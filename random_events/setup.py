@@ -20,7 +20,7 @@ def get_version():
     with open("src/random_events/__init__.py") as f:
         for line in f:
             if line.startswith("__version__"):
-                return ast.parse(line).body[0].value.s
+                return ast.parse(line).body[0].value.value
 
 
 setup(

@@ -159,7 +159,7 @@ class CollisionMatrixManager:
                     else:
                         distance = collision_request.distance
                     if not collision_request.is_allow_collision():
-                        collision_check.distance = distance
+                        collision_check.distance = max(distance, 0.001)
                         collision_check._validate()
                     if collision_request.is_allow_collision():
                         if collision_check in collision_matrix:

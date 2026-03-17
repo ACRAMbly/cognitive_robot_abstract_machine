@@ -50,6 +50,11 @@ class GraspDescription:
     """
     The offset between the center of the pose in the grasp sequence
     """
+    
+    grasp_position_offset: float = 0.0
+    """
+    An offset to shift the actual grasp pose, typically along the Z-axis (up/down).
+    """
 
     def _pose_sequence(self, pose: PoseStamped, body: Body = None, reverse: bool = False) -> List[PoseStamped]:
         """
@@ -71,7 +76,7 @@ class GraspDescription:
         if body:
             bb_in_frame = body.collision.as_bounding_box_collection_in_frame(body).bounding_box()
 
-            approach_axis = np.array(self.approach_direction.axis.value, dtype=np.bool)
+            approach_axis = np.array(self.approach_direction.axis.value, dtype=np.bool_)
 
             # Pre-pose calculation
             offset = (np.array(bb_in_frame.dimensions)[approach_axis] / 2 + self.manipulation_offset)[0]
@@ -84,6 +89,11 @@ class GraspDescription:
 
         grasp_pose = deepcopy(pose)
         grasp_pose.rotate_by_quaternion(grasp_orientation)
+        # Only apply vertical offset during picking (not placing).
+        # When reverse=True, this sequence is used for placement; applying the
+        # offset there would push the arm into the table or into stacked objects.
+        if self.grasp_position_offset != 0.0 and not reverse:
+            grasp_pose.position.z += self.grasp_position_offset
 
         # Lift pose calculation
         lift_pose_map = PoseStamped.from_spatial_type(world.transform(pose.to_spatial_type(), world.root))

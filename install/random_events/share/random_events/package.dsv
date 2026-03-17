@@ -1,0 +1,3 @@
+source;share/random_events/hook/pythonpath.ps1
+source;share/random_events/hook/pythonpath.dsv
+source;share/random_events/hook/pythonpath.sh

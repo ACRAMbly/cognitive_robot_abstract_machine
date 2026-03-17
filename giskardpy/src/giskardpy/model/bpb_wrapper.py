@@ -5,7 +5,20 @@ from uuid import UUID
 
 import giskardpy_bullet_bindings as pb
 import trimesh
-from pkg_resources import resource_filename
+try:
+    from pkg_resources import resource_filename
+except ImportError:
+    # pkg_resources was removed in modern setuptools (>=71).
+    # Fall back to importlib.util to locate the package path.
+    import importlib.util as _ilu
+
+    def resource_filename(package_or_requirement, resource_name):
+        spec = _ilu.find_spec(package_or_requirement)
+        if spec is None or spec.origin is None:
+            raise FileNotFoundError(f"Cannot find package: {package_or_requirement}")
+        import pathlib
+        pkg_dir = pathlib.Path(spec.origin).parent
+        return str(pkg_dir / resource_name)
 
 from giskardpy.middleware import get_middleware
 from giskardpy.model.collisions import GiskardCollision

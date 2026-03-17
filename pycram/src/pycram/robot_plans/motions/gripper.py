@@ -110,7 +110,20 @@ class MoveGripperMotion(BaseMotion):
     """
 
     def perform(self):
-        return
+        """
+        If a real-robot AlternativeMotion is registered for this motion + robot type,
+        call its perform() to command the hardware directly (e.g. a ROS 2 action server).
+        Otherwise this is a no-op — the gripper is controlled via the Giskard joint task
+        produced by _motion_chart.
+        """
+        from inspect import signature
+        alternative_cls = self.get_alternative_motion()
+        if alternative_cls is not None:
+            alternative_instance = alternative_cls(
+                **{param: getattr(self, param) for param in signature(self.__init__).parameters}
+            )
+            alternative_instance.plan_node = self.plan_node
+            alternative_instance.perform()
 
     @property
     def _motion_chart(self):

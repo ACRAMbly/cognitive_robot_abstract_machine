@@ -1,0 +1,185 @@
+[0.000000] (-) TimerEvent: {}
+[0.000226] (random_events) JobQueued: {'identifier': 'random_events', 'dependencies': OrderedDict()}
+[0.000304] (random_events) JobStarted: {'identifier': 'random_events'}
+[0.099773] (-) TimerEvent: {}
+[0.199974] (-) TimerEvent: {}
+[0.300107] (-) TimerEvent: {}
+[0.400263] (-) TimerEvent: {}
+[0.500459] (-) TimerEvent: {}
+[0.600721] (-) TimerEvent: {}
+[0.700955] (-) TimerEvent: {}
+[0.748134] (random_events) Command: {'cmd': ['/usr/bin/python3', '-W', 'ignore:setup.py install is deprecated', '-W', 'ignore:easy_install command is deprecated', 'setup.py', 'egg_info', '--egg-base', '../build/random_events', 'build', '--build-base', '/home/zakaria/workspace/ros/src/cognitive_robot_abstract_machine/build/random_events/build', 'install', '--record', '/home/zakaria/workspace/ros/src/cognitive_robot_abstract_machine/build/random_events/install.log', '--single-version-externally-managed'], 'cwd': '/home/zakaria/workspace/ros/src/cognitive_robot_abstract_machine/random_events', 'env': {'GJS_DEBUG_TOPICS': 'JS ERROR;JS LOG', 'VIRTUALENVWRAPPER_WORKON_CD': '1', 'PYTHON_BASIC_REPL': '1', 'LESSOPEN': '| /usr/bin/lesspipe %s', 'LIBRARY_PATH': '/home/zakaria/local/lib:/home/zakaria/local/usr/lib:/usr/local/lib:/home/zakaria/local/lib:/home/zakaria/local/usr/lib:/home/zakaria/workspace/ros/install/giskard_msgs/lib:/opt/ros/jazzy/opt/gz_sim_vendor/lib:/opt/ros/jazzy/opt/gz_sensors_vendor/lib:/opt/ros/jazzy/opt/gz_physics_vendor/lib:/opt/ros/jazzy/opt/sdformat_vendor/lib:/opt/ros/jazzy/opt/rviz_ogre_vendor/lib:/opt/ros/jazzy/lib/x86_64-linux-gnu:/opt/ros/jazzy/opt/gz_gui_vendor/lib:/opt/ros/jazzy/opt/gz_transport_vendor/lib:/opt/ros/jazzy/opt/gz_rendering_vendor/lib:/opt/ros/jazzy/opt/gz_plugin_vendor/lib:/opt/ros/jazzy/opt/gz_fuel_tools_vendor/lib:/opt/ros/jazzy/opt/gz_msgs_vendor/lib:/opt/ros/jazzy/opt/gz_common_vendor/lib:/opt/ros/jazzy/opt/gz_math_vendor/lib:/opt/ros/jazzy/opt/gz_utils_vendor/lib:/opt/ros/jazzy/opt/gz_tools_vendor/lib:/opt/ros/jazzy/opt/gz_ogre_next_vendor/lib:/opt/ros/jazzy/opt/gz_dartsim_vendor/lib:/opt/ros/jazzy/opt/gz_cmake_vendor/lib:/opt/ros/jazzy/lib:/home/zakaria/local/lib:/home/zakaria/local/usr/lib:/home/zakaria/workspace/ros/install/giskard_msgs/lib:/opt/ros/jazzy/opt/gz_sim_vendor/lib:/opt/ros/jazzy/opt/gz_sensors_vendor/lib:/opt/ros/jazzy/opt/gz_physics_vendor/lib:/opt/ros/jazzy/opt/sdformat_vendor/lib:/opt/ros/jazzy/opt/rviz_ogre_vendor/lib:/opt/ros/jazzy/lib/x86_64-linux-gnu:/opt/ros/jazzy/opt/gz_gui_vendor/lib:/opt/ros/jazzy/opt/gz_transport_vendor/lib:/opt/ros/jazzy/opt/gz_rendering_vendor/lib:/opt/ros/jazzy/opt/gz_plugin_vendor/lib:/opt/ros/jazzy/opt/gz_fuel_tools_vendor/lib:/opt/ros/jazzy/opt/gz_msgs_vendor/lib:/opt/ros/jazzy/opt/gz_common_vendor/lib:/opt/ros/jazzy/opt/gz_math_vendor/lib:/opt/ros/jazzy/opt/gz_utils_vendor/lib:/opt/ros/jazzy/opt/gz_tools_vendor/lib:/opt/ros/jazzy/opt/gz_ogre_next_vendor/lib:/opt/ros/jazzy/opt/gz_dartsim_vendor/lib:/opt/ros/jazzy/opt/gz_cmake_vendor/lib:/opt/ros/jazzy/lib:', 'PYTHON3_VERSION': 'python3.12', 'GZ_SIM_RESOURCE_PATH': '/opt/ros/jazzy/share', 'LANGUAGE': 'en_US:en', 'WORKON_HOME': '/home/zakaria/.virtualenvs', 'USER': 'zakaria', 'LC_TIME': 'C.UTF-8', 'GZ_CONFIG_PATH': '/opt/ros/jazzy/opt/gz_sim_vendor/share/gz:/opt/ros/jazzy/opt/sdformat_vendor/share/gz:/opt/ros/jazzy/opt/gz_gui_vendor/share/gz:/opt/ros/jazzy/opt/gz_transport_vendor/share/gz:/opt/ros/jazzy/opt/gz_rendering_vendor/share/gz:/opt/ros/jazzy/opt/gz_plugin_vendor/share/gz:/opt/ros/jazzy/opt/gz_fuel_tools_vendor/share/gz:/opt/ros/jazzy/opt/gz_msgs_vendor/share/gz:/opt/ros/jazzy/opt/gz_common_vendor/share/gz', 'ROS_PACKAGE_PATH': '/home/zakaria/workspace/ros/install/iai_tracy/share', 'XDG_SESSION_TYPE': 'wayland', 'GIT_ASKPASS': '/usr/share/antigravity/resources/app/extensions/git/dist/askpass.sh', 'CLUTTER_DISABLE_MIPMAPPED_TEXT': '1', 'SHLVL': '2', 'LD_LIBRARY_PATH': '/usr/local/lib:/home/zakaria/local/lib:/home/zakaria/local/usr/lib:/usr/local/lib:/home/zakaria/local/lib:/home/zakaria/local/usr/lib:/home/zakaria/workspace/ros/install/giskard_msgs/lib:/opt/ros/jazzy/opt/gz_sim_vendor/lib:/opt/ros/jazzy/opt/gz_sensors_vendor/lib:/opt/ros/jazzy/opt/gz_physics_vendor/lib:/opt/ros/jazzy/opt/sdformat_vendor/lib:/opt/ros/jazzy/opt/rviz_ogre_vendor/lib:/opt/ros/jazzy/lib/x86_64-linux-gnu:/opt/ros/jazzy/opt/gz_gui_vendor/lib:/opt/ros/jazzy/opt/gz_transport_vendor/lib:/opt/ros/jazzy/opt/gz_rendering_vendor/lib:/opt/ros/jazzy/opt/gz_plugin_vendor/lib:/opt/ros/jazzy/opt/gz_fuel_tools_vendor/lib:/opt/ros/jazzy/opt/gz_msgs_vendor/lib:/opt/ros/jazzy/opt/gz_common_vendor/lib:/opt/ros/jazzy/opt/gz_math_vendor/lib:/opt/ros/jazzy/opt/gz_utils_vendor/lib:/opt/ros/jazzy/opt/gz_tools_vendor/lib:/opt/ros/jazzy/opt/gz_ogre_next_vendor/lib:/opt/ros/jazzy/opt/gz_dartsim_vendor/lib:/opt/ros/jazzy/opt/gz_cmake_vendor/lib:/opt/ros/jazzy/lib', 'ANTIGRAVITY_CLI_ALIAS': 'agy', 'HOME': '/home/zakaria', 'CHROME_DESKTOP': 'antigravity.desktop', 'TERM_PROGRAM_VERSION': '1.107.0', 'DESKTOP_SESSION': 'ubuntu', 'GIO_LAUNCHED_DESKTOP_FILE': '/usr/share/applications/antigravity.desktop', 'ROS_PYTHON_VERSION': '3', 'GNOME_SHELL_SESSION_MODE': 'ubuntu', 'GTK_MODULES': 'gail:atk-bridge', 'LDFLAGS': '-L/home/zakaria/local/lib -L/home/zakaria/local/lib', 'PAGER': 'cat', 'VSCODE_GIT_ASKPASS_MAIN': '/usr/share/antigravity/resources/app/extensions/git/dist/askpass-main.js', 'LC_MONETARY': 'C.UTF-8', 'VSCODE_GIT_ASKPASS_NODE': '/usr/share/antigravity/antigravity', 'MANAGERPID': '2072', 'PYDEVD_DISABLE_FILE_VALIDATION': '1', 'SYSTEMD_EXEC_PID': '2371', 'BUNDLED_DEBUGPY_PATH': '/home/zakaria/.antigravity/extensions/ms-python.debugpy-2025.18.0-linux-x64/bundled/libs/debugpy', 'IM_CONFIG_CHECK_ENV': '1', 'VSCODE_PYTHON_AUTOACTIVATE_GUARD': '1', 'GSM_SKIP_SSH_AGENT_WORKAROUND': 'true', 'DBUS_SESSION_BUS_ADDRESS': 'unix:path=/run/user/1000/bus', 'COLORTERM': 'truecolor', 'ANTIGRAVITY_AGENT': '1', 'GIO_LAUNCHED_DESKTOP_FILE_PID': '42664', 'DEBUGINFOD_URLS': 'https://debuginfod.ubuntu.com', 'CMAKE_INCLUDE_PATH': '/home/zakaria/local/include:/home/zakaria/local/usr/include:/home/zakaria/local/include:/home/zakaria/local/usr/include:', 'IM_CONFIG_PHASE': '1', 'WAYLAND_DISPLAY': 'wayland-0', 'COLCON_PREFIX_PATH': '/home/zakaria/workspace/ros/install', 'ROS_DISTRO': 'jazzy', 'LOGNAME': 'zakaria', 'JOURNAL_STREAM': '9:20902', '_': '/usr/bin/colcon', 'ROS_VERSION': '2', 'PKG_CONFIG_PATH': '/home/zakaria/local/lib/pkgconfig', 'MEMORY_PRESSURE_WATCH': '/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/session.slice/org.gnome.Shell@wayland.service/memory.pressure', 'XDG_SESSION_CLASS': 'user', 'USERNAME': 'zakaria', 'TERM': 'xterm-256color', 'GNOME_DESKTOP_SESSION_ID': 'this-is-deprecated', 'FC_FONTATIONS': '1', '_VIRTUALENVWRAPPER_API': ' mkvirtualenv rmvirtualenv lsvirtualenv showvirtualenv workon add2virtualenv cdsitepackages cdvirtualenv lssitepackages toggleglobalsitepackages cpvirtualenv setvirtualenvproject mkproject cdproject mktmpenv wipeenv allvirtualenv mkvirtualenv rmvirtualenv lsvirtualenv showvirtualenv workon add2virtualenv cdsitepackages cdvirtualenv lssitepackages toggleglobalsitepackages cpvirtualenv setvirtualenvproject mkproject cdproject mktmpenv wipeenv allvirtualenv', 'PATH': '/home/zakaria/local/bin:/home/zakaria/local/sbin:/home/zakaria/local/usr/bin:/home/zakaria/.local/bin:/home/zakaria/local/bin:/home/zakaria/local/sbin:/home/zakaria/local/usr/bin:/opt/ros/jazzy/opt/gz_msgs_vendor/bin:/opt/ros/jazzy/opt/gz_tools_vendor/bin:/opt/ros/jazzy/opt/gz_ogre_next_vendor/bin:/opt/ros/jazzy/bin:/home/zakaria/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin:/home/zakaria/.local/bin:/home/zakaria/.local/bin:/home/zakaria/.local/bin:/home/zakaria/.antigravity/extensions/ms-python.debugpy-2025.18.0-linux-x64/bundled/scripts/noConfigScripts:/home/zakaria/.local/bin', 'SESSION_MANAGER': 'local/zakaria:@/tmp/.ICE-unix/2326,unix/zakaria:/tmp/.ICE-unix/2326', 'INVOCATION_ID': 'ae1ccfdac1f3497c8317c90b41874f54', 'PAPERSIZE': 'a4', 'XDG_MENU_PREFIX': 'gnome-', 'LC_ADDRESS': 'C.UTF-8', 'GNOME_SETUP_DISPLAY': ':1', 'XDG_RUNTIME_DIR': '/run/user/1000', 'GDK_BACKEND': 'wayland', 'DISPLAY': ':0', 'VSCODE_DEBUGPY_ADAPTER_ENDPOINTS': '/home/zakaria/.antigravity/extensions/ms-python.debugpy-2025.18.0-linux-x64/.noConfigDebugAdapterEndpoints/endpoint-29db723b3236442f.txt', 'LANG': 'en_US.UTF-8', 'XDG_CURRENT_DESKTOP': 'ubuntu:GNOME', 'PYTHONSTARTUP': '/home/zakaria/.config/Antigravity/User/workspaceStorage/b72b361d050b65accb5dd13ad55c9836/ms-python.python/pythonrc.py', 'LC_TELEPHONE': 'C.UTF-8', 'XMODIFIERS': '@im=ibus', 'XDG_SESSION_DESKTOP': 'ubuntu', 'XAUTHORITY': '/run/user/1000/.mutter-Xwaylandauth.BFO7K3', 'LS_COLORS': 'rs=0:di=01;34:ln=01;36:mh=00:pi=40;33:so=01;35:do=01;35:bd=40;33;01:cd=40;33;01:or=40;31;01:mi=00:su=37;41:sg=30;43:ca=00:tw=30;42:ow=34;42:st=37;44:ex=01;32:*.tar=01;31:*.tgz=01;31:*.arc=01;31:*.arj=01;31:*.taz=01;31:*.lha=01;31:*.lz4=01;31:*.lzh=01;31:*.lzma=01;31:*.tlz=01;31:*.txz=01;31:*.tzo=01;31:*.t7z=01;31:*.zip=01;31:*.z=01;31:*.dz=01;31:*.gz=01;31:*.lrz=01;31:*.lz=01;31:*.lzo=01;31:*.xz=01;31:*.zst=01;31:*.tzst=01;31:*.bz2=01;31:*.bz=01;31:*.tbz=01;31:*.tbz2=01;31:*.tz=01;31:*.deb=01;31:*.rpm=01;31:*.jar=01;31:*.war=01;31:*.ear=01;31:*.sar=01;31:*.rar=01;31:*.alz=01;31:*.ace=01;31:*.zoo=01;31:*.cpio=01;31:*.7z=01;31:*.rz=01;31:*.cab=01;31:*.wim=01;31:*.swm=01;31:*.dwm=01;31:*.esd=01;31:*.avif=01;35:*.jpg=01;35:*.jpeg=01;35:*.mjpg=01;35:*.mjpeg=01;35:*.gif=01;35:*.bmp=01;35:*.pbm=01;35:*.pgm=01;35:*.ppm=01;35:*.tga=01;35:*.xbm=01;35:*.xpm=01;35:*.tif=01;35:*.tiff=01;35:*.png=01;35:*.svg=01;35:*.svgz=01;35:*.mng=01;35:*.pcx=01;35:*.mov=01;35:*.mpg=01;35:*.mpeg=01;35:*.m2v=01;35:*.mkv=01;35:*.webm=01;35:*.webp=01;35:*.ogm=01;35:*.mp4=01;35:*.m4v=01;35:*.mp4v=01;35:*.vob=01;35:*.qt=01;35:*.nuv=01;35:*.wmv=01;35:*.asf=01;35:*.rm=01;35:*.rmvb=01;35:*.flc=01;35:*.avi=01;35:*.fli=01;35:*.flv=01;35:*.gl=01;35:*.dl=01;35:*.xcf=01;35:*.xwd=01;35:*.yuv=01;35:*.cgm=01;35:*.emf=01;35:*.ogv=01;35:*.ogx=01;35:*.aac=00;36:*.au=00;36:*.flac=00;36:*.m4a=00;36:*.mid=00;36:*.midi=00;36:*.mka=00;36:*.mp3=00;36:*.mpc=00;36:*.ogg=00;36:*.ra=00;36:*.wav=00;36:*.oga=00;36:*.opus=00;36:*.spx=00;36:*.xspf=00;36:*~=00;90:*#=00;90:*.bak=00;90:*.crdownload=00;90:*.dpkg-dist=00;90:*.dpkg-new=00;90:*.dpkg-old=00;90:*.dpkg-tmp=00;90:*.old=00;90:*.orig=00;90:*.part=00;90:*.rej=00;90:*.rpmnew=00;90:*.rpmorig=00;90:*.rpmsave=00;90:*.swp=00;90:*.tmp=00;90:*.ucf-dist=00;90:*.ucf-new=00;90:*.ucf-old=00;90:', 'SBX_CHROME_API_RQ': '1', 'VSCODE_GIT_IPC_HANDLE': '/run/user/1000/vscode-git-383b7b2f16.sock', 'TERM_PROGRAM': 'vscode', 'SSH_AUTH_SOCK': '/run/user/1000/keyring/ssh', 'ROS_DOMAIN_ID': '5', 'AMENT_PREFIX_PATH': '/home/zakaria/workspace/ros/install/ur_description:/home/zakaria/workspace/ros/install/robotiq_description:/home/zakaria/workspace/ros/install/iai_tracy_ur:/home/zakaria/workspace/ros/install/iai_tracy_description:/home/zakaria/workspace/ros/install/iai_tracy_bringup:/home/zakaria/workspace/ros/install/iai_shelves:/home/zakaria/workspace/ros/install/iai_semantic_maps:/home/zakaria/workspace/ros/install/iai_refills_lab:/home/zakaria/workspace/ros/install/iai_pr2:/home/zakaria/workspace/ros/install/iai_pr2_description:/home/zakaria/workspace/ros/install/iai_maps:/home/zakaria/workspace/ros/install/iai_kitchen_defs:/home/zakaria/workspace/ros/install/iai_kitchen:/home/zakaria/workspace/ros/install/iai_apartment:/home/zakaria/workspace/ros/install/giskardpy_ros:/home/zakaria/workspace/ros/install/giskard_msgs:/home/zakaria/workspace/ros/install/chemistry_laboratory:/opt/ros/jazzy', 'SHELL': '/bin/bash', 'LC_NAME': 'C.UTF-8', 'QT_ACCESSIBILITY': '1', 'GDMSESSION': 'ubuntu', 'Simox_DIR': '/home/zakaria/local/src/simox/build', 'LESSCLOSE': '/usr/bin/lesspipe %s %s', 'VIRTUALENVWRAPPER_PROJECT_FILENAME': '.project', 'LC_MEASUREMENT': 'C.UTF-8', 'VIRTUALENVWRAPPER_HOOK_DIR': '/home/zakaria/.virtualenvs', 'GJS_DEBUG_OUTPUT': 'stderr', 'LC_IDENTIFICATION': 'C.UTF-8', 'CMAKE_LIBRARY_PATH': '/home/zakaria/local/lib:/home/zakaria/local/usr/lib:/usr/local/lib:/home/zakaria/local/lib:/home/zakaria/local/usr/lib:/home/zakaria/workspace/ros/install/giskard_msgs/lib:/opt/ros/jazzy/opt/gz_sim_vendor/lib:/opt/ros/jazzy/opt/gz_sensors_vendor/lib:/opt/ros/jazzy/opt/gz_physics_vendor/lib:/opt/ros/jazzy/opt/sdformat_vendor/lib:/opt/ros/jazzy/opt/rviz_ogre_vendor/lib:/opt/ros/jazzy/lib/x86_64-linux-gnu:/opt/ros/jazzy/opt/gz_gui_vendor/lib:/opt/ros/jazzy/opt/gz_transport_vendor/lib:/opt/ros/jazzy/opt/gz_rendering_vendor/lib:/opt/ros/jazzy/opt/gz_plugin_vendor/lib:/opt/ros/jazzy/opt/gz_fuel_tools_vendor/lib:/opt/ros/jazzy/opt/gz_msgs_vendor/lib:/opt/ros/jazzy/opt/gz_common_vendor/lib:/opt/ros/jazzy/opt/gz_math_vendor/lib:/opt/ros/jazzy/opt/gz_utils_vendor/lib:/opt/ros/jazzy/opt/gz_tools_vendor/lib:/opt/ros/jazzy/opt/gz_ogre_next_vendor/lib:/opt/ros/jazzy/opt/gz_dartsim_vendor/lib:/opt/ros/jazzy/opt/gz_cmake_vendor/lib:/opt/ros/jazzy/lib:/home/zakaria/local/lib:/home/zakaria/local/usr/lib:/home/zakaria/workspace/ros/install/giskard_msgs/lib:/opt/ros/jazzy/opt/gz_sim_vendor/lib:/opt/ros/jazzy/opt/gz_sensors_vendor/lib:/opt/ros/jazzy/opt/gz_physics_vendor/lib:/opt/ros/jazzy/opt/sdformat_vendor/lib:/opt/ros/jazzy/opt/rviz_ogre_vendor/lib:/opt/ros/jazzy/lib/x86_64-linux-gnu:/opt/ros/jazzy/opt/gz_gui_vendor/lib:/opt/ros/jazzy/opt/gz_transport_vendor/lib:/opt/ros/jazzy/opt/gz_rendering_vendor/lib:/opt/ros/jazzy/opt/gz_plugin_vendor/lib:/opt/ros/jazzy/opt/gz_fuel_tools_vendor/lib:/opt/ros/jazzy/opt/gz_msgs_vendor/lib:/opt/ros/jazzy/opt/gz_common_vendor/lib:/opt/ros/jazzy/opt/gz_math_vendor/lib:/opt/ros/jazzy/opt/gz_utils_vendor/lib:/opt/ros/jazzy/opt/gz_tools_vendor/lib:/opt/ros/jazzy/opt/gz_ogre_next_vendor/lib:/opt/ros/jazzy/opt/gz_dartsim_vendor/lib:/opt/ros/jazzy/opt/gz_cmake_vendor/lib:/opt/ros/jazzy/lib:', 'VIRTUALENVWRAPPER_SCRIPT': '/usr/share/virtualenvwrapper/virtualenvwrapper.sh', 'ROS_AUTOMATIC_DISCOVERY_RANGE': 'SUBNET', 'VSCODE_GIT_ASKPASS_EXTRA_ARGS': '', 'QT_IM_MODULE': 'ibus', 'PWD': '/home/zakaria/workspace/ros/src/cognitive_robot_abstract_machine/build/random_events', 'LC_ALL': 'en_US.UTF-8', 'XDG_CONFIG_DIRS': '/etc/xdg/xdg-ubuntu:/etc/xdg', 'XDG_DATA_DIRS': '/usr/share/ubuntu:/usr/share/gnome:/usr/local/share/:/usr/share/:/var/lib/snapd/desktop', 'PYTHONPATH': '/home/zakaria/workspace/ros/src/cognitive_robot_abstract_machine/build/random_events/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/zakaria/workspace/ros/src/cognitive_robot_abstract_machine/install/random_events/lib/python3.12/site-packages:/home/zakaria/local/lib/python/site-packages:/home/zakaria/local/lib/python3/site-packages:/home/zakaria/local/lib//site-packages:/home/zakaria/local/lib//dist-packages:/home/zakaria/local/lib/python3.12/site-packages:/home/zakaria/local/lib/python3.12/dist-packages:/home/zakaria/local/lib/python/dist-packages:/home/zakaria/local/lib/python3/dist-packages:/home/zakaria/local/lib/python/site-packages:/home/zakaria/local/lib/python3/site-packages:/home/zakaria/local/lib//site-packages:/home/zakaria/local/lib//dist-packages:/home/zakaria/local/lib/python3.12/site-packages:/home/zakaria/local/lib/python3.12/dist-packages:/home/zakaria/local/lib/python/dist-packages:/home/zakaria/local/lib/python3/dist-packages:/home/zakaria/workspace/ros/build/random_events/src:/home/zakaria/workspace/ros/install/random_events/lib/python3.12/site-packages:/home/zakaria/workspace/ros/install/giskardpy_ros/lib/python3.12/site-packages:/home/zakaria/workspace/ros/install/giskard_msgs/lib/python3.12/site-packages:/opt/ros/jazzy/lib/python3.12/site-packages', 'LC_NUMERIC': 'C.UTF-8', 'LC_PAPER': 'C.UTF-8', 'CPATH': '/home/zakaria/local/include:/home/zakaria/local/usr/include:/home/zakaria/local/include:/home/zakaria/local/usr/include:', 'COLCON': '1', 'MEMORY_PRESSURE_WRITE': 'c29tZSAyMDAwMDAgMjAwMDAwMAA=', 'CMAKE_PREFIX_PATH': '/home/zakaria/workspace/ros/install/ur_description:/home/zakaria/workspace/ros/install/robotiq_description:/home/zakaria/workspace/ros/install/iai_tracy_ur:/home/zakaria/workspace/ros/install/iai_tracy_description:/home/zakaria/workspace/ros/install/iai_tracy_bringup:/home/zakaria/workspace/ros/install/iai_tracy:/home/zakaria/workspace/ros/install/iai_shelves:/home/zakaria/workspace/ros/install/iai_semantic_maps:/home/zakaria/workspace/ros/install/iai_refills_lab:/home/zakaria/workspace/ros/install/iai_pr2:/home/zakaria/workspace/ros/install/iai_pr2_description:/home/zakaria/workspace/ros/install/iai_maps:/home/zakaria/workspace/ros/install/iai_kitchen_defs:/home/zakaria/workspace/ros/install/iai_kitchen:/home/zakaria/workspace/ros/install/iai_apartment:/home/zakaria/workspace/ros/install/giskard_msgs:/home/zakaria/workspace/ros/install/chemistry_laboratory:/opt/ros/jazzy/opt/gz_sim_vendor:/opt/ros/jazzy/opt/gz_sensors_vendor:/opt/ros/jazzy/opt/gz_physics_vendor:/opt/ros/jazzy/opt/sdformat_vendor:/opt/ros/jazzy/opt/gz_gui_vendor:/opt/ros/jazzy/opt/gz_transport_vendor:/opt/ros/jazzy/opt/gz_rendering_vendor:/opt/ros/jazzy/opt/gz_plugin_vendor:/opt/ros/jazzy/opt/gz_fuel_tools_vendor:/opt/ros/jazzy/opt/gz_msgs_vendor:/opt/ros/jazzy/opt/gz_common_vendor:/opt/ros/jazzy/opt/gz_math_vendor:/opt/ros/jazzy/opt/gz_utils_vendor:/opt/ros/jazzy/opt/gz_tools_vendor:/opt/ros/jazzy/opt/gz_ogre_next_vendor:/opt/ros/jazzy/opt/gz_dartsim_vendor:/opt/ros/jazzy/opt/gz_cmake_vendor'}, 'shell': False}
+[0.801084] (-) TimerEvent: {}
+[0.820423] (random_events) StderrLine: {'line': b'/home/zakaria/workspace/ros/src/cognitive_robot_abstract_machine/random_events/setup.py:23: DeprecationWarning: Attribute s is deprecated and will be removed in Python 3.14; use value instead\n'}
+[0.820651] (random_events) StderrLine: {'line': b'  return ast.parse(line).body[0].value.s\n'}
+[0.893934] (random_events) StderrLine: {'line': b'/usr/lib/python3/dist-packages/setuptools/config/_apply_pyprojecttoml.py:80: SetuptoolsWarning: `install_requires` overwritten in `pyproject.toml` (dependencies)\n'}
+[0.894091] (random_events) StderrLine: {'line': b'  corresp(dist, value, root_dir)\n'}
+[0.901276] (-) TimerEvent: {}
+[1.001522] (-) TimerEvent: {}
+[1.050892] (random_events) StdoutLine: {'line': b'running egg_info\n'}
+[1.051076] (random_events) StdoutLine: {'line': b'creating ../build/random_events/random_events.egg-info\n'}
+[1.066046] (random_events) StdoutLine: {'line': b'writing ../build/random_events/random_events.egg-info/PKG-INFO\n'}
+[1.066352] (random_events) StdoutLine: {'line': b'writing dependency_links to ../build/random_events/random_events.egg-info/dependency_links.txt\n'}
+[1.066467] (random_events) StdoutLine: {'line': b'writing requirements to ../build/random_events/random_events.egg-info/requires.txt\n'}
+[1.066552] (random_events) StdoutLine: {'line': b'writing top-level names to ../build/random_events/random_events.egg-info/top_level.txt\n'}
+[1.066946] (random_events) StdoutLine: {'line': b"writing manifest file '../build/random_events/random_events.egg-info/SOURCES.txt'\n"}
+[1.101715] (-) TimerEvent: {}
+[1.112859] (random_events) StdoutLine: {'line': b"reading manifest file '../build/random_events/random_events.egg-info/SOURCES.txt'\n"}
+[1.113116] (random_events) StdoutLine: {'line': b"writing manifest file '../build/random_events/random_events.egg-info/SOURCES.txt'\n"}
+[1.113433] (random_events) StdoutLine: {'line': b'running build\n'}
+[1.113525] (random_events) StdoutLine: {'line': b'running build_py\n'}
+[1.113619] (random_events) StdoutLine: {'line': b'creating /home/zakaria/workspace/ros/src/cognitive_robot_abstract_machine/build/random_events/build\n'}
+[1.113728] (random_events) StdoutLine: {'line': b'creating /home/zakaria/workspace/ros/src/cognitive_robot_abstract_machine/build/random_events/build/lib.linux-x86_64-cpython-312\n'}
+[1.118497] (random_events) StdoutLine: {'line': b'creating /home/zakaria/workspace/ros/src/cognitive_robot_abstract_machine/build/random_events/build/lib.linux-x86_64-cpython-312/random_events\n'}
+[1.118839] (random_events) StdoutLine: {'line': b'copying src/random_events/product_algebra.py -> /home/zakaria/workspace/ros/src/cognitive_robot_abstract_machine/build/random_events/build/lib.linux-x86_64-cpython-312/random_events\n'}
+[1.118940] (random_events) StdoutLine: {'line': b'copying src/random_events/sigma_algebra.py -> /home/zakaria/workspace/ros/src/cognitive_robot_abstract_machine/build/random_events/build/lib.linux-x86_64-cpython-312/random_events\n'}
+[1.119037] (random_events) StdoutLine: {'line': b'copying src/random_events/set.py -> /home/zakaria/workspace/ros/src/cognitive_robot_abstract_machine/build/random_events/build/lib.linux-x86_64-cpython-312/random_events\n'}
+[1.119121] (random_events) StdoutLine: {'line': b'copying src/random_events/__init__.py -> /home/zakaria/workspace/ros/src/cognitive_robot_abstract_machine/build/random_events/build/lib.linux-x86_64-cpython-312/random_events\n'}
+[1.119203] (random_events) StdoutLine: {'line': b'copying src/random_events/utils.py -> /home/zakaria/workspace/ros/src/cognitive_robot_abstract_machine/build/random_events/build/lib.linux-x86_64-cpython-312/random_events\n'}
+[1.119284] (random_events) StdoutLine: {'line': b'copying src/random_events/variable.py -> /home/zakaria/workspace/ros/src/cognitive_robot_abstract_machine/build/random_events/build/lib.linux-x86_64-cpython-312/random_events\n'}
+[1.119364] (random_events) StdoutLine: {'line': b'copying src/random_events/polytope.py -> /home/zakaria/workspace/ros/src/cognitive_robot_abstract_machine/build/random_events/build/lib.linux-x86_64-cpython-312/random_events\n'}
+[1.119447] (random_events) StdoutLine: {'line': b'copying src/random_events/interval.py -> /home/zakaria/workspace/ros/src/cognitive_robot_abstract_machine/build/random_events/build/lib.linux-x86_64-cpython-312/random_events\n'}
+[1.119575] (random_events) StdoutLine: {'line': b'running build_ext\n'}
+[1.120175] (random_events) StdoutLine: {'line': b"building 'random_events_lib' extension\n"}
+[1.120357] (random_events) StdoutLine: {'line': b'creating /home/zakaria/workspace/ros/src/cognitive_robot_abstract_machine/build/random_events/build/temp.linux-x86_64-cpython-312\n'}
+[1.120562] (random_events) StdoutLine: {'line': b'creating /home/zakaria/workspace/ros/src/cognitive_robot_abstract_machine/build/random_events/build/temp.linux-x86_64-cpython-312/src\n'}
+[1.120662] (random_events) StdoutLine: {'line': b'creating /home/zakaria/workspace/ros/src/cognitive_robot_abstract_machine/build/random_events/build/temp.linux-x86_64-cpython-312/src/random-events-lib\n'}
+[1.120742] (random_events) StdoutLine: {'line': b'creating /home/zakaria/workspace/ros/src/cognitive_robot_abstract_machine/build/random_events/build/temp.linux-x86_64-cpython-312/src/random-events-lib/export\n'}
+[1.120819] (random_events) StdoutLine: {'line': b'creating /home/zakaria/workspace/ros/src/cognitive_robot_abstract_machine/build/random_events/build/temp.linux-x86_64-cpython-312/src/random-events-lib/random_events_lib\n'}
+[1.120895] (random_events) StdoutLine: {'line': b'creating /home/zakaria/workspace/ros/src/cognitive_robot_abstract_machine/build/random_events/build/temp.linux-x86_64-cpython-312/src/random-events-lib/random_events_lib/src\n'}
+[1.120973] (random_events) StdoutLine: {'line': b'x86_64-linux-gnu-gcc -fno-strict-overflow -Wsign-compare -DNDEBUG -g -O2 -Wall -fPIC -Isrc/random-events-lib/random_events_lib/include -I/usr/lib/python3/dist-packages/pybind11/include -I/home/zakaria/workspace/ros/src/cognitive_robot_abstract_machine/install/random_events/include -I/usr/include/python3.12 -c src/random-events-lib/export/bindings.cpp -o /home/zakaria/workspace/ros/src/cognitive_robot_abstract_machine/build/random_events/build/temp.linux-x86_64-cpython-312/src/random-events-lib/export/bindings.o -fvisibility=hidden -g0 -std=c++17 -fPIC\n'}
+[1.201809] (-) TimerEvent: {}
+[1.301957] (-) TimerEvent: {}
+[1.402220] (-) TimerEvent: {}
+[1.502372] (-) TimerEvent: {}
+[1.602647] (-) TimerEvent: {}
+[1.702924] (-) TimerEvent: {}
+[1.803197] (-) TimerEvent: {}
+[1.903436] (-) TimerEvent: {}
+[2.003726] (-) TimerEvent: {}
+[2.104001] (-) TimerEvent: {}
+[2.204279] (-) TimerEvent: {}
+[2.304528] (-) TimerEvent: {}
+[2.404836] (-) TimerEvent: {}
+[2.505056] (-) TimerEvent: {}
+[2.605226] (-) TimerEvent: {}
+[2.705379] (-) TimerEvent: {}
+[2.805662] (-) TimerEvent: {}
+[2.905822] (-) TimerEvent: {}
+[3.006005] (-) TimerEvent: {}
+[3.106189] (-) TimerEvent: {}
+[3.206379] (-) TimerEvent: {}
+[3.306560] (-) TimerEvent: {}
+[3.406745] (-) TimerEvent: {}
+[3.507026] (-) TimerEvent: {}
+[3.607298] (-) TimerEvent: {}
+[3.707583] (-) TimerEvent: {}
+[3.807738] (-) TimerEvent: {}
+[3.907895] (-) TimerEvent: {}
+[4.008052] (-) TimerEvent: {}
+[4.108229] (-) TimerEvent: {}
+[4.208503] (-) TimerEvent: {}
+[4.308663] (-) TimerEvent: {}
+[4.408837] (-) TimerEvent: {}
+[4.509136] (-) TimerEvent: {}
+[4.609378] (-) TimerEvent: {}
+[4.709667] (-) TimerEvent: {}
+[4.809939] (-) TimerEvent: {}
+[4.910122] (-) TimerEvent: {}
+[5.010387] (-) TimerEvent: {}
+[5.110668] (-) TimerEvent: {}
+[5.210873] (-) TimerEvent: {}
+[5.311151] (-) TimerEvent: {}
+[5.411416] (-) TimerEvent: {}
+[5.511685] (-) TimerEvent: {}
+[5.611957] (-) TimerEvent: {}
+[5.712139] (-) TimerEvent: {}
+[5.812327] (-) TimerEvent: {}
+[5.912619] (-) TimerEvent: {}
+[6.012898] (-) TimerEvent: {}
+[6.113170] (-) TimerEvent: {}
+[6.213439] (-) TimerEvent: {}
+[6.313655] (-) TimerEvent: {}
+[6.413807] (-) TimerEvent: {}
+[6.514082] (-) TimerEvent: {}
+[6.614275] (-) TimerEvent: {}
+[6.714479] (-) TimerEvent: {}
+[6.814620] (-) TimerEvent: {}
+[6.914773] (-) TimerEvent: {}
+[7.014926] (-) TimerEvent: {}
+[7.115195] (-) TimerEvent: {}
+[7.215463] (-) TimerEvent: {}
+[7.315767] (-) TimerEvent: {}
+[7.415958] (-) TimerEvent: {}
+[7.516108] (-) TimerEvent: {}
+[7.616316] (-) TimerEvent: {}
+[7.716619] (-) TimerEvent: {}
+[7.816814] (-) TimerEvent: {}
+[7.917029] (-) TimerEvent: {}
+[8.017190] (-) TimerEvent: {}
+[8.117466] (-) TimerEvent: {}
+[8.217663] (-) TimerEvent: {}
+[8.317943] (-) TimerEvent: {}
+[8.418189] (-) TimerEvent: {}
+[8.518457] (-) TimerEvent: {}
+[8.618730] (-) TimerEvent: {}
+[8.719009] (-) TimerEvent: {}
+[8.738766] (random_events) StdoutLine: {'line': b'x86_64-linux-gnu-gcc -fno-strict-overflow -Wsign-compare -DNDEBUG -g -O2 -Wall -fPIC -Isrc/random-events-lib/random_events_lib/include -I/usr/lib/python3/dist-packages/pybind11/include -I/home/zakaria/workspace/ros/src/cognitive_robot_abstract_machine/install/random_events/include -I/usr/include/python3.12 -c src/random-events-lib/random_events_lib/src/product_algebra.cpp -o /home/zakaria/workspace/ros/src/cognitive_robot_abstract_machine/build/random_events/build/temp.linux-x86_64-cpython-312/src/random-events-lib/random_events_lib/src/product_algebra.o -fvisibility=hidden -g0 -std=c++17 -fPIC\n'}
+[8.819224] (-) TimerEvent: {}
+[8.919497] (-) TimerEvent: {}
+[9.019734] (-) TimerEvent: {}
+[9.119931] (-) TimerEvent: {}
+[9.220084] (-) TimerEvent: {}
+[9.320359] (-) TimerEvent: {}
+[9.420583] (-) TimerEvent: {}
+[9.520871] (-) TimerEvent: {}
+[9.621145] (-) TimerEvent: {}
+[9.721433] (-) TimerEvent: {}
+[9.821694] (-) TimerEvent: {}
+[9.922060] (-) TimerEvent: {}
+[9.997279] (random_events) StdoutLine: {'line': b'x86_64-linux-gnu-gcc -fno-strict-overflow -Wsign-compare -DNDEBUG -g -O2 -Wall -fPIC -Isrc/random-events-lib/random_events_lib/include -I/usr/lib/python3/dist-packages/pybind11/include -I/home/zakaria/workspace/ros/src/cognitive_robot_abstract_machine/install/random_events/include -I/usr/include/python3.12 -c src/random-events-lib/random_events_lib/src/set.cpp -o /home/zakaria/workspace/ros/src/cognitive_robot_abstract_machine/build/random_events/build/temp.linux-x86_64-cpython-312/src/random-events-lib/random_events_lib/src/set.o -fvisibility=hidden -g0 -std=c++17 -fPIC\n'}
+[10.022147] (-) TimerEvent: {}
+[10.122322] (-) TimerEvent: {}
+[10.222593] (-) TimerEvent: {}
+[10.322846] (-) TimerEvent: {}
+[10.423114] (-) TimerEvent: {}
+[10.523355] (-) TimerEvent: {}
+[10.578753] (random_events) StdoutLine: {'line': b'x86_64-linux-gnu-gcc -fno-strict-overflow -Wsign-compare -DNDEBUG -g -O2 -Wall -fPIC -Isrc/random-events-lib/random_events_lib/include -I/usr/lib/python3/dist-packages/pybind11/include -I/home/zakaria/workspace/ros/src/cognitive_robot_abstract_machine/install/random_events/include -I/usr/include/python3.12 -c src/random-events-lib/random_events_lib/src/sigma_algebra.cpp -o /home/zakaria/workspace/ros/src/cognitive_robot_abstract_machine/build/random_events/build/temp.linux-x86_64-cpython-312/src/random-events-lib/random_events_lib/src/sigma_algebra.o -fvisibility=hidden -g0 -std=c++17 -fPIC\n'}
+[10.623546] (-) TimerEvent: {}
+[10.723806] (-) TimerEvent: {}
+[10.823954] (-) TimerEvent: {}
+[10.924202] (-) TimerEvent: {}
+[11.024406] (-) TimerEvent: {}
+[11.124664] (-) TimerEvent: {}
+[11.224911] (-) TimerEvent: {}
+[11.325087] (-) TimerEvent: {}
+[11.365714] (random_events) StdoutLine: {'line': b'x86_64-linux-gnu-g++ -shared -Wl,-O1 -Wl,-Bsymbolic-functions -Wl,-Bsymbolic-functions -Wl,-z,relro -g -fwrapv -O2 -L/home/zakaria/local/lib -L/home/zakaria/local/lib /home/zakaria/workspace/ros/src/cognitive_robot_abstract_machine/build/random_events/build/temp.linux-x86_64-cpython-312/src/random-events-lib/export/bindings.o /home/zakaria/workspace/ros/src/cognitive_robot_abstract_machine/build/random_events/build/temp.linux-x86_64-cpython-312/src/random-events-lib/random_events_lib/src/product_algebra.o /home/zakaria/workspace/ros/src/cognitive_robot_abstract_machine/build/random_events/build/temp.linux-x86_64-cpython-312/src/random-events-lib/random_events_lib/src/set.o /home/zakaria/workspace/ros/src/cognitive_robot_abstract_machine/build/random_events/build/temp.linux-x86_64-cpython-312/src/random-events-lib/random_events_lib/src/sigma_algebra.o -L/usr/lib/x86_64-linux-gnu -o /home/zakaria/workspace/ros/src/cognitive_robot_abstract_machine/build/random_events/build/lib.linux-x86_64-cpython-312/random_events_lib.cpython-312-x86_64-linux-gnu.so\n'}
+[11.425280] (-) TimerEvent: {}
+[11.433337] (random_events) StdoutLine: {'line': b'running install\n'}
+[11.438419] (random_events) StdoutLine: {'line': b'running install_lib\n'}
+[11.458864] (random_events) StdoutLine: {'line': b'copying /home/zakaria/workspace/ros/src/cognitive_robot_abstract_machine/build/random_events/build/lib.linux-x86_64-cpython-312/random_events_lib.cpython-312-x86_64-linux-gnu.so -> /home/zakaria/workspace/ros/src/cognitive_robot_abstract_machine/install/random_events/lib/python3.12/site-packages\n'}
+[11.459093] (random_events) StdoutLine: {'line': b'creating /home/zakaria/workspace/ros/src/cognitive_robot_abstract_machine/install/random_events/lib/python3.12/site-packages/random_events\n'}
+[11.459233] (random_events) StdoutLine: {'line': b'copying /home/zakaria/workspace/ros/src/cognitive_robot_abstract_machine/build/random_events/build/lib.linux-x86_64-cpython-312/random_events/product_algebra.py -> /home/zakaria/workspace/ros/src/cognitive_robot_abstract_machine/install/random_events/lib/python3.12/site-packages/random_events\n'}
+[11.459388] (random_events) StdoutLine: {'line': b'copying /home/zakaria/workspace/ros/src/cognitive_robot_abstract_machine/build/random_events/build/lib.linux-x86_64-cpython-312/random_events/sigma_algebra.py -> /home/zakaria/workspace/ros/src/cognitive_robot_abstract_machine/install/random_events/lib/python3.12/site-packages/random_events\n'}
+[11.459526] (random_events) StdoutLine: {'line': b'copying /home/zakaria/workspace/ros/src/cognitive_robot_abstract_machine/build/random_events/build/lib.linux-x86_64-cpython-312/random_events/set.py -> /home/zakaria/workspace/ros/src/cognitive_robot_abstract_machine/install/random_events/lib/python3.12/site-packages/random_events\n'}
+[11.459616] (random_events) StdoutLine: {'line': b'copying /home/zakaria/workspace/ros/src/cognitive_robot_abstract_machine/build/random_events/build/lib.linux-x86_64-cpython-312/random_events/__init__.py -> /home/zakaria/workspace/ros/src/cognitive_robot_abstract_machine/install/random_events/lib/python3.12/site-packages/random_events\n'}
+[11.459700] (random_events) StdoutLine: {'line': b'copying /home/zakaria/workspace/ros/src/cognitive_robot_abstract_machine/build/random_events/build/lib.linux-x86_64-cpython-312/random_events/utils.py -> /home/zakaria/workspace/ros/src/cognitive_robot_abstract_machine/install/random_events/lib/python3.12/site-packages/random_events\n'}
+[11.459778] (random_events) StdoutLine: {'line': b'copying /home/zakaria/workspace/ros/src/cognitive_robot_abstract_machine/build/random_events/build/lib.linux-x86_64-cpython-312/random_events/variable.py -> /home/zakaria/workspace/ros/src/cognitive_robot_abstract_machine/install/random_events/lib/python3.12/site-packages/random_events\n'}
+[11.459880] (random_events) StdoutLine: {'line': b'copying /home/zakaria/workspace/ros/src/cognitive_robot_abstract_machine/build/random_events/build/lib.linux-x86_64-cpython-312/random_events/polytope.py -> /home/zakaria/workspace/ros/src/cognitive_robot_abstract_machine/install/random_events/lib/python3.12/site-packages/random_events\n'}
+[11.459959] (random_events) StdoutLine: {'line': b'copying /home/zakaria/workspace/ros/src/cognitive_robot_abstract_machine/build/random_events/build/lib.linux-x86_64-cpython-312/random_events/interval.py -> /home/zakaria/workspace/ros/src/cognitive_robot_abstract_machine/install/random_events/lib/python3.12/site-packages/random_events\n'}
+[11.460035] (random_events) StdoutLine: {'line': b'byte-compiling /home/zakaria/workspace/ros/src/cognitive_robot_abstract_machine/install/random_events/lib/python3.12/site-packages/random_events/product_algebra.py to product_algebra.cpython-312.pyc\n'}
+[11.462862] (random_events) StdoutLine: {'line': b'byte-compiling /home/zakaria/workspace/ros/src/cognitive_robot_abstract_machine/install/random_events/lib/python3.12/site-packages/random_events/sigma_algebra.py to sigma_algebra.cpython-312.pyc\n'}
+[11.464077] (random_events) StdoutLine: {'line': b'byte-compiling /home/zakaria/workspace/ros/src/cognitive_robot_abstract_machine/install/random_events/lib/python3.12/site-packages/random_events/set.py to set.cpython-312.pyc\n'}
+[11.464644] (random_events) StdoutLine: {'line': b'byte-compiling /home/zakaria/workspace/ros/src/cognitive_robot_abstract_machine/install/random_events/lib/python3.12/site-packages/random_events/__init__.py to __init__.cpython-312.pyc\n'}
+[11.465173] (random_events) StdoutLine: {'line': b'byte-compiling /home/zakaria/workspace/ros/src/cognitive_robot_abstract_machine/install/random_events/lib/python3.12/site-packages/random_events/utils.py to utils.cpython-312.pyc\n'}
+[11.466119] (random_events) StdoutLine: {'line': b'byte-compiling /home/zakaria/workspace/ros/src/cognitive_robot_abstract_machine/install/random_events/lib/python3.12/site-packages/random_events/variable.py to variable.cpython-312.pyc\n'}
+[11.467102] (random_events) StdoutLine: {'line': b'byte-compiling /home/zakaria/workspace/ros/src/cognitive_robot_abstract_machine/install/random_events/lib/python3.12/site-packages/random_events/polytope.py to polytope.cpython-312.pyc\n'}
+[11.468167] (random_events) StdoutLine: {'line': b'byte-compiling /home/zakaria/workspace/ros/src/cognitive_robot_abstract_machine/install/random_events/lib/python3.12/site-packages/random_events/interval.py to interval.cpython-312.pyc\n'}
+[11.469226] (random_events) StdoutLine: {'line': b'running install_egg_info\n'}
+[11.486369] (random_events) StdoutLine: {'line': b'Copying ../build/random_events/random_events.egg-info to /home/zakaria/workspace/ros/src/cognitive_robot_abstract_machine/install/random_events/lib/python3.12/site-packages/random_events-4.1.18-py3.12.egg-info\n'}
+[11.486671] (random_events) StdoutLine: {'line': b'running install_scripts\n'}
+[11.519293] (random_events) StdoutLine: {'line': b"writing list of installed files to '/home/zakaria/workspace/ros/src/cognitive_robot_abstract_machine/build/random_events/install.log'\n"}
+[11.525426] (-) TimerEvent: {}
+[11.541992] (random_events) CommandEnded: {'returncode': 0}
+[11.547479] (random_events) JobEnded: {'identifier': 'random_events', 'rc': 0}
+[11.547835] (-) EventReactorShutdown: {}

@@ -164,6 +164,8 @@ class PickUpAction(ActionDescription):
             ),
             MoveGripperMotion(motion=GripperState.CLOSE, gripper=self.arm),
         ).perform()
+        import time
+        time.sleep(1.0)
         end_effector = ViewManager.get_end_effector_view(self.arm, self.robot_view)
 
         # Attach the object to the end effector
@@ -175,10 +177,16 @@ class PickUpAction(ActionDescription):
         _, _, lift_to_pose = self.grasp_description.grasp_pose_sequence(
             self.object_designator
         )
+        # Transform the target pose into the fixed world root frame. 
+        # Since the object is already attached to the arm, providing a target relative 
+        # to the object would create a moving goal for the CartesianPose controller.
+        lift_to_pose_world = PoseStamped.from_spatial_type(
+            self.world.transform(lift_to_pose.to_spatial_type(), self.world.root)
+        )
         SequentialPlan(
             self.context,
             MoveTCPMotion(
-                lift_to_pose,
+                lift_to_pose_world,
                 self.arm,
                 allow_gripper_collision=True,
                 movement_type=MovementType.TRANSLATION,

@@ -92,7 +92,10 @@ class PlaceAction(ActionDescription):
                 parent=world_root, child=self.object_designator, world=self.world
             )
             self.world.add_connection(connection)
-            connection.origin = obj_transform
+            
+        import time
+        time.sleep(0.5)
+        connection.origin = obj_transform
 
         _, _, retract_pose = previous_grasp._pose_sequence(
             self.target_location, self.object_designator, reverse=True

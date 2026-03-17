@@ -203,10 +203,17 @@ class StateSynchronizer(StateChangeCallback, SynchronizerOnCallback):
         :param msg: The message containing the new state information.
         """
         # Parse incoming states: WorldState has 'states' only
-        indices = [self.world.state._index[_id] for _id in msg.ids]
+        # Giskard may send updates for bodies that the SDT didn't load.
+        # Ignore these to avoid a KeyError.
+        valid_indices = []
+        valid_states = []
+        for _id, state in zip(msg.ids, msg.states):
+            if _id in self.world.state._index:
+                valid_indices.append(self.world.state._index[_id])
+                valid_states.append(state)
 
-        if indices:
-            self.world.state.data[0, indices] = np.asarray(msg.states, dtype=float)
+        if valid_indices:
+            self.world.state.data[0, valid_indices] = np.asarray(valid_states, dtype=float)
             self.update_previous_world_state()
             self.world.notify_state_change(publish_changes=False)
 

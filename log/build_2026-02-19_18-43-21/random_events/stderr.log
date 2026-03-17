@@ -1,0 +1,4 @@
+/home/zakaria/workspace/ros/src/cognitive_robot_abstract_machine/random_events/setup.py:23: DeprecationWarning: Attribute s is deprecated and will be removed in Python 3.14; use value instead
+  return ast.parse(line).body[0].value.s
+/usr/lib/python3/dist-packages/setuptools/config/_apply_pyprojecttoml.py:80: SetuptoolsWarning: `install_requires` overwritten in `pyproject.toml` (dependencies)
+  corresp(dist, value, root_dir)

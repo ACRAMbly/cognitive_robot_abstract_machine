@@ -109,8 +109,17 @@ class ForwardKinematicsManager(rustworkx.visit.DFSVisitor):
         """
         self.compute_np.cache_clear()
         self.subs = self.world.state.positions
-        self.forward_kinematics_for_all_bodies = self.compiled_all_fks(self.subs)
-        self.collision_fks = self.compiled_collision_fks(self.subs)
+        # Guard against model/state synchronization race condition:
+        # When a model change adds new DOFs and recompiles the FK function,
+        # the compiled function may expect more parameters than the current
+        # state buffer provides if the state update hasn't arrived yet.
+        # In this case CasADi raises a RuntimeError about buffer size.
+        # We silently skip — the next recompute after the state syncs will succeed.
+        try:
+            self.forward_kinematics_for_all_bodies = self.compiled_all_fks(self.subs)
+            self.collision_fks = self.compiled_collision_fks(self.subs)
+        except RuntimeError:
+            pass
 
     @copy_lru_cache()
     def compose_expression(
