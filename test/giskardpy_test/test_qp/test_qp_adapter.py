@@ -319,6 +319,13 @@ def test_qp_data_symbolic(prismatic_bot2):
         reference_velocity=1,
         name="position_constraint",
     )
+    constraints.add_equality_constraint(
+        task_expression=dof2.variables.position,
+        equality_bound=1,
+        quadratic_weight=0,
+        reference_velocity=1,
+        name="0 weight constraint",
+    )
     qp_data_symbolic = QPDataSymbolic(
         degrees_of_freedom=prismatic_bot2.active_degrees_of_freedom,
         constraint_collection=constraints,
@@ -335,7 +342,8 @@ def test_qp_data_symbolic(prismatic_bot2):
         life_cycle_state=np.array([]),
         float_variables=np.array([]),
     )
-    solution = QPSolverPIQP().solver_call(qp_data)
+    qp_data_filtered = qp_data.apply_filters()
+    solution = QPSolverPIQP().solver_call(qp_data_filtered)
     debugger = QPDebugger(qp_data_symbolic=qp_data_symbolic, last_solution=solution)
 
     pass

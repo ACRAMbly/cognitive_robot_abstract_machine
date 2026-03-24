@@ -1790,4 +1790,4 @@ class QPDataSymbolic:
 
     @property
     def num_non_slack_variables(self) -> int:
-        return self.num_free_variable_constraints - self.num_slack_variables
+        return self.quadratic_weights.shape[0] - self.num_slack_variables

@@ -50,12 +50,27 @@ class QPDebugger:
     # debug: pandas.DataFrame = field(init=False)
 
     def __post_init__(self):
-        if self.last_solution is None:
-            self.last_solution = (
-                np.ones(self.qp_data_symbolic.box_lower_constraints.shape[0]) * np.nan
-            )
+        last_solution = (
+            np.ones(self.qp_data_symbolic.box_lower_constraints.shape[0]) * np.nan
+        )
+        if self.last_solution is not None:
+            last_solution[self.quadratic_weight_filter] = self.last_solution
+        self.last_solution = last_solution
         self.create_direct_limits()
         self.create_equality_constraints()
+
+    @property
+    def quadratic_weight_filter(self) -> np.ndarray:
+        quadratic_weight_filter = np.ones(
+            self.qp_data_symbolic.quadratic_weights.shape[0]
+        )
+        quadratic_weight_filter[self.qp_data_symbolic.num_non_slack_variables :] = (
+            self.qp_data_symbolic.quadratic_weights.evaluate()[
+                self.qp_data_symbolic.num_non_slack_variables :
+            ]
+            != 0
+        )
+        return quadratic_weight_filter.astype(bool)
 
     def create_direct_limits(self):
         self.direct_limits = pd.DataFrame(
