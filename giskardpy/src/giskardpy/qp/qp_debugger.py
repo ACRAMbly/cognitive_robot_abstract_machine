@@ -120,22 +120,23 @@ class QPDebugger:
         Ex = neq_matrix_dofs_np @ self.current_solution[: neq_matrix_dofs_np.shape[1]]
         lower_bounds = self.qp_data_symbolic.neq_lower_bounds.evaluate()
         upper_bounds = self.qp_data_symbolic.neq_upper_bounds.evaluate()
-        self.inequality_constraints = pd.DataFrame(
-            {
-                "lower_bounds": lower_bounds,
-                "Ex": Ex,
-                # "slack": bounds - Ex,
-                "upper_bounds": upper_bounds,
-            },
-            self.inequality_constr_names,
-            dtype=float,
-        )
-        self.inequality_matrix = pd.DataFrame(
-            neq_matrix_dofs_np,
-            self.inequality_constr_names,
-            self.degree_of_freedom_names,
-            dtype=float,
-        )
+        if len(self.inequality_constr_names) > 0:
+            self.inequality_constraints = pd.DataFrame(
+                {
+                    "lower_bounds": lower_bounds,
+                    "Ex": Ex,
+                    # "slack": bounds - Ex,
+                    "upper_bounds": upper_bounds,
+                },
+                self.inequality_constr_names,
+                dtype=float,
+            )
+            self.inequality_matrix = pd.DataFrame(
+                neq_matrix_dofs_np,
+                self.inequality_constr_names,
+                self.degree_of_freedom_names,
+                dtype=float,
+            )
 
     def _has_nan(self):
         nan_entries = self.p_A[0].isnull().stack()

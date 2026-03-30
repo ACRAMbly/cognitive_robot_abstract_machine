@@ -3,7 +3,8 @@ from dataclasses import dataclass
 from typing import List
 
 import krrood.symbolic_math.symbolic_math as sm
-from giskardpy.motion_statechart.graph_node import Task
+from giskardpy.motion_statechart.context import MotionStatechartContext
+from giskardpy.motion_statechart.graph_node import Task, NodeArtifacts
 from semantic_digital_twin.spatial_types import Point3
 from semantic_digital_twin.spatial_types.derivatives import Derivatives
 from semantic_digital_twin.world_description.world_entity import Body
@@ -91,31 +92,33 @@ class MaxManipulability(Task):
     gain: float = 5
     m_threshold: float = 0.15
 
-    def __post_init__(self):
-        root_P_tip = context.world._forward_kinematic_manager.compose_expression(
+    def build(self, context: MotionStatechartContext) -> NodeArtifacts:
+        artifacts = NodeArtifacts()
+        root_P_tip = context.world.compose_forward_kinematics_expression(
             self.root_link, self.tip_link
         ).to_position()[:3]
 
-        symbols = context.free_variables()
+        symbols = root_P_tip.free_variables()
         e = sm.vstack([root_P_tip])
         J = e.jacobian(symbols)
         JJT = J.dot(J.T)
         m = sm.sqrt(JJT.det())
 
-        self.add_position_constraint(
+        artifacts.constraints.add_position_constraint(
             reference_velocity=1,
             expr_goal=self.m_threshold,
-            weight=0.1,
+            quadratic_weight=10,
             expr_current=m,
             name=self.name,
         )
 
-        context.add_debug_expression(
-            f"mIndex {self.tip_link.name.name}", m, derivatives_to_plot=[0, 1]
-        )
-        context.add_debug_expression(
-            f"mIndex {self.tip_link.name.name} threshold",
-            self.m_threshold,
-            derivatives_to_plot=[0, 1],
-        )
-        self.observation_expression = sm.abs(self.m_threshold - m) <= 0.01
+        # context.add_debug_expression(
+        #     f"mIndex {self.tip_link.name.name}", m, derivatives_to_plot=[0, 1]
+        # )
+        # context.add_debug_expression(
+        #     f"mIndex {self.tip_link.name.name} threshold",
+        #     self.m_threshold,
+        #     derivatives_to_plot=[0, 1],
+        # )
+        artifacts.observation_expression = sm.abs(self.m_threshold - m) <= 0.01
+        return artifacts

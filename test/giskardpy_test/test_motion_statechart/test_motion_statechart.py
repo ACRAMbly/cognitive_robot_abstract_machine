@@ -76,6 +76,7 @@ from giskardpy.motion_statechart.tasks.feature_functions import (
 )
 from giskardpy.motion_statechart.tasks.joint_tasks import JointPositionList, JointState
 from giskardpy.motion_statechart.tasks.pointing import Pointing, PointingCone
+from giskardpy.motion_statechart.tasks.weight_scaling_goals import MaxManipulability
 from giskardpy.motion_statechart.test_nodes.test_nodes import (
     ChangeStateOnEvents,
     ConstTrueNode,
@@ -1519,7 +1520,10 @@ class TestCartesianTasks:
         kin_sim.compile(motion_statechart=msc)
         kin_sim.tick_until_end()
 
-    def test_cart_goal_1eef(self, pr2_world_state_reset: World):
+    def test_cart_goal_1eef(self, pr2_world_state_reset: World, rclpy_node):
+        VizMarkerPublisher(
+            _world=pr2_world_state_reset, node=rclpy_node
+        ).with_tf_publisher()
         tip = pr2_world_state_reset.get_kinematic_structure_entity_by_name(
             "r_gripper_tool_frame"
         )
@@ -4502,3 +4506,24 @@ class TestLifeCycleTransitions:
         msc.plot_gantt_chart()
 
         assert len(msc.history) == 5
+
+
+class TestMaxManipulability:
+    def test_MaxManipulability(self, pr2_world_state_reset: World, rclpy_node):
+        VizMarkerPublisher(
+            _world=pr2_world_state_reset, node=rclpy_node
+        ).with_tf_publisher()
+        root = pr2_world_state_reset.get_body_by_name("base_footprint")
+        tip = pr2_world_state_reset.get_body_by_name("r_gripper_tool_frame")
+
+        msc = MotionStatechart()
+        msc.add_nodes(
+            [
+                MaxManipulability(root_link=root, tip_link=tip),
+            ]
+        )
+        # msc.add_node(EndMotion.when_false(pulse))
+
+        kin_sim = Executor(MotionStatechartContext(world=pr2_world_state_reset))
+        kin_sim.compile(motion_statechart=msc)
+        kin_sim.tick_until_end()
