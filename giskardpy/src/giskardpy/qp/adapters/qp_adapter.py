@@ -189,7 +189,7 @@ class SlackLimits(DirectLimits):
                 self.normalized_weight(
                     quadratic_weight=c.quadratic_weight,
                     control_horizon=config.velocity_horizon,
-                    normalization_number=config.radian_normalization_number,
+                    normalization_number=c.normalization_factor,
                 )
                 for c in constraints
             ]
@@ -199,7 +199,7 @@ class SlackLimits(DirectLimits):
                 self.normalized_weight(
                     quadratic_weight=c.linear_weight,
                     control_horizon=config.velocity_horizon,
-                    normalization_number=config.radian_normalization_number,
+                    normalization_number=c.normalization_factor,
                 )
                 for c in constraints
             ]
@@ -715,26 +715,43 @@ class IntegralConstraintStrategy(ConstraintStrategy):
             config=self.config,
         )
 
-    def _apply_cap(self, value: Scalar, dt: float, control_horizon: int) -> Scalar:
+    def _apply_cap(
+        self,
+        value: Scalar,
+        dt: float,
+        normalization_number: float,
+        control_horizon: int,
+    ) -> Scalar:
         # todo normalization with jacobian???
         return sm.limit(
             value,
-            -self.config.radian_normalization_number * dt * control_horizon,
-            self.config.radian_normalization_number * dt * control_horizon,
+            -normalization_number * dt * control_horizon,
+            normalization_number * dt * control_horizon,
         )
 
     def capped_bound(
-        self, equality_bound: Scalar, dt: float, control_horizon: int
+        self,
+        equality_bound: Scalar,
+        dt: float,
+        normalization_number: float,
+        control_horizon: int,
     ) -> Scalar:
-        return self._apply_cap(equality_bound, dt, control_horizon)
+        return self._apply_cap(
+            equality_bound, dt, normalization_number, control_horizon
+        )
 
-    def create_bounds(self, bounds: list[Scalar]) -> Vector:
+    def create_bounds(
+        self, bounds: list[Scalar], normalization_numbers: list[float]
+    ) -> Vector:
         return Vector(
             [
                 self.capped_bound(
-                    bound, self.config.mpc_dt, self.config.velocity_horizon
+                    bound,
+                    self.config.mpc_dt,
+                    normalization_number,
+                    self.config.velocity_horizon,
                 )
-                for bound in bounds
+                for bound, normalization_number in zip(bounds, normalization_numbers)
             ]
         )
 
@@ -749,8 +766,14 @@ class InequalityConstraintModel(InequalityConstraint):
         self.matrix = strategy.create_matrix(constraints)
         self.slack_matrix = strategy.create_slack_matrix(constraints)
         self.slack_variables = strategy.create_slack_variables(constraints)
-        self.lower_bounds = strategy.create_bounds([c.lower_error for c in constraints])
-        self.upper_bounds = strategy.create_bounds([c.upper_error for c in constraints])
+        self.lower_bounds = strategy.create_bounds(
+            [c.lower_error for c in constraints],
+            [c.normalization_factor for c in constraints],
+        )
+        self.upper_bounds = strategy.create_bounds(
+            [c.upper_error for c in constraints],
+            [c.normalization_factor for c in constraints],
+        )
 
     @property
     def constraint_names(self) -> list[str]:
@@ -889,7 +912,10 @@ class EqualityConstraintModel(EqualityConstraint):
         self.matrix = strategy.create_matrix(constraints)
         self.slack_matrix = strategy.create_slack_matrix(constraints)
         self.slack_variables = strategy.create_slack_variables(constraints)
-        self.bounds = strategy.create_bounds([c.bound for c in constraints])
+        self.bounds = strategy.create_bounds(
+            [c.bound for c in constraints],
+            [c.normalization_factor for c in constraints],
+        )
 
     @property
     def constraint_names(self) -> list[str]:
