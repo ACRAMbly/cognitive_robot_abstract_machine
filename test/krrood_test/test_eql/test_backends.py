@@ -31,6 +31,7 @@ from pycram.datastructures.grasp import GraspDescription
 from pycram.robot_plans.actions.composite.transporting import MoveAndPickUpAction
 from pycram.robot_plans.actions.core.misc import MoveToReach
 from random_events.interval import Interval, reals, singleton
+from random_events.product_algebra import Event
 from random_events.set import Set
 from random_events.variable import Symbolic, Variable
 from semantic_digital_twin.orm.model import (
@@ -102,12 +103,6 @@ def test_nested_action(mutable_model_world):
         and not isinstance(match.assigned_value, EllipsisType)
         and not match.assigned_value is None
     ]
-    random_events_names = [
-        name
-        for name, variable in variables.items()
-        if isinstance(variable, Symbolic)
-        and name in names_of_actual_specified_parameters
-    ]
 
     assert names_of_actual_specified_parameters == [
         "MoveAndPickUpAction.object_designator",
@@ -119,7 +114,23 @@ def test_nested_action(mutable_model_world):
         variables[
             "MoveAndPickUpAction.grasp_description.manipulation_offset"
         ].domain.simple_sets
-        == singleton(manipulation_offset).simple_sets
+        == reals().simple_sets
+    )
+    assert len(parameters._events_from_literal_values) == 1
+
+    manipulation_offset_variable_of_conditioning_event = (
+        parameters._events_from_literal_values[0].simple_sets[0]
+    )
+
+    assert (
+        len(
+            [
+                assignment
+                for assignment in manipulation_offset_variable_of_conditioning_event.assignments
+                if assignment == singleton(manipulation_offset)
+            ]
+        )
+        == 1
     )
 
 
@@ -177,8 +188,10 @@ def test_underspecified_parameters_with_partly_symbolic_expression():
     assert variables["KRROODPosition.x"].is_numeric
     assert variables["KRROODPosition.y"].domain == reals()
     assert variables["KRROODPosition.y"].is_numeric
-    assert variables["KRROODPosition.z"].domain == Set.from_iterable([1, 2, 3])
-    assert not variables["KRROODPosition.z"].is_numeric
+    assert variables["KRROODPosition.z"].domain == reals()
+    assert variables["KRROODPosition.z"].is_numeric
+    assert len(parameters.conditioning_event.simple_sets) == 3
+    assert len(parameters.conditioning_event.simplify().simple_sets) == 1
 
 
 def test_underspecified_parameters_with_full_symbolic_expression():

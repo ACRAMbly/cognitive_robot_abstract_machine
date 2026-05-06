@@ -247,7 +247,7 @@ class ProbabilisticBackend(GenerativeBackend):
 
         # create new objects with the values from the samples
         for sample in samples:
-            instance = parameters.create_instance_from_variables_and_sample(
+            instance = parameters.construct_instance_from_model_sample(
                 truncated.variables, sample
             )
             yield instance

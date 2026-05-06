@@ -3,7 +3,7 @@ from __future__ import annotations
 import types
 import typing
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import Enum, EnumType
 from functools import cached_property
 from inspect import isclass
 from typing import Dict, Optional
@@ -13,10 +13,13 @@ from typing import Dict, Optional, Tuple
 import numpy as np
 from typing_extensions import Any, get_args
 
+import krrood
+from krrood.parametrization.exceptions import EmptyVariableDomain
+from semantic_digital_twin.orm.ormatic_interface import *  # type: ignore
 import random_events.variable
 from krrood.entity_query_language.core.base_expressions import SymbolicExpression
 from krrood.entity_query_language.core.variable import Literal, Variable
-from krrood.entity_query_language.factories import and_
+from krrood.entity_query_language.factories import and_, variable
 from krrood.entity_query_language.core.mapped_variable import (
     Attribute,
     Index,
@@ -38,7 +41,7 @@ from probabilistic_model.probabilistic_circuit.relational.learn_rspn import (
 from random_events.interval import singleton
 from random_events.product_algebra import Event, SimpleEvent
 from random_events.set import Set, SetElement
-from random_events.variable import compatible_types
+from random_events.variable import compatible_types, variable_from_name_and_type
 from semantic_digital_twin.world_description.world_entity import Body
 
 
@@ -130,138 +133,153 @@ class UnderspecifiedParameters:
         result = {v.name: v for v in self._random_event_compiler.variables.values()}
 
         for attribute_match in self.statement.matches_with_variables:
-            name = attribute_match.name_from_variable_access_path
-
-            if isinstance(
-                attribute_match.assigned_variable, Literal
-            ) and not isinstance(
-                attribute_match.assigned_value,
-                (SymbolicExpression, type(Ellipsis), NoneType),
-            ):
-                if issubclass(attribute_match.assigned_variable._type_, Enum):
-                    name = f"{attribute_match.name_from_variable_access_path}"
-                    variable = random_events.variable.Symbolic(
-                        name=name,
-                        domain=Set.from_iterable(
-                            attribute_match.assigned_variable._domain_
-                        ),
-                    )
-                    result[variable.name] = variable
-                    event = Event.from_simple_sets(
-                        SimpleEvent.from_data(
-                            {variable: attribute_match.assigned_variable._domain_}
-                        )
-                    )
-                    self._events_from_literal_values.append(event)
-                    continue
-                # case Literal is Orientation(x=1,y=0,z=1)
-                if isinstance(attribute_match.assigned_value, (int, float)):
-                    variable = self._create_variable_from_literal_value(attribute_match)
-                    result[variable.name] = variable
-                elif not isinstance(attribute_match.assigned_value, compatible_types):
-                    feature_extractor = FeatureExtractor(
-                        get_features_of_class_bfs(
-                            to_dao(attribute_match.assigned_value),
-                            attribute_match.assigned_variable,
-                        )
-                    )
-                    for feature in feature_extractor.features:
-                        mapping = feature.apply_mapping_on_external_root(
-                            attribute_match.assigned_value
-                        )
-                        result[
-                            f"{name}.{get_clean_name_from_mapped_variable(feature)}"
-                        ] = random_events.variable.Continuous(
-                            name=f"{name}.{get_clean_name_from_mapped_variable(feature)}",
-                        )
-                        event = Event.from_simple_sets(
-                            SimpleEvent.from_data(
-                                {
-                                    result[
-                                        f"{name}.{get_clean_name_from_mapped_variable(feature)}"
-                                    ]: singleton(mapping)
-                                }
-                            )
-                        )
-                        self._events_from_literal_values.append(event)
+            if attribute_match.assigned_value is None:
                 continue
 
-                # continue
-                variable = self._create_variable_from_literal_value(attribute_match)
-                result[variable.name] = variable
-                continue
+            result.update(self._extract_variables_from_attribute_match(attribute_match))
 
-            assigned_type = attribute_match.assigned_variable._type_
-            if isinstance(attribute_match.assigned_value, SymbolicExpression):
-                variables = self._create_variables_from_symbolic_expression(
-                    attribute_match
-                )
-                result.update(variables)
-                continue
-            elif assigned_type is None:
-                continue
-            elif type(assigned_type) is types.UnionType:
-                target_type = random_events.variable.most_appropriate_variable_type(
-                    get_args(assigned_type)
-                )
-
-            elif not isclass(assigned_type):
-                continue
-
-            elif issubclass(
-                assigned_type,
-                random_events.variable.compatible_types,
-            ):
-                target_type = attribute_match.assigned_variable._type_
-
-            else:
-                continue
-            if target_type is None:
-                continue
-            random_events_variable = random_events.variable.variable_from_name_and_type(
-                name, target_type
-            )
-
-            result[random_events_variable.name] = random_events_variable
         return result
 
-    def _create_variable_from_literal_value(
-        self, attribute_match: AttributeMatch
-    ) -> random_events.variable.Variable:
-        name = f"{attribute_match.name_from_variable_access_path}"
-        result = random_events.variable.Continuous(
-            name=name,
-        )
-        event = Event.from_simple_sets(
-            SimpleEvent.from_data({result: attribute_match.assigned_value})
-        )
-        self._events_from_literal_values.append(event)
-        return result
-
-    def _create_variables_from_symbolic_expression(
+    def _extract_variables_from_attribute_match(
         self, attribute_match: AttributeMatch
     ) -> Dict[str, random_events.variable.Variable]:
+        """
+        Extract variables from an attribute match by dispatching to specific handlers.
 
-        if attribute_match.assigned_value in self._symbolic_expression_event_cache:
-            return self._symbolic_expression_event_cache[attribute_match.assigned_value]
+        :param attribute_match: The attribute match to extract variables from.
+        :return: A dictionary of extracted variables.
+        """
+        krrood_variable = attribute_match.assigned_variable
 
-        result = {}
+        if isinstance(krrood_variable, Literal):
+            return self._handle_literal_attribute_match(attribute_match)
 
-        state = ToDataAccessObjectState()
-        domain_objects = attribute_match.assigned_value.tolist()
-        hashes = [hash(obj) for obj in domain_objects]
-        if get_dao_class(type(domain_objects[0])) is None:
-            random_events_variable = random_events.variable.Symbolic(
-                name=attribute_match.name_from_variable_access_path,
-                domain=Set.from_iterable(hashes),
-            )
-            result[random_events_variable.name] = random_events_variable
-            self._events_from_symbolic_expression.append(
-                Event.from_simple_sets(
-                    SimpleEvent.from_data({random_events_variable: hashes})
-                )
+        if isinstance(krrood_variable, Variable):
+            return self._handle_variable_attribute_match(attribute_match)
+
+        return {}
+
+    def _handle_literal_attribute_match(
+        self, attribute_match: AttributeMatch
+    ) -> Dict[str, random_events.variable.Variable]:
+        """
+        Handle attribute matches where the assigned value is a literal.
+
+        :param attribute_match: The attribute match with a literal assigned value.
+        :return: A dictionary of extracted variables.
+        """
+        name = attribute_match.name_from_variable_access_path
+        value = attribute_match.assigned_value
+        krrood_variable = attribute_match.assigned_variable
+
+        if isinstance(value, compatible_types) or isinstance(
+            krrood_variable._type_, compatible_types
+        ):
+            result = {name: variable_from_name_and_type(name=name, type_=type(value))}
+            self._register_literal_conditioning_event(
+                attribute_match, krrood_variable, result
             )
             return result
+
+        if isinstance(value, types.EllipsisType):
+            return {name: random_events.variable.Continuous(name=name)}
+
+        return self._extract_variables_from_non_primitive_literal(attribute_match)
+
+    def _extract_variables_from_non_primitive_literal(
+        self, attribute_match: AttributeMatch
+    ) -> Dict[str, random_events.variable.Variable]:
+        """
+        Extract variables from a literal value that is not a primitive type.
+
+        :param attribute_match: The attribute match with a non-primitive literal value.
+        :return: A dictionary of extracted variables.
+        """
+        result = {}
+        dao_state = ToDataAccessObjectState()
+
+        for feature in FeatureExtractor(
+            get_features_of_class_bfs(
+                to_dao(attribute_match.assigned_value, dao_state),
+                variable(type(attribute_match.assigned_value), []),
+            )
+        ).features:
+            result[feature._name_] = random_events.variable.Continuous(
+                name=feature._name_
+            )
+            self._register_literal_conditioning_event(attribute_match, feature, result)
+        return result
+
+    def _handle_variable_attribute_match(
+        self, attribute_match: AttributeMatch
+    ) -> Dict[str, random_events.variable.Variable]:
+        """
+        Handle attribute matches where the assigned value is a KRROOD variable.
+
+        :param attribute_match: The attribute match with a KRROOD variable assigned value.
+        :return: A dictionary of extracted variables.
+        """
+        if attribute_match.assigned_value in self._symbolic_expression_event_cache:
+            return self._symbolic_expression_event_cache[
+                attribute_match.assigned_value
+            ][1]
+
+        domain_objects = attribute_match.assigned_value.tolist()
+
+        if not domain_objects:
+            raise EmptyVariableDomain(attribute_match.variable)
+
+        if issubclass(attribute_match.assigned_variable._type_, compatible_types):
+            return self._extract_variables_from_primitive_krrood_variable(
+                attribute_match, domain_objects
+            )
+
+        return self._extract_variables_from_non_primitive_krrood_variable(
+            attribute_match, domain_objects
+        )
+
+    def _extract_variables_from_primitive_krrood_variable(
+        self, attribute_match: AttributeMatch, domain_objects: typing.List[Any]
+    ) -> Dict[str, random_events.variable.Variable]:
+        """
+        Extract variables from a KRROOD variable with a primitive type.
+
+        :param attribute_match: The attribute match.
+        :param domain_objects: The objects in the variable's domain.
+        :return: A dictionary of extracted variables.
+        """
+        name = attribute_match.name_from_variable_access_path
+        re_variable = variable_from_name_and_type(
+            name=name, type_=attribute_match.assigned_variable._type_
+        )
+        result = {re_variable.name: re_variable}
+
+        if issubclass(type(attribute_match.assigned_variable._type_), EnumType):
+            simple_events = [
+                SimpleEvent.from_data({re_variable: Set.from_iterable(domain_objects)})
+            ]
+        else:
+            simple_events = [
+                SimpleEvent.from_data({re_variable: singleton(obj)})
+                for obj in domain_objects
+            ]
+        self._events_from_symbolic_expression.append(
+            Event.from_simple_sets(*simple_events)
+        )
+        return result
+
+    def _extract_variables_from_non_primitive_krrood_variable(
+        self, attribute_match: AttributeMatch, domain_objects: typing.List[Any]
+    ) -> Dict[str, random_events.variable.Variable]:
+        """
+        Extract variables from a KRROOD variable with a non-primitive type.
+
+        :param attribute_match: The attribute match.
+        :param domain_objects: The objects in the variable's domain.
+        :return: A dictionary of extracted variables.
+        """
+        state = ToDataAccessObjectState()
+        hashes = [hash(obj) for obj in domain_objects]
         data_access_objects = [to_dao(obj, state=state) for obj in domain_objects]
 
         features = get_features_of_class_bfs(
@@ -270,38 +288,37 @@ class UnderspecifiedParameters:
         )
         extractor = FeatureExtractor(features)
 
+        result = {}
+
         # extract feature variables
         for feature in extractor.features:
             relative_feature_name = get_clean_name_from_mapped_variable(feature)
-            name = f"{attribute_match.name_from_variable_access_path}.{relative_feature_name}"
-            random_events_variable = random_events.variable.variable_from_name_and_type(
-                name=name, type_=feature._type_
+            name = (
+                f"{attribute_match.name_from_variable_access_path}."
+                f"{relative_feature_name}"
             )
-            result[random_events_variable.name] = random_events_variable
+            re_variable = variable_from_name_and_type(name=name, type_=feature._type_)
+            result[re_variable.name] = re_variable
 
         identifier_name = f"{attribute_match.name_from_variable_access_path}"
         identifier_variable = random_events.variable.Symbolic(
             name=identifier_name, domain=Set.from_iterable(hashes)
         )
-
         result[identifier_variable.name] = identifier_variable
 
         simple_events = []
-        for index, (hash_, dao) in enumerate(zip(hashes, data_access_objects)):
-            current_features = extractor.apply_mapping(dao)
+        for hash_, dao in zip(hashes, data_access_objects):
+            current_feature_values = extractor.apply_mapping(dao)
 
-            current_simple_event = SimpleEvent.from_data(
-                {
-                    identifier_variable: hash_,
-                    **{
-                        result[
-                            f"{attribute_match.name_from_variable_access_path}.{get_clean_name_from_mapped_variable(f)}"
-                        ]: v
-                        for f, v in zip(features, current_features)
-                    },
-                }
-            )
-            simple_events.append(current_simple_event)
+            data = {identifier_variable: hash_}
+            for feature, value in zip(features, current_feature_values):
+                relative_name = get_clean_name_from_mapped_variable(feature)
+                full_name = (
+                    f"{attribute_match.name_from_variable_access_path}.{relative_name}"
+                )
+                data[result[full_name]] = value
+
+            simple_events.append(SimpleEvent.from_data(data))
 
         resulting_event = Event.from_simple_sets(*simple_events)
         self._events_from_symbolic_expression.append(resulting_event)
@@ -359,17 +376,17 @@ class UnderspecifiedParameters:
             complete_event = complete_event.intersection_with(other_event)
         return complete_event
 
-    def create_instance_from_variables_and_sample(
+    def construct_instance_from_model_sample(
         self,
         variables: typing.Iterable[random_events.variable.Variable],
         sample: np.ndarray,
     ) -> Dict[random_events.variable.Variable, Any]:
         """
-        Create an instance from a sample of a probabilistic model.
+        Construct an instance from a sample of a probabilistic model.
 
         :param variables: The variables from a probabilistic model.
-        :param sample: A sample from the same model-
-        :return: The instance
+        :param sample: A sample from the same model.
+        :return: The constructed instance.
         """
         sample_mapping = dict(zip(variables, sample))
         for variable_, value in sample_mapping.items():
@@ -413,3 +430,27 @@ class UnderspecifiedParameters:
         self.statement._update_kwargs_from_literal_values()
         result = self.statement.construct_instance()
         return result
+
+    def _register_literal_conditioning_event(
+        self,
+        attribute_match: AttributeMatch,
+        attribute: Attribute,
+        result: Dict[str, random_events.variable.Variable],
+    ):
+        """
+        Register a conditioning event for a literal attribute match.
+
+        :param attribute_match: The attribute match.
+        :param attribute: The attribute being matched.
+        :param result: The dictionary of variables to update.
+        """
+        if not isinstance(attribute_match.assigned_value, compatible_types):
+            mapping = attribute.apply_mapping_on_external_root(
+                attribute_match.assigned_value
+            )
+        else:
+            mapping = attribute_match.assigned_value
+        event = Event.from_simple_sets(
+            SimpleEvent.from_data({result[attribute._name_]: mapping})
+        )
+        self._events_from_literal_values.append(event)
