@@ -20,9 +20,9 @@ import enum
 import krrood.adapters.json_serializer
 import krrood.ormatic.custom_types
 import krrood.ormatic.type_dict
+import pathlib
 import semantic_digital_twin.adapters.sage_10k_dataset.loader
 import semantic_digital_twin.adapters.sage_10k_dataset.schema
-import semantic_digital_twin.adapters.sage_10k_dataset.utils
 import semantic_digital_twin.callbacks.callback
 import semantic_digital_twin.collision_checking.collision_detector
 import semantic_digital_twin.collision_checking.collision_groups
@@ -98,10 +98,6 @@ from krrood.ormatic.data_access_objects.dao import (
     AssociationDataAccessObject,
 )
 from krrood.ormatic.custom_types import TypeType
-from semantic_digital_twin.semantic_annotations import (
-    natural_language,
-    semantic_annotations,
-)
 
 
 class Base(DeclarativeBase):
@@ -112,6 +108,7 @@ class Base(DeclarativeBase):
         enum.Enum: krrood.ormatic.custom_types.PolymorphicEnumType,
         krrood.adapters.json_serializer.SubclassJSONSerializer: sqlalchemy.sql.sqltypes.JSON,
         uuid.UUID: sqlalchemy.sql.sqltypes.UUID,
+        pathlib.Path: krrood.ormatic.custom_types.PathType,
     }
 
 
@@ -3343,6 +3340,31 @@ class PipelineDAO(
     )
 
 
+class PointOccupiedErrorDAO(
+    Base, DataAccessObject[semantic_digital_twin.exceptions.PointOccupiedError]
+):
+
+    __tablename__ = "PointOccupiedErrorDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
+
+    message: Mapped[builtins.str] = mapped_column(
+        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
+    )
+
+    point_id: Mapped[int] = mapped_column(
+        ForeignKey("Point3MappingDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
+    )
+
+    point: Mapped[Point3MappingDAO] = relationship(
+        "Point3MappingDAO", uselist=False, foreign_keys=[point_id], post_update=True
+    )
+
+
 class PointSpatialRelationDAO(
     Base,
     DataAccessObject[semantic_digital_twin.reasoning.predicates.PointSpatialRelation],
@@ -3622,6 +3644,10 @@ class Sage10kDatasetLoaderDAO(
 
     database_id: Mapped[builtins.int] = mapped_column(
         Integer, primary_key=True, use_existing_column=True
+    )
+
+    directory: Mapped[pathlib.Path] = mapped_column(
+        krrood.ormatic.custom_types.PathType, nullable=False, use_existing_column=True
     )
 
 
@@ -3945,6 +3971,10 @@ class Sage10kSceneDAO(
         sqlalchemy.sql.sqltypes.Text, use_existing_column=True
     )
     total_area: Mapped[builtins.float] = mapped_column(use_existing_column=True)
+
+    directory: Mapped[typing.Optional[pathlib.Path]] = mapped_column(
+        krrood.ormatic.custom_types.PathType, nullable=True, use_existing_column=True
+    )
 
     rooms: Mapped[builtins.list[Sage10kSceneDAO_rooms_association]] = relationship(
         "Sage10kSceneDAO_rooms_association",
@@ -7965,7 +7995,9 @@ class DoorDAO(
 
 class DoorWithTypeDAO(
     DoorDAO,
-    DataAccessObject[semantic_annotations.DoorWithType],
+    DataAccessObject[
+        semantic_digital_twin.semantic_annotations.semantic_annotations.DoorWithType
+    ],
 ):
 
     __tablename__ = "DoorWithTypeDAO"
@@ -8720,7 +8752,9 @@ class NaturalLanguageDescriptionDAO(
 
 class NaturalLanguageWithTypeDescriptionDAO(
     NaturalLanguageDescriptionDAO,
-    DataAccessObject[natural_language.NaturalLanguageWithTypeDescription],
+    DataAccessObject[
+        semantic_digital_twin.semantic_annotations.natural_language.NaturalLanguageWithTypeDescription
+    ],
 ):
 
     __tablename__ = "NaturalLanguageWithTypeDescriptionDAO"
@@ -9279,7 +9313,9 @@ class LivingRoomDAO(
 
 class RoomWithWallsAndDoorsDAO(
     RoomDAO,
-    DataAccessObject[semantic_annotations.RoomWithWallsAndDoors],
+    DataAccessObject[
+        semantic_digital_twin.semantic_annotations.semantic_annotations.RoomWithWallsAndDoors
+    ],
 ):
 
     __tablename__ = "RoomWithWallsAndDoorsDAO"

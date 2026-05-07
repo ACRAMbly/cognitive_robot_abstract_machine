@@ -1,27 +1,36 @@
 import os
 import unittest
 
+import numpy as np
 import plotly.graph_objects as go
+
 from random_events.interval import SimpleInterval
 from random_events.product_algebra import SimpleEvent
-
 from semantic_digital_twin.adapters.urdf import URDFParser
-from semantic_digital_twin.world_description.geometry import BoundingBox
-from semantic_digital_twin.world_description.shape_collection import (
-    BoundingBoxCollection,
-    ShapeCollection,
-)
-from semantic_digital_twin.world_description.graph_of_convex_sets import (
-    GraphOfConvexSets,
-)
+from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
+from semantic_digital_twin.datastructures.variables import SpatialVariables
 from semantic_digital_twin.exceptions import PointOccupiedError
 from semantic_digital_twin.spatial_types import Point3
+from semantic_digital_twin.spatial_types import (
+    RotationMatrix,
+)
 from semantic_digital_twin.spatial_types.spatial_types import (
     HomogeneousTransformationMatrix,
 )
-from semantic_digital_twin.datastructures.variables import SpatialVariables
 from semantic_digital_twin.world import World
+from semantic_digital_twin.world_description.connections import FixedConnection
+from semantic_digital_twin.world_description.geometry import BoundingBox
+from semantic_digital_twin.world_description.graph_of_convex_sets import (
+    GraphOfConvexSets,
+)
+from semantic_digital_twin.world_description.graph_of_convex_sets import (
+    navigation_map_at_target,
+)
+from semantic_digital_twin.world_description.shape_collection import (
+    BoundingBoxCollection,
+)
 from semantic_digital_twin.world_description.world_entity import Body
+from semantic_digital_twin.world_description.world_entity import Region
 
 
 class GCSTestCase(unittest.TestCase):
