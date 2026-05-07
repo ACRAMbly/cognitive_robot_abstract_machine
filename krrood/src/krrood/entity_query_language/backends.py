@@ -223,7 +223,7 @@ class ProbabilisticBackend(GenerativeBackend):
 
         model = self.model_registry.get_model(parameters)
 
-        # apply conditions from the parameters
+        # apply conditions from literal assignments to underspecified variables
         conditioned, _ = model.conditional(
             parameters.conditioning_assignments_from_literal_values
         )
@@ -236,11 +236,21 @@ class ProbabilisticBackend(GenerativeBackend):
             truncated, _ = conditioned.truncated(
                 parameters.truncation_assignments_from_where_conditions
             )
+        else:
+            truncated = conditioned
+
+        # apply conditions from variable assignments to underspecified variables
+        if parameters.truncation_assignments_from_krrood_variables:
+            complete_event = parameters.truncation_assignments_from_krrood_variables[0]
+            complete_event.fill_missing_variables(parameters.variables.values())
+            [complete_event] = [
+                complete_event.intersection_with(event)
+                for event in parameters.truncation_assignments_from_krrood_variables[1:]
+            ]
+            truncated, _ = conditioned.truncated(complete_event, singleton_allowed=True)
 
             if truncated is None:
                 raise NoSolutionFound(expression.expression)
-        else:
-            truncated = conditioned
 
         number_of_samples = expression.expression._limit_ or self.number_of_samples
 

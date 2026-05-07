@@ -4,7 +4,7 @@ import importlib
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
-from enum import Enum, auto
+from enum import Enum, auto, StrEnum
 from types import FunctionType
 from typing import Set, Generic
 
@@ -18,6 +18,7 @@ from krrood.ormatic.data_access_objects.alternative_mappings import (
     T,
 )
 from krrood.symbol_graph.symbol_graph import Symbol
+from krrood_test.dataset.semantic_world_like_classes import Body
 
 
 # check that custom enums works
@@ -131,6 +132,17 @@ class KRROODCup(KRROODPhysicalObject):
 
 class KRROODBowl(KRROODPhysicalObject):
     pass
+
+
+class NestedAction:
+    object: Body
+    pose: KRROODPose
+
+
+@dataclass
+class EnumAction:
+    object: Body
+    enum: TestEnum
 
 
 @dataclass

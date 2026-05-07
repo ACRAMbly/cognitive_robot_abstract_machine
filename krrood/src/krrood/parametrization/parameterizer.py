@@ -1,46 +1,32 @@
 from __future__ import annotations
 
 import types
-import typing
 from dataclasses import dataclass, field
 from enum import Enum, EnumType
 from functools import cached_property
-from inspect import isclass
-from typing import Dict, Optional
-from types import NoneType
 from typing import Dict, Optional, Tuple
 
 import numpy as np
 from typing_extensions import Any, get_args
-
-import krrood
 from krrood.parametrization.exceptions import EmptyVariableDomain
-from semantic_digital_twin.orm.ormatic_interface import *  # type: ignore
 import random_events.variable
 from krrood.entity_query_language.core.base_expressions import SymbolicExpression
 from krrood.entity_query_language.core.variable import Literal, Variable
 from krrood.entity_query_language.factories import and_, variable
 from krrood.entity_query_language.core.mapped_variable import (
     Attribute,
-    Index,
-    Call,
-    MappedVariable,
 )
-from krrood.entity_query_language.predicate import symbolic_function
 from krrood.entity_query_language.query.match import MatchVariable, AttributeMatch
 from krrood.ormatic.data_access_objects.helper import to_dao, get_dao_class
 from krrood.ormatic.data_access_objects.to_dao import ToDataAccessObjectState
 from krrood.parametrization.random_events_translator import (
     WhereExpressionToRandomEventTranslator,
 )
-from probabilistic_model.probabilistic_circuit.relational.learn_rspn import (
-    FeatureExtractor,
-)
+from krrood.parametrization.feature_extractor import FeatureExtractor
 from random_events.interval import singleton
 from random_events.product_algebra import Event, SimpleEvent
 from random_events.set import Set, SetElement
 from random_events.variable import compatible_types, variable_from_name_and_type
-from semantic_digital_twin.world_description.world_entity import Body
 
 
 @dataclass
@@ -175,9 +161,10 @@ class UnderspecifiedParameters:
         result = {}
         dao_state = ToDataAccessObjectState()
 
-        for feature in FeatureExtractor(
-            to_dao(attribute_match.assigned_value, dao_state)
-        ):
+        extractor = FeatureExtractor(
+            [to_dao(attribute_match.assigned_value, dao_state)]
+        )
+        for feature in extractor.features:
             result[feature._name_] = random_events.variable.Continuous(
                 name=feature._name_
             )
