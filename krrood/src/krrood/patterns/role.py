@@ -78,7 +78,7 @@ class Role(Symbol, SubClassSafeGeneric[T], ABC):
                 setattr(
                     self,
                     role_taker_name,
-                    self.get_role_taker_type()(*args, **role_taker_init_kwargs),
+                    self.get_role_taker_type()(**role_taker_init_kwargs),
                 )
                 return
             setattr(self, role_taker_name, init_kwargs.pop(role_taker_name))
