@@ -4,9 +4,13 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Any, List, TYPE_CHECKING
 
+import inflect
+
+_engine = inflect.engine()
+
 
 def _article(type_name: str) -> str:
-    return "an" if type_name[0].lower() in "aeiou" else "a"
+    return _engine.a(type_name).split()[0]
 
 
 @dataclass

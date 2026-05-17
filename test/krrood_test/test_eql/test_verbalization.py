@@ -333,25 +333,25 @@ def test_verbalize_not_complex_fallback():
 def test_verbalize_count():
     x = variable(int, [1, 2])
     text = _v(eql.count(x))
-    assert "count" in text and "int" in text
+    assert "count" in text and "ints" in text
 
 
 def test_verbalize_average():
     x = variable(int, [1, 2])
     text = _v(eql.average(x))
-    assert "average" in text
+    assert "average" in text and "ints" in text
 
 
 def test_verbalize_sum():
     x = variable(int, [1, 2])
     text = _v(eql.sum(x))
-    assert "sum" in text
+    assert "sum" in text and "ints" in text
 
 
 def test_verbalize_max_min():
     x = variable(int, [1, 2])
-    assert "maximum" in _v(eql.max(x))
-    assert "minimum" in _v(eql.min(x))
+    assert "maximum" in _v(eql.max(x)) and "ints" in _v(eql.max(x))
+    assert "minimum" in _v(eql.min(x)) and "ints" in _v(eql.min(x))
 
 
 # ── Integration: target test cases ────────────────────────────────────────────
@@ -391,9 +391,15 @@ def test_verbalize_for_all(handles_and_containers_world):
     text = _vq(query)
 
     assert "for all" in text
-    assert "Cabinet" in text
+    assert "Cabinets'" in text
+    assert "containers" in text
     assert "Container" in text
     assert "is" in text
+    # no bare article after "for all"
+    assert "for all a " not in text
+    assert "for all an " not in text
+    # bound variable reused in condition must use definite article
+    assert "the Cabinet's container" in text
 
 
 def test_verbalize_order_by_aggregation(handles_and_containers_world):
@@ -411,6 +417,7 @@ def test_verbalize_order_by_aggregation(handles_and_containers_world):
     assert "grouped by" in text
     assert "ordered by" in text
     assert "count" in text
+    assert "Cabinets'" in text
     assert "drawers" in text
     assert "descending" in text
 
@@ -425,10 +432,10 @@ def test_verbalize_complex_having(departments_and_employees_fixture):
     )
     text = _vq(query)
 
-    assert "Employee" in text
+    assert "Employees'" in text
     assert "department" in text
     assert "average" in text
-    assert "salary" in text
+    assert "salaries" in text
     assert "grouped by" in text
     assert "having" in text
     assert "30000" in text

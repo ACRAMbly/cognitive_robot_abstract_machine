@@ -4,6 +4,10 @@ import operator
 import re
 from typing import Optional
 
+import inflect
+
+_engine = inflect.engine()
+
 from krrood.entity_query_language.core.base_expressions import SymbolicExpression
 from krrood.entity_query_language.core.mapped_variable import (
     Attribute,
@@ -93,11 +97,19 @@ def _camel_to_words(name: str) -> str:
     """
     return re.sub(r"([A-Z])", r" \1", name).strip().lower()
 
-_ORDINALS = {0: "first", 1: "second", 2: "third", 3: "fourth", 4: "fifth"}
-
-
 def _ordinal(n: int) -> str:
-    return _ORDINALS.get(n, f"{n + 1}th")
+    return _engine.ordinal(_engine.number_to_words(n + 1))
+
+
+def _ensure_plural(word: str) -> str:
+    """Return *word* in plural form, without double-pluralising already-plural words."""
+    return word if _engine.singular_noun(word) else _engine.plural(word)
+
+
+def _plural_possessive(word: str) -> str:
+    """Return the plural-possessive form: 'Cabinets'' or 'Children's'."""
+    plural = _engine.plural(word)
+    return plural + "'" if plural.endswith("s") else plural + "'s"
 
 
 class EQLVerbalizer:
@@ -150,6 +162,38 @@ class EQLVerbalizer:
 
     def _v_FlatVariable_(self, expr: FlatVariable, ctx: VerbalizationContext) -> str:
         return self.verbalize(expr._child_, ctx)
+
+    def _verbalize_plural_(self, expr, ctx: VerbalizationContext) -> str:
+        """
+        Return a plural noun phrase for *expr* — used by ForAll and aggregators.
+
+        * ``Variable(T)``              → ``"Employees"``
+        * ``FlatVariable(child)``      → recurse into child
+        * ``Attribute`` (single-hop)   → ``"Cabinets' containers"``
+        * anything else                → fall back to singular ``verbalize()``
+        """
+        if isinstance(expr, FlatVariable):
+            return self._verbalize_plural_(expr._child_, ctx)
+
+        if isinstance(expr, Variable):
+            ctx.seen[expr._id_] = expr._type_.__name__
+            return _engine.plural(expr._type_.__name__)
+
+        if isinstance(expr, Attribute):
+            # Walk the chain to find root variable and single attribute hop.
+            chain: list = []
+            current = expr
+            while isinstance(current, MappedVariable):
+                chain.append(current)
+                current = current._child_
+            root = current
+            if isinstance(root, Variable) and len(chain) == 1 and isinstance(chain[0], Attribute):
+                ctx.seen[root._id_] = root._type_.__name__
+                root_possessive = _plural_possessive(root._type_.__name__)
+                attr_plural = _ensure_plural(chain[0]._attribute_name_)
+                return f"{root_possessive} {attr_plural}"
+
+        return self.verbalize(expr, ctx)
 
     def _verbalize_mapped_chain_(self, expr: MappedVariable, ctx: VerbalizationContext,
                                  negated: bool = False) -> str:
@@ -364,7 +408,7 @@ class EQLVerbalizer:
     # ── Quantifiers ────────────────────────────────────────────────────────────
 
     def _v_ForAll_(self, expr: ForAll, ctx: VerbalizationContext) -> str:
-        var_text = self.verbalize(expr.variable, ctx)
+        var_text = self._verbalize_plural_(expr.variable, ctx)
         cond_text = self.verbalize(expr.condition, ctx)
         return f"for all {var_text}, {cond_text}"
 
@@ -413,7 +457,7 @@ class EQLVerbalizer:
         Verbalize an aggregator with coreference: first mention returns the plain phrase;
         any subsequent mention of the same expression prefixes it with "the".
         """
-        child_text = self.verbalize(expr._child_, ctx)
+        child_text = self._verbalize_plural_(expr._child_, ctx)
         phrase = template.format(child_text)
         if expr._id_ in ctx.seen:
             return f"the {phrase}"
