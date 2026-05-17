@@ -7,6 +7,7 @@ from numpy.ma.testutils import (
 from krrood.entity_query_language.core.variable import InstantiatedVariable
 from krrood.entity_query_language.explanation import explain_inference
 from krrood.entity_query_language.factories import entity, variable, in_, inference, an
+from krrood.entity_query_language.verbalization import verbalize_expression
 from semantic_digital_twin.adapters.world_entity_kwargs_tracker import (
     WorldEntityWithIDKwargsTracker,
 )
@@ -217,6 +218,19 @@ def test_explain_inferred_semantic_annotations(apartment_world_setup):
     visualize = False
     if visualize:
         explanation.condition_graph().visualize(filename="drawer_explanation.pdf")
+
+@pytest.mark.order("fourth_to_last")
+def test_verbalize_query_that_inferred_semantic_annotations(apartment_world_setup):
+    world_reasoner = WorldReasoner(apartment_world_setup)
+    found_semantic_annotations = list(world_reasoner.infer_semantic_annotations())
+    drawer = next(ann for ann in found_semantic_annotations if isinstance(ann, Drawer))
+    explanation = explain_inference(drawer)
+    verbalization = verbalize_expression(explanation.query_root)
+    assert verbalization == ("a Drawer, where the Drawer's root is"
+                             " a FixedConnection's parent and the Drawer's handle "
+                             "is the FixedConnection's child, such that "
+                             "the FixedConnection's parent is a PrismaticConnection's child,"
+                             " and the FixedConnection's child is a Handle's root")
 
 
 def fit_rules_and_assert_semantic_annotations(

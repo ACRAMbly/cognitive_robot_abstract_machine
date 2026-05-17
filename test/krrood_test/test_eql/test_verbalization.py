@@ -962,6 +962,55 @@ def test_search_by_booking_date_and_aggregate():
     assert "sum of" in text, f"Expected 'sum of' in: {text!r}"
 
 
+def test_cabinet_rule_verbalization(handles_and_containers_world):
+    """Plural field binding uses 'are Drawers' and grouped-by names the aggregated variable."""
+    drawer = variable(Drawer, handles_and_containers_world.views)
+    prismatic_connection = variable(PrismaticConnection, handles_and_containers_world.connections)
+    query = (
+        entity(
+            inference(Cabinet)(
+                container=prismatic_connection.parent,
+                drawers=drawer,
+            )
+        )
+        .where(prismatic_connection.child == drawer.container)
+        .grouped_by(prismatic_connection.parent)
+    )
+    text = verbalize_expression(query)
+    assert "Cabinet" in text, f"Expected 'Cabinet' in: {text!r}"
+    # plural field must use "are Drawers", not "is a Drawer"
+    assert "drawers are Drawers" in text, f"Expected 'drawers are Drawers' in: {text!r}"
+    assert "drawers is" not in text, f"Did not expect 'drawers is' in: {text!r}"
+    # grouped-by must name what is being grouped and by what
+    assert "Drawers are grouped by" in text, f"Expected 'Drawers are grouped by' in: {text!r}"
+    assert "PrismaticConnection's parent" in text, f"Expected group key in: {text!r}"
+
+
+def test_plural_field_binding_uses_are(handles_and_containers_world):
+    """A plural field name in an InstantiatedVariable binding uses 'are <Plural>' not 'is <Article> <Singular>'."""
+    drawer = variable(Drawer, handles_and_containers_world.views)
+    cabinet = inference(Cabinet)(drawers=drawer)
+    text = verbalize_expression(cabinet)
+    assert "drawers are Drawers" in text, f"Expected 'drawers are Drawers' in: {text!r}"
+    assert "drawers is" not in text, f"Did not expect 'drawers is' in: {text!r}"
+
+
+def test_grouped_by_without_instantiated_variable(handles_and_containers_world):
+    """grouped_by on a plain variable query falls back to 'grouped by X' (no aggregated subject)."""
+    cabinet = variable(Cabinet, handles_and_containers_world.views)
+    drawer = flat_variable(cabinet.drawers)
+    query = an(
+        entity(cabinet)
+        .grouped_by(cabinet)
+        .ordered_by(eql.count(drawer), descending=True)
+    )
+    text = verbalize_expression(query)
+    # The selected variable IS the group key, so there are no extra aggregated nouns;
+    # the sentence should still contain "grouped by" without crashing.
+    assert "grouped by" in text, f"Expected 'grouped by' in: {text!r}"
+    assert "Cabinet" in text, f"Expected 'Cabinet' in: {text!r}"
+
+
 # ── Fixture ────────────────────────────────────────────────────────────────────
 
 

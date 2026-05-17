@@ -391,12 +391,16 @@ class EQLVerbalizer:
 
         binding_parts: list[str] = []
         for field_name, child_expr in expr._child_vars_.items():
-            value_text = (
-                ctx.type_name_of_value(child_expr._value_)
-                if isinstance(child_expr, Literal)
-                else self.verbalize(child_expr, ctx)
-            )
-            binding_parts.append(f"the {type_name}'s {field_name} is {value_text}")
+            if _engine.singular_noun(field_name):
+                plural_value = self._verbalize_plural_(child_expr, ctx)
+                binding_parts.append(f"the {type_name}'s {field_name} are {plural_value}")
+            else:
+                value_text = (
+                    ctx.type_name_of_value(child_expr._value_)
+                    if isinstance(child_expr, Literal)
+                    else self.verbalize(child_expr, ctx)
+                )
+                binding_parts.append(f"the {type_name}'s {field_name} is {value_text}")
 
         constraints = ctx.pop_constraint_frame()
 
@@ -630,6 +634,20 @@ class EQLVerbalizer:
         vars_str = ", ".join(self.verbalize(v, ctx) for v in expr._selected_variables_)
         return self._verbalize_query_body_(expr, ctx, f"Find sets of ({vars_str})")
 
+    @staticmethod
+    def combine_in_a_bracket(parts: list[str]) -> str:
+        if len(parts) == 1:
+            return parts[0]
+        return f"({EQLVerbalizer.combine(parts, 'and')})"
+
+    @staticmethod
+    def combine(parts: list[str], conjunction: str = "and") -> str:
+        if len(parts) == 1:
+            return parts[0]
+        conjunction = f" {conjunction} " if conjunction else " "
+        combined = ", ".join(parts[:-1]) + f",{conjunction}{parts[-1]}"
+        return combined
+
     def _verbalize_query_body_(self, expr, ctx: VerbalizationContext, prefix: str) -> str:
         """Append where / grouped-by / having / ordered-by clauses to *prefix*."""
         parts = [prefix]
@@ -642,8 +660,17 @@ class EQLVerbalizer:
             parts.append(f"such that {self.verbalize(where_expr.condition, ctx)}")
 
         if grouped_expr is not None and grouped_expr.variables_to_group_by:
+            group_key_root_ids = self._root_var_ids_(grouped_expr.variables_to_group_by)
             groups = [self.verbalize(v, ctx) for v in grouped_expr.variables_to_group_by]
-            parts.append(f"grouped by {', '.join(groups)}")
+            aggregated = self._aggregated_noun_phrases_(expr, group_key_root_ids, ctx)
+            groups_str = self.combine_in_a_bracket(groups)
+            if aggregated:
+                aggregated_str = self.combine(aggregated, '')
+                parts.append(
+                    f"and the {aggregated_str} are grouped by {groups_str}"
+                )
+            else:
+                parts.append(f"grouped by {groups_str}")
 
         if having_expr is not None:
             ctx.compact_predicates = True
@@ -686,6 +713,51 @@ class EQLVerbalizer:
     def _v_OrderedBy_(self, expr: OrderedBy, ctx: VerbalizationContext) -> str:
         direction = "descending" if expr.descending else "ascending"
         return f"ordered by {self.verbalize(expr.variable, ctx)} ({direction})"
+
+    # ── Grouped-by helpers ─────────────────────────────────────────────────────
+
+    def _root_var_ids_(self, exprs) -> set:
+        """Return the set of Variable._id_ values at the root of each expression."""
+        ids: set = set()
+        for e in exprs:
+            current = e
+            while isinstance(current, MappedVariable):
+                current = current._child_
+            if isinstance(current, Variable):
+                ids.add(current._id_)
+        return ids
+
+    def _aggregated_noun_phrases_(
+        self, query_expr, group_key_root_ids: set, ctx: VerbalizationContext
+    ) -> list[str]:
+        """
+        Return plural noun phrases for variables in the selection that are not group keys.
+
+        For Entity queries whose selected variable is an InstantiatedVariable, the
+        child_vars are inspected: any child whose root Variable is not a group key is
+        considered aggregated.  For other query shapes, non-group-key selected variables
+        are used instead.
+        """
+        from krrood.entity_query_language.query.query import Entity
+        from krrood.entity_query_language.core.variable import InstantiatedVariable
+
+        texts: list[str] = []
+        selected_var = query_expr.selected_variable if isinstance(query_expr, Entity) else None
+
+        if isinstance(selected_var, InstantiatedVariable):
+            for child_expr in selected_var._child_vars_.values():
+                root = child_expr
+                while isinstance(root, MappedVariable):
+                    root = root._child_
+                if isinstance(root, Variable) and root._id_ in group_key_root_ids:
+                    continue
+                texts.append(self._verbalize_plural_(child_expr, ctx))
+        else:
+            for var in getattr(query_expr, "_selected_variables_", []):
+                if hasattr(var, "_id_") and var._id_ not in group_key_root_ids:
+                    texts.append(self._verbalize_plural_(var, ctx))
+
+        return texts
 
     # ── Fallback ───────────────────────────────────────────────────────────────
 
