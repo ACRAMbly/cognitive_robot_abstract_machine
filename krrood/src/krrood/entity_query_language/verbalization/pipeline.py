@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 from krrood.entity_query_language.verbalization.fragments import VerbFragment
-from krrood.entity_query_language.verbalization.rendering.colorizer import (
-    ANSIColorizer,
-    MarkdownColorizer,
-    PlainColorizer,
+from krrood.entity_query_language.verbalization.rendering.formatter import (
+    ANSIFormatter,
+    HTMLFormatter,
+    PlainFormatter,
 )
 from krrood.entity_query_language.verbalization.rendering.renderer import (
     FragmentRenderer,
@@ -22,14 +22,14 @@ class VerbalizationPipeline:
 
     Usage::
 
-        pipeline = VerbalizationPipeline(HierarchicalRenderer(MarkdownColorizer()))
+        pipeline = VerbalizationPipeline(HierarchicalRenderer(HTMLFormatter()))
         text = pipeline.verbalize(query)
 
     Factory helpers cover the most common configurations:
 
-    * :meth:`plain`      — no colour, paragraph prose (default for :func:`verbalize_expression`)
-    * :meth:`ansi`       — ANSI true-colour terminal output, paragraph prose
-    * :meth:`markdown`   — HTML ``<span>`` colours, paragraph prose or hierarchical
+    * :meth:`plain`  — no colour, paragraph prose (default for :func:`verbalize_expression`)
+    * :meth:`ansi`   — ANSI true-colour terminal output, paragraph prose
+    * :meth:`html`   — HTML ``<span>`` colours, paragraph prose or hierarchical
     """
 
     def __init__(self, renderer: FragmentRenderer = ParagraphRenderer()):
@@ -50,18 +50,18 @@ class VerbalizationPipeline:
     @classmethod
     def plain(cls) -> "VerbalizationPipeline":
         """Plain text, paragraph prose — no colour."""
-        return cls(ParagraphRenderer(PlainColorizer()))
+        return cls(ParagraphRenderer(PlainFormatter()))
 
     @classmethod
     def ansi(cls, hierarchical: bool = False) -> "VerbalizationPipeline":
         """ANSI true-colour output for terminal display."""
-        colorizer = ANSIColorizer()
-        renderer = HierarchicalRenderer(colorizer) if hierarchical else ParagraphRenderer(colorizer)
+        formatter = ANSIFormatter()
+        renderer = HierarchicalRenderer(formatter) if hierarchical else ParagraphRenderer(formatter)
         return cls(renderer)
 
     @classmethod
-    def markdown(cls, hierarchical: bool = False) -> "VerbalizationPipeline":
-        """HTML ``<span>`` colour output for Markdown / Jupyter rendering."""
-        colorizer = MarkdownColorizer()
-        renderer = HierarchicalRenderer(colorizer) if hierarchical else ParagraphRenderer(colorizer)
+    def html(cls, hierarchical: bool = False) -> "VerbalizationPipeline":
+        """HTML ``<span>`` colour output for Jupyter / inline-HTML rendering."""
+        formatter = HTMLFormatter()
+        renderer = HierarchicalRenderer(formatter) if hierarchical else ParagraphRenderer(formatter)
         return cls(renderer)

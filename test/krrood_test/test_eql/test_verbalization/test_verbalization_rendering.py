@@ -1,13 +1,14 @@
 """
-Tests for the fragment model, colorizers, renderers, and VerbalizationPipeline.
+Tests for the fragment model, formatters, renderers, and VerbalizationPipeline.
 
 Coverage:
 - Fragment tree structure: SemanticRole tagging for variables, aggregations, keywords, operators
-- PlainColorizer: identity pass-through
-- ANSIColorizer: wraps text in ANSI escape sequences; plain for PLAIN role
-- MarkdownColorizer: wraps text in <span> tags; plain for PLAIN role
+- PlainFormatter: identity pass-through
+- ANSIFormatter: wraps text in ANSI escape sequences; plain for PLAIN role
+- HTMLFormatter: wraps text in <span> tags; plain for PLAIN role; uses &nbsp; / <br>
+- BulletStyle / IndentSize enums
 - ParagraphRenderer: flattens block structure to prose
-- HierarchicalRenderer: indents block items as bullet points
+- HierarchicalRenderer: indents block items as bullet points; no isinstance coupling
 - VerbalizationPipeline: end-to-end with each factory
 """
 
@@ -16,7 +17,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import krrood.entity_query_language.factories as eql
-from department_and_employee import Employee
 from krrood.entity_query_language.factories import (
     an,
     entity,
@@ -33,17 +33,19 @@ from krrood.entity_query_language.verbalization.fragments.base import (
 )
 from krrood.entity_query_language.verbalization.fragments.roles import SemanticRole
 from krrood.entity_query_language.verbalization.pipeline import VerbalizationPipeline
-from krrood.entity_query_language.verbalization.rendering.colorizer import (
-    ANSIColorizer,
-    MarkdownColorizer,
-    PlainColorizer,
+from krrood.entity_query_language.verbalization.rendering.formatter import (
+    ANSIFormatter,
+    BulletStyle,
+    HTMLFormatter,
+    IndentSize,
+    PlainFormatter,
 )
 from krrood.entity_query_language.verbalization.rendering.renderer import (
     HierarchicalRenderer,
     ParagraphRenderer,
 )
 from krrood.entity_query_language.verbalization.verbalizer import EQLVerbalizer, _str
-from semantic_world_like_classes import (
+from ...dataset.semantic_world_like_classes import (
     Drawer,
     FixedConnection,
     Handle,
@@ -176,74 +178,125 @@ def test_rule_is_block_fragment(doors_and_drawers_world):
     assert isinstance(frag, BlockFragment)
 
 
-# ── PlainColorizer ─────────────────────────────────────────────────────────────
+# ── PlainFormatter ─────────────────────────────────────────────────────────────
 
 
-def test_plain_colorizer_returns_text_unchanged():
-    c = PlainColorizer()
-    assert c.colorize("hello", SemanticRole.KEYWORD) == "hello"
-    assert c.colorize("hello", SemanticRole.AGGREGATION) == "hello"
-    assert c.colorize("hello", SemanticRole.PLAIN) == "hello"
+def test_plain_formatter_returns_text_unchanged():
+    f = PlainFormatter()
+    assert f.colorize("hello", SemanticRole.KEYWORD) == "hello"
+    assert f.colorize("hello", SemanticRole.AGGREGATION) == "hello"
+    assert f.colorize("hello", SemanticRole.PLAIN) == "hello"
 
 
-# ── ANSIColorizer ──────────────────────────────────────────────────────────────
+def test_plain_formatter_space_is_space():
+    assert PlainFormatter().space == " "
 
 
-def test_ansi_colorizer_wraps_keyword():
-    c = ANSIColorizer()
-    result = c.colorize("If", SemanticRole.KEYWORD)
+def test_plain_formatter_newline_is_unix_newline():
+    assert PlainFormatter().newline == "\n"
+
+
+# ── ANSIFormatter ──────────────────────────────────────────────────────────────
+
+
+def test_ansi_formatter_wraps_keyword():
+    f = ANSIFormatter()
+    result = f.colorize("If", SemanticRole.KEYWORD)
     assert result.startswith("\033[38;2;")
     assert "If" in result
     assert result.endswith("\033[0m")
 
 
-def test_ansi_colorizer_plain_role_no_escape():
-    c = ANSIColorizer()
-    result = c.colorize("the", SemanticRole.PLAIN)
+def test_ansi_formatter_plain_role_no_escape():
+    f = ANSIFormatter()
+    result = f.colorize("the", SemanticRole.PLAIN)
     assert result == "the"
 
 
-def test_ansi_colorizer_aggregation_uses_red_orange():
-    c = ANSIColorizer()
-    result = c.colorize("sum of", SemanticRole.AGGREGATION)
+def test_ansi_formatter_aggregation_uses_red_orange():
+    f = ANSIFormatter()
+    result = f.colorize("sum of", SemanticRole.AGGREGATION)
     # #F54927 → R=245, G=73, B=39
     assert "245;73;39" in result
 
 
-def test_ansi_colorizer_variable_uses_cornflowerblue():
-    c = ANSIColorizer()
-    result = c.colorize("Robot", SemanticRole.VARIABLE)
+def test_ansi_formatter_variable_uses_cornflowerblue():
+    f = ANSIFormatter()
+    result = f.colorize("Robot", SemanticRole.VARIABLE)
     # cornflowerblue → R=100, G=149, B=237
     assert "100;149;237" in result
 
 
-# ── MarkdownColorizer ──────────────────────────────────────────────────────────
+def test_ansi_formatter_space_is_space():
+    assert ANSIFormatter().space == " "
 
 
-def test_markdown_colorizer_wraps_keyword_in_span():
-    c = MarkdownColorizer()
-    result = c.colorize("If", SemanticRole.KEYWORD)
+def test_ansi_formatter_newline_is_unix_newline():
+    assert ANSIFormatter().newline == "\n"
+
+
+# ── HTMLFormatter ──────────────────────────────────────────────────────────────
+
+
+def test_html_formatter_wraps_keyword_in_span():
+    f = HTMLFormatter()
+    result = f.colorize("If", SemanticRole.KEYWORD)
     assert result == '<span style="color:#eded18">If</span>'
 
 
-def test_markdown_colorizer_plain_role_no_span():
-    c = MarkdownColorizer()
-    result = c.colorize("the", SemanticRole.PLAIN)
+def test_html_formatter_plain_role_no_span():
+    f = HTMLFormatter()
+    result = f.colorize("the", SemanticRole.PLAIN)
     assert result == "the"
 
 
-def test_markdown_colorizer_aggregation():
-    c = MarkdownColorizer()
-    result = c.colorize("number of", SemanticRole.AGGREGATION)
+def test_html_formatter_aggregation():
+    f = HTMLFormatter()
+    result = f.colorize("number of", SemanticRole.AGGREGATION)
     assert "#F54927" in result
     assert "number of" in result
 
 
-def test_markdown_colorizer_variable():
-    c = MarkdownColorizer()
-    result = c.colorize("Robot", SemanticRole.VARIABLE)
+def test_html_formatter_variable():
+    f = HTMLFormatter()
+    result = f.colorize("Robot", SemanticRole.VARIABLE)
     assert "cornflowerblue" in result
     assert "Robot" in result
+
+
+def test_html_formatter_space_is_nbsp():
+    assert HTMLFormatter().space == "&nbsp;"
+
+
+def test_html_formatter_newline_is_br():
+    assert HTMLFormatter().newline == "<br>"
+
+
+# ── BulletStyle / IndentSize enums ─────────────────────────────────────────────
+
+
+def test_bullet_style_dash_value():
+    assert BulletStyle.DASH.value == "-"
+
+
+def test_bullet_style_dot_value():
+    assert BulletStyle.DOT.value == "•"
+
+
+def test_bullet_style_asterisk_value():
+    assert BulletStyle.ASTERISK.value == "*"
+
+
+def test_indent_size_two_spaces_value():
+    assert IndentSize.TWO_SPACES.value == "  "
+
+
+def test_indent_size_four_spaces_value():
+    assert IndentSize.FOUR_SPACES.value == "    "
+
+
+def test_indent_size_tab_value():
+    assert IndentSize.TAB.value == "\t"
 
 
 # ── ParagraphRenderer ──────────────────────────────────────────────────────────
@@ -255,7 +308,7 @@ def test_paragraph_renderer_word():
 
 
 def test_paragraph_renderer_role_fragment_plain():
-    r = ParagraphRenderer(PlainColorizer())
+    r = ParagraphRenderer(PlainFormatter())
     assert r.render(RoleFragment("Robot", SemanticRole.VARIABLE)) == "Robot"
 
 
@@ -266,7 +319,7 @@ def test_paragraph_renderer_phrase():
 
 
 def test_paragraph_renderer_block_flattens_to_prose():
-    r = ParagraphRenderer(PlainColorizer())
+    r = ParagraphRenderer(PlainFormatter())
     block = BlockFragment(
         header=RoleFragment("Find", SemanticRole.KEYWORD),
         items=[
@@ -286,11 +339,22 @@ def test_paragraph_renderer_block_no_header():
     assert "a" in result and "b" in result
 
 
+def test_paragraph_html_formatter_uses_nbsp_in_block_header_join():
+    """ParagraphRenderer uses formatter.space to join the header to its prose."""
+    r = ParagraphRenderer(HTMLFormatter())
+    block = BlockFragment(
+        header=RoleFragment("Find", SemanticRole.PLAIN),
+        items=[WordFragment("Robot")],
+    )
+    result = r.render(block)
+    assert "&nbsp;" in result
+
+
 # ── HierarchicalRenderer ───────────────────────────────────────────────────────
 
 
 def test_hierarchical_renderer_block_has_header_line():
-    r = HierarchicalRenderer(PlainColorizer())
+    r = HierarchicalRenderer(PlainFormatter())
     block = BlockFragment(
         header=RoleFragment("If", SemanticRole.KEYWORD),
         items=[WordFragment("there's a Handle")],
@@ -302,7 +366,7 @@ def test_hierarchical_renderer_block_has_header_line():
 
 
 def test_hierarchical_renderer_items_are_indented():
-    r = HierarchicalRenderer(PlainColorizer(), indent="  ", bullet="-")
+    r = HierarchicalRenderer(PlainFormatter(), indent=IndentSize.TWO_SPACES, bullet=BulletStyle.DASH)
     block = BlockFragment(
         header=RoleFragment("Find", SemanticRole.KEYWORD),
         items=[WordFragment("a Robot"), WordFragment("b Something")],
@@ -315,7 +379,7 @@ def test_hierarchical_renderer_items_are_indented():
 
 
 def test_hierarchical_renderer_nested_block_deepens_indent():
-    r = HierarchicalRenderer(PlainColorizer(), indent="  ", bullet="- ")
+    r = HierarchicalRenderer(PlainFormatter(), indent=IndentSize.TWO_SPACES, bullet=BulletStyle.DASH)
     inner = BlockFragment(
         header=RoleFragment("such that", SemanticRole.KEYWORD),
         items=[WordFragment("battery > 50")],
@@ -332,7 +396,7 @@ def test_hierarchical_renderer_nested_block_deepens_indent():
 
 
 def test_hierarchical_renderer_custom_bullet():
-    r = HierarchicalRenderer(PlainColorizer(), bullet="•")
+    r = HierarchicalRenderer(PlainFormatter(), bullet=BulletStyle.DOT)
     block = BlockFragment(
         header=None,
         items=[WordFragment("item one"), WordFragment("item two")],
@@ -342,19 +406,76 @@ def test_hierarchical_renderer_custom_bullet():
     assert "• item two" in result
 
 
-# ── ParagraphRenderer with MarkdownColorizer ───────────────────────────────────
+def test_hierarchical_bullet_style_dot_produces_dot_bullet():
+    r = HierarchicalRenderer(PlainFormatter(), bullet=BulletStyle.DOT)
+    block = BlockFragment(header=None, items=[WordFragment("x")])
+    assert "•" in r.render(block)
 
 
-def test_paragraph_markdown_query_contains_find_span():
+def test_hierarchical_bullet_style_asterisk_produces_asterisk():
+    r = HierarchicalRenderer(PlainFormatter(), bullet=BulletStyle.ASTERISK)
+    block = BlockFragment(header=None, items=[WordFragment("x")])
+    assert "*" in r.render(block)
+
+
+def test_hierarchical_indent_four_spaces_indents_items_by_four():
+    r = HierarchicalRenderer(PlainFormatter(), indent=IndentSize.FOUR_SPACES)
+    block = BlockFragment(
+        header=WordFragment("H"),
+        items=[WordFragment("item")],
+    )
+    result = r.render(block)
+    item_line = next(l for l in result.split("\n") if "item" in l)
+    assert item_line.startswith("    ")
+
+
+# ── HierarchicalRenderer formatter decoupling ─────────────────────────────────
+
+
+def test_hierarchical_html_formatter_joins_with_br():
+    """HTMLFormatter.newline drives line separation — no hardcoded \\n."""
+    r = HierarchicalRenderer(HTMLFormatter())
+    block = BlockFragment(header=None, items=[WordFragment("a"), WordFragment("b")])
+    result = r.render(block)
+    assert "<br>" in result
+
+
+def test_hierarchical_ansi_formatter_joins_with_newline_not_br():
+    r = HierarchicalRenderer(ANSIFormatter())
+    block = BlockFragment(header=None, items=[WordFragment("a"), WordFragment("b")])
+    result = r.render(block)
+    assert "\n" in result
+    assert "<br>" not in result
+
+
+def test_hierarchical_custom_formatter_newline_controls_line_separation():
+    """Proves no isinstance coupling: any Formatter subclass controls the separator."""
+
+    class PipeFormatter(PlainFormatter):
+        @property
+        def newline(self) -> str:
+            return "|"
+
+    r = HierarchicalRenderer(PipeFormatter())
+    block = BlockFragment(header=None, items=[WordFragment("a"), WordFragment("b")])
+    result = r.render(block)
+    assert "|" in result
+    assert "\n" not in result
+
+
+# ── ParagraphRenderer with HTMLFormatter ──────────────────────────────────────
+
+
+def test_paragraph_html_query_contains_find_span():
     r = variable(_Robot, [])
-    text = VerbalizationPipeline.markdown().verbalize(an(entity(r).where(r.battery > 50)))
+    text = VerbalizationPipeline.html().verbalize(an(entity(r).where(r.battery > 50)))
     assert '<span style="color' in text
     assert "Find" in text
 
 
-def test_paragraph_markdown_aggregation_is_colored():
+def test_paragraph_html_aggregation_is_colored():
     r = variable(_Robot, [])
-    text = VerbalizationPipeline.markdown().verbalize(an(entity(eql.count(r))))
+    text = VerbalizationPipeline.html().verbalize(an(entity(eql.count(r))))
     assert "#F54927" in text
 
 
@@ -363,7 +484,7 @@ def test_paragraph_markdown_aggregation_is_colored():
 
 def test_hierarchical_plain_query_structure():
     r = variable(_Robot, [])
-    text = VerbalizationPipeline(HierarchicalRenderer(PlainColorizer())).verbalize(
+    text = VerbalizationPipeline(HierarchicalRenderer(PlainFormatter())).verbalize(
         an(entity(r).where(r.battery > 50))
     )
     lines = text.splitlines()
@@ -383,7 +504,7 @@ def test_hierarchical_plain_rule_structure(doors_and_drawers_world):
     fc = match_variable(FixedConnection, world.connections)(parent=pc.child, child=handle)
     drawer_var = inference(Drawer)(container=fc.parent, handle=fc.child)
 
-    text = VerbalizationPipeline(HierarchicalRenderer(PlainColorizer())).verbalize(entity(drawer_var))
+    text = VerbalizationPipeline(HierarchicalRenderer(PlainFormatter())).verbalize(entity(drawer_var))
     lines = text.splitlines()
     assert any("If" in l for l in lines)
     assert any("then" in l for l in lines)
@@ -468,30 +589,30 @@ def test_pipeline_ansi_contains_escape_codes():
     assert "\033[" in text
 
 
-def test_pipeline_markdown_contains_span():
+def test_pipeline_html_contains_span():
     r = variable(_Robot, [])
-    text = VerbalizationPipeline.markdown().verbalize(an(entity(r)))
+    text = VerbalizationPipeline.html().verbalize(an(entity(r)))
     assert "<span" in text
 
 
-def test_pipeline_markdown_hierarchical_has_newlines():
+def test_pipeline_html_hierarchical_has_br():
     r = variable(_Robot, [])
-    text = VerbalizationPipeline.markdown(hierarchical=True).verbalize(
+    text = VerbalizationPipeline.html(hierarchical=True).verbalize(
         an(entity(r).where(r.battery > 50))
     )
-    assert "\n" in text
+    assert "<br>" in text
 
 
-def test_pipeline_markdown_hierarchical_has_two_newlines_between_headers_on_rule(doors_and_drawers_world):
+def test_pipeline_html_hierarchical_has_br_between_items_on_rule(doors_and_drawers_world):
     drawer_fragment = _drawer_rule_fragment(doors_and_drawers_world)
-    text = VerbalizationPipeline.markdown(hierarchical=True).verbalize_fragment(drawer_fragment)
+    text = VerbalizationPipeline.html(hierarchical=True).verbalize_fragment(drawer_fragment)
     print("\n" + text)
-    assert "\n\n" in text
+    assert "<br>" in text
 
 
-def test_pipeline_ansi_hierarchical_has_no_two_newlines_between_headers_on_rule(doors_and_drawers_world):
+def test_pipeline_ansi_hierarchical_has_newlines_on_rule(doors_and_drawers_world):
     drawer_fragment = _drawer_rule_fragment(doors_and_drawers_world)
     text = VerbalizationPipeline.ansi(hierarchical=True).verbalize_fragment(drawer_fragment)
     print("\n" + text)
-    assert "\n\n" not in text
     assert "\n" in text
+    assert "<br>" not in text
