@@ -11,6 +11,14 @@ from krrood.entity_query_language.verbalization.rendering.renderer import (
     HierarchicalRenderer,
     ParagraphRenderer,
 )
+from krrood.entity_query_language.verbalization.rendering.source_link_resolver import (
+    AutoAPIResolver,
+    FileURLResolver,
+    IdeaURIResolver,
+    LocalBridgeResolver,
+    PyCharmResolver,
+    SourceLinkResolver,
+)
 
 __all__ = [
     "Formatter",
@@ -22,4 +30,10 @@ __all__ = [
     "FragmentRenderer",
     "ParagraphRenderer",
     "HierarchicalRenderer",
+    "SourceLinkResolver",
+    "FileURLResolver",
+    "IdeaURIResolver",
+    "PyCharmResolver",
+    "LocalBridgeResolver",
+    "AutoAPIResolver",
 ]

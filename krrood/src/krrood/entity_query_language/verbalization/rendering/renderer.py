@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
+from typing import Optional, TYPE_CHECKING
 
 from krrood.entity_query_language.verbalization.fragments.base import (
     BlockFragment,
@@ -17,15 +18,16 @@ from krrood.entity_query_language.verbalization.rendering.formatter import (
     PlainFormatter,
 )
 
+if TYPE_CHECKING:
+    from krrood.entity_query_language.verbalization.rendering.source_link_resolver import SourceLinkResolver
+
 
 @dataclass
 class FragmentRenderer(ABC):
     """Converts a VerbFragment tree into a string."""
 
     _formatter: Formatter = field(default_factory=PlainFormatter)
-    """
-    The formatter to use for rendering.
-    """
+    _link_resolver: Optional["SourceLinkResolver"] = field(default=None)
 
     @abstractmethod
     def render(self, fragment: VerbFragment) -> str:
@@ -36,6 +38,15 @@ class FragmentRenderer(ABC):
         :return: The rendered string.
         """
         ...
+
+    def _render_role(self, text: str, role, source_ref) -> str:
+        """Colorize *text* and, when a resolver and source ref are present, wrap with a link."""
+        colored = self._formatter.colorize(text, role)
+        if source_ref is not None and self._link_resolver is not None:
+            url = self._link_resolver.resolve(source_ref)
+            if url is not None:
+                return self._formatter.wrap_link(colored, url)
+        return colored
 
 
 @dataclass
@@ -51,8 +62,8 @@ class ParagraphRenderer(FragmentRenderer):
         match fragment:
             case WordFragment(text=text):
                 return text
-            case RoleFragment(text=text, role=role):
-                return self._formatter.colorize(text, role)
+            case RoleFragment(text=text, role=role, source_ref=ref):
+                return self._render_role(text, role, ref)
             case PhraseFragment(parts=parts, separator=sep):
                 rendered = [self.render(p) for p in parts]
                 return sep.join(rendered)
@@ -126,8 +137,8 @@ class HierarchicalRenderer(FragmentRenderer):
         match fragment:
             case WordFragment(text=text):
                 return text
-            case RoleFragment(text=text, role=role):
-                return self._formatter.colorize(text, role)
+            case RoleFragment(text=text, role=role, source_ref=ref):
+                return self._render_role(text, role, ref)
             case PhraseFragment(parts=parts, separator=sep):
                 return sep.join(self._inline(p) for p in parts)
             case BlockFragment():

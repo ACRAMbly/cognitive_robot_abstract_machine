@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 from krrood.entity_query_language.verbalization.fragments.roles import SemanticRole
+from krrood.entity_query_language.verbalization.fragments.source_ref import SourceRef
 
 
 @dataclass
@@ -19,9 +20,10 @@ class WordFragment(VerbFragment):
 
 @dataclass
 class RoleFragment(VerbFragment):
-    """Text carrying a semantic role — drives coloring."""
+    """Text carrying a semantic role — drives coloring and optional source hyperlinking."""
     text: str
     role: SemanticRole
+    source_ref: Optional[SourceRef] = None
 
 
 @dataclass

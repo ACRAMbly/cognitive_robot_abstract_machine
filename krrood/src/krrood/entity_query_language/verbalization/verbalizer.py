@@ -52,6 +52,7 @@ from krrood.entity_query_language.verbalization.fragments.base import (
     WordFragment,
 )
 from krrood.entity_query_language.verbalization.fragments.roles import SemanticRole
+from krrood.entity_query_language.verbalization.fragments.source_ref import SourceRef
 from krrood.entity_query_language.verbalization.rule_analysis import (
     AggregationStatus,
     AntecedentInfo,
@@ -88,8 +89,12 @@ def _word(text: str) -> WordFragment:
     return WordFragment(text=text)
 
 
-def _role(text: str, role: SemanticRole) -> RoleFragment:
-    return RoleFragment(text=text, role=role)
+def _role(
+    text: str,
+    role: SemanticRole,
+    source_ref: Optional[SourceRef] = None,
+) -> RoleFragment:
+    return RoleFragment(text=text, role=role, source_ref=source_ref)
 
 
 def _phrase(*parts: VerbFragment, sep: str = " ") -> PhraseFragment:
@@ -212,7 +217,8 @@ class EQLVerbalizer:
 
     def _v_Variable_(self, expr: Variable, ctx: VerbalizationContext) -> VerbFragment:
         article, label = ctx.noun_for_parts(expr)
-        label_frag = _role(label, SemanticRole.VARIABLE)
+        ref = SourceRef(cls=expr._type_) if isinstance(expr._type_, type) else None
+        label_frag = _role(label, SemanticRole.VARIABLE, ref)
         if article == ArticleSelection.NONE:
             return label_frag
         if article == ArticleSelection.DEFINITE:
@@ -249,7 +255,8 @@ class EQLVerbalizer:
             label = ctx.disambiguation_map.get(expr._id_, type_name)
             ctx.seen[expr._id_] = label
             plural = label if label != type_name else inflect_engine.plural(type_name)
-            return _role(plural, SemanticRole.VARIABLE)
+            ref = SourceRef(cls=expr._type_) if isinstance(expr._type_, type) else None
+            return _role(plural, SemanticRole.VARIABLE, ref)
 
         if isinstance(expr, Attribute):
             chain: list = []
@@ -263,11 +270,15 @@ class EQLVerbalizer:
                 label = ctx.disambiguation_map.get(root._id_, type_name)
                 ctx.seen[root._id_] = label
                 root_plural = label if label != type_name else inflect_engine.plural(type_name)
-                attr_plural = _ensure_plural(chain[0]._attribute_name_)
+                attr_name = chain[0]._attribute_name_
+                attr_plural = _ensure_plural(attr_name)
+                owner = chain[0]._owner_class_
+                attr_ref = SourceRef(cls=owner, attribute=attr_name) if isinstance(owner, type) else None
+                root_ref = SourceRef(cls=root._type_) if isinstance(root._type_, type) else None
                 return _phrase(
-                    _role(attr_plural, SemanticRole.ATTRIBUTE),
+                    _role(attr_plural, SemanticRole.ATTRIBUTE, attr_ref),
                     Prepositions.OF.as_fragment(),
-                    _role(root_plural, SemanticRole.VARIABLE),
+                    _role(root_plural, SemanticRole.VARIABLE, root_ref),
                 )
 
         return self.build(expr, ctx)
@@ -282,25 +293,31 @@ class EQLVerbalizer:
         chain.reverse()
         return chain, current
 
-    def _render_path_(self, parts: list[str], root_text: str) -> str:
+    def _render_path_(self, parts: list[tuple[str, Optional[SourceRef]]], root_text: str) -> str:
         if not parts:
             return root_text
         of_the = Prepositions.OF_THE.text
         of_ = Prepositions.OF.text
         the = Articles.THE.text
-        inner = f" {of_the} ".join(reversed(parts))
+        inner = f" {of_the} ".join(reversed([name for name, _ in parts]))
         return f"{the} {inner} {of_} {root_text}"
 
-    def _render_path_fragment_(self, parts: list[str], root_frag: VerbFragment) -> VerbFragment:
+    def _render_path_fragment_(
+        self, parts: list[tuple[str, Optional[SourceRef]]], root_frag: VerbFragment
+    ) -> VerbFragment:
         if not parts:
             return root_frag
         reversed_parts = list(reversed(parts))
+        first_name, first_ref = reversed_parts[0]
         frag_parts: list[VerbFragment] = [
             Articles.THE.as_fragment(),
-            _role(reversed_parts[0], SemanticRole.ATTRIBUTE),
+            _role(first_name, SemanticRole.ATTRIBUTE, first_ref),
         ]
-        for attr in reversed_parts[1:]:
-            frag_parts.extend([Prepositions.OF_THE.as_fragment(), _role(attr, SemanticRole.ATTRIBUTE)])
+        for attr_name, attr_ref in reversed_parts[1:]:
+            frag_parts.extend([
+                Prepositions.OF_THE.as_fragment(),
+                _role(attr_name, SemanticRole.ATTRIBUTE, attr_ref),
+            ])
         frag_parts.extend([Prepositions.OF.as_fragment(), root_frag])
         return PhraseFragment(parts=frag_parts, separator=" ")
 
@@ -361,8 +378,11 @@ class EQLVerbalizer:
         root_text = self._verbalize_chain_root_(leaf, ctx)
         nav_text = self._verbalize_navigation_chain_(chain[:-1], root_text)
         copula = Copulas.IS_NOT.as_fragment() if negated else Copulas.IS.as_fragment()
-        attr_name = chain[-1]._attribute_name_
-        return _phrase(_word(nav_text), copula, _role(attr_name, SemanticRole.ATTRIBUTE))
+        terminal = chain[-1]
+        attr_name = terminal._attribute_name_
+        owner = terminal._owner_class_
+        ref = SourceRef(cls=owner, attribute=attr_name) if isinstance(owner, type) else None
+        return _phrase(_word(nav_text), copula, _role(attr_name, SemanticRole.ATTRIBUTE, ref))
 
     def _verbalize_mapped_chain_(
         self, expr: MappedVariable, ctx: VerbalizationContext, negated: bool = False
@@ -409,21 +429,26 @@ class EQLVerbalizer:
             return f"{the} {ordinal} {of_} {pre_text}"
         return self._render_path_(self._build_path_parts_(nav_chain), root_text)
 
-    def _build_path_parts_(self, chain: list) -> list[str]:
-        parts: list[str] = []
+    def _build_path_parts_(self, chain: list) -> list[tuple[str, Optional[SourceRef]]]:
+        parts: list[tuple[str, Optional[SourceRef]]] = []
         i = 0
         while i < len(chain):
             node = chain[i]
             if isinstance(node, Attribute):
                 name = node._attribute_name_
+                owner = node._owner_class_
+                ref: Optional[SourceRef] = (
+                    SourceRef(cls=owner, attribute=name) if isinstance(owner, type) else None
+                )
                 while i + 1 < len(chain) and isinstance(chain[i + 1], Index):
                     i += 1
                     name += f"[{repr(chain[i]._key_)}]"
-                parts.append(name)
+                    ref = None  # composite indexed access has no clean single-line anchor
+                parts.append((name, ref))
             elif isinstance(node, Index):
-                parts.append(f"[{repr(node._key_)}]")
+                parts.append((f"[{repr(node._key_)}]", None))
             elif isinstance(node, Call):
-                parts.append("()")
+                parts.append(("()", None))
             elif isinstance(node, FlatVariable):
                 pass
             i += 1
@@ -452,6 +477,7 @@ class EQLVerbalizer:
         self, expr: InstantiatedVariable, ctx: VerbalizationContext
     ) -> VerbFragment:
         type_name = getattr(expr._type_, "__name__", str(expr._type_))
+        ref = SourceRef(cls=expr._type_) if isinstance(expr._type_, type) else None
         if len(expr._child_vars_) == 2:
             items = list(expr._child_vars_.items())
             left, right = items[0][1], items[1][1]
@@ -463,10 +489,10 @@ class EQLVerbalizer:
             )
             return _phrase(
                 Articles.indefinite(type_name),
-                _role(type_name, SemanticRole.VARIABLE),
+                _role(type_name, SemanticRole.VARIABLE, ref),
                 _word(f"({args_str})"),
             )
-        return _phrase(Articles.indefinite(type_name), _role(type_name, SemanticRole.VARIABLE))
+        return _phrase(Articles.indefinite(type_name), _role(type_name, SemanticRole.VARIABLE, ref))
 
     def _verbalize_instantiated_natural_(
         self, expr: InstantiatedVariable, ctx: VerbalizationContext
@@ -507,8 +533,9 @@ class EQLVerbalizer:
         if constraints and binding_alias_map:
             constraints = [_apply_binding_aliases(c, binding_alias_map) for c in constraints]
 
+        inst_ref = SourceRef(cls=expr._type_) if isinstance(expr._type_, type) else None
         result_parts: list[VerbFragment] = [
-            _phrase(Articles.indefinite(type_name), _role(type_name, SemanticRole.VARIABLE))
+            _phrase(Articles.indefinite(type_name), _role(type_name, SemanticRole.VARIABLE, inst_ref))
         ]
         if binding_parts:
             result_parts.append(_word(f", {_where} " + f" {_and} ".join(binding_parts)))
@@ -767,7 +794,7 @@ class EQLVerbalizer:
         ctx.seen[current._id_] = root_type
 
         parts = self._build_path_parts_(chain)
-        field = list(reversed(parts))[0] if parts else root_type
+        field = list(reversed(parts))[0][0] if parts else root_type
         return _str(GroupKeyPhrases.COMMON_OF.build_phrase(field, root_plural))
 
     # ── Query: Entity and SetOf ────────────────────────────────────────────────
@@ -816,6 +843,8 @@ class EQLVerbalizer:
         )
         var = expr.selected_variable
         selected_type = var._type_.__name__ if var and getattr(var, "_type_", None) else FallbackNouns.ENTITY.text
+        var_type = getattr(var, "_type_", None)
+        ref = SourceRef(cls=var_type) if isinstance(var_type, type) else None
 
         ctx.seen[expr._id_] = selected_type
         if var is not None:
@@ -823,12 +852,12 @@ class EQLVerbalizer:
 
         if is_the:
             article_noun: VerbFragment = _phrase(
-                Articles.THE_UNIQUE.as_fragment(), _role(selected_type, SemanticRole.VARIABLE)
+                Articles.THE_UNIQUE.as_fragment(), _role(selected_type, SemanticRole.VARIABLE, ref)
             )
         else:
             article_noun = _phrase(
                 Articles.indefinite(selected_type),
-                _role(selected_type, SemanticRole.VARIABLE),
+                _role(selected_type, SemanticRole.VARIABLE, ref),
             )
 
         where_expr = expr._where_expression_
@@ -854,7 +883,9 @@ class EQLVerbalizer:
             cond_text = self.verbalize(where_expr.condition, ctx)
             ctx.add_constraint(cond_text)
 
-        return _phrase(Articles.indefinite(type_name), _role(type_name, SemanticRole.VARIABLE))
+        var_type = getattr(var, "_type_", None)
+        ref = SourceRef(cls=var_type) if isinstance(var_type, type) else None
+        return _phrase(Articles.indefinite(type_name), _role(type_name, SemanticRole.VARIABLE, ref))
 
     def _v_SetOf_(self, expr: SetOf, ctx: VerbalizationContext) -> VerbFragment:
         expr.build()
