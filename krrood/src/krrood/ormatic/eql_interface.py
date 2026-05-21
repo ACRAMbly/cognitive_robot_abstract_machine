@@ -480,7 +480,6 @@ class EQLTranslator:
 
             self.sql_query = select(*dao_classes)
         else:
-            # Flexibler Modus: Unterstützt jeden Mix aus Spalten, Aggregatoren und CaseWhen
             base_dao = None
             for var in selected:
                 base_dao = self._extract_dao_from_expression(var)
