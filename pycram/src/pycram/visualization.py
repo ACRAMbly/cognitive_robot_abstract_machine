@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import pathlib
 from typing import Any, Callable, Dict, Iterable, Optional, Sequence, Tuple
 
 import networkx as nx
+from bokeh.io import output_file
 
 
 def plot_rustworkx_interactive(
@@ -11,7 +13,7 @@ def plot_rustworkx_interactive(
     node_params: Optional[Dict[int, Dict[str, Any]]] = None,
     node_label: Optional[Callable[[int, Any], str]] = None,
     attributes: Optional[Sequence[str]] = None,
-    layout: str = "spring",
+    layout: str = "bfs",
     start: Optional[int] = None,
     title: str = "Rustworkx Graph",
     width: int = 1200,
@@ -134,6 +136,10 @@ def plot_rustworkx_interactive(
     cds.selected.js_on_change("indices", callback)
 
     p.renderers.append(g_renderer)
+
+    output_file(
+        pathlib.Path.home().joinpath("rustworkx_graph.html").as_posix(), title=title
+    )
 
     # Show composed layout
     show(row(p, info))
