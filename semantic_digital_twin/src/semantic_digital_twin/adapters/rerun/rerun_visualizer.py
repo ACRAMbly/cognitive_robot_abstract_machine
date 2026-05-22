@@ -64,7 +64,7 @@ class RerunVisualizer(ModelChangeCallback):
     """Name of the Rerun timeline driven by the world state version."""
     mesh_file_resolver: Optional[MeshFileResolver] = field(default=None, kw_only=True)
     """Optional hook to load local mesh files for color."""
-    state_history: bool = field(default=True, kw_only=True)
+    state_history: bool = field(default=False, kw_only=True)
     """Keep a scrubbable state history (bounded by ``memory_limit``); if ``False``, keep only the current state."""
     memory_limit: str = field(default="75%", kw_only=True)
     """Spawned-viewer memory budget (e.g. ``"2GB"``); oldest data is dropped past it. Only used by the ``SPAWN`` sink."""
