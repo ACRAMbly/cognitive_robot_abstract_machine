@@ -55,6 +55,9 @@ class RuleEngine:
         ctx: VerbalizationContext,
         delegate: EQLVerbalizer,
     ) -> VerbFragment:
+        var_id = getattr(expr, "_id_", None)
+        if var_id is not None and var_id in ctx.binding_overrides:
+            return ctx.binding_overrides[var_id]
         for rule_cls in self._rules:
             if rule_cls.applies(expr, ctx):
                 return rule_cls.transform(expr, ctx, delegate)

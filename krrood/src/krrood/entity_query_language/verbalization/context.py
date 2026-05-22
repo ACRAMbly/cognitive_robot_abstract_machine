@@ -9,6 +9,10 @@ from typing import Any, Dict, List, TYPE_CHECKING
 
 import inflect
 
+if TYPE_CHECKING:
+    from krrood.entity_query_language.core.base_expressions import SymbolicExpression
+    from krrood.entity_query_language.verbalization.fragments.base import VerbFragment
+
 _engine = inflect.engine()
 
 
@@ -74,23 +78,26 @@ class VerbalizationContext:
     """When True, comparators omit the copula "is" (e.g. "greater than" not "is greater than").
     Set by the verbalizer while rendering HAVING conditions."""
 
-    deferred_constraints: List[List[str]] = field(default_factory=list)
-    """Stack of constraint-text frames. Each frame belongs to one nesting level of
+    constraint_exprs: List[List["SymbolicExpression"]] = field(default_factory=list)
+    """Stack of deferred-expression frames. Each frame belongs to one nesting level of
     InstantiatedVariable verbalization. When an Entity is verbalized as an inline noun
-    its where-conditions are deferred into the top frame so the enclosing
-    InstantiatedVariable can emit them as a 'such that …' clause."""
+    its where-condition expression is deferred into the top frame so the enclosing
+    InstantiatedVariable can build and emit them as a 'such that …' clause after all
+    binding overrides have been registered."""
 
     disambiguation_map: Dict[uuid.UUID, str] = field(default_factory=dict)
     """Maps variable ``_id_`` → display label, pre-computed before verbalization begins.
     Types with a single variable keep the plain type name; types with multiple variables
     get ``"TypeName 1"``, ``"TypeName 2"``, … labels."""
 
-    binding_aliases: Dict[str, str] = field(default_factory=dict)
-    """Maps the definite-form verbalization of a binding value to its field reference.
+    binding_overrides: Dict[uuid.UUID, "VerbFragment"] = field(default_factory=dict)
+    """Maps a child expression's ``_id_`` to the field-reference VerbFragment that
+    should be substituted whenever that expression appears again.
 
-    Populated by ``_v_InstantiatedVariable_`` as it processes each binding and read by
-    ``_verbalize_query_body_`` so that WHERE / grouped-by / having / ordered-by clauses
-    refer to already-established field names rather than raw structural paths."""
+    Populated by ``_verbalize_instantiated_natural`` for each field binding and
+    checked by ``RuleEngine.build`` before dispatching to any rule, so clause
+    fragments (WHERE, HAVING, ordered-by) automatically use the field-reference
+    path instead of re-verbalizing the raw expression."""
 
     @classmethod
     def from_expression(cls, expr) -> "VerbalizationContext":
@@ -99,24 +106,16 @@ class VerbalizationContext:
 
     def push_constraint_frame(self) -> None:
         """Open a new constraint frame for the current InstantiatedVariable."""
-        self.deferred_constraints.append([])
+        self.constraint_exprs.append([])
 
-    def pop_constraint_frame(self) -> List[str]:
-        """Close the current frame and return its accumulated constraint strings."""
-        return self.deferred_constraints.pop() if self.deferred_constraints else []
+    def pop_constraint_frame(self) -> "List[SymbolicExpression]":
+        """Close the current frame and return its deferred expressions."""
+        return self.constraint_exprs.pop() if self.constraint_exprs else []
 
-    def add_constraint(self, text: str) -> None:
-        """Append *text* to the top constraint frame (no-op when no frame is open)."""
-        if self.deferred_constraints:
-            self.deferred_constraints[-1].append(text)
-
-    def noun_for(self, var) -> str:
-        article, label = self.noun_for_parts(var)
-        if article == ArticleSelection.NONE:
-            return label
-        if article == ArticleSelection.DEFINITE:
-            return f"the {label}"
-        return f"{_article(label)} {label}"
+    def defer_constraint(self, expr: "SymbolicExpression") -> None:
+        """Defer *expr* into the top constraint frame (no-op when no frame is open)."""
+        if self.constraint_exprs:
+            self.constraint_exprs[-1].append(expr)
 
     def noun_for_parts(self, var) -> "tuple[ArticleSelection, str]":
         """

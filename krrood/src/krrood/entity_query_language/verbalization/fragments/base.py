@@ -77,3 +77,36 @@ class BlockFragment(VerbFragment):
     """
     header: Optional[VerbFragment]
     items: list[VerbFragment] = field(default_factory=list)
+
+
+# ── Fragment joining utilities ─────────────────────────────────────────────────
+
+
+def join_with(parts: list[VerbFragment], sep: VerbFragment) -> VerbFragment:
+    """Interleave *parts* with *sep* between each adjacent pair."""
+    if not parts:
+        return WordFragment(text="")
+    if len(parts) == 1:
+        return parts[0]
+    result: list[VerbFragment] = []
+    for i, frag in enumerate(parts):
+        result.append(frag)
+        if i < len(parts) - 1:
+            result.append(sep)
+    return PhraseFragment(parts=result, separator="")
+
+
+def oxford_and(parts: list[VerbFragment], conjunction: VerbFragment) -> VerbFragment:
+    """Oxford-comma join: ``f1, f2, conj f3``."""
+    if not parts:
+        return WordFragment(text="")
+    if len(parts) == 1:
+        return parts[0]
+    head = parts[:-1]
+    tail = parts[-1]
+    result: list[VerbFragment] = []
+    for f in head:
+        result.append(f)
+        result.append(WordFragment(text=", "))
+    result.append(PhraseFragment(parts=[conjunction, tail], separator=" "))
+    return PhraseFragment(parts=result, separator="")

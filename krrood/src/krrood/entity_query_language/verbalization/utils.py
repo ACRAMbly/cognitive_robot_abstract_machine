@@ -49,11 +49,3 @@ def _ensure_plural(word: str) -> str:
     return word if inflect_engine.singular_noun(word) else inflect_engine.plural(word)
 
 
-def _apply_binding_aliases(text: str, alias_map: dict[str, str]) -> str:
-    """Replace each verbalized binding value in *text* with its established field reference.
-
-    Longer aliases are tried first to avoid partial replacements.
-    """
-    for value, field_ref in sorted(alias_map.items(), key=lambda kv: -len(kv[0])):
-        text = text.replace(value, field_ref)
-    return text

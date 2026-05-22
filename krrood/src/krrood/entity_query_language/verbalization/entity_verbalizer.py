@@ -15,13 +15,13 @@ from krrood.entity_query_language.query.query import Entity, Query, SetOf
 from krrood.entity_query_language.verbalization.chain_utils import chain_root, verbalize_plural
 from krrood.entity_query_language.verbalization.fragments.base import (
     BlockFragment,
+    oxford_and,
     PhraseFragment,
     RoleFragment,
     VerbFragment,
     WordFragment,
 )
 from krrood.entity_query_language.verbalization.fragments.roles import SemanticRole
-from krrood.entity_query_language.verbalization.utils import _apply_binding_aliases, _str
 from krrood.entity_query_language.verbalization.vocabulary.english import (
     Articles,
     Conjunctions,
@@ -135,15 +135,18 @@ class EntityVerbalizer:
 
         where_expr = entity._where_expression_
         if where_expr is not None:
-            cond_text = self._d.verbalize(where_expr.condition, ctx)
-            ctx.add_constraint(cond_text)
+            ctx.defer_constraint(where_expr.condition)
 
         return _phrase(Articles.indefinite(type_name), RoleFragment.for_variable(type_name, var))
 
     def verbalize_set_of(self, expr: SetOf, ctx: VerbalizationContext) -> VerbFragment:
         expr.build()
-        vars_str = ", ".join(self._d.verbalize(v, ctx) for v in expr._selected_variables_)
-        prefix = _phrase(Keywords.FIND_SETS_OF.as_fragment(), _word(f"({vars_str})"))
+        var_frags = [self._d.build(v, ctx) for v in expr._selected_variables_]
+        vars_phrase = PhraseFragment(parts=var_frags, separator=", ")
+        prefix = _phrase(
+            Keywords.FIND_SETS_OF.as_fragment(),
+            PhraseFragment(parts=[_word("("), vars_phrase, _word(")")], separator=""),
+        )
         return self._verbalize_query_body_(expr, ctx, prefix)
 
     # ── Query body assembly ────────────────────────────────────────────────────
@@ -155,66 +158,52 @@ class EntityVerbalizer:
         where_expr = expr._where_expression_
         grouped_expr = expr._grouped_by_expression_
         having_expr = expr._having_expression_
-        aliases = ctx.binding_aliases
         clauses: list[VerbFragment] = []
 
         if where_expr is not None:
             clauses.append(_phrase(
                 Keywords.SUCH_THAT.as_fragment(),
-                self._build_clause_frag_(where_expr.condition, ctx, aliases),
+                self._d.build(where_expr.condition, ctx),
             ))
 
         if grouped_expr is not None and grouped_expr.variables_to_group_by:
             group_key_root_ids = self._root_var_ids_(grouped_expr.variables_to_group_by)
-            groups = [
-                _apply_binding_aliases(self._d.verbalize(v, ctx), aliases)
-                for v in grouped_expr.variables_to_group_by
-            ]
-            aggregated = self._aggregated_noun_phrases_(expr, group_key_root_ids, ctx)
-            groups_str = self._join_groups_(groups)
-            _the = Articles.THE.text
-            _are = Copulas.ARE.text
-            if aggregated:
-                aggregated_str = self._join_plain_(aggregated)
+            group_frags = [self._d.build(v, ctx) for v in grouped_expr.variables_to_group_by]
+            groups_phrase = PhraseFragment(parts=group_frags, separator=", ")
+            aggregated_frags = self._aggregated_noun_frags_(expr, group_key_root_ids, ctx)
+            if aggregated_frags:
+                aggregated_phrase = oxford_and(aggregated_frags, Conjunctions.AND.as_fragment())
                 clauses.append(_phrase(
                     Conjunctions.AND.as_fragment(),
-                    _word(f"{_the} {aggregated_str} {_are}"),
+                    Articles.THE.as_fragment(),
+                    aggregated_phrase,
+                    Copulas.ARE.as_fragment(),
                     Keywords.GROUPED_BY.as_fragment(),
-                    _word(groups_str),
+                    groups_phrase,
                 ))
             else:
-                clauses.append(_phrase(Keywords.GROUPED_BY.as_fragment(), _word(groups_str)))
+                clauses.append(_phrase(Keywords.GROUPED_BY.as_fragment(), groups_phrase))
 
         if having_expr is not None:
             ctx.compact_predicates = True
-            having_frag = self._build_clause_frag_(having_expr.condition, ctx, aliases)
+            having_frag = self._d.build(having_expr.condition, ctx)
             ctx.compact_predicates = False
             clauses.append(_phrase(Keywords.HAVING.as_fragment(), having_frag))
 
         ob = expr._ordered_by_builder_
         if ob is not None:
-            direction = SortDirections.DESCENDING.text if ob.descending else SortDirections.ASCENDING.text
-            ordered_frag = self._build_clause_frag_(ob.variable, ctx, aliases)
-            clauses.append(_phrase(
-                Keywords.ORDERED_BY.as_fragment(),
-                ordered_frag,
-                _word(f"({direction})"),
-            ))
+            direction_frag = (
+                SortDirections.DESCENDING.as_fragment()
+                if ob.descending
+                else SortDirections.ASCENDING.as_fragment()
+            )
+            ordered_frag = self._d.build(ob.variable, ctx)
+            paren_frag = PhraseFragment(
+                parts=[_word("("), direction_frag, _word(")")], separator=""
+            )
+            clauses.append(_phrase(Keywords.ORDERED_BY.as_fragment(), ordered_frag, paren_frag))
 
         return BlockFragment(header=find_header, items=clauses)
-
-    def _build_clause_frag_(self, expr, ctx: VerbalizationContext, aliases: dict) -> VerbFragment:
-        """Build a clause condition as a VerbFragment, preserving all semantic roles.
-
-        When *aliases* is empty (all plain Entity queries) the fragment is returned
-        as-is, keeping full role/colour information.  When aliases are present
-        (InstantiatedVariable selection path) we fall back to string-level
-        substitution — a known limitation tracked for Phase 2.
-        """
-        frag = self._d.build(expr, ctx)
-        if not aliases:
-            return frag
-        return _word(_apply_binding_aliases(_str(frag), aliases))
 
     @staticmethod
     def _root_var_ids_(exprs) -> set:
@@ -225,10 +214,10 @@ class EntityVerbalizer:
                 ids.add(root._id_)
         return ids
 
-    def _aggregated_noun_phrases_(
+    def _aggregated_noun_frags_(
         self, query_expr, group_key_root_ids: set, ctx: VerbalizationContext
-    ) -> list[str]:
-        texts: list[str] = []
+    ) -> list[VerbFragment]:
+        frags: list[VerbFragment] = []
         selected_var = query_expr.selected_variable if isinstance(query_expr, Entity) else None
 
         if isinstance(selected_var, InstantiatedVariable):
@@ -236,23 +225,10 @@ class EntityVerbalizer:
                 root = chain_root(child_expr)
                 if isinstance(root, Variable) and root._id_ in group_key_root_ids:
                     continue
-                texts.append(_str(verbalize_plural(child_expr, ctx, self._d.build)))
+                frags.append(verbalize_plural(child_expr, ctx, self._d.build))
         elif isinstance(query_expr, Query):
             for var in query_expr._selected_variables_:
                 if var._id_ not in group_key_root_ids:
-                    texts.append(_str(verbalize_plural(var, ctx, self._d.build)))
+                    frags.append(verbalize_plural(var, ctx, self._d.build))
 
-        return texts
-
-    @staticmethod
-    def _join_groups_(groups: list[str]) -> str:
-        if len(groups) == 1:
-            return groups[0]
-        conj = f", {Conjunctions.AND.text} "
-        return f"({', '.join(groups[:-1])}{conj}{groups[-1]})"
-
-    @staticmethod
-    def _join_plain_(parts: list[str]) -> str:
-        if len(parts) == 1:
-            return parts[0]
-        return ", ".join(parts[:-1]) + " " + parts[-1]
+        return frags

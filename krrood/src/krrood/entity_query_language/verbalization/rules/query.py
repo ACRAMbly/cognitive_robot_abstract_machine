@@ -76,8 +76,8 @@ class GroupedByRule(VerbalizationRule):
     @classmethod
     def transform(cls, expr: GroupedBy, ctx: VerbalizationContext, delegate: EQLVerbalizer) -> VerbFragment:
         if expr.variables_to_group_by:
-            groups = [delegate.verbalize(v, ctx) for v in expr.variables_to_group_by]
-            return _phrase(Keywords.GROUPED_BY.as_fragment(), _word(", ".join(groups)))
+            group_frags = [delegate.build(v, ctx) for v in expr.variables_to_group_by]
+            return _phrase(Keywords.GROUPED_BY.as_fragment(), PhraseFragment(parts=group_frags, separator=", "))
         return Keywords.GROUPED.as_fragment()
 
 
@@ -88,8 +88,11 @@ class OrderedByRule(VerbalizationRule):
 
     @classmethod
     def transform(cls, expr: OrderedBy, ctx: VerbalizationContext, delegate: EQLVerbalizer) -> VerbFragment:
-        direction = SortDirections.DESCENDING.text if expr.descending else SortDirections.ASCENDING.text
-        return _phrase(
-            Keywords.ORDERED_BY.as_fragment(),
-            _word(f"{delegate.verbalize(expr.variable, ctx)} ({direction})"),
+        direction_frag = (
+            SortDirections.DESCENDING.as_fragment()
+            if expr.descending
+            else SortDirections.ASCENDING.as_fragment()
         )
+        ordered_frag = delegate.build(expr.variable, ctx)
+        paren_frag = PhraseFragment(parts=[_word("("), direction_frag, _word(")")], separator="")
+        return _phrase(Keywords.ORDERED_BY.as_fragment(), ordered_frag, paren_frag)

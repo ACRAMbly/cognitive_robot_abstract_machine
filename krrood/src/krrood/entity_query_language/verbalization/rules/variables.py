@@ -1,16 +1,18 @@
 from __future__ import annotations
 
-import re
 from typing import TYPE_CHECKING
 
 from krrood.entity_query_language.core.variable import ExternallySetVariable, InstantiatedVariable, Literal, Variable
 from krrood.entity_query_language.predicate import Verbalizable
 from krrood.entity_query_language.verbalization.chain_utils import verbalize_plural
 from krrood.entity_query_language.verbalization.context import ArticleSelection
-from krrood.entity_query_language.verbalization.fragments.base import PhraseFragment, RoleFragment, VerbFragment, WordFragment
+from krrood.entity_query_language.verbalization.fragments.base import (
+    oxford_and, PhraseFragment, RoleFragment, VerbFragment, WordFragment,
+)
 from krrood.entity_query_language.verbalization.fragments.roles import SemanticRole
+from krrood.entity_query_language.verbalization.fragments.source_ref import SourceRef
 from krrood.entity_query_language.verbalization.rule_engine import VerbalizationRule
-from krrood.entity_query_language.verbalization.utils import _apply_binding_aliases, _str, inflect_engine
+from krrood.entity_query_language.verbalization.utils import inflect_engine
 from krrood.entity_query_language.verbalization.vocabulary.english import (
     Articles, Conjunctions, Copulas, Keywords, Prepositions,
 )
@@ -86,7 +88,11 @@ class InstantiatedVariableRule(VerbalizationRule):
 
 
 class InstantiatedVerbalizableRule(InstantiatedVariableRule):
-    """InstantiatedVariable whose type provides a _verbalization_template_(); uses it directly."""
+    """InstantiatedVariable whose type provides a _verbalization_template_(); uses it directly.
+
+    Known limitation: the user-supplied format string cannot carry semantic roles,
+    so the result is a plain WordFragment.
+    """
 
     @classmethod
     def applies(cls, expr, ctx: VerbalizationContext) -> bool:
@@ -111,6 +117,21 @@ def _has_verbalization_template(expr: InstantiatedVariable) -> bool:
     return False
 
 
+def _make_field_ref_frag(field_name: str, type_name: str, type_cls) -> VerbFragment:
+    """Build a 'the <field> of the <Type>' fragment with proper semantic roles."""
+    return PhraseFragment(parts=[
+        Articles.THE.as_fragment(),
+        RoleFragment(text=field_name, role=SemanticRole.ATTRIBUTE),
+        Prepositions.OF.as_fragment(),
+        Articles.THE.as_fragment(),
+        RoleFragment(
+            text=type_name,
+            role=SemanticRole.VARIABLE,
+            source_ref=SourceRef.for_type(type_cls) if isinstance(type_cls, type) else None,
+        ),
+    ], separator=" ")
+
+
 def _verbalize_instantiated_natural(
     expr: InstantiatedVariable,
     ctx: VerbalizationContext,
@@ -124,39 +145,39 @@ def _verbalize_instantiated_natural(
 
     ctx.push_constraint_frame()
 
-    _the = Articles.THE.text
-    _is = Copulas.IS.text
-    _are = Copulas.ARE.text
-    _where = Keywords.WHERE.text
-    _such_that = Keywords.SUCH_THAT.text
-    _and = Conjunctions.AND.text
-    _of = Prepositions.OF.text
-
-    binding_parts: list[str] = []
-    binding_alias_map: dict[str, str] = {}
+    binding_frags: list[VerbFragment] = []
     for field_name, child_expr in expr._child_vars_.items():
-        field_ref = f"{_the} {field_name} {_of} {_the} {type_name}"
-        if inflect_engine.singular_noun(field_name):
-            plural_value = _str(verbalize_plural(child_expr, ctx, delegate.build))
-            binding_parts.append(f"{field_ref} {_are} {plural_value}")
-        else:
-            value_text = delegate.verbalize(child_expr, ctx)
-            binding_parts.append(f"{field_ref} {_is} {value_text}")
-            _the_pat = re.escape(_the)
-            definite_value = re.sub(r"\b(a|an) ([A-Z])", rf"{_the} \2", value_text)
-            if re.search(rf"\b{_the_pat} [A-Z]", definite_value) and definite_value not in binding_alias_map:
-                binding_alias_map[definite_value] = field_ref
+        field_ref_frag = _make_field_ref_frag(field_name, type_name, expr._type_)
 
-    constraints = ctx.pop_constraint_frame()
-    ctx.binding_aliases.update(binding_alias_map)
-    if constraints and binding_alias_map:
-        constraints = [_apply_binding_aliases(c, binding_alias_map) for c in constraints]
+        if inflect_engine.singular_noun(field_name):
+            value_frag = verbalize_plural(child_expr, ctx, delegate.build)
+            binding_frags.append(_phrase(field_ref_frag, Copulas.ARE.as_fragment(), value_frag))
+        else:
+            value_frag = delegate.build(child_expr, ctx)
+            binding_frags.append(_phrase(field_ref_frag, Copulas.IS.as_fragment(), value_frag))
+
+        # Register the override AFTER building the value so the value itself
+        # is not intercepted. The override is still active when constraints are
+        # built below (all bindings are processed before any constraint is built).
+        ctx.binding_overrides[child_expr._id_] = field_ref_frag
+
+    # Build constraints now — all binding overrides are registered, so any
+    # reference to a bound expression inside a constraint resolves to its
+    # field-reference fragment automatically via RuleEngine.build.
+    deferred = ctx.pop_constraint_frame()
+    constraint_frags = [delegate.build(e, ctx) for e in deferred]
 
     result_parts: list[VerbFragment] = [
         _phrase(Articles.indefinite(type_name), RoleFragment.for_variable(type_name, expr))
     ]
-    if binding_parts:
-        result_parts.append(_word(f", {_where} " + f" {_and} ".join(binding_parts)))
-    if constraints:
-        result_parts.append(_word(f", {_such_that} " + f" {_and} ".join(constraints)))
+    if binding_frags:
+        joined = oxford_and(binding_frags, Conjunctions.AND.as_fragment())
+        result_parts.append(PhraseFragment(
+            parts=[_word(","), Keywords.WHERE.as_fragment(), joined], separator=" "
+        ))
+    if constraint_frags:
+        joined_c = oxford_and(constraint_frags, Conjunctions.AND.as_fragment())
+        result_parts.append(PhraseFragment(
+            parts=[_word(","), Keywords.SUCH_THAT.as_fragment(), joined_c], separator=" "
+        ))
     return PhraseFragment(parts=result_parts, separator="")
