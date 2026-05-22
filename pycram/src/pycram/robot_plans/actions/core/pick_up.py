@@ -7,7 +7,13 @@ from dataclasses import dataclass
 from typing_extensions import Any, Dict
 
 from krrood.entity_query_language.core.base_expressions import SymbolicExpression
-from krrood.entity_query_language.factories import and_, or_, not_, variable_from
+from krrood.entity_query_language.factories import (
+    and_,
+    or_,
+    not_,
+    variable_from,
+    ConditionType,
+)
 from pycram.datastructures.dataclasses import Context
 from pycram.datastructures.enums import (
     Arms,
@@ -65,7 +71,7 @@ class ReachAction(ActionDescription):
     reverse_reach_order: bool = False
 
     @property
-    def action_plan(self) -> PlanNode:
+    def _action_plan(self) -> PlanNode:
         target_pre_pose, target_pose, _ = self.grasp_description._pose_sequence(
             self.target_pose, self.object_designator, reverse=self.reverse_reach_order
         )
@@ -80,7 +86,7 @@ class ReachAction(ActionDescription):
                     allow_gripper_collision=False,
                     movement_type=MovementType.CARTESIAN,
                 ),
-            ]
+            ],
         )
 
     def execute(self) -> Any:
@@ -110,7 +116,7 @@ class ReachAction(ActionDescription):
     @staticmethod
     def pre_condition(
         variables, context: Context, kwargs: Dict[str, Any]
-    ) -> SymbolicExpression:
+    ) -> ConditionType:
         """
         The sequence in which the robot would reach the target pose needs to be achiveable
         """
@@ -134,7 +140,7 @@ class ReachAction(ActionDescription):
     @staticmethod
     def post_condition(
         variables, context: Context, kwargs: Dict[str, Any]
-    ) -> SymbolicExpression | bool:
+    ) -> ConditionType:
         """
         The end effector needs to be close to the target pose
         """
@@ -174,7 +180,7 @@ class PickUpAction(ActionDescription):
     """
 
     @property
-    def action_plan(self) -> PlanNode:
+    def _action_plan(self) -> PlanNode:
 
         _, _, lift_to_pose = self.grasp_description.grasp_pose_sequence(
             self.object_designator
@@ -201,7 +207,7 @@ class PickUpAction(ActionDescription):
                     allow_gripper_collision=True,
                     movement_type=MovementType.TRANSLATION,
                 ),
-            ]
+            ],
         )
 
     def execute(self) -> Any:
@@ -247,7 +253,7 @@ class PickUpAction(ActionDescription):
     @staticmethod
     def pre_condition(
         variables: Dict, context: Context, kwargs: Dict[str, Any]
-    ) -> SymbolicExpression:
+    ) -> ConditionType:
         """
         The gripper with which to grasp the object needs to be free and the object needs to be reachable
         """
@@ -270,7 +276,7 @@ class PickUpAction(ActionDescription):
     @staticmethod
     def post_condition(
         variables: Dict, context: Context, kwargs: Dict[str, Any]
-    ) -> SymbolicExpression:
+    ) -> ConditionType:
         """
         The object needs to be in the griper frame
         """

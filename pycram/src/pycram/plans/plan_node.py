@@ -12,6 +12,7 @@ from typing_extensions import Union
 
 from giskardpy.motion_statechart.graph_node import Task
 from krrood.entity_query_language.query.match import Match
+from pycram.action_executor import ActionExecutor
 
 from pycram.datastructures.enums import TaskStatus
 from pycram.plans.failures import PlanFailure
@@ -37,7 +38,7 @@ def sort_by_layer_index(nodes: Iterable[PlanNode]) -> Iterable[PlanNode]:
 
 
 @dataclass(eq=False)
-class PlanNode(PlanEntity):
+class PlanNode(PlanEntity, ABC):
     """
     A node in the plan.
     """
@@ -266,7 +267,7 @@ class PlanNode(PlanEntity):
 
         self.status = TaskStatus.RUNNING
         try:
-            self.result = self._perform()
+            self.result = self.notify()
         except PlanFailure as e:
             self.status = TaskStatus.FAILED
             self.reason = e
@@ -292,7 +293,7 @@ class PlanNode(PlanEntity):
         pass
 
     @abstractmethod
-    def _perform(self):
+    def notify(self):
         """
         Perform the node without managing the fields of this node.
         """
@@ -324,7 +325,7 @@ class UnderspecifiedNode(PlanNode):
     def designator_type(self) -> Type:
         return self.underspecified_action.type
 
-    def _perform(self):
+    def notify(self):
         if self._action_iterator is None:
             self._action_iterator = self.plan.context.query_backend.evaluate(
                 self.underspecified_action
@@ -448,16 +449,20 @@ class ActionNode(DesignatorNode):
             ]
         )
 
-    def _perform(self):
+    def notify(self):
         self.create_execution_data_pre_perform()
 
-        result = self.action.perform()
+        # result = self.action.perform()
 
-        self.execute_motion_state_chart()
+        self.action.expand()
+
+        ActionExecutor(self, self.plan, self.plan.world).execute()
+
+        # self.execute_motion_state_chart()
 
         self.update_execution_data_post_perform()
 
-        return result
+        # return result
 
 
 @dataclass(eq=False, repr=False)
@@ -472,7 +477,7 @@ class MotionNode(DesignatorNode):
     def motion(self) -> BaseMotion:
         return self.designator
 
-    def _perform(self):
+    def notify(self):
         """
         Performs this node by performing the respective MotionDesignator. Additionally, checks if one of the parents has
         the status INTERRUPTED and aborts the perform if that is the case.

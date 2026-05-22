@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 from abc import abstractmethod, ABC, abstractproperty
+from copy import copy
 from dataclasses import dataclass, fields, Field
 from functools import cached_property
 
@@ -21,7 +22,7 @@ from pycram.exceptions import ContextIsUnavailable, ConditionNotSatisfied
 from pycram.plans.failures import PlanFailure
 from semantic_digital_twin.world import World
 
-from pycram.plans.plan_node import PlanNode
+from pycram.plans.plan_node import PlanNode, ActionNode
 from pycram.plans.designator import Designator
 from krrood.entity_query_language.core.base_expressions import SymbolicExpression
 from krrood.entity_query_language.core.variable import Variable
@@ -32,6 +33,7 @@ from krrood.entity_query_language.factories import (
     evaluate_condition,
 )
 from ...datastructures.dataclasses import Context
+from ...plans.condition_nodes import ConditionNode
 
 logger = logging.getLogger(__name__)
 
@@ -69,14 +71,55 @@ class ActionDescription(Designator):
         return result
 
     @property
+    def action_plan(self) -> PlanNode:
+
+        # plan_context = self.plan.context if self.plan_node else None
+
+        sub_plan_root = self._action_plan
+        action_node = ActionNode(designator=copy(self))
+
+        sub_plan_root.plan.add_edge(action_node, sub_plan_root)
+        # sub_plan_root.plan.context = plan_context
+
+        return action_node
+
+    @property
     @abstractmethod
-    def action_plan(self) -> PlanNode: ...
+    def _action_plan(self) -> PlanNode: ...
 
     """
     Creates the whole plan for this action. 
     
     :return: The root not of the plan of this action 
     """
+
+    def expand(self) -> PlanNode:
+
+        pre_condition_node = ConditionNode(
+            condition=self.pre_condition(
+                self.bound_variables,
+                self.context,
+                self.designator_parameter,
+            ),
+            pre_condition=True,
+        )
+
+        self.plan.add_edge(self.plan_node, pre_condition_node)
+
+        root = self.add_subplan(self.action_plan)
+
+        post_condition_node = ConditionNode(
+            condition=self.post_condition(
+                self.bound_variables,
+                self.context,
+                self.designator_parameter,
+            ),
+            pre_condition=False,
+        )
+
+        self.plan.add_edge(self.plan_node, post_condition_node)
+
+        return root
 
     @abstractmethod
     def execute(self) -> Any:
@@ -117,29 +160,29 @@ class ActionDescription(Designator):
             for f in self.fields
         }
 
-    def evaluate_pre_condition(self) -> bool:
-        condition = self.pre_condition(
-            self.bound_variables,
-            self.context,
-            self.designator_parameter,
-        )
-        evaluation = evaluate_condition(condition)
-        if evaluation:
-            return True
-        raise ConditionNotSatisfied(
-            pre_condition=True, action=self.__class__, condition=condition
-        )
-
-    def evaluate_post_condition(self) -> bool:
-        condition = self.post_condition(
-            self.bound_variables,
-            self.context,
-            self.designator_parameter,
-        )
-        evaluation = evaluate_condition(condition)
-        if evaluation:
-            return True
-        raise ConditionNotSatisfied(False, self.__class__, condition)
+    # def evaluate_pre_condition(self) -> bool:
+    #     condition = self.pre_condition(
+    #         self.bound_variables,
+    #         self.context,
+    #         self.designator_parameter,
+    #     )
+    #     evaluation = evaluate_condition(condition)
+    #     if evaluation:
+    #         return True
+    #     raise ConditionNotSatisfied(
+    #         pre_condition=True, action=self.__class__, condition=condition
+    #     )
+    #
+    # def evaluate_post_condition(self) -> bool:
+    #     condition = self.post_condition(
+    #         self.bound_variables,
+    #         self.context,
+    #         self.designator_parameter,
+    #     )
+    #     evaluation = evaluate_condition(condition)
+    #     if evaluation:
+    #         return True
+    #     raise ConditionNotSatisfied(False, self.__class__, condition)
 
     def add_subplan(self, subplan_root: PlanNode) -> PlanNode:
         subplan_root = self.plan._migrate_nodes_from_plan(subplan_root.plan)

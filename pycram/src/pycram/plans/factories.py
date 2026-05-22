@@ -117,6 +117,8 @@ def _make_plan_from_type_and_children(
         child = make_node(action_like)
         if isinstance(child, LanguageNode):
             root.mount_subplan(child)
+        if child.plan:
+            root.mount_subplan(child)
         else:
             root.add_child(child)
     plan.simplify()

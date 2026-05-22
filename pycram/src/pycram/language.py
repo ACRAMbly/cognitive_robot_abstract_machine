@@ -54,7 +54,7 @@ class ExecutesSequentially(LanguageNode):
     Base class for nodes that execute their children sequentially.
     """
 
-    def _perform(self):
+    def notify(self):
         result = [child.perform() for child in self.children]
         return result
 
@@ -98,7 +98,7 @@ class ParallelNode(ExecutesInParallel):
     All exceptions are raised after all children have finished.
     """
 
-    def _perform(self):
+    def notify(self):
         self._perform_parallel(self.children)
         for child in self.children:
             if child.status == TaskStatus.FAILED:
@@ -116,9 +116,9 @@ class RepeatNode(ExecutesSequentially):
     The number of repetitions of the children.
     """
 
-    def _perform(self):
+    def notify(self):
         for _ in range(self.repetitions):
-            super()._perform()
+            super().notify()
 
 
 @dataclass(eq=False)
@@ -160,8 +160,8 @@ class MonitorNode(ExecutesSequentially):
         )
         self._monitor_thread.start()
 
-    def _perform(self):
-        super()._perform()
+    def notify(self):
+        super().notify()
         self.kill_event.set()
         self._monitor_thread.join()
 
@@ -187,7 +187,7 @@ class TryInOrderNode(ExecutesSequentially):
     Tries all children in order sequentially and fails if all children fail.
     """
 
-    def _perform(self):
+    def notify(self):
         for child in self.children:
             try:
                 child.perform()
@@ -205,7 +205,7 @@ class TryAllNode(ExecutesInParallel):
     Only raise a failure if all children fail.
     """
 
-    def _perform(self):
+    def notify(self):
         self._perform_parallel(self.children)
         failed = all([child.status == TaskStatus.FAILED for child in self.children])
         if failed:
@@ -221,5 +221,5 @@ class CodeNode(LanguageNode):
 
     code: Callable = field(default_factory=lambda: lambda: None, kw_only=True)
 
-    def _perform(self) -> Any:
+    def notify(self) -> Any:
         return self.code()

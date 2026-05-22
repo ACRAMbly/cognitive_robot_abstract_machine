@@ -28,6 +28,7 @@ from pycram.plans.plan_node import (
     ActionNode,
     DesignatorNode,
 )
+from pycram.visualization import plot_rustworkx_interactive
 from semantic_digital_twin.robots.abstract_robot import AbstractRobot
 from semantic_digital_twin.world import World
 
@@ -306,72 +307,18 @@ class Plan:
 
         self.root.simplify()
 
-    # %% Plotting functions
-
-    def bfs_layout(
-        self, scale: float = 1.0, align: PlotAlignment = PlotAlignment.VERTICAL
-    ) -> Dict[int, np.array]:
+    def plot(self, layout: str = "bfs"):
         """
-        Generate a bfs layout for this plan.
+        Plots the plan in an interactive browser window
 
-        :return: A dict mapping the node indices to 2d coordinates.
+        :param layout: The layout of the plot
         """
-        layers = self.layers
-
-        pos = None
-        nodes = []
-        width = len(layers)
-        for i, layer in enumerate(layers):
-            height = len(layer)
-            xs = np.repeat(i, height)
-            ys = np.arange(0, height, dtype=float)
-            offset = ((width - 1) / 2, (height - 1) / 2)
-            layer_pos = np.column_stack([xs, ys]) - offset
-            if pos is None:
-                pos = layer_pos
-            else:
-                pos = np.concatenate([pos, layer_pos])
-            nodes.extend(layer)
-
-        # Find max length over all dimensions
-        pos -= pos.mean(axis=0)
-        lim = np.abs(pos).max()  # max coordinate for all axes
-        # rescale to (-scale, scale) in all directions, preserves aspect
-        if lim > 0:
-            pos *= scale / lim
-
-        if align == PlotAlignment.HORIZONTAL:
-            pos = pos[:, ::-1]  # swap x and y coords
-
-        pos = dict(zip([node.index for node in nodes], pos))
-        return pos
-
-    def plot_plan_structure(
-        self, scale: float = 1.0, align: PlotAlignment = PlotAlignment.HORIZONTAL
-    ) -> None:
-        """
-        Plots the kinematic structure of the world.
-        The plot shows bodies as nodes and connections as edges in a directed graph.
-        """
-        import matplotlib.pyplot as plt
-
-        # Create a new figure
-        plt.figure(figsize=(15, 8))
-
-        pos = self.bfs_layout(scale=scale, align=align)
-
-        rx.visualization.mpl_draw(
-            self.plan_graph, pos=pos, labels=lambda node: repr(node), with_labels=True
+        plot_rustworkx_interactive(
+            self.plan_graph, layout=layout, start=self.root.index
         )
 
-        plt.title("Plan Graph")
-        plt.axis("off")  # Hide axes
-        plt.gca().invert_yaxis()
-        plt.gca().invert_xaxis()
-        plt.show()
-
     def __repr__(self):
-        return f"Plan with {len(self.nodes)} nodes"
+        return f"Plan with {len(self.all_nodes)} nodes"
 
     def prepare_for_replay(self):
         """
