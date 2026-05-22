@@ -70,15 +70,13 @@ def _condition_left_owner_id_(cond) -> Optional[object]:
     or None if the condition is not a simple attribute equality.
     """
     from krrood.entity_query_language.operators.comparator import Comparator
-    from krrood.entity_query_language.core.mapped_variable import MappedVariable
     from krrood.entity_query_language.query.quantifiers import ResultQuantifier
+    from krrood.entity_query_language.verbalization.chain_utils import chain_root
     import operator as _op
 
     if not isinstance(cond, Comparator) or cond.operation is not _op.eq:
         return None
-    current = cond.left
-    while isinstance(current, MappedVariable):
-        current = current._child_
+    current = chain_root(cond.left)
     while isinstance(current, ResultQuantifier):
         current = current._child_
     return getattr(current, "_id_", None)
@@ -194,14 +192,12 @@ class RuleAnalyzer:
 
     @staticmethod
     def _find_root(expr) -> Optional[Any]:
-        from krrood.entity_query_language.core.mapped_variable import MappedVariable
         from krrood.entity_query_language.core.variable import Variable
         from krrood.entity_query_language.query.quantifiers import ResultQuantifier
         from krrood.entity_query_language.query.query import Entity
+        from krrood.entity_query_language.verbalization.chain_utils import chain_root
 
-        current = expr
-        while isinstance(current, MappedVariable):
-            current = current._child_
+        current = chain_root(expr)
         while isinstance(current, ResultQuantifier):
             current = current._child_
         if isinstance(current, (Variable, Entity)):

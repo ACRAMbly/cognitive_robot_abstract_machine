@@ -13,3 +13,13 @@ class SourceRef:
 
     attribute: Optional[str] = None
     """Attribute name within *cls*; ``None`` means the fragment refers to the class itself."""
+
+    @classmethod
+    def for_type(cls, t) -> Optional["SourceRef"]:
+        """Return SourceRef(cls=t) when t is a real type, else None."""
+        return cls(cls=t) if isinstance(t, type) else None
+
+    @classmethod
+    def for_attribute(cls, owner, attr_name: str) -> Optional["SourceRef"]:
+        """Return SourceRef(cls=owner, attribute=attr_name) when owner is a real type, else None."""
+        return cls(cls=owner, attribute=attr_name) if isinstance(owner, type) else None
