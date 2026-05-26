@@ -288,6 +288,28 @@ print(verbalize_expression(WorksIn(emp, dept)))
 When a predicate does not define `_verbalization_template_`, the verbalizer falls
 back to a generic description.
 
+## Grouped Queries (`set_of` + `grouped_by` + `having`)
+
+Queries built with `set_of`, `grouped_by`, and `having` are verbalized as a structured
+sentence with the selection, GROUP BY, and HAVING clauses clearly separated.
+
+```{code-cell} ipython3
+from krrood.entity_query_language.factories import a, set_of
+
+emp = variable(Employee, domain=None)
+avg_salary = eql.average(emp.salary)
+query = a(
+    set_of(emp.department, avg_salary)
+    .grouped_by(emp.department)
+    .having(avg_salary > 30000)
+)
+print(verbalize_expression(query))
+```
+
+The HAVING clause uses the *compact* (copula-less) operator form — *"greater than 30000"*
+instead of *"is greater than 30000"* — matching SQL-style conciseness.  The GROUP BY
+clause states only the grouping key without restating the full selection tuple.
+
 ## Colored Terminal Output
 
 For richer output in a terminal, use `VerbalizationPipeline.ansi()`. Each part of the sentence is
