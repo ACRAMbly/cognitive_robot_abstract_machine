@@ -131,7 +131,8 @@ class VerbalizationContext:
         already verbalized in this pass.
     :ivar compact_predicates: When ``True``, comparators omit the copula *"is"*
         (e.g. *"greater than"* instead of *"is greater than"*).  Set temporarily
-        by :class:`~krrood.entity_query_language.verbalization.entity_verbalizer.EntityVerbalizer`
+        by the HAVING clause renderer in
+        :mod:`~krrood.entity_query_language.verbalization.rules.query`
         while rendering HAVING conditions.
     :ivar constraint_exprs: Stack of deferred-expression frames.  Each frame
         belongs to one nesting level of

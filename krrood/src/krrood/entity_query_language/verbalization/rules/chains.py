@@ -34,6 +34,7 @@ from krrood.entity_query_language.verbalization.fragments.factory import phrase,
 from krrood.entity_query_language.verbalization.fragments.roles import SemanticRole
 from krrood.entity_query_language.verbalization.fragments.source_ref import SourceRef
 from krrood.entity_query_language.verbalization.rule_engine import VerbalizationRule
+from krrood.entity_query_language.verbalization.rules.query import as_inline_noun
 from krrood.entity_query_language.verbalization.utils import _ordinal
 from krrood.entity_query_language.verbalization.vocabulary.english import (
     Articles,
@@ -140,7 +141,7 @@ def _chain_root_frag(leaf, ctx: "VerbalizationContext", delegate: "EQLVerbalizer
     while isinstance(inner, ResultQuantifier):
         inner = inner._child_
     if isinstance(inner, Entity):
-        return delegate._entity.as_inline_noun(inner, ctx)
+        return as_inline_noun(inner, ctx, delegate)
     return delegate.build(leaf, ctx)
 
 

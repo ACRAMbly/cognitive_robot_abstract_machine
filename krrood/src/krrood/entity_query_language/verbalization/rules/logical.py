@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import operator
 from typing import TYPE_CHECKING
 
 from krrood.entity_query_language.core.mapped_variable import Attribute, MappedVariable
@@ -27,7 +26,6 @@ from krrood.entity_query_language.verbalization.range_fold import (
     RangeFold,
 )
 from krrood.entity_query_language.verbalization.rule_engine import VerbalizationRule
-from krrood.entity_query_language.verbalization.subquery import is_calculation_value
 from krrood.entity_query_language.verbalization.vocabulary.english import (
     Conjunctions,
     Logicals,
@@ -251,43 +249,6 @@ class NotComparatorRule(NotRule):
         :param ctx: Shared verbalization state.
         :param delegate: Parent verbalizer for recursive calls.
         :returns: Negated comparator phrase.
-        :rtype: ~krrood.entity_query_language.verbalization.fragments.base.VerbFragment
-        """
-        return comparator_phrase(expr._child_, ctx, delegate, negated=True)
-
-
-class NotCalculationEqualityRule(NotComparatorRule):
-    """
-    Negates a calc-equality inline: *"<left> is not equal to <right>"* (for
-    ``not (a == calc)``) or *"<left> is equal to <right>"* (for ``not (a != calc)``).
-
-    Precondition (declarative): the Not child is a ``==``/``!=`` Comparator with a
-    calculation operand
-    (:func:`~krrood.entity_query_language.verbalization.subquery.is_calculation_value`).
-    Takes priority over :class:`NotComparatorRule` via MRO depth.
-    """
-
-    @classmethod
-    def applies(cls, expr, ctx: "VerbalizationContext") -> bool:
-        """Return ``True`` when the Not child is a calc-equality comparator."""
-        if not (isinstance(expr, Not) and isinstance(expr._child_, Comparator)):
-            return False
-        child = expr._child_
-        return child.operation in (operator.eq, operator.ne) and (
-            is_calculation_value(child.left) or is_calculation_value(child.right)
-        )
-
-    @classmethod
-    def transform(
-        cls, expr: "Not", ctx: "VerbalizationContext", delegate: "EQLVerbalizer"
-    ) -> VerbFragment:
-        """
-        Build the negated calc-equality phrase.
-
-        :param expr: Not-wrapping calc-equality Comparator.
-        :param ctx: Shared verbalization state.
-        :param delegate: Parent verbalizer for recursive calls.
-        :returns: Negated calc-equality fragment.
         :rtype: ~krrood.entity_query_language.verbalization.fragments.base.VerbFragment
         """
         return comparator_phrase(expr._child_, ctx, delegate, negated=True)

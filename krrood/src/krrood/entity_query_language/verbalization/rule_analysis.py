@@ -82,7 +82,7 @@ class RuleStructure:
     Complete decomposition of an inference-rule Entity query.
 
     Produced by :meth:`RuleAnalyzer.analyze` and consumed by
-    :class:`~krrood.entity_query_language.verbalization.rule_verbalizer.RuleVerbalizer`.
+    :class:`~krrood.entity_query_language.verbalization.rules.inference_rule.InferenceRuleRule`.
 
     :ivar primary_antecedents: Antecedents with at least one condition — appear
         as items in the IF block.
@@ -134,7 +134,7 @@ class RuleAnalyzer:
     query and returns a :class:`RuleStructure`.
 
     The analyzer is stateless; a single shared instance is used by
-    :class:`~krrood.entity_query_language.verbalization.rule_verbalizer.RuleVerbalizer`.
+    :class:`~krrood.entity_query_language.verbalization.rules.inference_rule.InferenceRuleRule`.
     """
 
     def can_handle(self, entity) -> bool:

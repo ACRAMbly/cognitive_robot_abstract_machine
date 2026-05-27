@@ -1,197 +1,685 @@
+"""
+Verbalization rules for Entity, SetOf, and query-body clause assembly.
+
+This module is the single source of truth for query verbalization: the rules own
+both the *decision* (which form) and the *rendering* (the fragment tree).  All
+clause helpers, noun forms, and aggregation-value rendering that previously lived
+in ``EntityVerbalizer`` are now module-level functions called directly by the rules.
+"""
+
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import Optional, TYPE_CHECKING
 
 from krrood.entity_query_language.core.base_expressions import Filter
+from krrood.entity_query_language.core.variable import InstantiatedVariable, Variable
+from krrood.entity_query_language.operators.aggregators import Aggregator
 from krrood.entity_query_language.query.operations import GroupedBy, OrderedBy
-from krrood.entity_query_language.query.quantifiers import ResultQuantifier
-from krrood.entity_query_language.query.query import Entity, SetOf
-from krrood.entity_query_language.verbalization.fragments.base import PhraseFragment, VerbFragment
+from krrood.entity_query_language.query.quantifiers import An, ResultQuantifier, The
+from krrood.entity_query_language.query.query import Entity, Query, SetOf
+from krrood.entity_query_language.verbalization.chain_utils import (
+    chain_root,
+    verbalize_plural,
+)
+from krrood.entity_query_language.verbalization.fragments.base import (
+    BlockFragment,
+    oxford_and,
+    PhraseFragment,
+    RoleFragment,
+    VerbFragment,
+    WordFragment,
+)
+from krrood.entity_query_language.verbalization.fragments.roles import SemanticRole
+from krrood.entity_query_language.verbalization.restriction import (
+    RestrictionClauseBuilder,
+    restriction_subject,
+)
 from krrood.entity_query_language.verbalization.rule_engine import VerbalizationRule
-from krrood.entity_query_language.verbalization.vocabulary.english import Keywords, SortDirections
+from krrood.entity_query_language.verbalization.rules.aggregators import _AGGREGATION_KIND
+from krrood.entity_query_language.verbalization.subquery import (
+    aggregation_leaf_attribute,
+    aggregation_source_root,
+    is_aggregation_subquery,
+    is_constrained_query,
+    selected_aggregator,
+)
+from krrood.entity_query_language.verbalization.utils import _str
+from krrood.entity_query_language.verbalization.vocabulary.english import (
+    Articles,
+    Conjunctions,
+    Copulas,
+    FallbackNouns,
+    Keywords,
+    Prepositions,
+    SortDirections,
+)
+from krrood.entity_query_language.verbalization.vocabulary.words import ChildForm
 
 if TYPE_CHECKING:
     from krrood.entity_query_language.verbalization.context import VerbalizationContext
     from krrood.entity_query_language.verbalization.verbalizer import EQLVerbalizer
 
+_UNSET = object()
 
-def _word(text: str) -> VerbFragment:
-    from krrood.entity_query_language.verbalization.fragments.base import WordFragment
+
+def _word(text: str) -> WordFragment:
     return WordFragment(text=text)
 
 
-def _phrase(*parts: VerbFragment, sep: str = " ") -> PhraseFragment:
+def _role(text, role, ref=None):
+    return RoleFragment(text=text, role=role, source_ref=ref)
+
+
+def _phrase(*parts, sep=" "):
     return PhraseFragment(parts=list(parts), separator=sep)
+
+
+# ── Ordered-by / Grouped-by shared helpers ───────────────────────────────────────
+
+
+def _render_ordered_by(
+    ob: "OrderedBy", ctx: "VerbalizationContext", delegate: "EQLVerbalizer"
+) -> VerbFragment:
+    """Render an OrderedBy expression as *"ordered by <var> (ascending|descending)"*."""
+    direction_frag = (
+        SortDirections.DESCENDING.as_fragment()
+        if ob.descending
+        else SortDirections.ASCENDING.as_fragment()
+    )
+    ordered_frag = delegate.build(ob.variable, ctx)
+    paren_frag = PhraseFragment(
+        parts=[_word("("), direction_frag, _word(")")], separator=""
+    )
+    return _phrase(Keywords.ORDERED_BY.as_fragment(), ordered_frag, paren_frag)
+
+
+def _render_group_keys(
+    variables: list, ctx: "VerbalizationContext", delegate: "EQLVerbalizer"
+) -> VerbFragment:
+    """Render group-by key expressions as a comma-separated phrase."""
+    group_frags = [delegate.build(v, ctx) for v in variables]
+    return PhraseFragment(parts=group_frags, separator=", ")
+
+
+# ── Query entry points ──────────────────────────────────────────────────────────
+
+
+def verbalize_query(
+    expr: "Entity", ctx: "VerbalizationContext", delegate: "EQLVerbalizer"
+) -> VerbFragment:
+    """
+    Full query form: *"Find X such that …"*.
+
+    Assembles ``FIND + SUCH THAT + GROUPED BY + HAVING + ORDERED BY`` clauses.
+    """
+    seen = ctx.seen_reference(expr)
+    if seen is not None:
+        return seen
+
+    expr.build()
+
+    ctx.query_depth += 1
+    try:
+        is_the = (
+            expr._quantifier_builder_ is not None
+            and expr._quantifier_builder_.type is The
+        )
+        var = expr.selected_variable
+
+        if isinstance(var, Entity):
+            return _verbalize_query_body_(
+                expr, ctx, delegate, as_noun(var, ctx, delegate)
+            )
+        if var is None:
+            ctx.seen[expr._id_] = FallbackNouns.ENTITY.text
+            return _verbalize_query_body_(
+                expr, ctx, delegate, FallbackNouns.ENTITY.plural_fragment()
+            )
+
+        ctx.push_subject(var)
+        try:
+            if is_the:
+                selected_type = (
+                    var._type_.__name__
+                    if getattr(var, "_type_", None)
+                    else FallbackNouns.ENTITY.text
+                )
+                ctx.seen[var._id_] = selected_type
+                ctx.seen[expr._id_] = selected_type
+                selected = _phrase(
+                    Articles.THE_UNIQUE.as_fragment(),
+                    _role(selected_type, SemanticRole.VARIABLE),
+                )
+            else:
+                selected = delegate.build(var, ctx)
+                selected_type = ctx.seen.get(
+                    getattr(var, "_id_", None), FallbackNouns.ENTITY.text
+                )
+                ctx.seen[expr._id_] = selected_type
+            selected, where_item = _apply_subject_restrictions_(
+                expr, var, selected, ctx, delegate
+            )
+            return _verbalize_query_body_(
+                expr, ctx, delegate, selected, where_item=where_item
+            )
+        finally:
+            ctx.pop_subject()
+    finally:
+        ctx.query_depth -= 1
+
+
+def verbalize_nested(
+    expr: "Entity", ctx: "VerbalizationContext", delegate: "EQLVerbalizer"
+) -> VerbFragment:
+    """
+    Noun-phrase form for a nested Entity (never emits *"Find …"*).
+
+    * **Unconstrained aggregation subquery** → collapsed aggregate noun.
+    * **Constrained aggregation subquery** → full form preserving the filter.
+    * **Any other nested entity** → :func:`as_noun`.
+    """
+    seen = ctx.seen_reference(expr)
+    if seen is not None:
+        return seen
+
+    expr.build()
+
+    if is_aggregation_subquery(expr):
+        return _verbalize_aggregation_value_(expr, ctx, delegate)
+
+    return as_noun(expr, ctx, delegate)
+
+
+def verbalize_set_of(
+    expr: "SetOf", ctx: "VerbalizationContext", delegate: "EQLVerbalizer"
+) -> VerbFragment:
+    """Verbalize a SetOf query as *"Find (v1, v2, …) such that …"*."""
+    expr.build()
+    ctx.query_depth += 1
+    try:
+        var_frags = [delegate.build(v, ctx) for v in expr._selected_variables_]
+        vars_phrase = PhraseFragment(parts=var_frags, separator=", ")
+        selection = PhraseFragment(
+            parts=[_word("("), vars_phrase, _word(")")], separator=""
+        )
+        return _verbalize_query_body_(
+            expr,
+            ctx,
+            delegate,
+            selection,
+            find_header=Keywords.FIND_SETS_OF.as_fragment(),
+        )
+    finally:
+        ctx.query_depth -= 1
+
+
+# ── Noun forms ──────────────────────────────────────────────────────────────────
+
+
+def as_noun(
+    expr: "Entity", ctx: "VerbalizationContext", delegate: "EQLVerbalizer"
+) -> VerbFragment:
+    """Standalone-noun form: *"a Robot where …"* (for nested Entity selectors)."""
+    seen = ctx.seen_reference(expr)
+    if seen is not None:
+        return seen
+
+    expr.build()
+    is_the = (
+        expr._quantifier_builder_ is not None
+        and expr._quantifier_builder_.type is The
+    )
+    var = expr.selected_variable
+    selected_type = (
+        var._type_.__name__
+        if var and getattr(var, "_type_", None)
+        else FallbackNouns.ENTITY.text
+    )
+    ctx.seen[expr._id_] = selected_type
+    if var is not None:
+        ctx.seen[var._id_] = selected_type
+
+    if is_the:
+        article_noun: VerbFragment = _phrase(
+            Articles.THE_UNIQUE.as_fragment(),
+            RoleFragment.for_variable(selected_type, var),
+        )
+    else:
+        article_noun = _phrase(
+            Articles.indefinite(selected_type),
+            RoleFragment.for_variable(selected_type, var),
+        )
+
+    where_expr = expr._where_expression_
+    if where_expr is None:
+        return article_noun
+    ctx.query_depth += 1
+    ctx.push_subject(var)
+    try:
+        restrictions = RestrictionClauseBuilder(delegate)
+        whose, residual = restrictions.build(var, where_expr.condition, ctx)
+    finally:
+        ctx.pop_subject()
+        ctx.query_depth -= 1
+    result = article_noun
+    if whose is not None:
+        result = _phrase(result, whose)
+    if residual is not None:
+        result = _phrase(result, Keywords.WHERE.as_fragment(), residual)
+    return result
+
+
+def as_inline_noun(
+    entity: "Entity", ctx: "VerbalizationContext", delegate: "EQLVerbalizer"
+) -> VerbFragment:
+    """
+    Inline-noun form used as a chain root inside an InstantiatedVariable.
+
+    Defers the entity's WHERE condition to
+    :attr:`~krrood.entity_query_language.verbalization.context.VerbalizationContext.constraint_exprs`
+    so the enclosing rule can emit it as a *"such that …"* clause after all
+    binding overrides are registered.
+    """
+    seen = ctx.seen_reference(entity)
+    if seen is not None:
+        return seen
+
+    entity.build()
+    var = entity.selected_variable
+    var_type = getattr(var, "_type_", None)
+    type_name = var_type.__name__ if var_type else FallbackNouns.ENTITY.text
+
+    ctx.seen[entity._id_] = type_name
+    ctx.seen[var._id_] = type_name
+
+    where_expr = entity._where_expression_
+    if where_expr is not None:
+        ctx.defer_constraint(where_expr.condition)
+
+    return _phrase(
+        Articles.indefinite(type_name), RoleFragment.for_variable(type_name, var)
+    )
+
+
+# ── Aggregation sub-query rendering ─────────────────────────────────────────────
+
+
+def _verbalize_aggregation_value_(
+    expr: "Entity", ctx: "VerbalizationContext", delegate: "EQLVerbalizer"
+) -> VerbFragment:
+    """
+    Render an aggregation sub-query as a compact aggregate noun phrase.
+
+    * **Unconstrained** → *"the <aggregation> <leaf>"*
+    * **Constrained** → *"the <aggregation> <leaf> among <plural source> such that <filter>"*
+    * **No attribute leaf** → falls back to aggregator's own verbose rendering.
+    """
+    aggregator = selected_aggregator(expr)
+    leaf = aggregation_leaf_attribute(expr)
+    if leaf is None:
+        ctx.query_depth += 1
+        try:
+            return delegate.build(aggregator, ctx)
+        finally:
+            ctx.query_depth -= 1
+
+    agg_kind = _AGGREGATION_KIND[type(aggregator)]
+    plural_leaf = agg_kind.value.child_form == ChildForm.PLURAL
+    leaf_frag = RoleFragment.for_attribute(
+        leaf._owner_class_, leaf._attribute_name_, plural=plural_leaf
+    )
+    aggregate = _phrase(Articles.THE.as_fragment(), agg_kind.as_fragment(), leaf_frag)
+
+    if aggregator._id_ not in ctx.seen:
+        ctx.seen[aggregator._id_] = _str(
+            _phrase(agg_kind.as_fragment(), leaf_frag)
+        )
+
+    if not is_constrained_query(expr):
+        return aggregate
+    return _aggregation_scope_(expr, aggregate, ctx, delegate)
+
+
+def _aggregation_scope_(
+    expr: "Entity",
+    aggregate: VerbFragment,
+    ctx: "VerbalizationContext",
+    delegate: "EQLVerbalizer",
+) -> VerbFragment:
+    """Append *"among <plural source> such that <filter>"* to a constrained aggregate."""
+    source = aggregation_source_root(expr)
+    source_frag = (
+        verbalize_plural(source, ctx, delegate.build)
+        if source is not None
+        else FallbackNouns.ENTITY.plural_fragment()
+    )
+    parts = [aggregate, Prepositions.AMONG.as_fragment(), source_frag]
+
+    where_expr = expr._where_expression_
+    if where_expr is not None:
+        ctx.query_depth += 1
+        try:
+            restrictions = RestrictionClauseBuilder(delegate)
+            whose, residual = restrictions.build(source, where_expr.condition, ctx)
+        finally:
+            ctx.query_depth -= 1
+        if whose is not None:
+            parts.append(whose)
+        if residual is not None:
+            parts += [Keywords.SUCH_THAT.as_fragment(), residual]
+
+    having_expr = expr._having_expression_
+    if having_expr is not None:
+        ctx.compact_predicates = True
+        ctx.query_depth += 1
+        try:
+            having_frag = delegate.build(having_expr.condition, ctx)
+        finally:
+            ctx.query_depth -= 1
+            ctx.compact_predicates = False
+        parts += [Keywords.HAVING.as_fragment(), having_frag]
+
+    return _phrase(*parts)
+
+
+# ── Subject restriction ─────────────────────────────────────────────────────────
+
+
+def _apply_subject_restrictions_(
+    expr,
+    var,
+    selected: VerbFragment,
+    ctx: "VerbalizationContext",
+    delegate: "EQLVerbalizer",
+) -> "tuple[VerbFragment, object]":
+    """
+    Fold a subject's single-hop attribute predicates into a *"whose …"* modifier.
+    Returns ``(selected, _UNSET)`` when no grouping applies.
+    """
+    where_expr = expr._where_expression_
+    subject = restriction_subject(expr, var, ctx)
+    if where_expr is None or subject is None:
+        return selected, _UNSET
+    restrictions = RestrictionClauseBuilder(delegate)
+    whose, residual = restrictions.build(subject, where_expr.condition, ctx)
+    if whose is not None:
+        selected = _phrase(selected, whose)
+    where_item = (
+        _phrase(Keywords.SUCH_THAT.as_fragment(), residual)
+        if residual is not None
+        else None
+    )
+    return selected, where_item
+
+
+# ── Query body assembly ─────────────────────────────────────────────────────────
+
+
+def _verbalize_query_body_(
+    expr,
+    ctx: "VerbalizationContext",
+    delegate: "EQLVerbalizer",
+    selection: VerbFragment,
+    where_item=_UNSET,
+    find_header: "Optional[VerbFragment]" = None,
+) -> VerbFragment:
+    """Assemble the full *"Find <selection> such that … grouped by … having … ordered by …"* block."""
+    if find_header is None:
+        find_header = Keywords.FIND.as_fragment()
+    header = _phrase(find_header, selection)
+    where = (
+        _where_clause(expr, ctx, delegate) if where_item is _UNSET else where_item
+    )
+    clauses = [
+        c
+        for c in [
+            where,
+            _grouped_by_clause(expr, ctx, delegate),
+            _having_clause(expr, ctx, delegate),
+            _ordered_by_clause(expr, ctx, delegate),
+        ]
+        if c is not None
+    ]
+    return BlockFragment(header=header, items=clauses)
+
+
+def _where_clause(
+    expr, ctx: "VerbalizationContext", delegate: "EQLVerbalizer"
+) -> Optional[VerbFragment]:
+    """Build the *"such that <condition>"* fragment, or ``None``."""
+    where_expr = expr._where_expression_
+    if where_expr is None:
+        return None
+    return _phrase(
+        Keywords.SUCH_THAT.as_fragment(), delegate.build(where_expr.condition, ctx)
+    )
+
+
+def _grouped_by_clause(
+    expr, ctx: "VerbalizationContext", delegate: "EQLVerbalizer"
+) -> Optional[VerbFragment]:
+    """Build the *"and the <aggregated> are grouped by <keys>"* fragment, or ``None``."""
+    grouped_expr = expr._grouped_by_expression_
+    if grouped_expr is None or not grouped_expr.variables_to_group_by:
+        return None
+    group_key_root_ids = _root_var_ids_(grouped_expr.variables_to_group_by)
+    groups_phrase = _render_group_keys(
+        grouped_expr.variables_to_group_by, ctx, delegate
+    )
+    aggregated_frags = _aggregated_noun_frags_(
+        expr, group_key_root_ids, ctx, delegate
+    )
+    if aggregated_frags and not isinstance(expr, SetOf):
+        aggregated_phrase = oxford_and(
+            aggregated_frags, Conjunctions.AND.as_fragment()
+        )
+        return _phrase(
+            Conjunctions.AND.as_fragment(),
+            Articles.THE.as_fragment(),
+            aggregated_phrase,
+            Copulas.ARE.as_fragment(),
+            Keywords.GROUPED_BY.as_fragment(),
+            groups_phrase,
+        )
+    return _phrase(Keywords.GROUPED_BY.as_fragment(), groups_phrase)
+
+
+def _having_clause(
+    expr, ctx: "VerbalizationContext", delegate: "EQLVerbalizer"
+) -> Optional[VerbFragment]:
+    """Build the *"having <condition>"* fragment with compact comparators, or ``None``."""
+    having_expr = expr._having_expression_
+    if having_expr is None:
+        return None
+    ctx.compact_predicates = True
+    having_frag = delegate.build(having_expr.condition, ctx)
+    ctx.compact_predicates = False
+    return _phrase(Keywords.HAVING.as_fragment(), having_frag)
+
+
+def _ordered_by_clause(
+    expr, ctx: "VerbalizationContext", delegate: "EQLVerbalizer"
+) -> Optional[VerbFragment]:
+    """Build the *"ordered by <variable> (ascending|descending)"* fragment, or ``None``."""
+    ob = expr._ordered_by_builder_
+    if ob is None:
+        return None
+    return _render_ordered_by(ob, ctx, delegate)
+
+
+# ── Grouping helpers ────────────────────────────────────────────────────────────
+
+
+def _root_var_ids_(exprs) -> set:
+    ids: set = set()
+    for e in exprs:
+        root = chain_root(e)
+        if isinstance(root, Variable):
+            ids.add(root._id_)
+    return ids
+
+
+def _aggregated_expressions_(query_expr, group_key_root_ids: set) -> list:
+    selected_var = (
+        query_expr.selected_variable if isinstance(query_expr, Entity) else None
+    )
+    if isinstance(selected_var, InstantiatedVariable):
+        result = []
+        for child in selected_var._child_vars_.values():
+            root = chain_root(child)
+            if not (
+                isinstance(root, Variable) and root._id_ in group_key_root_ids
+            ):
+                result.append(child)
+        return result
+    if isinstance(query_expr, Query):
+        return [
+            v
+            for v in query_expr._selected_variables_
+            if v._id_ not in group_key_root_ids
+        ]
+    return []
+
+
+def _aggregated_noun_frags_(
+    query_expr, group_key_root_ids: set, ctx: "VerbalizationContext", delegate: "EQLVerbalizer"
+) -> list[VerbFragment]:
+    return [
+        verbalize_plural(e, ctx, delegate.build)
+        for e in _aggregated_expressions_(query_expr, group_key_root_ids)
+    ]
+
+
+# ── Rules ───────────────────────────────────────────────────────────────────────
 
 
 class EntityRule(VerbalizationRule):
     """
-    Delegates :class:`~krrood.entity_query_language.query.query.Entity` expressions to
-    :meth:`~krrood.entity_query_language.verbalization.entity_verbalizer.EntityVerbalizer.verbalize_query`.
+    Verbalizes :class:`~krrood.entity_query_language.query.query.Entity` expressions.
+
+    Uses :func:`verbalize_query` at the top level (:attr:`~VerbalizationContext.query_depth`
+    ``== 0``) for the imperative *"Find …"* form, or :func:`verbalize_nested` for a
+    nested sub-query used as a value.
     """
 
     @classmethod
     def applies(cls, expr, ctx: "VerbalizationContext") -> bool:
-        """Return ``True`` for :class:`~krrood.entity_query_language.query.query.Entity` expressions."""
+        """Return ``True`` for Entity expressions."""
         return isinstance(expr, Entity)
 
     @classmethod
-    def transform(cls, expr: "Entity", ctx: "VerbalizationContext", delegate: "EQLVerbalizer") -> VerbFragment:
-        """
-        Render the imperative *"Find … such that …"* form at the top level
-        (:attr:`~krrood.entity_query_language.verbalization.context.VerbalizationContext.query_depth`
-        ``== 0``), or delegate to
-        :meth:`~krrood.entity_query_language.verbalization.entity_verbalizer.EntityVerbalizer.verbalize_nested`
-        for a nested sub-query used as a value.
-
-        :param expr: Entity expression.
-        :param ctx: Shared verbalization state.
-        :param delegate: Parent verbalizer.
-        :returns: Full query fragment (top level) or noun-phrase fragment (nested).
-        :rtype: ~krrood.entity_query_language.verbalization.fragments.base.VerbFragment
-        """
+    def transform(
+        cls,
+        expr: "Entity",
+        ctx: "VerbalizationContext",
+        delegate: "EQLVerbalizer",
+    ) -> VerbFragment:
+        """Render the imperative *"Find …"* form (top level) or noun phrase (nested)."""
         if ctx.query_depth > 0:
-            return delegate._entity.verbalize_nested(expr, ctx)
-        return delegate._entity.verbalize_query(expr, ctx)
+            return verbalize_nested(expr, ctx, delegate)
+        return verbalize_query(expr, ctx, delegate)
 
 
 class SetOfRule(VerbalizationRule):
-    """
-    Delegates :class:`~krrood.entity_query_language.query.query.SetOf` expressions to
-    :meth:`~krrood.entity_query_language.verbalization.entity_verbalizer.EntityVerbalizer.verbalize_set_of`.
-    """
+    """Verbalizes SetOf expressions as *"Find (v1, v2, …) such that …"*."""
 
     @classmethod
     def applies(cls, expr, ctx: "VerbalizationContext") -> bool:
-        """Return ``True`` for :class:`~krrood.entity_query_language.query.query.SetOf` expressions."""
+        """Return ``True`` for SetOf expressions."""
         return isinstance(expr, SetOf)
 
     @classmethod
-    def transform(cls, expr: "SetOf", ctx: "VerbalizationContext", delegate: "EQLVerbalizer") -> VerbFragment:
-        """
-        Delegate to :meth:`~krrood.entity_query_language.verbalization.entity_verbalizer.EntityVerbalizer.verbalize_set_of`.
-
-        :param expr: SetOf expression.
-        :param ctx: Shared verbalization state.
-        :param delegate: Parent verbalizer.
-        :returns: SetOf query fragment.
-        :rtype: ~krrood.entity_query_language.verbalization.fragments.base.VerbFragment
-        """
-        return delegate._entity.verbalize_set_of(expr, ctx)
+    def transform(
+        cls,
+        expr: "SetOf",
+        ctx: "VerbalizationContext",
+        delegate: "EQLVerbalizer",
+    ) -> VerbFragment:
+        """Render the SetOf query via :func:`verbalize_set_of`."""
+        return verbalize_set_of(expr, ctx, delegate)
 
 
 class ResultQuantifierRule(VerbalizationRule):
     """
     Transparent wrapper: delegates to the child expression.
 
-    :class:`~krrood.entity_query_language.query.quantifiers.An`,
-    :class:`~krrood.entity_query_language.query.quantifiers.The`, and other
-    :class:`~krrood.entity_query_language.query.quantifiers.ResultQuantifier` subclasses
-    carry selection metadata but add no natural-language content.
+    An, The, and other ResultQuantifier subclasses carry selection metadata but add
+    no natural-language content.
     """
 
     @classmethod
     def applies(cls, expr, ctx: "VerbalizationContext") -> bool:
-        """Return ``True`` for any :class:`~krrood.entity_query_language.query.quantifiers.ResultQuantifier`."""
+        """Return ``True`` for any ResultQuantifier."""
         return isinstance(expr, ResultQuantifier)
 
     @classmethod
-    def transform(cls, expr: "ResultQuantifier", ctx: "VerbalizationContext", delegate: "EQLVerbalizer") -> VerbFragment:
-        """
-        Unwrap and delegate to the child expression.
-
-        :param expr: ResultQuantifier wrapper.
-        :param ctx: Shared verbalization state.
-        :param delegate: Parent verbalizer.
-        :returns: Fragment for the unwrapped child.
-        :rtype: ~krrood.entity_query_language.verbalization.fragments.base.VerbFragment
-        """
+    def transform(
+        cls,
+        expr: "ResultQuantifier",
+        ctx: "VerbalizationContext",
+        delegate: "EQLVerbalizer",
+    ) -> VerbFragment:
+        """Unwrap and delegate to the child expression."""
         return delegate.build(expr._child_, ctx)
 
 
 class FilterRule(VerbalizationRule):
-    """
-    Transparent wrapper: delegates to the filter's condition expression.
-
-    Both :class:`~krrood.entity_query_language.core.base_expressions.Where` and
-    :class:`~krrood.entity_query_language.core.base_expressions.Having` (both ``Filter``
-    subclasses) are handled by this rule.
-    """
+    """Transparent wrapper: delegates to the filter's condition expression."""
 
     @classmethod
     def applies(cls, expr, ctx: "VerbalizationContext") -> bool:
-        """Return ``True`` for any :class:`~krrood.entity_query_language.core.base_expressions.Filter`."""
+        """Return ``True`` for any Filter (Where / Having)."""
         return isinstance(expr, Filter)
 
     @classmethod
-    def transform(cls, expr: "Filter", ctx: "VerbalizationContext", delegate: "EQLVerbalizer") -> VerbFragment:
-        """
-        Delegate to the condition expression.
-
-        :param expr: Filter expression.
-        :param ctx: Shared verbalization state.
-        :param delegate: Parent verbalizer.
-        :returns: Fragment for the condition.
-        :rtype: ~krrood.entity_query_language.verbalization.fragments.base.VerbFragment
-        """
+    def transform(
+        cls,
+        expr: "Filter",
+        ctx: "VerbalizationContext",
+        delegate: "EQLVerbalizer",
+    ) -> VerbFragment:
+        """Delegate to the condition expression."""
         return delegate.build(expr.condition, ctx)
 
 
 class GroupedByRule(VerbalizationRule):
-    """
-    Verbalizes :class:`~krrood.entity_query_language.query.operations.GroupedBy`
-    as *"grouped by <key1>, <key2>, …"*.
-    """
+    """Verbalizes GroupedBy as *"grouped by <key1>, <key2>, …"*."""
 
     @classmethod
     def applies(cls, expr, ctx: "VerbalizationContext") -> bool:
-        """Return ``True`` for :class:`~krrood.entity_query_language.query.operations.GroupedBy`."""
+        """Return ``True`` for GroupedBy."""
         return isinstance(expr, GroupedBy)
 
     @classmethod
-    def transform(cls, expr: "GroupedBy", ctx: "VerbalizationContext", delegate: "EQLVerbalizer") -> VerbFragment:
-        """
-        Build *"grouped by <key1>, <key2>, …"*, or *"grouped"* when no keys.
-
-        :param expr: GroupedBy expression.
-        :param ctx: Shared verbalization state.
-        :param delegate: Parent verbalizer for key expression rendering.
-        :returns: Grouped-by phrase fragment.
-        :rtype: ~krrood.entity_query_language.verbalization.fragments.base.VerbFragment
-        """
+    def transform(
+        cls,
+        expr: "GroupedBy",
+        ctx: "VerbalizationContext",
+        delegate: "EQLVerbalizer",
+    ) -> VerbFragment:
+        """Build *"grouped by <key1>, <key2>, …"*, or *"grouped"* when no keys."""
         if expr.variables_to_group_by:
-            group_frags = [delegate.build(v, ctx) for v in expr.variables_to_group_by]
-            return _phrase(Keywords.GROUPED_BY.as_fragment(), PhraseFragment(parts=group_frags, separator=", "))
+            return _phrase(
+                Keywords.GROUPED_BY.as_fragment(),
+                _render_group_keys(expr.variables_to_group_by, ctx, delegate),
+            )
         return Keywords.GROUPED.as_fragment()
 
 
 class OrderedByRule(VerbalizationRule):
-    """
-    Verbalizes :class:`~krrood.entity_query_language.query.operations.OrderedBy`
-    as *"ordered by <variable> (ascending|descending)"*.
-    """
+    """Verbalizes OrderedBy as *"ordered by <variable> (ascending|descending)"*."""
 
     @classmethod
     def applies(cls, expr, ctx: "VerbalizationContext") -> bool:
-        """Return ``True`` for :class:`~krrood.entity_query_language.query.operations.OrderedBy`."""
+        """Return ``True`` for OrderedBy."""
         return isinstance(expr, OrderedBy)
 
     @classmethod
-    def transform(cls, expr: "OrderedBy", ctx: "VerbalizationContext", delegate: "EQLVerbalizer") -> VerbFragment:
-        """
-        Build *"ordered by <variable> (ascending|descending)"*.
-
-        :param expr: OrderedBy expression.
-        :param ctx: Shared verbalization state.
-        :param delegate: Parent verbalizer for variable rendering.
-        :returns: Ordered-by phrase fragment.
-        :rtype: ~krrood.entity_query_language.verbalization.fragments.base.VerbFragment
-        """
-        direction_frag = (
-            SortDirections.DESCENDING.as_fragment()
-            if expr.descending
-            else SortDirections.ASCENDING.as_fragment()
-        )
-        ordered_frag = delegate.build(expr.variable, ctx)
-        paren_frag = PhraseFragment(parts=[_word("("), direction_frag, _word(")")], separator="")
-        return _phrase(Keywords.ORDERED_BY.as_fragment(), ordered_frag, paren_frag)
+    def transform(
+        cls,
+        expr: "OrderedBy",
+        ctx: "VerbalizationContext",
+        delegate: "EQLVerbalizer",
+    ) -> VerbFragment:
+        """Build *"ordered by <variable> (ascending|descending)"*."""
+        return _render_ordered_by(expr, ctx, delegate)

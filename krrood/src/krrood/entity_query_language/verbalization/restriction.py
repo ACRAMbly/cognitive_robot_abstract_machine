@@ -9,8 +9,8 @@ by specificity (mirroring the main
 conjunct that **no** rule matches becomes residual — groupability lives in the rule
 preconditions, not in branching glue.
 
-:class:`RestrictionClauseBuilder` is the thin orchestrator used by
-:class:`~krrood.entity_query_language.verbalization.entity_verbalizer.EntityVerbalizer`.
+:class:`RestrictionClauseBuilder` is the thin orchestrator used by the
+query-body assembly in :mod:`~krrood.entity_query_language.verbalization.rules.query`.
 """
 
 from __future__ import annotations

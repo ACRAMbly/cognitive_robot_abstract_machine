@@ -14,7 +14,7 @@ These predicates are the single source of truth for this concept, shared by the
 disambiguation pre-scan
 (:func:`~krrood.entity_query_language.verbalization.context._build_disambiguation_map`)
 and the nested-entity renderer
-(:meth:`~krrood.entity_query_language.verbalization.entity_verbalizer.EntityVerbalizer.verbalize_nested`).
+(:func:`~krrood.entity_query_language.verbalization.rules.query.verbalize_nested`).
 """
 
 from __future__ import annotations

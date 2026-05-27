@@ -6,7 +6,6 @@ from typing import Optional
 from krrood.entity_query_language.core.base_expressions import SymbolicExpression
 from krrood.entity_query_language.query.query import Query
 from krrood.entity_query_language.verbalization.context import VerbalizationContext
-from krrood.entity_query_language.verbalization.entity_verbalizer import EntityVerbalizer
 from krrood.entity_query_language.verbalization.fragments.base import VerbFragment
 from krrood.entity_query_language.verbalization.rule_engine import RuleEngine
 from krrood.entity_query_language.verbalization.rules.registry import ALL_RULES
@@ -28,16 +27,12 @@ class EQLVerbalizer:
     For coloured / formatted output build a
     :class:`~krrood.entity_query_language.verbalization.pipeline.VerbalizationPipeline`.
 
-    :ivar _entity: Delegate for :class:`~krrood.entity_query_language.query.query.Entity` and
-        :class:`~krrood.entity_query_language.query.query.SetOf` expressions.
     :ivar _engine: Rule dispatcher; sorts rules by MRO depth before first call.
     """
 
-    _entity: EntityVerbalizer = field(init=False, repr=False)
     _engine: RuleEngine = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
-        self._entity = EntityVerbalizer(delegate=self)
         self._engine = RuleEngine(ALL_RULES)
 
     def build(

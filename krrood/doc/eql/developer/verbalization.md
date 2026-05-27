@@ -54,14 +54,12 @@ graph LR
 
 It does not produce strings directly. Every call to `build(expr, ctx)` returns a `VerbFragment` — rendering (plain/ANSI/HTML) is deferred to Layer 2.
 
-`EQLVerbalizer` delegates to four sub-verbalizers:
-
-| Sub-verbalizer | Responsibility |
-|---|---|
-| {py:class}`~krrood.entity_query_language.verbalization.rule_engine.RuleEngine` | Dispatches each expression to the first matching `VerbalizationRule` |
-| {py:class}`~krrood.entity_query_language.verbalization.entity_verbalizer.EntityVerbalizer` | Entity / SetOf query rendering (FIND, SUCH THAT, GROUPED BY, …) |
-| {py:class}`~krrood.entity_query_language.verbalization.chain_verbalizer.ChainVerbalizer` | MappedVariable chain rendering (possessive paths, bool predicates) |
-| {py:class}`~krrood.entity_query_language.verbalization.rule_verbalizer.RuleVerbalizer` | IF … THEN … inference-rule rendering |
+`EQLVerbalizer` delegates to a single {py:class}`~krrood.entity_query_language.verbalization.rule_engine.RuleEngine`,
+which dispatches every expression to the first matching
+{py:class}`~krrood.entity_query_language.verbalization.rule_engine.VerbalizationRule`.
+Rules are the **only** extension unit — there are no sub-verbalizer classes.
+Each expression type has exactly one rule as the single source of truth for its
+verbalization.
 
 ### Layer 2 — Fragment Rendering (`FragmentRenderer`)
 
@@ -169,7 +167,12 @@ NotRule           (depth 1)   ← generic fallback
 └── NotBoolAttrRule   (depth 2)  ← tried first: Not(bool Attribute)
 ```
 
-### Adding a New Rule
+### Adding a New Rule (the Only Extension Point)
+
+To verbalize a new expression type or change an existing phrasing, write one
+`VerbalizationRule`, use `delegate.build(child, ctx)` for sub-expressions, and register
+it in {py:data}`~krrood.entity_query_language.verbalization.rules.registry.ALL_RULES`.
+That's it — there are no sub-verbalizer classes to modify.
 
 1. Create a class in the appropriate `rules/*.py` file (or a new file).
 2. Subclass {py:class}`~krrood.entity_query_language.verbalization.rule_engine.VerbalizationRule` (or an existing rule for deeper priority).
@@ -278,42 +281,31 @@ The resolver is passed to the renderer at construction time (via `VerbalizationP
 
 ---
 
-## Specialized Verbalizers
+## Rule Organisation
 
-### EntityVerbalizer
+Rules live in `krrood/entity_query_language/verbalization/rules/`.  Each file owns one
+expression family:
 
-Handles three forms of `Entity` rendering:
-
-| Method | When used | Output form |
+| Module | Expression types | Output form |
 |---|---|---|
-| `verbalize_query` | Top-level query | *"Find X such that …"* |
-| `as_noun` | Nested Entity selector | *"a Robot where …"* |
-| `as_inline_noun` | Chain root inside InstantiatedVariable | *"a Robot"* (defers WHERE) |
+| `rules/query.py` | `Entity`, `SetOf`, `GroupedBy`, `OrderedBy`, `Filter`, `ResultQuantifier` | *"Find X such that …"*, noun phrases, clause assembly |
+| `rules/inference_rule.py` | `Entity` (selected var is `InstantiatedVariable`) | *"IF … THEN …"* blocks |
+| `rules/chains.py` | `MappedVariable` (Attribute, Index, Call, FlatVariable) | Possessive paths, bool predicates, pronominal chains |
+| `rules/logical.py` | `AND`, `OR`, `Not`, `RangeConjunction` | Oxford-comma lists, negation, range folding |
+| `rules/comparator.py` | `Comparator` | *"<left> <operator> <right>"* (via `operator_phrase.py`) |
+| `rules/aggregators.py` | `Aggregator` | *"the sum of …"*, *"the number of …"* |
+| `rules/quantifiers.py` | `ForAll`, `Exists` | *"for all …"*, *"there exists …"* |
+| `rules/variables.py` | `Variable`, `Literal`, `InstantiatedVariable` | Type names, literals, binding forms |
 
-The IF/THEN inference-rule form is detected in `verbalize_query` and delegated to `RuleVerbalizer.verbalize`.
+Rule bodies live directly in `transform()` methods or in module-level helpers within the
+same file.  For example, the query-body assembly (`_verbalize_query_body_`,
+`_grouped_by_clause`, etc.) and the noun forms (`as_noun`, `as_inline_noun`) are all
+module-level functions in `rules/query.py`, called directly by `EntityRule.transform`
+and `SetOfRule.transform`.
 
-### ChainVerbalizer
-
-Builds *"the attr of the Root"* possessive paths from walked chains:
-
-```
-robot.arm.joint   →  "the joint of the arm of the Robot"
-```
-
-Boolean terminal attributes trigger the predicative form:
-
-```
-robot.is_charging  →  "the Robot is charging"
-Not(robot.is_charging)  →  "the Robot is not charging"
-```
-
-### RuleVerbalizer
-
-Handles `Entity` queries whose selected variable is an `InstantiatedVariable`.  Uses `RuleAnalyzer.analyze()` to decompose the query into:
-
-- **Primary antecedents** — IF clause bullets (have conditions)
-- **Secondary antecedents** — registered for coreference only
-- **Consequent bindings** — THEN clause bullets
+Chain rules (`rules/chains.py`) and inference rules (`rules/inference_rule.py`) import
+`as_inline_noun` from `rules/query.py` for the cases where an `Entity` appears as a
+chain root or antecedent — a simple cross-module function call, not a delegate method.
 
 ---
 
@@ -397,16 +389,23 @@ pipeline = VerbalizationPipeline(ParagraphRenderer(MarkdownFormatter()))
 - {py:class}`~krrood.entity_query_language.verbalization.rendering.source_link_resolver.SourceLinkResolver`
 - {py:class}`~krrood.entity_query_language.verbalization.rendering.source_link_resolver.AutoAPIResolver`
 
-### Sub-Verbalizers and Analysis
+### Rule Modules and Analysis
 
-- {py:class}`~krrood.entity_query_language.verbalization.entity_verbalizer.EntityVerbalizer`
-- {py:class}`~krrood.entity_query_language.verbalization.chain_verbalizer.ChainVerbalizer`
-- {py:class}`~krrood.entity_query_language.verbalization.rule_verbalizer.RuleVerbalizer`
+- {py:mod}`~krrood.entity_query_language.verbalization.rules.query`
+- {py:mod}`~krrood.entity_query_language.verbalization.rules.inference_rule`
+- {py:mod}`~krrood.entity_query_language.verbalization.rules.chains`
+- {py:mod}`~krrood.entity_query_language.verbalization.rules.logical`
+- {py:mod}`~krrood.entity_query_language.verbalization.rules.comparator`
+- {py:mod}`~krrood.entity_query_language.verbalization.rules.aggregators`
+- {py:mod}`~krrood.entity_query_language.verbalization.rules.quantifiers`
+- {py:mod}`~krrood.entity_query_language.verbalization.rules.variables`
 - {py:class}`~krrood.entity_query_language.verbalization.rule_analysis.RuleAnalyzer`
 - {py:class}`~krrood.entity_query_language.verbalization.rule_analysis.RuleStructure`
 - {py:class}`~krrood.entity_query_language.verbalization.rule_analysis.AntecedentInfo`
 - {py:class}`~krrood.entity_query_language.verbalization.rule_analysis.ConsequentBinding`
 - {py:class}`~krrood.entity_query_language.verbalization.rule_analysis.AggregationStatus`
+- {py:func}`~krrood.entity_query_language.verbalization.operator_phrase.comparator_phrase`
+- {py:func}`~krrood.entity_query_language.verbalization.operator_phrase.comparator_operator`
 
 ### Utilities
 

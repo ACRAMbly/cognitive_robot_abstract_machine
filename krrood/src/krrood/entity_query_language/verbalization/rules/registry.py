@@ -5,8 +5,8 @@ subclasses used by the :class:`~krrood.entity_query_language.verbalization.rule_
 :data:`ALL_RULES` is the single authoritative list consumed by
 :class:`~krrood.entity_query_language.verbalization.verbalizer.EQLVerbalizer`.
 Rules are ordered so that more-specific patterns appear before their parent classes;
-the :class:`~krrood.entity_query_language.verbalization.rule_engine.RuleEngine` re-sorts
-them by MRO depth anyway, but the explicit ordering here aids readability.
+the :class:`~krrood.entity_query_language.verbalization.rule_engine.RuleEngine` sorts
+them by MRO depth, but the explicit ordering here aids readability.
 """
 
 from __future__ import annotations
@@ -18,7 +18,6 @@ from krrood.entity_query_language.verbalization.rules.logical import (
     OrRule,
     NotRule,
     NotComparatorRule,
-    NotCalculationEqualityRule,
     NotBoolAttrRule,
 )
 from krrood.entity_query_language.verbalization.rules.quantifiers import (
@@ -28,7 +27,6 @@ from krrood.entity_query_language.verbalization.rules.quantifiers import (
 )
 from krrood.entity_query_language.verbalization.rules.comparator import (
     ComparatorRule,
-    CalculationEqualityRule,
 )
 from krrood.entity_query_language.verbalization.rules.aggregators import (
     AggregatorRule,
@@ -60,7 +58,6 @@ from krrood.entity_query_language.verbalization.rules.inference_rule import (
 
 ALL_RULES: list[type] = [
     # logical — specific patterns first, generic Not last
-    NotCalculationEqualityRule,
     NotComparatorRule,
     NotBoolAttrRule,
     NotRule,
@@ -70,8 +67,7 @@ ALL_RULES: list[type] = [
     # quantifiers
     ForAllRule,
     ExistsRule,
-    # comparator — calc-equality before the generic comparator
-    CalculationEqualityRule,
+    # comparator
     ComparatorRule,
     # instantiated variables — template form before natural form
     InstantiatedVerbalizableRule,
