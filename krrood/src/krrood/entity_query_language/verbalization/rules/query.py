@@ -118,8 +118,7 @@ def verbalize_query(
 
     expression.build()
 
-    context.query_depth += 1
-    try:
+    with context.query_depth_scope():
         var = expression.selected_variable
 
         if isinstance(var, Entity):
@@ -143,8 +142,6 @@ def verbalize_query(
             )
         finally:
             context.pop_subject()
-    finally:
-        context.query_depth -= 1
 
 
 def verbalize_nested(
@@ -174,8 +171,7 @@ def verbalize_set_of(
 ) -> VerbFragment:
     """Verbalize a SetOf query as *"Find (v1, v2, …) such that …"*."""
     expression.build()
-    context.query_depth += 1
-    try:
+    with context.query_depth_scope():
         variable_fragments = [verbalizer.build(variable, context) for variable in expression._selected_variables_]
         vars_phrase = PhraseFragment(parts=variable_fragments, separator=", ")
         selection = PhraseFragment(
@@ -188,8 +184,6 @@ def verbalize_set_of(
             selection,
             find_header=Keywords.FIND_SETS_OF.as_fragment(),
         )
-    finally:
-        context.query_depth -= 1
 
 
 def _build_selection(
@@ -293,15 +287,14 @@ def as_noun(
     where_expression = expression._where_expression_
     if where_expression is None:
         return article_noun
-    context.query_depth += 1
-    context.push_subject(var)
-    try:
-        whose, residual = _build_restrictions(
-            verbalizer, var, where_expression.condition, context
-        )
-    finally:
-        context.pop_subject()
-        context.query_depth -= 1
+    with context.query_depth_scope():
+        context.push_subject(var)
+        try:
+            whose, residual = _build_restrictions(
+                verbalizer, var, where_expression.condition, context
+            )
+        finally:
+            context.pop_subject()
     result = article_noun
     if whose is not None:
         result = phrase(result, whose)
@@ -358,11 +351,8 @@ def _verbalize_aggregation_value_(
     aggregator = selected_aggregator(expression)
     leaf = aggregation_leaf_attribute(expression)
     if leaf is None:
-        context.query_depth += 1
-        try:
+        with context.query_depth_scope():
             return verbalizer.build(aggregator, context)
-        finally:
-            context.query_depth -= 1
 
     aggregation_kind = _AGGREGATION_KIND[type(aggregator)]
     plural_leaf = aggregation_kind.value.child_form == ChildForm.PLURAL
@@ -398,13 +388,10 @@ def _aggregation_scope_(
 
     where_expression = expression._where_expression_
     if where_expression is not None:
-        context.query_depth += 1
-        try:
+        with context.query_depth_scope():
             whose, residual = _build_restrictions(
                 verbalizer, source, where_expression.condition, context
             )
-        finally:
-            context.query_depth -= 1
         if whose is not None:
             parts.append(whose)
         if residual is not None:
@@ -413,12 +400,9 @@ def _aggregation_scope_(
     having_expression = expression._having_expression_
     if having_expression is not None:
         context.compact_predicates = True
-        context.query_depth += 1
-        try:
+        with context.query_depth_scope():
             having_frag = verbalizer.build(having_expression.condition, context)
-        finally:
-            context.query_depth -= 1
-            context.compact_predicates = False
+        context.compact_predicates = False
         parts += [Keywords.HAVING.as_fragment(), having_frag]
 
     return phrase(*parts)

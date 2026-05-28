@@ -10,6 +10,7 @@ constraints for InstantiatedVariable rendering, and manages pronoun-eligible sub
 
 from __future__ import annotations
 
+import contextlib
 import datetime
 import uuid
 from collections import defaultdict
@@ -250,6 +251,22 @@ class VerbalizationContext:
         """Pop the current coreference subject pushed by :meth:`push_subject`."""
         if self.coref_subjects:
             self.coref_subjects.pop()
+
+    @contextlib.contextmanager
+    def query_depth_scope(self):
+        """Context manager that increments :attr:`query_depth` for the duration of a ``with`` block.
+
+        Usage::
+
+            with context.query_depth_scope():
+                ...  # query_depth is incremented here
+            # query_depth is restored on exit
+        """
+        self.query_depth += 1
+        try:
+            yield
+        finally:
+            self.query_depth -= 1
 
     @property
     def current_subject_id(self):
