@@ -93,8 +93,8 @@ def reachability_validator(
     tip_link: KinematicStructureEntity,
     robot_view: AbstractRobot,
     world: World,
-    grasp_description: GraspDescription = None,
     use_fullbody_ik: bool = False,
+    grasp_description: GraspDescription = None,
 ) -> bool:
     """
     Evaluates if a pose can be reached with the tip_link in the given world. This uses giskard motion state charts
@@ -104,8 +104,8 @@ def reachability_validator(
     :param tip_link: The tip link which should be used for reachability
     :param robot_view: The semantic annotation of the robot which should be evaluated for reachability
     :param world: The world in which the visibility should be validated.
-    :param grasp_description: The description of the grasp.
     :param use_fullbody_ik: If true the base will be used in trying to reach the poses
+    :param grasp_description: The description of the grasp.
     """
     if grasp_description:
         _, target_pose, _ = grasp_description._pose_sequence(target_pose)

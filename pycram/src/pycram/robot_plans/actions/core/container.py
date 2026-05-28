@@ -89,12 +89,12 @@ class OpenAction(ActionDescription):
                 manipulator.tool_frame,
                 test_robot,
                 test_world,
+                context.robot.full_body_controlled,
                 GraspDescription(
                     ApproachDirection.FRONT,
                     VerticalAlignment.NoAlignment,
                     ViewManager.get_end_effector_view(kwargs["arm"], test_robot),
                 ),
-                context.robot.full_body_controlled,
             ),
         )
 
