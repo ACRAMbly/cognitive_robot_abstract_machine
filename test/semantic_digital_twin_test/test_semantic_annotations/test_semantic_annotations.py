@@ -1,13 +1,14 @@
 import logging
 
-from numpy.ma.testutils import (
-    assert_equal,
-)  # You could replace this with numpy's regular assert for better compatibility
-
+from krrood.entity_query_language.core.base_expressions import SymbolicExpression
 from krrood.entity_query_language.core.variable import InstantiatedVariable
 from krrood.entity_query_language.explanation.explanation import explain_inference
 from krrood.entity_query_language.factories import entity, variable, in_, inference, an
 from krrood.entity_query_language.verbalization import verbalize_expression
+from krrood.entity_query_language.query.quantifiers import An
+from numpy.ma.testutils import (
+    assert_equal,
+)  # You could replace this with numpy's regular assert for better compatibility
 from semantic_digital_twin.adapters.world_entity_kwargs_tracker import (
     WorldEntityWithIDKwargsTracker,
 )
@@ -211,7 +212,7 @@ def test_explain_inferred_semantic_annotations(apartment_world_setup):
     drawer = next(ann for ann in found_semantic_annotations if isinstance(ann, Drawer))
     explanation = explain_inference(drawer)
     assert explanation is not None
-    assert isinstance(explanation.query_root, InstantiatedVariable)
+    assert isinstance(explanation.query_root, SymbolicExpression)
     assert explanation.get_satisfied_conditions_as_string() == (
         '(FixedConnection.parent == PrismaticConnection.child)'
         '\nAND (FixedConnection.child == Handle.root)')
