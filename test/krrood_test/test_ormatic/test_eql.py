@@ -920,25 +920,22 @@ def test_set_of_with_where(session):
     )
 
     translator = eql_to_sql(query, session)
-    """
-    The expected SQL cannot be built as a SQLAlchemy select() object here
-    because KRROODPoseDAO has multiple FK relationships (position_id and
-    orientation_id), causing AmbiguousForeignKeysError when joining without
-    explicit aliases. The translator uses internal aliases that cannot be
-    replicated externally.
-    """
 
-    expected_sql = (
-        'SELECT "KRROODPositionDAO_1".x, "KRROODPositionDAO_1".y, '
-        '"KRROODPositionDAO_1".z \n'
-        'FROM "SymbolDAO" JOIN "KRROODPoseDAO" ON "KRROODPoseDAO".database_id = '
-        '"SymbolDAO".database_id JOIN ("SymbolDAO" AS "SymbolDAO_1" JOIN '
-        '"KRROODPositionDAO" AS "KRROODPositionDAO_1" ON '
-        '"KRROODPositionDAO_1".database_id = "SymbolDAO_1".database_id) ON '
-        '"KRROODPositionDAO_1".database_id = "KRROODPoseDAO".position_id \n'
-        'WHERE "KRROODPositionDAO_1".z < :z_1'
+    position_alias = aliased(KRROODPositionDAO, flat=True)
+
+    expected = (
+        select(KRROODPoseDAO)
+        .join(position_alias,
+              onclause=position_alias.database_id == KRROODPoseDAO.position_id)
+        .with_only_columns(
+            position_alias.x,
+            position_alias.y,
+            position_alias.z,
+        )
+        .where(position_alias.z < 0.9)
     )
-    assert str(translator.sql_query) == expected_sql
+
+    assert str(translator.sql_query) == str(expected)
 
 
 def test_set_of_same_table_twice(session):
@@ -1222,22 +1219,20 @@ def test_case_when_with_min(session):
     ))
 
     translator = eql_to_sql(query, session)
-    """
-    The expected SQL cannot be built as a SQLAlchemy select() object here
-    because using SymbolDAO.polymorphic_type and MoveActionDAO.database_id
-    directly in func.min(case(...)) causes SQLAlchemy to generate additional
-    internal aliases (SymbolDAO_1, MoveActionDAO_1) that do not match the
-    translator output.
-    """
-    expected_sql = (
-        'SELECT min(CASE WHEN ("SymbolDAO".polymorphic_type = :polymorphic_type_1) '
-        'THEN "MoveActionDAO".database_id END) AS min_1 \n'
-        'FROM "SymbolDAO" JOIN "WorldEntityDAO" ON "WorldEntityDAO".database_id = '
-        '"SymbolDAO".database_id JOIN "MoveActionDAO" ON '
-        '"MoveActionDAO".database_id = "WorldEntityDAO".database_id'
-    )
-    assert str(translator.sql_query) == expected_sql
 
+    expected = (
+        select(MoveActionDAO)
+        .with_only_columns(
+            func.min(
+                case(
+                    (SymbolDAO.polymorphic_type == 'PickUpActionDAO',
+                     MoveActionDAO.database_id)
+                )
+            )
+        )
+    )
+
+    assert str(translator.sql_query) == str(expected)
 
 
 
@@ -1278,15 +1273,17 @@ def test_case_when_with_max(session):
         max(case_when(action.polymorphic_type == 'PlaceActionDAO', action.database_id))
     ))
     translator = eql_to_sql(query, session)
-    """
-    Same reason as test_case_when_with_min — SQLAlchemy generates internal
-    aliases when using DAO columns directly in func.max(case(...)).
-    """
-    expected_sql = (
-        'SELECT max(CASE WHEN ("SymbolDAO".polymorphic_type = :polymorphic_type_1) '
-        'THEN "MoveActionDAO".database_id END) AS max_1 \n'
-        'FROM "SymbolDAO" JOIN "WorldEntityDAO" ON "WorldEntityDAO".database_id = '
-        '"SymbolDAO".database_id JOIN "MoveActionDAO" ON '
-        '"MoveActionDAO".database_id = "WorldEntityDAO".database_id'
+
+    expected = (
+        select(MoveActionDAO)
+        .with_only_columns(
+            func.max(
+                case(
+                    (SymbolDAO.polymorphic_type == 'PlaceActionDAO',
+                     MoveActionDAO.database_id)
+                )
+            )
+        )
     )
-    assert str(translator.sql_query) == expected_sql
+
+    assert str(translator.sql_query) == str(expected)
