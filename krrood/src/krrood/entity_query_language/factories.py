@@ -421,10 +421,16 @@ def next_rule(*conditions: ConditionType) -> SymbolicExpression:
 @dataclass(eq=False)
 class CaseWhen(Selectable):
     """
-    Represents a SQL CASE WHEN ... THEN ... ELSE ... END expression.
+    Represents a conditional expression: CASE WHEN condition THEN value ELSE else_value END.
 
-    This construct is designed exclusively for SQL translation via the EQL translator.
-    Local Python evaluation is not supported — use the SQL translator instead.
+    Supports both local Python evaluation via EQL and SQL translation via the EQL translator.
+
+    .. code-block:: python
+
+        action = variable(MoveAction, domain=[])
+        query = an(set_of(
+            min(case_when(action.polymorphic_type == 'PickUpActionDAO', action.database_id))
+        ))
     """
     condition: SymbolicExpression
     then_value: SymbolicExpression
@@ -461,11 +467,17 @@ class CaseWhen(Selectable):
 
     def _evaluate__(self, sources: Any) -> Any:
         """
-        Evaluates the condition locally in Python.
+        Evaluate the condition locally in Python.
+
+        :param sources: The variable bindings for evaluation
+        :return: then_value if condition is true, else_value otherwise
         """
         cond_result = self.condition._evaluate__(sources)
-
-        is_true = bool(cond_result) if not isinstance(cond_result, list) else len(cond_result) > 0
+        is_true = (
+            bool(cond_result)
+            if not isinstance(cond_result, list)
+            else len(cond_result) > 0
+        )
 
         if is_true:
             if hasattr(self.then_value, "_evaluate__"):
