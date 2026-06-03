@@ -14,6 +14,7 @@ from giskardpy.utils.math import fast_sparse_diagonal
 @dataclass
 class QPSolverPIQP(QPSolver[QPDataExplicit]):
     solver: piqp.SparseSolver = field(default_factory=piqp.SparseSolver)
+    big_ball_mode: bool = False
 
     def __post_init__(self):
         self.solver.settings.eps_abs = 1e-6
@@ -21,6 +22,7 @@ class QPSolverPIQP(QPSolver[QPDataExplicit]):
         self.solver.settings.eps_duality_gap_abs = 1e-5
         self.solver.settings.eps_duality_gap_rel = 1e-5
         self.solver.settings.reg_lower_limit = 1e-11
+        # self.solver.settings.infeasibility_threshold = 10
         # self.solver.settings.kkt_solver = piqp.KKTSolver.sparse_multistage
 
     def solver_call_explicit_interface(self, qp_data: QPDataExplicit) -> np.ndarray:
@@ -48,7 +50,7 @@ class QPSolverPIQP(QPSolver[QPDataExplicit]):
             )
 
         status = self.solver.solve()
-        if status.value != piqp.PIQP_SOLVED:
+        if status.value != piqp.PIQP_SOLVED and not self.big_ball_mode:
             raise InfeasibleException(f"Solver status: {status.value}")
         return self.solver.result.x
 
