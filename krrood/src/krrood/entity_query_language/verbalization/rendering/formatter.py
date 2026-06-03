@@ -224,7 +224,7 @@ class HTMLFormatter(Formatter):
         return f'<span style="color:{color}">{text}</span>'
 
     def wrap_link(self, text: str, url: str) -> str:
-        return f'<a href="{url}">{text}</a>'
+        return f'<a target="_blank" rel="noopener" href="{url}">{text}</a>'
 
     @property
     def space(self) -> str:

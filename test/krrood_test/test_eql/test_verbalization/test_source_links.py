@@ -303,14 +303,14 @@ def test_plain_formatter_wrap_link_is_noop():
 def test_html_formatter_wrap_link_produces_anchor():
     f = HTMLFormatter()
     result = f.wrap_link("Robot", "http://example.com")
-    assert result == '<a href="http://example.com">Robot</a>'
+    assert result == '<a target="_blank" rel="noopener" href="http://example.com">Robot</a>'
 
 
 def test_html_formatter_wrap_link_preserves_inner_markup():
     f = HTMLFormatter()
     colored = '<span style="color:cornflowerblue">Robot</span>'
     result = f.wrap_link(colored, "http://example.com")
-    assert result.startswith('<a href="http://example.com">')
+    assert 'href="http://example.com"' in result
     assert "cornflowerblue" in result
 
 
@@ -381,7 +381,7 @@ def test_paragraph_renderer_injects_link_when_resolver_and_ref_present():
     ref = SourceRef(cls=_Sensor)
     frag = RoleFragment(text="Sensor", role=SemanticRole.VARIABLE, source_ref=ref)
     result = r.render(frag)
-    assert '<a href="http://example.com">' in result
+    assert 'href="http://example.com"' in result
     assert "Sensor" in result
 
 
@@ -419,7 +419,7 @@ def test_hierarchical_renderer_injects_link():
         items=[WordFragment("some condition")],
     )
     result = r.render(block)
-    assert '<a href="http://example.com">' in result
+    assert 'href="http://example.com"' in result
 
 
 # ── Pipeline: html() with link_resolver ───────────────────────────────────────
@@ -429,7 +429,7 @@ def test_pipeline_html_with_resolver_links_variable_name():
     r = variable(_Sensor, [])
     resolver = _ConstantResolver("http://example.com/sensor")
     text = VerbalizationPipeline.html(link_resolver=resolver).verbalize(an(entity(r)))
-    assert '<a href="http://example.com/sensor">' in text
+    assert 'href="http://example.com/sensor"' in text
     assert "_Sensor" in text
 
 
