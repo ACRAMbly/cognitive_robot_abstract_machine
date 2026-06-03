@@ -8,11 +8,11 @@ from datetime import datetime
 from typing import Optional, Any, List, Type, TYPE_CHECKING, Iterable, Iterator
 
 import rustworkx as rx
-from typing_extensions import Union
+from typing_extensions import Union, Dict
 
 from giskardpy.motion_statechart.graph_node import Task
 from krrood.entity_query_language.query.match import Match
-from pycram.action_executor import ActionExecutor
+from pycram.action_executor import Executable, ConditionExecutable, MotionExecutable
 
 from pycram.datastructures.enums import TaskStatus
 from pycram.plans.failures import PlanFailure
@@ -312,6 +312,26 @@ class PlanNode(PlanEntity, ABC):
         Perform the node without managing the fields of this node.
         """
 
+    def parse(self) -> Executable: ...
+
+    def merge_motion_executables(
+        self, executables: List[Executable]
+    ) -> List[Executable]:
+        result = []
+        for exec in self.group_by_type(executables, MotionExecutable):
+            if not isinstance(exec[0], MotionExecutable):
+                result.extend(exec)
+            else:
+                new_mappings = self.merge_motion_mappings(exec)
+                result.append(MotionExecutable(motion_mappings=new_mappings))
+        return result
+
+    def merge_motion_mappings(self, motions: List[Dict[MotionNode, Task]]):
+        new_mappings = {}
+        for motion in motions:
+            new_mappings.update(motion.motion_mappings)
+        return new_mappings
+
 
 @dataclass(eq=False, repr=False)
 class UnderspecifiedNode(PlanNode):
@@ -358,7 +378,7 @@ class UnderspecifiedNode(PlanNode):
         return f"{self.designator_type.__name__}"
 
 
-@dataclass
+@dataclass(eq=False, repr=False)
 class DesignatorNode(PlanNode, ABC):
     """
     Abstract base class for all nodes that represent a designator.
@@ -418,43 +438,6 @@ class ActionNode(DesignatorNode):
     def action(self) -> ActionDescription:
         return self.designator
 
-    def collect_motions(self) -> List[Task]:
-        """
-        Collects all child motions of this action. A motion is considered if it is a direct child of this action node,
-        i.e. there is no other action node between this action node and the motion.
-        """
-        return [
-            motion_node.motion.motion_chart
-            for motion_node in self.descendants
-            if isinstance(motion_node, MotionNode)
-            and self is motion_node.parent_action_node
-        ]
-
-    def construct_motion_state_chart(self):
-        """
-        Builds a giskard Motion State Chart from the collected motions of this action node.
-        """
-        self.motion_executor = MotionExecutor(
-            self.collect_motions(),
-            self.plan.world,
-            ros_node=self.plan.context.ros_node,
-            plan_node=self,
-        )
-        self.motion_executor.construct_msc()
-
-    def execute_motion_state_chart(self):
-        """
-        Executes the constructed Motion State Chart of this action node.
-        """
-        # self.construct_motion_state_chart()
-        self.motion_executor = MotionExecutor(
-            self.collect_motions(),
-            self.plan.world,
-            plan_node=self,
-            ros_node=self.plan.context.ros_node,
-        )
-        self.motion_executor.execute()
-
     def create_execution_data_pre_perform(self):
         """
         Create the ExecutionData and logs additional information about the execution of this node.
@@ -486,13 +469,24 @@ class ActionNode(DesignatorNode):
 
         self.action.expand()
 
-        ActionExecutor(self, self.plan, self.plan.world).execute()
+        # self.parse().execute()
 
         # self.execute_motion_state_chart()
 
         self.update_execution_data_post_perform()
 
         # return result
+
+    def parse(self) -> Executable:
+        children = self.children
+        pre_condition_executable = ConditionExecutable(condition_node=children.pop(0))
+        post_condition_executable = ConditionExecutable(condition_node=children.pop(-1))
+
+        child_execs = [child.parse() for child in children]
+
+        exec_list = [pre_condition_executable, *child_execs, post_condition_executable]
+
+        return Executable(execution_list=self.merge_motion_executables(exec_list))
 
 
 @dataclass(eq=False, repr=False)
@@ -527,6 +521,11 @@ class MotionNode(DesignatorNode):
             if isinstance(node, ActionNode):
                 return node
         return None
+
+    def parse(self) -> Executable:
+        task = self.motion.motion_chart
+
+        return MotionExecutable(motion_mappings={self: task}, giskard_task=task)
 
 
 ActionLike = Union[Match, Designator, PlanNode]

@@ -15,14 +15,25 @@ from typing_extensions import (
     Any,
     List,
     Union,
+    Type,
 )
 
+from giskardpy.motion_statechart.goals.templates import Sequence, Parallel
+from giskardpy.motion_statechart.graph_node import Goal
+from pycram.action_executor import (
+    MotionExecutable,
+    LanguageExecutable,
+    Executable,
+    GiskardExecutable,
+)
 from pycram.datastructures.enums import TaskStatus, MonitorBehavior
+from pycram.plans.attachment_nodes import ModelChangeNode
 from pycram.plans.failures import PlanFailure, AllChildrenFailed
 from pycram.fluent import Fluent
 from pycram.plans.plan_node import (
     PlanNode,
 )
+from pycram.utils import split_list_by_type
 
 logger = logging.getLogger(__name__)
 
@@ -35,12 +46,32 @@ class LanguageNode(PlanNode, ABC):
     way.
     """
 
+    msc_template: Type[Goal] = field(kw_only=True, default=Sequence)
+
     def simplify(self):
         for child in self.children:
             if type(child) != type(self):
                 continue
 
             self.merge(child)
+
+    def parse(self) -> Executable:
+        child_executables = [node.parse() for node in self.children]
+
+        model_change_split = split_list_by_type(child_executables, ModelChangeNode)
+
+        # group everything before and after
+
+        all_motions = all([isinstance(m, GiskardExecutable) for m in child_executables])
+        if all_motions:
+            tasks = [
+                t for exe in child_executables for t in exe.motion_mappings.values()
+            ]
+
+            return LanguageExecutable(
+                motion_mappings=self.merge_motion_mappings(child_executables),
+                giskard_task=self.msc_template(nodes=tasks),
+            )
 
 
 @dataclass
@@ -85,6 +116,8 @@ class SequentialNode(ExecutesSequentially):
     Executes all children sequentially. Any failure is immediately raised.
     """
 
+    msc_template = Sequence
+
 
 @dataclass
 class ParallelNode(ExecutesInParallel):
@@ -92,6 +125,8 @@ class ParallelNode(ExecutesInParallel):
     Executes all children in parallel by creating a thread per children and executing them in the respective thread.
     All exceptions are raised after all children have finished.
     """
+
+    msc_template = Parallel
 
     def notify(self):
         self._perform_parallel(self.children)

@@ -10,38 +10,60 @@ GeneratorList -- implementation of generator list wrappers.
 from __future__ import annotations
 
 import math
-import os
 from copy import deepcopy
-from inspect import isgeneratorfunction
+from itertools import groupby
 from typing import Union, Iterator
 
 import numpy as np
 from typing_extensions import (
     Tuple,
-    Callable,
     List,
     Dict,
     TYPE_CHECKING,
     Sequence,
     Any,
-    Iterable,
+    Type,
 )
 
-from semantic_digital_twin.spatial_types.spatial_types import (
-    Pose,
-    Quaternion,
-    HomogeneousTransformationMatrix,
-    Point3,
-)
-from semantic_digital_twin.world_description.world_entity import Body
 from pycram.tf_transformations import (
     quaternion_about_axis,
     quaternion_multiply,
-    quaternion_matrix,
 )
+from semantic_digital_twin.spatial_types.spatial_types import (
+    Pose,
+    Point3,
+)
+from semantic_digital_twin.world_description.world_entity import Body
 
 if TYPE_CHECKING:
     from pycram.view_manager import CameraDescription
+    from pycram.action_executor import Executable
+
+    def split_list_by_type(
+        flat_list: List, cluster_type: Type[Any]
+    ) -> List[List[Executable]]:
+        groups = list(
+            (
+                list(g)
+                for _, g in groupby(
+                    flat_list, key=lambda m: isinstance(m, cluster_type)
+                )
+            )
+        )
+        return groups
+
+    def group_by_type(
+        flat_list: List[Any], group_type: Type[Any]
+    ) -> List[List[Executable]]:
+        groups = list(
+            (
+                list(g)
+                for _, g in groupby(
+                    flat_list, key=lambda m: not isinstance(m, group_type)
+                )
+            )
+        )
+        return groups
 
 
 def link_pose_for_joint_config(obj: Body, joint_config: Dict[str, float]) -> Pose:

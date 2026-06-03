@@ -29,5 +29,5 @@ def test_sub_action_expansion(immutable_model_world):
     pick_node.notify()
 
     parser = ActionGraphParser(pick_node)
-    exapanded_children = parser.expand_sub_actions(pick_node.children)
+    exapanded_children = parser.parse_children(pick_node.children)
     assert len(exapanded_children) > 1

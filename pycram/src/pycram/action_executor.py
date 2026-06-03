@@ -1,42 +1,20 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from itertools import groupby
 
-from typing_extensions import TYPE_CHECKING, Any, List, Type
+from typing_extensions import TYPE_CHECKING, Any, List, Type, Dict
 
 from giskardpy.motion_statechart.goals.templates import Sequence, Parallel
+from giskardpy.motion_statechart.graph_node import Task, Goal, MotionStatechartNode
 
 if TYPE_CHECKING:
 
-    from pycram.plans.plan import Plan
     from pycram.plans.plan_node import ActionNode, PlanNode, MotionNode
-    from semantic_digital_twin.world import World
     from pycram.robot_plans import BaseMotion
     from pycram.plans.condition_nodes import ConditionNode
     from pycram.language import LanguageNode
-
-
-@dataclass
-class ActionExecutor:
-    action_node: ActionNode
-    """
-    Root node of the action sub-plan that should be executed
-    """
-
-    plan: Plan
-    """
-    Plan to which the action node belongs
-    """
-
-    world: World
-    """
-    World in which the action should be executed.
-    """
-
-    def execute(self):
-        pass
 
 
 @dataclass
@@ -46,13 +24,13 @@ class GraphParser(ABC):
     """
 
     @abstractmethod
-    def parse(self) -> Any:
+    def parse(self) -> Executable:
         """
         Parses the graph and returns the result.
         """
         pass
 
-    def expand_sub_actions(self, children: List[PlanNode]) -> List[Executable]:
+    def parse_children(self, children: List[PlanNode]) -> List[Executable]:
         """
         Expands sub-actions within a list of plan nodes into executables.
 
@@ -66,16 +44,20 @@ class GraphParser(ABC):
 
         for child in children:
             if isinstance(child, ActionNode):
-                result.append(*ActionGraphParser(child).parse())
+                result.append(ActionGraphParser(child).parse())
             elif isinstance(child, LanguageNode):
-                result.append(*LanguageGraphParser(child).parse())
+                result.append(LanguageGraphParser(child).parse())
             elif isinstance(child, MotionNode):
-                result.append(MotionExecutable(child))
+                result.append(
+                    MotionExecutable(
+                        motion_mappings={child: child.designator.motion_chart}
+                    )
+                )
             else:
                 result.append(child)
         return result
 
-    def cluster_list_by_type(
+    def split_list_by_type(
         self, flat_list: List, cluster_type: Type[Any]
     ) -> List[List[Executable]]:
         groups = list(
@@ -87,6 +69,37 @@ class GraphParser(ABC):
             )
         )
         return groups
+
+    def group_by_type(
+        self, flat_list: List[Any], group_type: Type[Any]
+    ) -> List[List[Executable]]:
+        groups = list(
+            (
+                list(g)
+                for _, g in groupby(
+                    flat_list, key=lambda m: not isinstance(m, group_type)
+                )
+            )
+        )
+        return groups
+
+    def merge_motion_executables(
+        self, executables: List[Executable]
+    ) -> List[Executable]:
+        result = []
+        for exec in self.group_by_type(executables, MotionExecutable):
+            if not isinstance(exec[0], MotionExecutable):
+                result.extend(exec)
+            else:
+                new_mappings = self.merge_motion_mappings(exec)
+                result.append(MotionExecutable(motion_mappings=new_mappings))
+        return result
+
+    def merge_motion_mappings(self, motions: List[Dict[MotionNode, Task]]):
+        new_mappings = {}
+        for motion in motions:
+            new_mappings.update(motion.motion_mappings)
+        return new_mappings
 
 
 @dataclass
@@ -100,17 +113,21 @@ class ActionGraphParser(GraphParser):
     The action node to parse.
     """
 
-    def parse(self) -> List[Executable]:
+    def parse(self) -> Executable:
         """
         Parses the action node and its children into a list of executables.
 
         :return: A list of executables.
         """
         children = self.action_node.children
-        pre_condition_executable = ConditionExecutable(children.pop(0))
-        post_condition_executable = ConditionExecutable(children.pop(-1))
+        pre_condition_executable = ConditionExecutable(condition_node=children.pop(0))
+        post_condition_executable = ConditionExecutable(condition_node=children.pop(-1))
 
-        return self.expand_sub_actions(children)
+        child_execs = self.parse_children(children)
+
+        exec_list = [pre_condition_executable, *child_execs, post_condition_executable]
+
+        return Executable(self.merge_motion_executables(exec_list))
 
 
 @dataclass
@@ -118,36 +135,20 @@ class LanguageGraphParser(GraphParser):
 
     language_node: LanguageNode
 
-    def parse(self) -> List[Executable]:
-        executables: List[Executable] = []
+    def parse(self) -> Executable:
 
-        for child in self.language_node.descendants:
-            if isinstance(child, LanguageNode):
-                executables.append(LanguageGraphParser(child).parse())
-            elif isinstance(child, ActionNode):
-                executables.append(ActionGraphParser(child).parse())
-            elif isinstance(child, MotionNode):
-                executables.append(MotionExecutable(child))
+        child_executables = self.parse_children(self.language_node.children)
 
-    def _build_sequential_executable(self, motions): ...
+        all_motions = all([isinstance(m, MotionExecutable) for m in child_executables])
+        if all_motions:
+            tasks = [
+                t for exe in child_executables for t in exe.motion_mappings.values()
+            ]
 
-
-@dataclass
-class MotionsParser(GraphParser):
-    """
-    Parser for motion descriptions.
-    """
-
-    motions: List[BaseMotion]
-    """
-    The list of base motions to parse.
-    """
-
-    def parse(self) -> Any:
-        """
-        Parses the motions.
-        """
-        pass
+            return LanguageExecutable(
+                motion_mappings=self.merge_motion_mappings(child_executables),
+                giskard_task=self.language_node.msc_template(nodes=tasks),
+            )
 
 
 @dataclass
@@ -156,47 +157,28 @@ class Executable:
     Base class for executable units.
     """
 
+    execution_list: List[Executable] = field(default_factory=list)
+
     def execute(self) -> None:
         """
         Executes the unit.
         """
-        pass
+        for e in self.execution_list:
+            e.execute()
 
 
 @dataclass
-class LanguageExecutable(Executable):
+class GiskardExecutable(Executable):
+    motion_mappings: Dict[MotionNode, Task] = field(kw_only=True)
 
-    motions: List[MotionExecutable]
+    giskard_task: MotionStatechartNode = field(kw_only=True, default=None)
 
     def execute(self) -> None:
         pass
 
-    @property
-    def motion_state_chart(self):
-        return Parallel(
-            nodes=[
-                motion.motion_node.designator.motion_chart for motion in self.motions
-            ]
-        )
-
 
 @dataclass
-class SequentialExecutable(LanguageExecutable):
-
-    @property
-    def motion_state_chart(self):
-        return Sequence(
-            nodes=[
-                motion.motion_node.designator.motion_chart for motion in self.motions
-            ]
-        )
-
-
-@dataclass
-class ParallelExecutable(LanguageExecutable):
-
-    def execute(self) -> None:
-        pass
+class LanguageExecutable(GiskardExecutable):
 
     @property
     def motion_state_chart(self):
@@ -213,7 +195,7 @@ class ConditionExecutable(Executable):
     An executable unit for a condition node.
     """
 
-    condition_node: ConditionNode
+    condition_node: ConditionNode = field(kw_only=True)
     """
     The condition node to execute.
     """
@@ -226,28 +208,4 @@ class ConditionExecutable(Executable):
 
 
 @dataclass
-class MotionExecutable(Executable):
-
-    motion_node: MotionNode
-
-    def execute(self) -> None:
-        pass
-
-
-@dataclass
-class ExecutionPackage:
-    """
-    A package of executables to be executed sequentially.
-    """
-
-    execution_list: List[Executable]
-    """
-    The list of executables.
-    """
-
-    def execute(self) -> None:
-        """
-        Executes all executables in the package.
-        """
-        for executable in self.execution_list:
-            executable.execute()
+class MotionExecutable(GiskardExecutable): ...
