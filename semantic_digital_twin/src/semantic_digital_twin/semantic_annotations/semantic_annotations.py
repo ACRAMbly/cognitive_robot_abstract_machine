@@ -382,7 +382,7 @@ class Table(Furniture, HasSupportingSurface, HasLegs):
 
 
 @dataclass(eq=False)
-class Counter_Top(Furniture, HasSupportingSurface):
+class CounterTop(Furniture, HasSupportingSurface):
     """
     A semantic annotation that represents a counter top.
     """

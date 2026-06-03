@@ -10,7 +10,7 @@ from semantic_digital_twin.semantic_annotations.semantic_annotations import (
     Sofa,
     TrashCan,
     Fridge,
-    Counter_Top,
+    CounterTop,
     Wall,
     Cabinet,
     Cupboard,
@@ -359,7 +359,7 @@ class KitchenEnvironment:
                                                                                            yaw=-np.pi / 2)
 
             # Place the plate on top of the modules (z = ct_h + plate_thickness/2)
-            counterTop = Counter_Top.create_with_new_body_in_world(
+            counterTop = CounterTop.create_with_new_body_in_world(
                 world=world, name=PrefixedName("counterTop"),
                 world_root_T_self=ct_root_T @ HomogeneousTransformationMatrix.from_xyz_rpy(z=ct_h / 2 + 0.02),
                 scale=Scale(ct_d, ct_l, 0.04))
