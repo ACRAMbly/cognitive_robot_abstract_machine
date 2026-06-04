@@ -283,13 +283,12 @@ class TestJointGoals:
             sleep(0.01)
         else:
             assert False
-            #state version never changed
+            # state version never changed
         np.testing.assert_almost_equal(
             giskard.api.world.state[arm_lift_joints.dof.id].position,
             0.5,
             decimal=2,
         )
-
 
 
 class TestCartGoals:
