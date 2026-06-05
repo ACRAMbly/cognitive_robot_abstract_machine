@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-import operator
 from abc import ABC
 from abc import abstractmethod
 from copy import copy
@@ -10,11 +9,9 @@ from itertools import product
 from typing import List, TYPE_CHECKING, Type
 from uuid import UUID
 
-import numpy as np
-from typing_extensions import Self, Callable
-
 import giskardpy.utils.math as gm
 import krrood.symbolic_math.symbolic_math as sm
+import numpy as np
 from giskardpy.motion_statechart.data_types import FloatEnum
 from giskardpy.qp.exceptions import (
     InfeasibleException,
@@ -32,11 +29,15 @@ from semantic_digital_twin.world_description.degree_of_freedom import DegreeOfFr
 from semantic_digital_twin.world_description.degree_of_freedom import (
     DegreeOfFreedomLimits,
 )
+from typing_extensions import Self, Callable
 
 logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from giskardpy.qp.qp_controller_config import QPControllerConfig
+
+
+LargeNumber = 1e4
 
 
 class NormalizationFactors(FloatEnum):
@@ -122,8 +123,8 @@ class SlackLimits(DirectLimits):
                 for c in constraints
             ]
         )
-        self.lower_bounds = Vector([-np.inf] * num_of_slack_variables)
-        self.upper_bounds = Vector([np.inf] * num_of_slack_variables)
+        self.lower_bounds = Vector([-LargeNumber] * num_of_slack_variables)
+        self.upper_bounds = Vector([LargeNumber] * num_of_slack_variables)
         self.names = [c.name for c in constraints]
         return self
 
@@ -940,8 +941,8 @@ class GiskardConstraint(ABC):
 
     enforcement_strategy: type[EnforcementStrategy]
 
-    lower_slack_limit: sm.ScalarData = field(default=-np.inf)
-    upper_slack_limit: sm.ScalarData = field(default=np.inf)
+    lower_slack_limit: sm.ScalarData = field(default=-LargeNumber)
+    upper_slack_limit: sm.ScalarData = field(default=LargeNumber)
 
 
 @dataclass
