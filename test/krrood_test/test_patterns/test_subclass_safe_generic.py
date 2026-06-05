@@ -10,12 +10,15 @@ from typing import (
     Callable,
     Annotated,
     Dict,
+    Tuple,
 )
 
 from typing_extensions import (
     get_type_hints,
     get_args,
     get_origin,
+    TypeVarTuple,
+    Unpack,
 )
 
 from krrood.entity_query_language.factories import variable_from
@@ -354,3 +357,80 @@ def test_circular_reference_resolution():
     )
     assert resolved[T_local] is not None
     assert resolved[U_local] is not None
+
+
+Ts = TypeVarTuple("Ts")
+
+
+def test_typevartuple_basic_substitution():
+    """
+    Test that TypeVarTuple is correctly substituted when bound in a subclass.
+    """
+
+    @dataclass
+    class Base(Generic[Unpack[Ts]], AbstractSubClassSafeGeneric):
+        attribute: Tuple[Unpack[Ts]]
+
+    @dataclass
+    class Final(Base[int, str]):
+        pass
+
+    fields_by_name = {field.name: field for field in fields(Final)}
+    assert fields_by_name["attribute"].type == Tuple[int, str]
+
+
+def test_typevartuple_mixed_with_typevar():
+    """
+    Test that TypeVarTuple mixed with normal TypeVar is correctly substituted.
+    """
+
+    @dataclass
+    class Base(Generic[T, Unpack[Ts]], AbstractSubClassSafeGeneric):
+        attribute: Tuple[T, Unpack[Ts]]
+
+    @dataclass
+    class Final(Base[float, int, str]):
+        pass
+
+    fields_by_name = {field.name: field for field in fields(Final)}
+    assert fields_by_name["attribute"].type == Tuple[float, int, str]
+
+
+def test_typevartuple_multiple_subclasses():
+    """
+    Test that TypeVarTuple resolution works through multiple levels of inheritance.
+    """
+
+    @dataclass
+    class Base(Generic[Unpack[Ts]], AbstractSubClassSafeGeneric):
+        attribute: Tuple[Unpack[Ts]]
+
+    @dataclass
+    class Intermediate(Generic[T, Unpack[Ts]], Base[Unpack[Ts]]):
+        other: T
+
+    @dataclass
+    class Final(Intermediate[bool, int, str]):
+        pass
+
+    fields_by_name = {field.name: field for field in fields(Final)}
+    assert fields_by_name["attribute"].type == Tuple[int, str]
+    assert fields_by_name["other"].type == bool
+
+
+def test_typevartuple_unpack_in_different_positions():
+    """
+    Test Unpack[Ts] in different positions within a Tuple or other generic.
+    """
+
+    @dataclass
+    class Base(Generic[Unpack[Ts]], AbstractSubClassSafeGeneric):
+        attribute: Tuple[int, Unpack[Ts], float]
+
+    @dataclass
+    class Final(Base[str, bool]):
+        pass
+
+    fields_by_name = {field.name: field for field in fields(Final)}
+    # Expected: Tuple[int, str, bool, float]
+    assert fields_by_name["attribute"].type == Tuple[int, str, bool, float]
