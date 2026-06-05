@@ -168,6 +168,10 @@ class HasRobotParts(ABC):
             setattr(self, field_name, current_list)
 
         for concrete_type in types_to_initialize:
+            if get_origin(concrete_type) in [Union, types.UnionType]:
+                self._initialize_list_field(field_name, get_args(concrete_type))
+                continue
+
             if (
                 inspect.isclass(concrete_type)
                 and issubclass(concrete_type, AbstractRobotPart)
