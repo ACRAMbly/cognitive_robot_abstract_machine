@@ -19,7 +19,12 @@ from typing_extensions import Optional
 from krrood.entity_query_language.core.base_expressions import SymbolicExpression
 from krrood.entity_query_language.query.query import Query
 from krrood.entity_query_language.verbalization.context import VerbalizationContext
-from krrood.entity_query_language.verbalization.fragments.base import VerbFragment, flatten_fragment_to_plain_text
+from krrood.entity_query_language.verbalization.engine import fold
+from krrood.entity_query_language.verbalization.fragments.base import (
+    VerbFragment,
+    flatten_fragment_to_plain_text,
+)
+from krrood.entity_query_language.verbalization.grammar.registry import ALL_PHRASE_RULES
 from krrood.entity_query_language.verbalization.rule_engine import RuleEngine
 from krrood.entity_query_language.verbalization.rules.registry import ALL_RULES
 
@@ -41,7 +46,8 @@ class EQLVerbalizer:
     """
 
     _engine: RuleEngine = field(init=False, repr=False)
-    """Rule dispatcher; sorts rules by MRO depth before first call."""
+    """Legacy rule dispatcher, used as the strangler fallback for EQL constructs
+    not yet ported to :data:`~krrood.entity_query_language.verbalization.grammar.registry.ALL_PHRASE_RULES`."""
 
     def __post_init__(self) -> None:
         self._engine = RuleEngine(ALL_RULES)
@@ -54,8 +60,11 @@ class EQLVerbalizer:
         """
         Translate *expression* into a :class:`~krrood.entity_query_language.verbalization.fragments.base.VerbFragment` tree.
 
-        A fresh :class:`~krrood.entity_query_language.verbalization.context.VerbalizationContext`
-        (with a pre-built disambiguation map) is created when *context* is ``None``.
+        Dispatches through the grammar :func:`~krrood.entity_query_language.verbalization.engine.fold`;
+        constructs not yet expressed as a
+        :class:`~krrood.entity_query_language.verbalization.grammar.phrase_rule.PhraseRule`
+        fall through to the legacy :class:`~krrood.entity_query_language.verbalization.rule_engine.RuleEngine`
+        (strangler migration). A fresh context is created when *context* is ``None``.
 
         :param expression: Any EQL symbolic expression.
         :type expression: ~krrood.entity_query_language.core.base_expressions.SymbolicExpression
@@ -66,7 +75,12 @@ class EQLVerbalizer:
         """
         if context is None:
             context = VerbalizationContext.from_expression(expression)
-        return self._engine.build(expression, context, self)
+        return fold(expression, context, ALL_PHRASE_RULES, fallback=self._legacy_build)
+
+    def _legacy_build(self, node, context: VerbalizationContext) -> VerbFragment:
+        """Strangler fallback: dispatch *node* via the legacy engine; its children
+        re-enter the grammar fold through ``self.build``."""
+        return self._engine.build(node, context, self)
 
     def verbalize(
         self,

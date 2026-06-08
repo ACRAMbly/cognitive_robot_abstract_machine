@@ -17,7 +17,7 @@ Programming").  Compare the fold over the *output* tree,
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
-from typing_extensions import Optional, Sequence
+from typing_extensions import Callable, Optional, Sequence
 
 from krrood.entity_query_language.verbalization.fragments.base import (
     VerbFragment,
@@ -38,6 +38,7 @@ def fold(
     node,
     context: "VerbalizationContext",
     rules: Optional[Sequence[PhraseRule]] = None,
+    fallback: Optional[Callable[[object, "VerbalizationContext"], VerbFragment]] = None,
 ) -> VerbFragment:
     """
     Verbalize *node* by dispatching to the matching grammar rule and recursing.
@@ -49,11 +50,15 @@ def fold(
        dispatch (used for InstantiatedVariable field references).
     2. :func:`select` the most-specific rule and apply its ``build`` with a fresh
        :class:`Ctx` whose ``child`` re-enters :func:`fold`.
-    3. **Fallback** — no rule applies → a plain :class:`WordFragment` of ``node._name_``.
+    3. **Fallback** — no rule applies → *fallback(node, context)* when supplied
+       (the strangler hook routing un-ported constructs to the legacy engine
+       during migration), otherwise a plain :class:`WordFragment` of ``node._name_``.
 
     :param node: Any EQL expression.
     :param context: The verbalization context (services + render config).
     :param rules: Grammar to dispatch over; defaults to ``ALL_PHRASE_RULES``.
+    :param fallback: Optional handler for nodes no grammar rule covers; it should
+        recurse back through :func:`fold` for its children.
     :return: The fragment for *node*.
     :rtype: ~krrood.entity_query_language.verbalization.fragments.base.VerbFragment
     """
@@ -65,11 +70,14 @@ def fold(
         if override is not None:
             return override
 
-    ctx = Ctx(
-        child=lambda child_node: fold(child_node, context, rules), context=context
-    )
-
     rule = select(node, rules)
     if rule is None:
+        if fallback is not None:
+            return fallback(node, context)
         return WordFragment(text=node._name_)
+
+    ctx = Ctx(
+        child=lambda child_node: fold(child_node, context, rules, fallback),
+        context=context,
+    )
     return rule.build(node, ctx)
