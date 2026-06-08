@@ -20,11 +20,26 @@ from dataclasses import dataclass
 
 from typing_extensions import List
 
-from krrood.entity_query_language.core.mapped_variable import Attribute, MappedVariable
+from krrood.entity_query_language.core.mapped_variable import (
+    Attribute,
+    FlatVariable,
+    MappedVariable,
+)
 from krrood.entity_query_language.core.variable import (
     ExternallySetVariable,
     Literal,
     Variable,
+)
+from krrood.entity_query_language.operators.aggregators import (
+    Aggregator,
+    Average,
+    Count,
+    CountAll,
+    Max,
+    Min,
+    Mode,
+    MultiMode,
+    Sum,
 )
 from krrood.entity_query_language.operators.comparator import Comparator
 from krrood.entity_query_language.operators.core_logical_operators import (
@@ -33,8 +48,14 @@ from krrood.entity_query_language.operators.core_logical_operators import (
     Not,
     flatten_operands,
 )
-from krrood.entity_query_language.verbalization.chain_utils import walk_chain
+from krrood.entity_query_language.operators.logical_quantifiers import Exists, ForAll
+from krrood.entity_query_language.verbalization.chain_utils import (
+    chain_root,
+    verbalize_plural,
+    walk_chain,
+)
 from krrood.entity_query_language.verbalization.fragments.base import (
+    flatten_fragment_to_plain_text,
     join_with,
     oxford_and,
     PhraseFragment,
@@ -64,12 +85,30 @@ from krrood.entity_query_language.verbalization.operator_phrase import (
     comparator_operator,
     comparator_phrase,
 )
-from krrood.entity_query_language.verbalization.rules.chains import verbalize_chain
+from krrood.entity_query_language.verbalization.rules.chains import (
+    verbalize_chain,
+    verbalize_possessive_chain,
+)
 from krrood.entity_query_language.verbalization.vocabulary.english import (
+    Aggregations,
     Articles,
     Conjunctions,
+    Keywords,
     Logicals,
+    Prepositions,
 )
+from krrood.entity_query_language.verbalization.vocabulary.words import ChildForm
+
+#: Maps each standard aggregator subtype to its lexicon phrase.
+_AGGREGATION_KIND = {
+    Count: Aggregations.COUNT,
+    Sum: Aggregations.SUM,
+    Average: Aggregations.AVERAGE,
+    Max: Aggregations.MAX,
+    Min: Aggregations.MIN,
+    Mode: Aggregations.MODE,
+    MultiMode: Aggregations.MULTI_MODE,
+}
 
 
 @dataclass
@@ -178,7 +217,7 @@ class RangeConjunctionRule(PhraseRule):
     construct = AND
     name = "and-range"
 
-    def when(self, node):
+    def when(self, node, ctx: Ctx):
         return has_pair(flatten_operands(node, AND))
 
     def build(self, node, ctx: Ctx):
@@ -241,7 +280,7 @@ class NotComparatorRule(PhraseRule):
     construct = Not
     name = "not-comparator"
 
-    def when(self, node):
+    def when(self, node, ctx: Ctx):
         return isinstance(node._child_, Comparator)
 
     def build(self, node, ctx: Ctx):
@@ -256,12 +295,145 @@ class NotBoolAttrRule(PhraseRule):
     construct = Not
     name = "not-bool-attr"
 
-    def when(self, node):
+    def when(self, node, ctx: Ctx):
         return _is_bool_attr_chain(node._child_)
 
     def build(self, node, ctx: Ctx):
         return verbalize_chain(
             node._child_, ctx.context, _FoldVerbalizer(ctx), negated=True
+        )
+
+
+# ── chains (MappedVariable) ──────────────────────────────────────────────────
+
+
+class MappedVariableRule(PhraseRule):
+    """Any attribute / index / call chain → possessive or predicative phrase."""
+
+    construct = MappedVariable
+    name = "mapped-variable"
+
+    def build(self, node, ctx: Ctx):
+        return verbalize_chain(node, ctx.context, _FoldVerbalizer(ctx))
+
+
+class PronominalChainRule(PhraseRule):
+    """A chain rooted at the current subject → leading possessive *"its …"*."""
+
+    construct = MappedVariable
+    name = "pronominal-chain"
+
+    def when(self, node, ctx: Ctx):
+        if isinstance(node, FlatVariable):
+            return False
+        chain, root = walk_chain(node)
+        if not chain:
+            return False
+        terminal = chain[-1]
+        if isinstance(terminal, Attribute) and terminal._type_ is bool:
+            return False
+        return ctx.refer.pronoun_for(root) is not None
+
+    def build(self, node, ctx: Ctx):
+        root = chain_root(node)
+        return verbalize_possessive_chain(
+            node, ctx.context, ctx.refer.pronoun_for(root)
+        )
+
+
+class FlatVariableRule(PhraseRule):
+    """A transparent SetOf wrapper → unwrap to its child."""
+
+    construct = FlatVariable
+    name = "flat-variable"
+
+    def build(self, node, ctx: Ctx):
+        return ctx.child(node._child_)
+
+
+# ── aggregators ──────────────────────────────────────────────────────────────
+
+
+class AggregatorRule(PhraseRule):
+    """*"the <aggregation> <plural child>"* (or *"the <aggregation> of <child>"*)."""
+
+    construct = Aggregator
+    name = "aggregator"
+
+    def build(self, node, ctx: Ctx):
+        aggregation_kind = _AGGREGATION_KIND[type(node)]
+        aggregation_word = aggregation_kind.value
+        aggregation_fragment = aggregation_kind.as_fragment()
+
+        if aggregation_word.child_form == ChildForm.SINGULAR_OF:
+            child_fragment = ctx.child(node._child_)
+            result = phrase(
+                Articles.THE.as_fragment(),
+                aggregation_fragment,
+                Prepositions.OF.as_fragment(),
+                child_fragment,
+            )
+        else:
+            child_fragment = verbalize_plural(
+                node._child_, ctx.context, _FoldVerbalizer(ctx).build
+            )
+            result = phrase(
+                Articles.THE.as_fragment(), aggregation_fragment, child_fragment
+            )
+
+        if node._id_ not in ctx.refer.seen:
+            ctx.refer.seen[node._id_] = flatten_fragment_to_plain_text(
+                phrase(aggregation_fragment, child_fragment)
+            )
+        return result
+
+
+class CountAllRule(PhraseRule):
+    """``CountAll`` → *"count of all"* (no child)."""
+
+    construct = CountAll
+    name = "count-all"
+
+    def build(self, node, ctx: Ctx):
+        return Aggregations.COUNT_ALL.as_fragment()
+
+
+# ── quantifiers ──────────────────────────────────────────────────────────────
+
+
+class ForAllRule(PhraseRule):
+    """*"for all <plural var>, <condition>"*."""
+
+    construct = ForAll
+    name = "for-all"
+
+    def build(self, node, ctx: Ctx):
+        variable_fragment = verbalize_plural(
+            node.variable, ctx.context, _FoldVerbalizer(ctx).build
+        )
+        condition_fragment = ctx.child(node.condition)
+        return phrase(
+            Logicals.FOR_ALL.as_fragment(),
+            variable_fragment,
+            word(","),
+            condition_fragment,
+        )
+
+
+class ExistsRule(PhraseRule):
+    """*"there exists <variable> such that <condition>"*."""
+
+    construct = Exists
+    name = "exists"
+
+    def build(self, node, ctx: Ctx):
+        variable_fragment = ctx.child(node.variable)
+        condition_fragment = ctx.child(node.condition)
+        return phrase(
+            Logicals.THERE_EXISTS.as_fragment(),
+            variable_fragment,
+            Keywords.SUCH_THAT.as_fragment(),
+            condition_fragment,
         )
 
 
@@ -278,4 +450,11 @@ RULES: List[PhraseRule] = [
     NotRule(),
     NotComparatorRule(),
     NotBoolAttrRule(),
+    MappedVariableRule(),
+    PronominalChainRule(),
+    FlatVariableRule(),
+    AggregatorRule(),
+    CountAllRule(),
+    ForAllRule(),
+    ExistsRule(),
 ]

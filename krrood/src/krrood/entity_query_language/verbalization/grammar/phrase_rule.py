@@ -100,15 +100,18 @@ class PhraseRule(ABC):
     name: ClassVar[str] = ""
     tiebreak: ClassVar[int] = 0
 
-    def when(self, node) -> bool:
+    def when(self, node, ctx: Ctx) -> bool:
         """
         Extra precondition beyond ``isinstance(node, construct)``.
 
         The default accepts everything; override to express the non-``isinstance``
         part of the rule's applicability (a *guarded* rule outranks an unguarded one
-        on the same construct).
+        on the same construct).  Receives the same :class:`Ctx` as :meth:`build`, so a
+        guard may consult the microplanning services (e.g. ``ctx.refer.pronoun_for`` or
+        ``ctx.config.query_depth``).
 
         :param node: The candidate EQL expression.
+        :param ctx: The per-node context (recursion + services).
         :rtype: bool
         """
         return True
@@ -152,7 +155,7 @@ def most_specific(candidates: Sequence[_T], key: Callable[[_T], tuple]) -> Optio
     return max(candidates, key=key, default=None)
 
 
-def select(node, rules: Sequence[PhraseRule]) -> Optional[PhraseRule]:
+def select(node, rules: Sequence[PhraseRule], ctx: Ctx) -> Optional[PhraseRule]:
     """
     Return the most-specific :class:`PhraseRule` whose ``construct`` and :meth:`~PhraseRule.when`
     match *node*, or ``None`` when none apply.
@@ -163,10 +166,13 @@ def select(node, rules: Sequence[PhraseRule]) -> Optional[PhraseRule]:
 
     :param node: The EQL expression being dispatched.
     :param rules: The grammar (e.g. ``ALL_PHRASE_RULES``).
+    :param ctx: The per-node context, passed to each rule's :meth:`~PhraseRule.when`.
     :return: The chosen rule, or ``None`` (caller supplies the fallback).
     """
     candidates = [
-        rule for rule in rules if isinstance(node, rule.construct) and rule.when(node)
+        rule
+        for rule in rules
+        if isinstance(node, rule.construct) and rule.when(node, ctx)
     ]
     return most_specific(
         candidates,

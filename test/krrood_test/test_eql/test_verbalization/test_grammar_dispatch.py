@@ -14,6 +14,7 @@ from krrood.entity_query_language.verbalization.fragments.base import (
     WordFragment,
 )
 from krrood.entity_query_language.verbalization.grammar.phrase_rule import (
+    Ctx,
     PhraseRule,
     select,
 )
@@ -38,6 +39,11 @@ class Other:
     _name_ = "other"
 
 
+def _ctx():
+    """A Ctx for dispatch tests (no recursion needed by select)."""
+    return Ctx(child=lambda node: node, context=VerbalizationContext())
+
+
 def _custom(construct, name, build_fn, *, guard=None, tiebreak=0):
     """Build a flat PhraseRule subclass instance for testing."""
     namespace = {
@@ -47,7 +53,7 @@ def _custom(construct, name, build_fn, *, guard=None, tiebreak=0):
         "build": lambda self, node, ctx: build_fn(node, ctx),
     }
     if guard is not None:
-        namespace["when"] = lambda self, node: guard(node)
+        namespace["when"] = lambda self, node, ctx: guard(node)
     return type(f"R_{name}", (PhraseRule,), namespace)()
 
 
@@ -61,14 +67,14 @@ def _rule(construct, name, **kw):
 
 def test_select_prefers_deeper_construct():
     rules = [_rule(Base, "base"), _rule(Mid, "mid"), _rule(Leaf, "leaf")]
-    assert select(Leaf(), rules).name == "leaf"
-    assert select(Mid(), rules).name == "mid"
-    assert select(Base(), rules).name == "base"
+    assert select(Leaf(), rules, _ctx()).name == "leaf"
+    assert select(Mid(), rules, _ctx()).name == "mid"
+    assert select(Base(), rules, _ctx()).name == "base"
 
 
 def test_select_guarded_beats_unguarded_same_construct():
     rules = [_rule(Mid, "plain"), _rule(Mid, "guarded", guard=lambda n: True)]
-    assert select(Mid(), rules).name == "guarded"
+    assert select(Mid(), rules, _ctx()).name == "guarded"
 
 
 def test_select_tiebreak_breaks_same_construct_both_guarded():
@@ -76,20 +82,20 @@ def test_select_tiebreak_breaks_same_construct_both_guarded():
         _rule(Mid, "low", guard=lambda n: True, tiebreak=0),
         _rule(Mid, "high", guard=lambda n: True, tiebreak=5),
     ]
-    assert select(Mid(), rules).name == "high"
+    assert select(Mid(), rules, _ctx()).name == "high"
 
 
 def test_select_guard_can_exclude():
     rules = [_rule(Mid, "only-ok", guard=lambda n: getattr(n, "ok", False))]
     node = Mid()
-    assert select(node, rules) is None
+    assert select(node, rules, _ctx()) is None
     node.ok = True
-    assert select(node, rules).name == "only-ok"
+    assert select(node, rules, _ctx()).name == "only-ok"
 
 
 def test_select_returns_none_when_nothing_matches():
     rules = [_rule(Mid, "mid")]
-    assert select(Other(), rules) is None
+    assert select(Other(), rules, _ctx()) is None
 
 
 # ── fold: dispatch, recursion, override, fallback ────────────────────────────

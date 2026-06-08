@@ -70,14 +70,14 @@ def fold(
         if override is not None:
             return override
 
-    rule = select(node, rules)
-    if rule is None:
-        if fallback is not None:
-            return fallback(node, context)
-        return WordFragment(text=node._name_)
-
     ctx = Ctx(
         child=lambda child_node: fold(child_node, context, rules, fallback),
         context=context,
     )
+
+    rule = select(node, rules, ctx)
+    if rule is None:
+        if fallback is not None:
+            return fallback(node, context)
+        return WordFragment(text=node._name_)
     return rule.build(node, ctx)
