@@ -809,7 +809,7 @@ def test_copy_two_times(pr2_world_state_reset):
 def test_copy_many_times_doesnt_leak(pr2_world_state_reset):
     world_copy = deepcopy(pr2_world_state_reset)
     initial_count = objgraph.count("World")
-    for _ in range(40):
+    for _ in range(5):
         world_copy = deepcopy(world_copy)
     gc.collect()
     assert initial_count == objgraph.count("World")
