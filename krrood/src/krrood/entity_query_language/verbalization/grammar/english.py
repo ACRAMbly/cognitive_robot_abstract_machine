@@ -16,8 +16,6 @@ engine falls back to the legacy dispatcher (strangler migration).
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-
 from typing_extensions import List
 
 from krrood.entity_query_language.core.mapped_variable import (
@@ -119,24 +117,6 @@ from krrood.entity_query_language.verbalization.grammar.assembly.instantiated im
 from krrood.entity_query_language.verbalization.grammar.planning.instantiated import (
     InstantiatedPlanner,
 )
-
-
-@dataclass
-class _FoldVerbalizer:
-    """
-    Adapter exposing ``build(expression, context)`` over a :class:`Ctx`, for the few
-    legacy helpers (``comparator_phrase``, ``verbalize_chain``) that still expect a
-    verbalizer object.  Children recurse through ``ctx.child`` (the fold).  Transitional —
-    removed once those helpers are absorbed into the grammar.
-    """
-
-    ctx: Ctx
-
-    def build(self, expression, context=None) -> VerbFragment:
-        return self.ctx.child(expression)
-
-    def verbalize(self, expression, context=None) -> str:
-        return flatten_fragment_to_plain_text(self.ctx.child(expression))
 
 
 def _is_bool_attr_chain(expression) -> bool:
@@ -297,9 +277,7 @@ class NotComparatorRule(PhraseRule):
         return isinstance(node._child_, Comparator)
 
     def build(self, node, ctx: Ctx):
-        return comparator_phrase(
-            node._child_, ctx.context, _FoldVerbalizer(ctx), negated=True
-        )
+        return comparator_phrase(node._child_, ctx.context, ctx.child, negated=True)
 
 
 class NotBoolAttrRule(PhraseRule):
@@ -383,9 +361,7 @@ class AggregatorRule(PhraseRule):
                 child_fragment,
             )
         else:
-            child_fragment = verbalize_plural(
-                node._child_, ctx.context, _FoldVerbalizer(ctx).build
-            )
+            child_fragment = verbalize_plural(node._child_, ctx.context, ctx.child)
             result = phrase(
                 Articles.THE.as_fragment(), aggregation_fragment, child_fragment
             )
@@ -417,9 +393,7 @@ class ForAllRule(PhraseRule):
     name = "for-all"
 
     def build(self, node, ctx: Ctx):
-        variable_fragment = verbalize_plural(
-            node.variable, ctx.context, _FoldVerbalizer(ctx).build
-        )
+        variable_fragment = verbalize_plural(node.variable, ctx.context, ctx.child)
         condition_fragment = ctx.child(node.condition)
         return phrase(
             Logicals.FOR_ALL.as_fragment(),

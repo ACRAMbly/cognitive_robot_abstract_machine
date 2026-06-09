@@ -165,7 +165,8 @@ def verbalize_plural(
     :param expression: EQL expression to pluralise.
     :param context: Shared verbalization state.
     :type context: ~krrood.entity_query_language.verbalization.context.VerbalizationContext
-    :param build_fn: The top-level dispatcher (``EQLVerbalizer.build``) used as fallback.
+    :param build_fn: The single-argument recursion continuation (``ctx.child``) used as
+        the fallback for expression types without a dedicated plural form.
     :type build_fn: Callable
     :return: Plural fragment for *expression*.
     :rtype: ~krrood.entity_query_language.verbalization.fragments.base.VerbFragment
@@ -202,4 +203,4 @@ def verbalize_plural(
                 separator=" ",
             )
 
-    return build_fn(expression, context)
+    return build_fn(expression)

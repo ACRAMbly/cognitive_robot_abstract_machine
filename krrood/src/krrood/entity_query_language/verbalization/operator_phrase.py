@@ -10,10 +10,13 @@ from __future__ import annotations
 
 import operator
 from typing import TYPE_CHECKING
-from typing_extensions import Optional
+from typing_extensions import Callable, Optional
 
 from krrood.entity_query_language.verbalization.chain_utils import is_temporal
-from krrood.entity_query_language.verbalization.fragments.base import RoleFragment, VerbFragment
+from krrood.entity_query_language.verbalization.fragments.base import (
+    RoleFragment,
+    VerbFragment,
+)
 from krrood.entity_query_language.verbalization.fragments.factory import phrase
 from krrood.entity_query_language.verbalization.subquery import is_calculation_value
 from krrood.entity_query_language.verbalization.vocabulary.english import Operators
@@ -21,7 +24,6 @@ from krrood.entity_query_language.verbalization.vocabulary.english import Operat
 if TYPE_CHECKING:
     from krrood.entity_query_language.operators.comparator import Comparator
     from krrood.entity_query_language.verbalization.context import VerbalizationContext
-    from krrood.entity_query_language.verbalization.verbalizer import EQLVerbalizer
 
 
 def comparator_operator(
@@ -78,7 +80,7 @@ def comparator_operator(
 def comparator_phrase(
     comparator: Comparator,
     context: VerbalizationContext,
-    verbalizer: EQLVerbalizer,
+    build_fn: Callable,
     *,
     negated: bool = False,
 ) -> VerbFragment:
@@ -90,12 +92,13 @@ def comparator_phrase(
 
     :param comparator: The comparator expression.
     :param context: Shared verbalization state.
-    :param verbalizer: Verbalizer used to build the operand sub-expressions.
+    :param build_fn: The single-argument recursion continuation (``ctx.child``) used to
+        build the operand sub-expressions.
     :param negated: Outer negation (from a wrapping ``Not``).
     :return: The comparison phrase fragment.
     :rtype: ~krrood.entity_query_language.verbalization.fragments.base.VerbFragment
     """
-    left = verbalizer.build(comparator.left, context)
-    right = verbalizer.build(comparator.right, context)
+    left = build_fn(comparator.left)
+    right = build_fn(comparator.right)
     op = comparator_operator(comparator, context, negated=negated)
     return phrase(left, op, right)

@@ -100,14 +100,8 @@ class InstantiatedAssembler(Assembler[InstantiatedPlan]):
 
     def _value(self, binding: BindingPlan) -> VerbFragment:
         if binding.is_plural:
-            return verbalize_plural(
-                binding.value, self.ctx.context, self._render_plural
-            )
+            return verbalize_plural(binding.value, self.ctx.context, self.ctx.child)
         return self.ctx.child(binding.value)
-
-    def _render_plural(self, expression, _context=None) -> VerbFragment:
-        """``build_fn`` adapter for :func:`verbalize_plural` — recurses via the fold."""
-        return self.ctx.child(expression)
 
     # ── phrase assembly ──────────────────────────────────────────────────────────
 

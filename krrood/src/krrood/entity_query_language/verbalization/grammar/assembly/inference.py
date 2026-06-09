@@ -69,10 +69,6 @@ class InferenceAssembler(Assembler[RuleStructure]):
             ],
         )
 
-    def _render_plural(self, expression, _context=None) -> VerbFragment:
-        """``build_fn`` adapter for :func:`verbalize_plural` — recurses via the fold."""
-        return self.ctx.child(expression)
-
     @staticmethod
     def _number(antecedent: AntecedentInfo) -> Number:
         """The grammatical number of an antecedent — plural iff aggregated."""
@@ -138,7 +134,7 @@ class InferenceAssembler(Assembler[RuleStructure]):
     def _value(self, expression, number: Number) -> VerbFragment:
         """Render a value expression in the given number (plural folds the chain)."""
         if number is Number.PLURAL:
-            return verbalize_plural(expression, self.ctx.context, self._render_plural)
+            return verbalize_plural(expression, self.ctx.context, self.ctx.child)
         return self.ctx.child(expression)
 
     # ── THEN clause ───────────────────────────────────────────────────────────
@@ -173,12 +169,12 @@ class InferenceAssembler(Assembler[RuleStructure]):
             return phrase(
                 Articles.THE.as_fragment(),
                 verbalize_plural(
-                    binding.value_expression, self.ctx.context, self._render_plural
+                    binding.value_expression, self.ctx.context, self.ctx.child
                 ),
             )
         if binding.is_plural_field:
             return verbalize_plural(
-                binding.value_expression, self.ctx.context, self._render_plural
+                binding.value_expression, self.ctx.context, self.ctx.child
             )
         if binding.aggregation_status == AggregationStatus.GROUP_KEY:
             return self._group_key_value(binding.value_expression)

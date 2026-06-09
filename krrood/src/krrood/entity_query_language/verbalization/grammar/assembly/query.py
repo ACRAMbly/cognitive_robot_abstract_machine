@@ -242,7 +242,7 @@ class QueryAssembler(Assembler[QueryPlan]):
         """Append *"among <plural source> such that <filter> having <filter>"*."""
         source = plan.aggregation_value.source
         source_frag = (
-            verbalize_plural(source, self.ctx.context, self._render_plural)
+            verbalize_plural(source, self.ctx.context, self.ctx.child)
             if source is not None
             else FallbackNouns.ENTITY.plural_fragment()
         )
@@ -352,7 +352,7 @@ class QueryAssembler(Assembler[QueryPlan]):
             return None
         groups_phrase = self._group_keys_phrase(group.keys)
         aggregated_frags = [
-            verbalize_plural(expr, self.ctx.context, self._render_plural)
+            verbalize_plural(expr, self.ctx.context, self.ctx.child)
             for expr in group.aggregated
         ]
         if aggregated_frags and not isinstance(node, SetOf):
@@ -426,9 +426,3 @@ class QueryAssembler(Assembler[QueryPlan]):
         return phrase(
             Articles.indefinite(type_name), RoleFragment.for_variable(type_name, var)
         )
-
-    # ── recursion adapter ──────────────────────────────────────────────────────
-
-    def _render_plural(self, expression, _context=None) -> VerbFragment:
-        """``build_fn`` adapter for :func:`verbalize_plural` — recurses via the fold."""
-        return self.ctx.child(expression)
