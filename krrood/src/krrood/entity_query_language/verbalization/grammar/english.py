@@ -47,6 +47,7 @@ from krrood.entity_query_language.verbalization.chain_utils import (
 )
 from krrood.entity_query_language.verbalization.fragments.base import (
     join_with,
+    NounPhrase,
     oxford_and,
     PhraseFragment,
     RoleFragment,
@@ -57,7 +58,10 @@ from krrood.entity_query_language.verbalization.fragments.factory import (
     role,
     word,
 )
-from krrood.entity_query_language.verbalization.fragments.features import Number
+from krrood.entity_query_language.verbalization.fragments.features import (
+    Definiteness,
+    Number,
+)
 from krrood.entity_query_language.verbalization.fragments.roles import SemanticRole
 from krrood.entity_query_language.verbalization.grammar.conditions.recognition import (
     is_bool_attr_chain,
@@ -74,9 +78,6 @@ from krrood.entity_query_language.verbalization.microplanning.coordination impor
     fold_range_pairs,
     has_pair,
     RangeFold,
-)
-from krrood.entity_query_language.verbalization.microplanning.referring import (
-    ArticleSelection,
 )
 from krrood.entity_query_language.verbalization.rendering.morphology_processor import (
     realize_subtree,
@@ -149,25 +150,28 @@ class VariableRule(PhraseRule):
         if ctx.number is Number.PLURAL:
             return self._plural(node, ctx)
         article, label = ctx.refer.noun_for_parts(node)
-        label_fragment = RoleFragment.for_variable(label, node)
-        if article == ArticleSelection.NONE:
-            return label_fragment
-        if article == ArticleSelection.DEFINITE:
-            return phrase(Articles.THE.as_fragment(), label_fragment)
-        return phrase(Articles.indefinite(label), label_fragment)
+        return NounPhrase(
+            head=RoleFragment.for_variable(label, node),
+            definiteness=article.definiteness(),
+        )
 
     @staticmethod
     def _plural(node, ctx: Ctx):
-        """Bare plural variable NP (*"Robots"*); the morphology pass inflects the leaf.
+        """Bare plural variable NP (*"Robots"*); the determiner phase drops the article and
+        the morphology pass inflects the head.
 
-        A numbered label (*"Robot 2"*) is surface-final (tagged singular); a plain type
-        name is tagged plural for the morphology pass to inflect.
+        A numbered label (*"Robot 2"*) is surface-final — kept singular and bare; a plain type
+        name is a plural indefinite NP (the concord table renders it bare-then-pluralised).
         """
         type_name = node._type_.__name__
         label = ctx.refer.disambiguation_map.get(node._id_, type_name)
         ctx.refer.register_label(node, label)
-        number = Number.SINGULAR if label != type_name else Number.PLURAL
-        return RoleFragment.for_variable(label, node, number=number)
+        numbered = label != type_name
+        return NounPhrase(
+            head=RoleFragment.for_variable(label, node),
+            number=Number.SINGULAR if numbered else Number.PLURAL,
+            definiteness=Definiteness.BARE if numbered else Definiteness.INDEFINITE,
+        )
 
 
 class LiteralRule(PhraseRule):
@@ -190,9 +194,7 @@ class ExternalVariableRule(PhraseRule):
         type_name = (
             node._type_.__name__ if getattr(node, "_type_", None) else "variable"
         )
-        return phrase(
-            Articles.indefinite(type_name), role(type_name, SemanticRole.VARIABLE)
-        )
+        return NounPhrase(head=role(type_name, SemanticRole.VARIABLE))
 
 
 # ── logical ──────────────────────────────────────────────────────────────────

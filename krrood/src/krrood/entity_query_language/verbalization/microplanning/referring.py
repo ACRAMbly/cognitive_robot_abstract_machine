@@ -30,10 +30,12 @@ from typing_extensions import Dict, List, Optional
 from krrood.entity_query_language.core.variable import Variable, Literal
 from krrood.entity_query_language.query.query import Entity, Query
 from krrood.entity_query_language.verbalization.fragments.base import (
+    NounPhrase,
     PhraseFragment,
     RoleFragment,
     VerbFragment,
 )
+from krrood.entity_query_language.verbalization.fragments.features import Definiteness
 from krrood.entity_query_language.verbalization.fragments.roles import SemanticRole
 from krrood.entity_query_language.verbalization.subquery import (
     aggregation_source_root,
@@ -60,6 +62,15 @@ class ArticleSelection(Enum):
     NONE = auto()  # numbered variable — no article
     DEFINITE = auto()  # subsequent mention → "the"
     INDEFINITE = auto()  # first mention → "a" / "an"
+
+    def definiteness(self) -> Definiteness:
+        """The realisation feature this coreference decision maps to (consumed by the
+        determiner phase): ``NONE`` → ``BARE``, else the matching definiteness."""
+        return {
+            ArticleSelection.NONE: Definiteness.BARE,
+            ArticleSelection.DEFINITE: Definiteness.DEFINITE,
+            ArticleSelection.INDEFINITE: Definiteness.INDEFINITE,
+        }[self]
 
 
 def _aggregation_source_ids(expression) -> set:
