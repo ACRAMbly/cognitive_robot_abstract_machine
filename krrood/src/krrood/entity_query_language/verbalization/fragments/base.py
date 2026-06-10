@@ -18,7 +18,10 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 from typing_extensions import Callable, List, Optional, TypeVar
 
-from krrood.entity_query_language.verbalization.fragments.features import Number
+from krrood.entity_query_language.verbalization.fragments.features import (
+    Definiteness,
+    Number,
+)
 from krrood.entity_query_language.verbalization.fragments.roles import SemanticRole
 from krrood.entity_query_language.verbalization.fragments.source_ref import SourceRef
 
@@ -151,6 +154,36 @@ class PhraseFragment(VerbFragment):
 
     separator: str = " "
     """String inserted between adjacent parts."""
+
+
+@dataclass
+class NounPhrase(VerbFragment):
+    """
+    A **noun-phrase specification** (a determiner phrase / DP) — carries the grammatical
+    features of a noun phrase, *not* its surface determiner.
+
+    A rule emits this whenever it means *"a noun phrase"*; the
+    :class:`~krrood.entity_query_language.verbalization.rendering.determiner_processor.DeterminerProcessor`
+    pass lowers it to a :class:`PhraseFragment`, choosing the determiner from
+    :attr:`definiteness` × :attr:`number` (the concord table) and tagging the head's
+    :class:`Number` so the morphology pass inflects it.  Centralising the determiner decision
+    here means it lives in exactly one place instead of being re-decided at every NP site.
+
+    Reference: Gatt & Reiter (2009), SimpleNLG — ``NPPhraseSpec`` (a phrase spec carrying
+    number / definiteness features, realised by a downstream processor).
+    """
+
+    head: VerbFragment
+    """The noun leaf/sub-phrase the determiner attaches to (e.g. a ``VARIABLE``-role noun)."""
+
+    number: Number = Number.SINGULAR
+    """Grammatical number — drives both head inflection and the determiner concord."""
+
+    definiteness: Definiteness = Definiteness.INDEFINITE
+    """Determiner-system feature — selects *"a/an"* / *"the"* / no determiner."""
+
+    modifiers: List[VerbFragment] = field(default_factory=list)
+    """Post-modifiers following the head (e.g. *"of the Root"*, *"where … such that …"*)."""
 
 
 @dataclass

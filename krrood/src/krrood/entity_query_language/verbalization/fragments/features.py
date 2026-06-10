@@ -26,3 +26,21 @@ class Number(Enum):
     def of(cls, is_plural: bool) -> "Number":
         """``PLURAL`` when *is_plural* else ``SINGULAR`` (bridges boolean plan features)."""
         return cls.PLURAL if is_plural else cls.SINGULAR
+
+
+class Definiteness(Enum):
+    """
+    Grammatical **definiteness** of a noun phrase — the determiner-system feature a rule
+    *tags* onto a :class:`~krrood.entity_query_language.verbalization.fragments.base.NounPhrase`
+    and the determiner phase *realises* (choosing *"a/an"* / *"the"* / no determiner, in
+    concord with :class:`Number`).
+
+    :cvar BARE: No determiner (a numbered label *"Robot 2"*, a bare predicate noun).
+    :cvar INDEFINITE: First, non-specific mention — *"a/an Robot"* (singular) or a **bare**
+        plural *"Robots"* (the indefinite article is inherently singular).
+    :cvar DEFINITE: Identifiable / subsequent mention — *"the Robot"* / *"the Robots"*.
+    """
+
+    BARE = "bare"
+    INDEFINITE = "indefinite"
+    DEFINITE = "definite"

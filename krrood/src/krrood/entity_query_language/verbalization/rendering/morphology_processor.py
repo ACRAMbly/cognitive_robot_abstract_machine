@@ -66,10 +66,16 @@ class MorphologyProcessor:
 
 def realize_subtree(fragment: VerbFragment) -> str:
     """
-    Fully realise a sub-tree to plain text — run the agreement pass, then flatten.
+    Fully realise a sub-tree to plain text — lower the DP, run the agreement pass, then flatten.
 
     For an **opaque leaf** (a user :class:`~krrood.entity_query_language.predicate.Verbalizable`
     template that string-formats its children): the template's content is opaque text, so it
-    must realise its children *here*, locally, rather than deferring to the global pass.
+    must realise its children *here*, locally, rather than deferring to the global passes (the
+    same determiner → morphology order the verbalizer applies).
     """
-    return flatten_fragment_to_plain_text(MorphologyProcessor().process(fragment))
+    from krrood.entity_query_language.verbalization.rendering.determiner_processor import (
+        DeterminerProcessor,
+    )
+
+    lowered = DeterminerProcessor().process(fragment)
+    return flatten_fragment_to_plain_text(MorphologyProcessor().process(lowered))
