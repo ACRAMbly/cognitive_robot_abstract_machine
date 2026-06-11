@@ -146,7 +146,6 @@ class ORMaticReliabilityAggregateResult(ExperimentResult):
 def reliability_experiment(
     plan_size: int,
     world: World,
-    pr2,
     ctx: Context,
     world_building_duration: float,
 ) -> ORMaticReliabilityExperimentResult:
@@ -156,7 +155,6 @@ def reliability_experiment(
 
     :param plan_size: Number of actions to include in the random plan.
     :param world: The pre-built world to create the plan in.
-    :param pr2: The PR2 robot view.
     :param ctx: The execution context.
     :param world_building_duration: Pre-measured world building time (s).
     :return: Timing breakdown for this single run.
@@ -300,10 +298,6 @@ def main():
     for plan_size in tqdm.tqdm(
         [
             1,
-            3,
-            5,
-            10,
-            20,
         ]
     ):
         aggregate, raw = run_reliability_experiment(plan_size, iterations=10)
