@@ -50,12 +50,12 @@ def comparator_operator(
     :param context: Shared verbalization state.
     :param negated: Outer negation (from a wrapping ``Not``).
     :param compact: Copula-less variant (HAVING clauses).  Defaults to
-        ``context.compact_predicates`` when ``None``.
+        ``context.config.compact_predicates`` when ``None``.
     :return: The operator fragment.
     :rtype: ~krrood.entity_query_language.verbalization.fragments.base.VerbFragment
     """
     if compact is None:
-        compact = context.compact_predicates
+        compact = context.config.compact_predicates
     op = comparator.operation
 
     is_calc = op in (operator.eq, operator.ne) and (

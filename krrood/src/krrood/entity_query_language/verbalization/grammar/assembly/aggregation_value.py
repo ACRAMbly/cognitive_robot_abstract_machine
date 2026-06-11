@@ -55,7 +55,7 @@ class AggregationValueAssembler(Assembler[Query, QueryPlan]):
     def realize(self, node, plan: QueryPlan) -> VerbFragment:
         av = plan.aggregation_value
         if av.leaf is None:
-            with self.ctx.context.query_depth_scope():
+            with self.ctx.config.query_depth_scope():
                 return self.ctx.child(av.aggregator)
 
         aggregation_kind = AGGREGATION_KIND[type(av.aggregator)]
@@ -90,7 +90,7 @@ class AggregationValueAssembler(Assembler[Query, QueryPlan]):
         ]
 
         if plan.subject_restriction is not None:
-            with self.ctx.context.query_depth_scope():
+            with self.ctx.config.query_depth_scope():
                 whose, residual = RestrictionAssembler(self.ctx).render(
                     plan.subject_restriction, plan.subject
                 )
@@ -99,7 +99,7 @@ class AggregationValueAssembler(Assembler[Query, QueryPlan]):
             if residual is not None:
                 parts += [Keywords.SUCH_THAT.as_fragment(), residual]
 
-        with self.ctx.context.query_depth_scope():
+        with self.ctx.config.query_depth_scope():
             having = HavingAssembler(self.ctx).clause(node)
         if having is not None:
             parts.append(having)

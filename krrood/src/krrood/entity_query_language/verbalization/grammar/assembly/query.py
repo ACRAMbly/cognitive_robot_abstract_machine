@@ -82,7 +82,7 @@ class QueryAssembler(Assembler[Query, QueryPlan]):
             SelectionKind.EMPTY: self._realize_empty,
             SelectionKind.SUBJECT: self._assemble_subject,
         }
-        with self.ctx.context.query_depth_scope():
+        with self.ctx.config.query_depth_scope():
             return handlers[plan.kind](node, plan)
 
     def _realize_entity_selector(self, node, plan: QueryPlan) -> VerbFragment:
@@ -111,7 +111,7 @@ class QueryAssembler(Assembler[Query, QueryPlan]):
     def assemble_set_of(self, node) -> VerbFragment:
         """*"Find (v1, v2, …) such that …"* for a SetOf query."""
         plan = self.plan(node)
-        with self.ctx.context.query_depth_scope():
+        with self.ctx.config.query_depth_scope():
             variable_fragments = [
                 self.ctx.child(variable) for variable in node._selected_variables_
             ]
@@ -183,7 +183,7 @@ class QueryAssembler(Assembler[Query, QueryPlan]):
 
         modifiers: List[VerbFragment] = []
         if plan.subject_restriction is not None:
-            with self.ctx.context.query_depth_scope():
+            with self.ctx.config.query_depth_scope():
                 whose, residual = RestrictionAssembler(self.ctx).render(
                     plan.subject_restriction, plan.subject
                 )
@@ -260,7 +260,7 @@ class QueryAssembler(Assembler[Query, QueryPlan]):
 
         where_expression = entity._where_expression_
         if where_expression is not None:
-            self.ctx.context.defer_constraint(where_expression.condition)
+            self.ctx.scope.defer_constraint(where_expression.condition)
 
         # A referring NP (referent_id below) — a repeat reduces to "the <type>" in the pass.
         return NounPhrase(

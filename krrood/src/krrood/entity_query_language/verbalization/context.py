@@ -23,20 +23,16 @@ from __future__ import annotations
 
 import datetime
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+
 from typing_extensions import Any
 
 from krrood.entity_query_language.verbalization.microplanning.binding_scope import (
     BindingScope,
 )
 from krrood.entity_query_language.verbalization.microplanning.config import RenderConfig
-from krrood.entity_query_language.verbalization.fragments.features import Definiteness
 from krrood.entity_query_language.verbalization.microplanning.referring import (
     ReferringExpressions,
 )
-
-if TYPE_CHECKING:
-    from krrood.entity_query_language.core.base_expressions import SymbolicExpression
 
 __all__ = ["VerbalizationContext"]
 
@@ -44,13 +40,20 @@ __all__ = ["VerbalizationContext"]
 @dataclass
 class VerbalizationContext:
     """
-    Facade over the microplanning services for one verbalization pass.
+    Facade holding the three microplanning services for one verbalization pass.
 
-    Holds a :class:`~krrood.entity_query_language.verbalization.microplanning.referring.ReferringExpressions`,
-    a :class:`~krrood.entity_query_language.verbalization.microplanning.binding_scope.BindingScope`,
-    and a :class:`~krrood.entity_query_language.verbalization.microplanning.config.RenderConfig`,
-    delegating to each.  Create via :meth:`from_expression` to pre-load the
-    disambiguation map.
+    Rules reach the services through their :class:`~krrood.entity_query_language.verbalization.grammar.phrase_rule.Ctx`
+    (``ctx.refer`` / ``ctx.scope`` / ``ctx.config``), so this context exposes only the service
+    objects themselves (:attr:`referring`, :attr:`binding`, :attr:`config`) plus the one
+    cross-cutting helper that belongs to no single service (:meth:`type_name_of_value`).  Create
+    via :meth:`from_expression` to pre-load the disambiguation map.
+
+    * :class:`~krrood.entity_query_language.verbalization.microplanning.referring.ReferringExpressions`
+      — coreference, articles, disambiguation, pronouns.
+    * :class:`~krrood.entity_query_language.verbalization.microplanning.binding_scope.BindingScope`
+      — deferred-constraint frames and field-reference overrides.
+    * :class:`~krrood.entity_query_language.verbalization.microplanning.config.RenderConfig`
+      — render-mode flags (query depth, compact predicates).
     """
 
     referring: ReferringExpressions = field(default_factory=ReferringExpressions)
@@ -72,71 +75,6 @@ class VerbalizationContext:
         :rtype: VerbalizationContext
         """
         return cls(referring=ReferringExpressions.from_expression(expression))
-
-    # ── Referring-expression delegation ──────────────────────────────────────
-
-    @property
-    def seen(self) -> set:
-        """Referent ids introduced so far (for cross-build seeding); see
-        :attr:`ReferringExpressions.seen`."""
-        return self.referring.seen
-
-    @property
-    def disambiguation_map(self) -> dict:
-        """Pre-computed disambiguation labels; see :attr:`ReferringExpressions.disambiguation_map`."""
-        return self.referring.disambiguation_map
-
-    def mark_introduced(self, expression) -> None:
-        """Delegate to :meth:`ReferringExpressions.mark_introduced`."""
-        self.referring.mark_introduced(expression)
-
-    def noun_for_parts(self, var) -> tuple[Definiteness, str]:
-        """Delegate to :meth:`ReferringExpressions.noun_for_parts`."""
-        return self.referring.noun_for_parts(var)
-
-    # ── Binding-scope delegation ─────────────────────────────────────────────
-
-    @property
-    def binding_overrides(self) -> dict:
-        """Field-reference override map; see :attr:`BindingScope.binding_overrides`."""
-        return self.binding.binding_overrides
-
-    @property
-    def constraint_exprs(self) -> list:
-        """Deferred-constraint frame stack; see :attr:`BindingScope.constraint_exprs`."""
-        return self.binding.constraint_exprs
-
-    def push_constraint_frame(self) -> None:
-        """Delegate to :meth:`BindingScope.push_constraint_frame`."""
-        self.binding.push_constraint_frame()
-
-    def pop_constraint_frame(self):
-        """Delegate to :meth:`BindingScope.pop_constraint_frame`."""
-        return self.binding.pop_constraint_frame()
-
-    def defer_constraint(self, expression: SymbolicExpression) -> None:
-        """Delegate to :meth:`BindingScope.defer_constraint`."""
-        self.binding.defer_constraint(expression)
-
-    # ── Render-config delegation ─────────────────────────────────────────────
-
-    @property
-    def query_depth(self) -> int:
-        """Current query/noun nesting depth; see :attr:`RenderConfig.query_depth`."""
-        return self.config.query_depth
-
-    @property
-    def compact_predicates(self) -> bool:
-        """Whether comparators drop the copula; see :attr:`RenderConfig.compact_predicates`."""
-        return self.config.compact_predicates
-
-    def query_depth_scope(self):
-        """Delegate to :meth:`RenderConfig.query_depth_scope`."""
-        return self.config.query_depth_scope()
-
-    def compact_predicates_scope(self):
-        """Delegate to :meth:`RenderConfig.compact_predicates_scope`."""
-        return self.config.compact_predicates_scope()
 
     # ── Value lexicalisation ─────────────────────────────────────────────────
 

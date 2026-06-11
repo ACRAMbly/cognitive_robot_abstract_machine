@@ -113,7 +113,7 @@ class HavingAssembler(Assembler[Any, None]):
     """*"having <condition>"* (compact comparators). Realisation-only (no plan)."""
 
     def realize(self, node, plan: None = None) -> VerbFragment:
-        with self.ctx.context.compact_predicates_scope():
+        with self.ctx.config.compact_predicates_scope():
             having_frag = self.ctx.child(node._having_expression_.condition)
         return PhraseFragment(parts=[Keywords.HAVING.as_fragment(), having_frag])
 

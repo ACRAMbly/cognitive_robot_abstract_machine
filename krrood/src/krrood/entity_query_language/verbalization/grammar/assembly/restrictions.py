@@ -74,7 +74,7 @@ class RestrictionAssembler:
                         self.ctx.child(item.chain_expression),
                         self.ctx.child(item.lower_expression),
                         self.ctx.child(item.upper_expression),
-                        compact=self.ctx.context.compact_predicates,
+                        compact=self.ctx.config.compact_predicates,
                     )
                 )
             else:
