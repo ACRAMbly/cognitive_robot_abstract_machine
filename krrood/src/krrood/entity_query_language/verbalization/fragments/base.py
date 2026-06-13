@@ -235,7 +235,7 @@ def fold_fragment(
 ) -> _T:
     """
     Fold a fragment tree into a value of type ``_T`` by supplying one handler per node kind —
-    the single, shared structural recursion over the IR.
+    the single, shared structural recursion over the fragment tree.
 
     This is the catamorphism over the fragment tree: the recursion scheme lives here once, and
     each caller provides an algebra (the four handlers) describing how to combine results.
@@ -261,8 +261,8 @@ def fold_fragment(
     match fragment:
         case WordFragment(text=text):
             return word(text)
-        case RoleFragment(text=text, role=semantic_role, source_reference=ref):
-            return role(text, semantic_role, ref)
+        case RoleFragment(text=text, role=semantic_role, source_reference=reference):
+            return role(text, semantic_role, reference)
         case PhraseFragment(parts=parts, separator=separator):
             folded = [
                 fold_fragment(p, word=word, role=role, phrase=phrase, block=block)

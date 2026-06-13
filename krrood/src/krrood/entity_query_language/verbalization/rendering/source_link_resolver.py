@@ -20,11 +20,11 @@ class SourceLinkResolver(Protocol):
     cannot be located.
     """
 
-    def resolve(self, ref: SourceReference) -> Optional[str]:
+    def resolve(self, reference: SourceReference) -> Optional[str]:
         """
-        Resolve *ref* to a URL string.
+        Resolve *reference* to a URL string.
 
-        :param ref: Source reference to resolve.
+        :param reference: Source reference to resolve.
         :return: URL string, or ``None`` when the reference cannot be resolved.
         """
         ...
@@ -44,9 +44,9 @@ class AutoAPIResolver:
     """Optional local path to the Sphinx HTML output directory.  When set, resolution verifies
     that the AutoAPI page exists on disk and logs a warning if it does not."""
 
-    def resolve(self, ref: SourceReference) -> Optional[str]:
+    def resolve(self, reference: SourceReference) -> Optional[str]:
         """
-        Resolve *ref* to a Sphinx AutoAPI page URL.
+        Resolve *reference* to a Sphinx AutoAPI page URL.
 
         Constructs the URL as::
 
@@ -55,18 +55,18 @@ class AutoAPIResolver:
         When ``html_root`` is set and the page does not exist on disk, logs a warning suggesting
         the docs be rebuilt.
 
-        :param ref: Source reference to resolve.
-        :return: AutoAPI page URL, or ``None`` when *ref.owner_type* has no ``__module__``.
+        :param reference: Source reference to resolve.
+        :return: AutoAPI page URL, or ``None`` when *reference.owner_type* has no ``__module__``.
         """
         try:
-            module = ref.owner_type.__module__
-            qualname = ref.owner_type.__qualname__
+            module = reference.owner_type.__module__
+            qualname = reference.owner_type.__qualname__
         except AttributeError:
             return None
         module_path = module.replace(".", "/")
         anchor = f"{module}.{qualname}"
-        if ref.attribute is not None:
-            anchor = f"{anchor}.{ref.attribute}"
+        if reference.attribute is not None:
+            anchor = f"{anchor}.{reference.attribute}"
         base = self.base_url.rstrip("/")
         url = f"{base}/autoapi/{module_path}/index.html#{anchor}"
         if self.html_root is not None:

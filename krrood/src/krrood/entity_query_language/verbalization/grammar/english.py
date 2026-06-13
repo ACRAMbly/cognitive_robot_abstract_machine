@@ -268,7 +268,7 @@ class NotComparatorRule(PhraseRule):
         return ConditionVerbalizer(context).predicate(node._child_, negated=True)
 
 
-class NotBoolAttrRule(PhraseRule):
+class NotBooleanAttributeRule(PhraseRule):
     """Negated boolean attribute chain *"<nav> is not <attribute>"* (Not over a bool-attribute chain)."""
 
     construct = Not

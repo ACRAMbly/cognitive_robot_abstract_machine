@@ -52,7 +52,7 @@ class FragmentRenderer(ABC):
 
     def _render_role(self, text: str, role, source_reference) -> str:
         """
-        Colorise *text* for *role* and, when a resolver and source ref are present, wrap the
+        Colorise *text* for *role* and, when a resolver and source reference are present, wrap the
         result with a hyperlink.
 
         :param text: Plain display text.
@@ -96,7 +96,7 @@ class ParagraphRenderer(FragmentRenderer):
         return fold_fragment(
             fragment,
             word=lambda text: text,
-            role=lambda text, role, ref: self._render_role(text, role, ref),
+            role=lambda text, role, reference: self._render_role(text, role, reference),
             phrase=lambda parts, separator: separator.join(parts),
             block=_block,
         )
@@ -168,7 +168,7 @@ class HierarchicalRenderer(FragmentRenderer):
         return fold_fragment(
             fragment,
             word=lambda text: text,
-            role=lambda text, role, ref: self._render_role(text, role, ref),
+            role=lambda text, role, reference: self._render_role(text, role, reference),
             phrase=lambda parts, separator: separator.join(parts),
             block=lambda block: self.render(block, 0),
         )

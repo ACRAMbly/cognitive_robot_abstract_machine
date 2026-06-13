@@ -99,9 +99,9 @@ def build_path_parts(chain: list[MappedVariable]) -> list[PathStep]:
     Merging rules:
 
     * Consecutive ``Attribute → Index`` pairs are merged into ``"attribute[key]"`` with no source
-      ref (composite indexed access has no clean single-symbol anchor).
-    * Standalone ``Index`` nodes appear as ``"[key]"`` with no source ref.
-    * ``Call`` nodes appear as ``"()"`` with no source ref.
+      reference (composite indexed access has no clean single-symbol anchor).
+    * Standalone ``Index`` nodes appear as ``"[key]"`` with no source reference.
+    * ``Call`` nodes appear as ``"()"`` with no source reference.
     * ``FlatVariable`` nodes are skipped.
 
     :param chain: Outermost-first chain list.
@@ -114,12 +114,16 @@ def build_path_parts(chain: list[MappedVariable]) -> list[PathStep]:
         if isinstance(node, Attribute):
             name = node._attribute_name_
             owner = node._owner_class_
-            ref: Optional[SourceReference] = SourceReference.for_attribute(owner, name)
+            reference: Optional[SourceReference] = SourceReference.for_attribute(
+                owner, name
+            )
             while i + 1 < len(chain) and isinstance(chain[i + 1], Index):
                 i += 1
                 name += f"[{repr(chain[i]._key_)}]"
-                ref = None  # composite indexed access has no clean single-line anchor
-            parts.append(PathStep(name, ref))
+                reference = (
+                    None  # composite indexed access has no clean single-line anchor
+                )
+            parts.append(PathStep(name, reference))
         elif isinstance(node, Index):
             parts.append(PathStep(f"[{repr(node._key_)}]", None))
         elif isinstance(node, Call):

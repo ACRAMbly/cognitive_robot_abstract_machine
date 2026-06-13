@@ -16,7 +16,8 @@ _log = logging.getLogger(__name__)
 
 
 #: Hex colour string (or ``None`` for no colour) for each semantic role, matching the
-#: query-graph palette.  Colour is a *formatter* concern — the IR carries only the role tag.
+#: query-graph palette.  Colour is a *formatter* concern — the fragment tree carries only the
+#: role tag.
 ROLE_COLORS: dict[SemanticRole, Optional[str]] = {
     SemanticRole.KEYWORD: "#eded18",  # ConclusionSelector yellow
     SemanticRole.VARIABLE: "cornflowerblue",
@@ -199,12 +200,10 @@ class HTMLFormatter(Formatter):
         return f'<span style="color:{color}">{text}</span>'
 
     def wrap_link(self, text: str, url: str, tooltip: Optional[str] = None) -> str:
-        tooltip_attr = (
+        tooltip_attribute = (
             f' {_TOOLTIP_ATTR}="{html.escape(tooltip, quote=True)}"' if tooltip else ""
         )
-        return (
-            f'<a target="_blank" rel="noopener" href="{url}"{tooltip_attr}>{text}</a>'
-        )
+        return f'<a target="_blank" rel="noopener" href="{url}"{tooltip_attribute}>{text}</a>'
 
     @property
     def space(self) -> str:

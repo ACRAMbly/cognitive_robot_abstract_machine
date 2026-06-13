@@ -16,7 +16,7 @@ from krrood.entity_query_language.verbalization.fragments.features import (  # n
 from krrood.entity_query_language.verbalization.fragments.roles import SemanticRole
 
 # ``Number`` is defined in ``fragments.features`` (below both this lexicon and the fragment
-# IR, to avoid a cycle) and re-exported here for the ``for_number`` selectors and importers.
+# tree, to avoid a cycle) and re-exported here for the ``for_number`` selectors and importers.
 
 
 @dataclass(frozen=True)
