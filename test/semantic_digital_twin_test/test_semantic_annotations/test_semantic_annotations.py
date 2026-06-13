@@ -368,18 +368,18 @@ def test_room_roles():
     assert len(Role.roles_for(room)) == 2
     assert Role.has_role(room, LivingRoom)
     assert not isinstance(room, LivingRoom)
-    assert isinstance(living_room, Room)
+    assert not isinstance(living_room, Room)
 
     assert living_room == kitchen
     assert hash(living_room) == hash(kitchen)
 
-    # Create the room implicitly
-    kitchen = Kitchen(floor=floor)
+    # Create the kitchen for an explicitly constructed room.
+    kitchen = Kitchen(room=Room(floor=floor))
     room = kitchen.room
     assert Role.roles_for(room, Kitchen)[0] == kitchen
     assert Role.has_role(room, Kitchen)
     assert not isinstance(room, Kitchen)
-    assert isinstance(kitchen, Room)
+    assert not isinstance(kitchen, Room)
     assert kitchen.floor is room.floor
 
 

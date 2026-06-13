@@ -22,8 +22,6 @@ from ..dataset.role_and_ontology.university_ontology_like_classes_without_descri
     Course,
     RepresentativeAsSecondRole,
     DelegateAsThirdRole,
-    DirectDiamondShapedInheritanceWhereOneIsRole,
-    RoleWithOtherBasesThatHaveTheirOwnInit,
 )
 
 
@@ -41,18 +39,26 @@ def test_getting_and_setting_attribute_for_role_and_role_taker():
     assert ceo.head_of == Company(name="BassCo")
 
 
-def test_is_instance_or_role():
+def test_role_is_not_an_instance_of_its_taker():
     person = PersonInRoleAndOntology(name="Bass")
     ceo = CEOAsFirstRole(person=person)
     representative = RepresentativeAsSecondRole(ceo=ceo)
-    assert isinstance(ceo, PersonInRoleAndOntology)
+
+    # Pure composition: a role is not an instance of its role-taker type.
+    assert not isinstance(ceo, PersonInRoleAndOntology)
+    assert not isinstance(representative, PersonInRoleAndOntology)
+    assert not isinstance(representative, CEOAsFirstRole)
+
+    # A role is an instance of its own role type, and the taker is plainly itself.
     assert isinstance(ceo, CEOAsFirstRole)
     assert isinstance(representative, RepresentativeAsSecondRole)
-    assert isinstance(representative, CEOAsFirstRole)
-    assert isinstance(representative, PersonInRoleAndOntology)
     assert isinstance(person, PersonInRoleAndOntology)
     assert isinstance(person, CEOAsFirstRole) is False
     assert isinstance(person, RepresentativeAsSecondRole) is False
+
+    # Role membership is expressed through has_role, not inheritance.
+    assert Role.has_role(person, CEOAsFirstRole)
+    assert Role.has_role(ceo, RepresentativeAsSecondRole)
 
 
 def test_role_native_attr_accessible_from_roles_dict():
@@ -166,27 +172,8 @@ def test_get_roles_of_type():
         Role.get_taker_roles_of_type(person, ProfessorAsFirstRole)[0],
         ProfessorAsFirstRole,
     )
-    assert len(Role.get_taker_roles_of_type(person, PersonInRoleAndOntology)) == 3
-
-
-def test_role_that_inherits_from_class_that_role_taker_inherits_from_that_has_default_attributes():
-    person = PersonInRoleAndOntology(name="Bass", default_name="BassDefault")
-    # DirectDiamondShapedInheritanceWhereOneIsRole inherits from HasName and
-    # DelegatorForPersonInRoleAndOntology; the mixin property delegates name to role_taker.
-    ceo = DirectDiamondShapedInheritanceWhereOneIsRole(person=person)
-    assert ceo.name == person.name
-    assert ceo.default_name == person.default_name
-
-
-def test_role_that_inherits_from_class_that_has_explicit_init():
-    person = PersonInRoleAndOntology(name="Bass", default_name="BassDefault")
-    role = RoleWithOtherBasesThatHaveTheirOwnInit(
-        person=person, base_attribute="blabla"
-    )
-    assert role.name == person.name
-    assert role.default_name == person.default_name
-    assert role.base_attribute == "blabla"
-    assert role.person is person
+    # All three roles (ceo, representative, professor) resolve back to the same taker.
+    assert len(Role.roles_for(person)) == 3
 
 
 def test_role_taker_associations():
