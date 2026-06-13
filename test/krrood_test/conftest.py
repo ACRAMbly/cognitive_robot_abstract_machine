@@ -35,7 +35,6 @@ from .dataset.example_classes import (
 from .dataset.role_and_ontology import university_ontology_like_classes_without_descriptors, \
     role_takers_in_another_module, classes_for_testing_role_recursion_error
 from .dataset.semantic_world_like_classes import *
-
 from .test_eql.conf.world.doors_and_drawers import DoorsAndDrawersWorld
 from .test_eql.conf.world.handles_and_containers import (
     HandlesAndContainersWorld,
@@ -91,11 +90,7 @@ def generate_sqlalchemy_interface():
 
     instance = ORMatic(
         class_dependency_graph=class_diagram,
-        type_mappings=TypeDict(
-            {
-                KRROODPhysicalObject: ConceptType,
-            }
-        ),
+        type_mappings=TypeDict({KRROODPhysicalObject: ConceptType}),
         alternative_mappings=recursive_subclasses(AlternativeMapping),
     )
 

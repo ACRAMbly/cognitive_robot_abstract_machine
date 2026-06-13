@@ -45,12 +45,19 @@ from krrood.class_diagrams.attribute_introspector import (
     AttributeIntrospector,
     DataclassOnlyIntrospector,
 )
+from krrood.class_diagrams.utils import Role, get_generic_type_param, resolve_type
 from krrood.class_diagrams.wrapped_field import WrappedField
 
-from krrood.class_diagrams.exceptions import ClassIsUnMappedInClassDiagram
+from krrood.class_diagrams.exceptions import (
+    ClassIsUnMappedInClassDiagram,
+    CouldNotResolveType,
+)
 
 if TYPE_CHECKING:
     from krrood.patterns.role import Role
+
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass

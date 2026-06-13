@@ -19,7 +19,11 @@ from typing_extensions import (
     ClassVar,
     TypeVar,
     Iterator,
+    TYPE_CHECKING,
 )
+
+if TYPE_CHECKING:
+    from krrood.entity_query_language.explanation.explanation import InferenceExplanation
 
 from krrood import logger
 from krrood.class_diagrams.class_diagram import ClassDiagram

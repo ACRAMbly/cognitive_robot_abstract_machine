@@ -29,6 +29,11 @@ from krrood.class_diagrams.utils import (
     behaves_like_a_built_in_type,
     get_type_hints_of_object,
 )
+from krrood.class_diagrams.utils import (
+    behaves_like_a_built_in_class,
+    common_base_class,
+    get_type_hints_of_object,
+)
 from krrood.utils import module_and_class_name, is_builtin_type
 
 if TYPE_CHECKING:
@@ -251,8 +256,13 @@ class WrappedField:
     def type_endpoint(self) -> Type:
         if self.is_container or self.is_optional:
             return self.contained_type
-        else:
-            return self.resolved_type
+        resolved = self.resolved_type
+        if get_origin(resolved) is Union:
+            non_none = [arg for arg in get_args(resolved) if arg is not NoneType]
+            lowest_common_ancestor = common_base_class(non_none)
+            if lowest_common_ancestor is not None:
+                return lowest_common_ancestor
+        return resolved
 
     @cached_property
     def is_role_taker(self) -> bool:
