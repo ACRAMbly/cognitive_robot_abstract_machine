@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing_extensions import ClassVar, Generic, Optional, Type, TypeVar
 
 from krrood.entity_query_language.verbalization.fragments.base import Fragment
-from krrood.entity_query_language.verbalization.grammar.phrase_rule import Ctx
+from krrood.entity_query_language.verbalization.grammar.phrase_rule import RuleContext
 from krrood.entity_query_language.verbalization.grammar.planning.base import Planner
 
 N = TypeVar("N")
@@ -29,7 +29,7 @@ class Assembler(ABC, Generic[N, P]):
     applications", ENLG — surface realisation as a dedicated stage.
     """
 
-    ctx: Ctx
+    context: RuleContext
     """The per-node context (recursion entry and microplanning services)."""
 
     planner: ClassVar[Optional[Type[Planner]]] = None

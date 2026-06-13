@@ -49,7 +49,7 @@ class GroupedByAssembler(Assembler[Union[Query, GroupedBy], GroupPlan]):
             return Keywords.GROUPED.as_fragment()
         groups_phrase = self._keys_phrase(plan.keys)
         aggregated_fragments = [
-            self.ctx.child(expr, number=Number.PLURAL) for expr in plan.aggregated
+            self.context.child(expression, number=Number.PLURAL) for expression in plan.aggregated
         ]
         if aggregated_fragments and not isinstance(node, SetOf):
             aggregated_phrase = oxford_and(
@@ -81,7 +81,7 @@ class GroupedByAssembler(Assembler[Union[Query, GroupedBy], GroupPlan]):
         :return: The comma-joined group keys *"<key1>, <key2>, …"*.
         """
         return PhraseFragment(
-            parts=[self.ctx.child(variable) for variable in variables],
+            parts=[self.context.child(variable) for variable in variables],
             separator=COMMA_SEPARATOR,
         )
 
@@ -113,7 +113,7 @@ class OrderedByAssembler(Assembler[Union[OrderedBy, OrderedByBuilder], None]):
         return PhraseFragment(
             parts=[
                 Keywords.ORDERED_BY.as_fragment(),
-                self.ctx.child(node.variable),
+                self.context.child(node.variable),
                 paren,
             ]
         )
@@ -137,8 +137,8 @@ class HavingAssembler(Assembler[Query, None]):
         :return: *"having <condition>"* — the condition rendered with compact (copula-less)
             comparators.
         """
-        with self.ctx.config.compact_predicates_scope():
-            having_fragment = self.ctx.child(node._having_expression_.condition)
+        with self.context.configuration.compact_predicates_scope():
+            having_fragment = self.context.child(node._having_expression_.condition)
         return PhraseFragment(parts=[Keywords.HAVING.as_fragment(), having_fragment])
 
     def clause(self, query: Query) -> Optional[Fragment]:

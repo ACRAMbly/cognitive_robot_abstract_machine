@@ -8,7 +8,7 @@ from pathlib import Path
 from typing_extensions import TYPE_CHECKING, Optional
 
 from krrood.entity_query_language.core.base_expressions import SymbolicExpression
-from krrood.entity_query_language.verbalization.context import VerbalizationContext
+from krrood.entity_query_language.verbalization.context import MicroplanningServices
 from krrood.entity_query_language.verbalization.fragments.base import Fragment
 from krrood.entity_query_language.verbalization.rendering.formatter import (
     ANSIFormatter,
@@ -94,19 +94,19 @@ class VerbalizationPipeline:
     def verbalize(
         self,
         expression: SymbolicExpression,
-        context: Optional[VerbalizationContext] = None,
+        services: Optional[MicroplanningServices] = None,
     ) -> str:
         """
         Verbalize *expression* to a string using this pipeline's renderer.
 
         :param expression: Any EQL expression or query.
-        :param context: Shared verbalization state; created automatically when omitted.  Pass the
-            same context across calls so repeated mentions corefer (a Robot … the Robot).
+        :param services: Shared verbalization state; created automatically when omitted.  Pass the
+            same services across calls so repeated mentions corefer (a Robot … the Robot).
         :return: Formatted natural-language string (plain, ANSI, or HTML, per the renderer).
         """
         if isinstance(expression, Query):
             expression.build()
-        fragment = self._verbalizer.build(expression, context)
+        fragment = self._verbalizer.build(expression, services)
         return self.verbalize_fragment(fragment)
 
     def _is_html_renderer(self) -> bool:

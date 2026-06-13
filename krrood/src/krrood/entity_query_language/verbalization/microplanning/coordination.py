@@ -96,9 +96,9 @@ def fold_range_pairs(
     preserving the order of everything else.
 
     This is the coordination (aggregation) microplanning task — conjunction reduction folding
-    ``x >= lo`` and ``x <= hi`` into ``x is between lo and hi``. Direction (not position) decides
-    which operand is the lower vs upper bound, so ``t.x <= hi`` written before ``t.x >= lo`` still
-    yields ``between lo and hi``.
+    ``x >= low`` and ``x <= high`` into ``x is between low and high``. Direction (not position) decides
+    which operand is the lower vs upper bound, so ``t.x <= high`` written before ``t.x >= low`` still
+    yields ``between low and high``.
 
     References:
 
@@ -110,18 +110,18 @@ def fold_range_pairs(
     :param conjuncts: A flat list of conjuncts (e.g. the operands of an ``AND``).
     :return: A list whose items are either the original expressions or range folds.
     """
-    infos = [_classify(conjunct) for conjunct in conjuncts]
+    classifications = [_classify(conjunct) for conjunct in conjuncts]
     slots: List[Union[SymbolicExpression, RangeFold]] = list(conjuncts)
     dropped = [False] * len(conjuncts)
     # chain_key -> indices of bounds awaiting a complement (always one direction at a time).
     awaiting: Dict[ChainKey, List[int]] = {}
-    for i, info in enumerate(infos):
-        if info is None:
+    for i, classification in enumerate(classifications):
+        if classification is None:
             continue
-        key, bound = info
+        key, bound = classification
         queue = awaiting.setdefault(key, [])
         # A waiting bound of the opposite direction → fold the pair; else enqueue and wait.
-        if queue and infos[queue[0]][1] is not bound:
+        if queue and classifications[queue[0]][1] is not bound:
             j = queue.pop(0)
             lower, upper = (
                 (conjuncts[j], conjuncts[i])
@@ -180,7 +180,7 @@ def build_between(
     compact: bool,
 ) -> Fragment:
     """
-    Build *"<left> is between <lo> and <hi>"* (or copula-less *"<left> between …"* when *compact*).
+    Build *"<left> is between <low> and <high>"* (or copula-less *"<left> between …"* when *compact*).
 
     :param left_fragment: The already-rendered left side (a full chain, or a bare attribute).
     :param lower_fragment: Rendered lower-bound value.

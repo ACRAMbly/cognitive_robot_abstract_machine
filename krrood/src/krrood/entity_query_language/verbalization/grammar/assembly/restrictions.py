@@ -12,7 +12,7 @@ from krrood.entity_query_language.verbalization.fragments.base import (
     PhraseFragment,
     Fragment,
 )
-from krrood.entity_query_language.verbalization.grammar.phrase_rule import Ctx
+from krrood.entity_query_language.verbalization.grammar.phrase_rule import RuleContext
 from krrood.entity_query_language.verbalization.grammar.planning.query import (
     RestrictionPlan,
 )
@@ -38,7 +38,7 @@ class RestrictionFragments:
     """The rendered pieces of a subject restriction, each placed by the caller."""
 
     superlatives: List[Fragment] = field(default_factory=list)
-    """Selection PP modifiers, e.g. *"with the maximum amount"* (attach right after the noun)."""
+    """Selection prepositional phrase modifiers, e.g. *"with the maximum amount"* (attach right after the noun)."""
 
     whose: Optional[Fragment] = None
     """The appositive *"whose <grouped>"* modifier, or ``None``."""
@@ -60,7 +60,7 @@ class RestrictionAssembler:
     Reference: Reiter & Dale (2000) — content structuring (the WHERE partition is the plan).
     """
 
-    ctx: Ctx
+    context: RuleContext
     """The per-node context (recursion entry and microplanning services)."""
 
     def render(
@@ -76,7 +76,7 @@ class RestrictionAssembler:
         """
         by_placement: Dict[Placement, List[Fragment]] = defaultdict(list)
         for rule, item in restriction.matched:
-            by_placement[rule.placement].append(rule.render(item, subject, self.ctx))
+            by_placement[rule.placement].append(rule.render(item, subject, self.context))
 
         superlatives = by_placement.pop(Placement.SELECTION_MODIFIER, [])
         grouped = by_placement.pop(Placement.WHOSE_GROUP, [])
@@ -111,7 +111,7 @@ class RestrictionAssembler:
         """
         parts: List[Fragment] = [
             fragment_for_folded_conjunct(
-                item, self.ctx.child, compact=self.ctx.config.compact_predicates
+                item, self.context.child, compact=self.context.configuration.compact_predicates
             )
             for item in items
         ]

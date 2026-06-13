@@ -46,7 +46,7 @@ class ConditionPlan:
     """One antecedent WHERE condition, with its foldability decided up front.
 
     ``whose_attribute_name`` is the singular attribute name when the condition is a single-hop
-    attribute equality that folds into a *"whose <attr> is …"* modifier, else ``None``.
+    attribute equality that folds into a *"whose <attribute> is …"* modifier, else ``None``.
     """
 
     expression: SymbolicExpression
@@ -57,7 +57,7 @@ class ConditionPlan:
 
 
 @dataclass
-class AntecedentInfo:
+class AntecedentInformation:
     """Descriptor for one antecedent variable in the IF clause."""
 
     root: Union[Variable, Entity]
@@ -94,10 +94,10 @@ class ConsequentBinding:
 class RuleStructure:
     """Complete decomposition of an inference-rule Entity query (the plan)."""
 
-    primary_antecedents: List[AntecedentInfo]
+    primary_antecedents: List[AntecedentInformation]
     """Antecedents with at least one condition — items in the IF block."""
 
-    secondary_antecedents: List[AntecedentInfo]
+    secondary_antecedents: List[AntecedentInformation]
     """Antecedents with no conditions — only registered for coreference."""
 
     consequent_type: str
@@ -196,7 +196,7 @@ class InferencePlanner(Planner[Entity, RuleStructure]):
 
     def _plan_antecedents(
         self, group_key_ids: FrozenSet[uuid.UUID]
-    ) -> Tuple[List[AntecedentInfo], List[SymbolicExpression]]:
+    ) -> Tuple[List[AntecedentInformation], List[SymbolicExpression]]:
         """Discover antecedent roots, then attribute outer-WHERE conditions to them.
 
         :return: The antecedents (their ``conditions`` mutated in place) and the conditions that
@@ -208,14 +208,14 @@ class InferencePlanner(Planner[Entity, RuleStructure]):
 
     def _discover_antecedents(
         self, group_key_ids: FrozenSet[uuid.UUID]
-    ) -> List[AntecedentInfo]:
-        antecedents_by_root_id: Dict[uuid.UUID, AntecedentInfo] = {}
+    ) -> List[AntecedentInformation]:
+        antecedents_by_root_id: Dict[uuid.UUID, AntecedentInformation] = {}
         for child in self._inferred._child_vars_.values():
             root = self._find_root(child)
             if root is None or root._id_ in antecedents_by_root_id:
                 continue
             type_name, own_conditions = self._extract_root_info(root)
-            antecedents_by_root_id[root._id_] = AntecedentInfo(
+            antecedents_by_root_id[root._id_] = AntecedentInformation(
                 root=root,
                 type_name=type_name,
                 aggregation_status=self._aggregation_status(root._id_, group_key_ids),
@@ -229,7 +229,7 @@ class InferencePlanner(Planner[Entity, RuleStructure]):
 
     def _attribute_conditions(
         self,
-        antecedents: List[AntecedentInfo],
+        antecedents: List[AntecedentInformation],
         extra_conditions: List[SymbolicExpression],
     ) -> List[SymbolicExpression]:
         """Distribute outer-WHERE conditions to owning antecedents (in place).
@@ -250,7 +250,7 @@ class InferencePlanner(Planner[Entity, RuleStructure]):
         return unmatched
 
     def _antecedent_variable_id(
-        self, antecedent: AntecedentInfo
+        self, antecedent: AntecedentInformation
     ) -> Optional[uuid.UUID]:
         """:return: The stable ``_id_`` of the underlying variable for an antecedent."""
         root = antecedent.root
@@ -262,7 +262,7 @@ class InferencePlanner(Planner[Entity, RuleStructure]):
     def _condition_left_owner_id(
         self, condition: SymbolicExpression
     ) -> Optional[uuid.UUID]:
-        """:return: The ``_id_`` of the root variable on the LHS of an equality condition, else
+        """:return: The ``_id_`` of the root variable on the left-hand side of an equality condition, else
         ``None``."""
         if (
             not isinstance(condition, Comparator)
@@ -320,10 +320,10 @@ class InferencePlanner(Planner[Entity, RuleStructure]):
         )
 
     def _whose_attribute_name(self, condition: SymbolicExpression) -> Optional[str]:
-        """Foldable iff it is an attribute equality (``Attribute == value``); the modifier
+        """Foldable if and only if it is an attribute equality (``Attribute == value``); the modifier
         attribute is the last hop of the attribute chain.
 
-        :return: The singular attribute name when *condition* folds to *"whose <attr> is …"*,
+        :return: The singular attribute name when *condition* folds to *"whose <attribute> is …"*,
             else ``None``.
         """
         if (

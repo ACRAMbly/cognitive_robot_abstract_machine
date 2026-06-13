@@ -17,7 +17,7 @@ from krrood.entity_query_language.verbalization.grammar.conditions.recognition i
 from krrood.entity_query_language.verbalization.grammar.conditions.verbalizer import (
     ConditionVerbalizer,
 )
-from krrood.entity_query_language.verbalization.grammar.phrase_rule import Ctx
+from krrood.entity_query_language.verbalization.grammar.phrase_rule import RuleContext
 from krrood.entity_query_language.verbalization.grammar.selection import SpecificityRule
 from krrood.entity_query_language.verbalization.microplanning.coordination import (
     RangeFold,
@@ -32,7 +32,7 @@ class Placement(Enum):
     restriction surface slots."""
 
     SELECTION_MODIFIER = auto()
-    """A post-nominal PP on the selection — *"<noun> with the maximum amount"*."""
+    """A post-nominal prepositional phrase on the selection — *"<noun> with the maximum amount"*."""
     WHOSE_GROUP = auto()
     """A bare predicate gathered under one shared *"whose …, and …"* envelope."""
 
@@ -66,18 +66,18 @@ class RestrictionRule(SpecificityRule):
         cls,
         item: Union[SymbolicExpression, RangeFold],
         subject_variable: Variable,
-        ctx: Ctx,
+        context: RuleContext,
     ) -> Fragment:
         """
         :param item: The folded conjunct this rule matched.
         :param subject_variable: The variable the restriction is on.
-        :param ctx: The per-node context (recursion and services).
+        :param context: The per-node context (recursion and services).
         :return: *item* rendered as the fragment for this rule's placement.
         """
 
 
 class RangeRestrictionRule(RestrictionRule):
-    """A range fold on a single-hop subject attribute → *"<attr> is between lo and hi"*."""
+    """A range fold on a single-hop subject attribute → *"<attribute> is between low and high"*."""
 
     placement = Placement.WHOSE_GROUP
 
@@ -92,14 +92,14 @@ class RangeRestrictionRule(RestrictionRule):
         )
 
     @classmethod
-    def render(cls, item: RangeFold, subject_variable: Variable, ctx: Ctx) -> Fragment:
-        return ConditionVerbalizer(ctx).range_modifier(item, subject_variable)
+    def render(cls, item: RangeFold, subject_variable: Variable, context: RuleContext) -> Fragment:
+        return ConditionVerbalizer(context).range_modifier(item, subject_variable)
 
 
 class AttributePredicateRestrictionRule(RestrictionRule):
     """
-    A single-hop, non-boolean subject-attribute comparator whose RHS does not reference the
-    subject → *"<attr> is greater than 100"* / *"<attr> is equal to <calc>"*.
+    A single-hop, non-boolean subject-attribute comparator whose right-hand side does not reference the
+    subject → *"<attribute> is greater than 100"* / *"<attribute> is equal to <calc>"*.
     """
 
     placement = Placement.WHOSE_GROUP
@@ -110,14 +110,14 @@ class AttributePredicateRestrictionRule(RestrictionRule):
     ) -> bool:
         if not isinstance(item, Comparator):
             return False
-        attr = single_hop_attribute(item.left, subject_variable)
-        if attr is None or attr._type_ is bool:
+        attribute = single_hop_attribute(item.left, subject_variable)
+        if attribute is None or attribute._type_ is bool:
             return False
         return not references(item.right, subject_variable)
 
     @classmethod
-    def render(cls, item: Comparator, subject_variable: Variable, ctx: Ctx) -> Fragment:
-        return ConditionVerbalizer(ctx).attribute_modifier(item, subject_variable)
+    def render(cls, item: Comparator, subject_variable: Variable, context: RuleContext) -> Fragment:
+        return ConditionVerbalizer(context).attribute_modifier(item, subject_variable)
 
 
 class SuperlativeRestrictionRule(RestrictionRule):
@@ -136,8 +136,8 @@ class SuperlativeRestrictionRule(RestrictionRule):
         return superlative_aggregation(item, subject_variable) is not None
 
     @classmethod
-    def render(cls, item: Comparator, subject_variable: Variable, ctx: Ctx) -> Fragment:
-        return ConditionVerbalizer(ctx).superlative_modifier(item, subject_variable)
+    def render(cls, item: Comparator, subject_variable: Variable, context: RuleContext) -> Fragment:
+        return ConditionVerbalizer(context).superlative_modifier(item, subject_variable)
 
 
 def match_restriction(

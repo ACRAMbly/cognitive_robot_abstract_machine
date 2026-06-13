@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from typing_extensions import Optional
 
 from krrood.entity_query_language.core.base_expressions import SymbolicExpression
-from krrood.entity_query_language.verbalization.context import VerbalizationContext
+from krrood.entity_query_language.verbalization.context import MicroplanningServices
 from krrood.entity_query_language.verbalization.engine import fold
 from krrood.entity_query_language.verbalization.fragments.base import Fragment
 from krrood.entity_query_language.verbalization.grammar.english import RULES
@@ -23,23 +23,23 @@ class EQLVerbalizer:
     def build(
         self,
         expression: SymbolicExpression,
-        context: Optional[VerbalizationContext] = None,
+        services: Optional[MicroplanningServices] = None,
     ) -> Fragment:
         """
         Translate *expression* into its natural-language fragment tree.
 
-        A fresh context is created when *context* is ``None``; pass a shared context across calls
-        so repeated mentions corefer (a Robot … the Robot).
+        A fresh services bundle is created when *services* is ``None``; pass a shared one across
+        calls so repeated mentions corefer (a Robot … the Robot).
 
         :param expression: Any EQL symbolic expression.
-        :param context: Shared verbalization state; created automatically when omitted.
+        :param services: Shared verbalization state; created automatically when omitted.
         :return: Root of the fragment tree representing *expression* in natural language.
         """
-        if context is None:
-            context = VerbalizationContext.from_expression(expression)
-        # Referents already introduced by prior builds on this (shared) context, so the same
+        if services is None:
+            services = MicroplanningServices.from_expression(expression)
+        # Referents already introduced by prior builds on these (shared) services, so the same
         # expression verbalized twice reads "a Robot" then "the Robot".  Snapshot BEFORE the
         # fold, which records this build's own mentions in the same set.
-        already_seen = set(context.referring.seen)
-        fragment = fold(expression, context, RULES)
+        already_seen = set(services.referring.seen)
+        fragment = fold(expression, services, RULES)
         return realize_tree(fragment, already_seen=already_seen)

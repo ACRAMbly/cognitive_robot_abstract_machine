@@ -101,7 +101,7 @@ class QueryAssembler(Assembler[Query, QueryPlan]):
         """
         plan = self.plan(node)
         if plan.is_aggregation_subquery:
-            return AggregationValueAssembler(self.ctx).realize(node, plan)
+            return AggregationValueAssembler(self.context).realize(node, plan)
         return self._as_noun(node)
 
     def assemble_set_of(self, node: SetOf) -> Fragment:
@@ -111,7 +111,7 @@ class QueryAssembler(Assembler[Query, QueryPlan]):
         """
         plan = self.plan(node)
         variable_fragments = [
-            self.ctx.child(variable) for variable in node._selected_variables_
+            self.context.child(variable) for variable in node._selected_variables_
         ]
         variables_phrase = PhraseFragment(
             parts=variable_fragments, separator=COMMA_SEPARATOR
@@ -151,14 +151,14 @@ class QueryAssembler(Assembler[Query, QueryPlan]):
         noun phrase."""
         if plan.is_the:
             # "the unique <type>" first mention; the coreference pass reduces a repeat to
-            # "the <type>" (UNIQUE downgrades to DEFINITE) — so it is a referring NP.
+            # "the <type>" (UNIQUE downgrades to DEFINITE) — so it is a referring noun phrase.
             return NounPhrase(
                 head=RoleFragment.for_variable(plan.selected_type, variable),
                 definiteness=Definiteness.UNIQUE,
                 referent_id=_subject_id(variable),
             )
-        # ctx.child(variable) → VariableRule referring NP; the entity shares its referent.
-        return self.ctx.child(variable)
+        # context.child(variable) → VariableRule referring noun phrase; the entity shares its referent.
+        return self.context.child(variable)
 
     def _apply_subject_restrictions(
         self, plan: QueryPlan, selected: Fragment
@@ -168,7 +168,7 @@ class QueryAssembler(Assembler[Query, QueryPlan]):
         restriction = plan.subject_restriction
         if restriction is None:
             return selected, None
-        rendered = RestrictionAssembler(self.ctx).render(restriction, plan.subject)
+        rendered = RestrictionAssembler(self.context).render(restriction, plan.subject)
         modifiers = [*rendered.superlatives] + (
             [rendered.whose] if rendered.whose is not None else []
         )
@@ -197,7 +197,7 @@ class QueryAssembler(Assembler[Query, QueryPlan]):
 
         modifiers: List[Fragment] = []
         if plan.subject_restriction is not None:
-            rendered = RestrictionAssembler(self.ctx).render(
+            rendered = RestrictionAssembler(self.context).render(
                 plan.subject_restriction, plan.subject
             )
             modifiers.extend(rendered.superlatives)
@@ -247,9 +247,9 @@ class QueryAssembler(Assembler[Query, QueryPlan]):
     def _trailing_clauses(self, node: Query) -> List[Optional[Fragment]]:
         """:return: The post-selection clauses, in canonical reading order (``None`` when absent)."""
         return [
-            GroupedByAssembler(self.ctx).clause(node),
-            HavingAssembler(self.ctx).clause(node),
-            OrderedByAssembler(self.ctx).clause(node),
+            GroupedByAssembler(self.context).clause(node),
+            HavingAssembler(self.context).clause(node),
+            OrderedByAssembler(self.context).clause(node),
         ]
 
     def _where_clause(self, plan: QueryPlan) -> Optional[Fragment]:
@@ -259,7 +259,7 @@ class QueryAssembler(Assembler[Query, QueryPlan]):
         return PhraseFragment(
             parts=[
                 Keywords.SUCH_THAT.as_fragment(),
-                self.ctx.child(plan.where_condition),
+                self.context.child(plan.where_condition),
             ]
         )
 
@@ -280,9 +280,9 @@ class QueryAssembler(Assembler[Query, QueryPlan]):
 
         where_expression = entity._where_expression_
         if where_expression is not None:
-            self.ctx.scope.defer_constraint(where_expression.condition)
+            self.context.scope.defer_constraint(where_expression.condition)
 
-        # A referring NP (referent_id below) — a repeat reduces to "the <type>" in the pass.
+        # A referring noun phrase (referent_id below) — a repeat reduces to "the <type>" in the pass.
         return NounPhrase(
             head=RoleFragment.for_variable(type_name, variable),
             referent_id=_subject_id(variable),

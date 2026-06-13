@@ -82,7 +82,7 @@ def build_path_parts(
 
     Merging rules:
 
-    * Consecutive ``Attribute → Index`` pairs are merged into ``"attr[key]"`` with ``ref=None``
+    * Consecutive ``Attribute → Index`` pairs are merged into ``"attribute[key]"`` with ``ref=None``
       (composite indexed access has no clean single-symbol anchor).
     * Standalone ``Index`` nodes appear as ``"[key]"`` with ``ref=None``.
     * ``Call`` nodes appear as ``"()"`` with ``ref=None``.

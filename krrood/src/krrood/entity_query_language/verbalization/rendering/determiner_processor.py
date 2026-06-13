@@ -24,7 +24,7 @@ class DeterminerProcessor:
     """
     Lower every noun phrase to a determiner-bearing phrase.
 
-    Rules emit a noun-phrase spec carrying grammatical features (number + definiteness) but no
+    Rules emit a noun-phrase specification carrying grammatical features (number + definiteness) but no
     surface determiner. This pass walks the finished fragment tree and replaces every noun phrase
     with a plain phrase, choosing the determiner from the single concord table:
 
@@ -46,7 +46,7 @@ class DeterminerProcessor:
     def process(self, fragment: Fragment) -> Fragment:
         """
         :param fragment: Root of the fragment tree.
-        :return: A new tree with every noun phrase lowered (idempotent on NP-free trees).
+        :return: A new tree with every noun phrase lowered (idempotent on noun phrase-free trees).
         """
         return map_fragment(fragment, self._lower_if_noun_phrase)
 

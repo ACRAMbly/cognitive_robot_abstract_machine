@@ -48,7 +48,7 @@ class AutoAPIResolver:
 
         Constructs the URL as::
 
-            {base_url}/autoapi/{module/path}/index.html#{module.QualName[.attr]}
+            {base_url}/autoapi/{module/path}/index.html#{module.QualName[.attribute]}
 
         When ``html_root`` is set and the page does not exist on disk, logs a warning suggesting
         the docs be rebuilt.

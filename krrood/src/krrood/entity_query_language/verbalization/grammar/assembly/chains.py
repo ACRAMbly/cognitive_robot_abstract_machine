@@ -76,7 +76,7 @@ class ChainAssembler(Assembler[MappedVariable, None]):
             possessive path *"the attribute of the Root"*.
         """
         analysis = ChainAnalysis.of(expression)
-        if self.ctx.number is Number.PLURAL:
+        if self.context.number is Number.PLURAL:
             plural = self._plural_attribute(analysis)
             if plural is not None:
                 return plural
@@ -106,7 +106,7 @@ class ChainAssembler(Assembler[MappedVariable, None]):
             and isinstance(analysis.chain[0], Attribute)
         ):
             return None
-        label, numbered = self.ctx.refer.numbered_label(root)
+        label, numbered = self.context.refer.numbered_label(root)
         attribute = analysis.chain[0]
         root_noun_phrase = NounPhrase(
             head=RoleFragment.for_variable(label, root),
@@ -130,8 +130,8 @@ class ChainAssembler(Assembler[MappedVariable, None]):
         """
         inner = unwrap_result_quantifiers(root)
         if isinstance(inner, Entity):
-            return QueryAssembler(self.ctx).inline_noun(inner)
-        return self.ctx.child(root)
+            return QueryAssembler(self.context).inline_noun(inner)
+        return self.context.child(root)
 
     def _boolean_predicative(self, analysis: ChainAnalysis, negated: bool) -> Fragment:
         """

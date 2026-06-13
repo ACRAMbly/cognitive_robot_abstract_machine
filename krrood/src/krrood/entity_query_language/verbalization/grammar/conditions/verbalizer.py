@@ -38,9 +38,9 @@ class ConditionVerbalizer(Assembler[Comparator, None]):
     of every surface form a condition can take.
 
     A comparator/condition is said differently depending on where it sits: a standalone predicate
-    (*"x is greater than 5"*), a post-nominal attribute modifier on a subject (the bare *"<attr>
-    op <value>"* that a *"whose …"* envelope wraps), a range modifier (*"<attr> is between lo and
-    hi"*), or the inference whose-attribute body (*"<attr> is <value>"* agreeing in number).
+    (*"x is greater than 5"*), a post-nominal attribute modifier on a subject (the bare *"<attribute>
+    op <value>"* that a *"whose …"* envelope wraps), a range modifier (*"<attribute> is between low and
+    high"*), or the inference whose-attribute body (*"<attribute> is <value>"* agreeing in number).
 
     Reference: Gatt & Reiter (2009), SimpleNLG — surface realisation.
     """
@@ -61,9 +61,9 @@ class ConditionVerbalizer(Assembler[Comparator, None]):
         """
         return PhraseFragment(
             parts=[
-                self.ctx.child(comparator.left),
-                comparator_operator(comparator, self.ctx.context, negated=negated),
-                self.ctx.child(comparator.right),
+                self.context.child(comparator.left),
+                comparator_operator(comparator, self.context.services, negated=negated),
+                self.context.child(comparator.right),
             ]
         )
 
@@ -71,7 +71,7 @@ class ConditionVerbalizer(Assembler[Comparator, None]):
         """
         :param comparator: The comparator on *subject*'s single-hop attribute.
         :param subject: The subject variable.
-        :return: The bare *"<attr> <operator> <value>"* grouped predicate a *"whose …"* envelope
+        :return: The bare *"<attribute> <operator> <value>"* grouped predicate a *"whose …"* envelope
             wraps.
         """
         attribute = single_hop_attribute(comparator.left, subject)
@@ -80,8 +80,8 @@ class ConditionVerbalizer(Assembler[Comparator, None]):
                 RoleFragment.for_attribute(
                     attribute._owner_class_, attribute._attribute_name_
                 ),
-                comparator_operator(comparator, self.ctx.context, compact=False),
-                self.ctx.child(comparator.right),
+                comparator_operator(comparator, self.context.services, compact=False),
+                self.context.child(comparator.right),
             ]
         )
 
@@ -107,7 +107,7 @@ class ConditionVerbalizer(Assembler[Comparator, None]):
         """
         :param range_fold: The folded lower/upper bound pair on *subject*'s single-hop attribute.
         :param subject: The subject variable.
-        :return: The modifier *"<attr> is between lo and hi"*.
+        :return: The modifier *"<attribute> is between low and high"*.
         """
         attribute = single_hop_attribute(range_fold.chain_expression, subject)
         left = RoleFragment.for_attribute(
@@ -115,8 +115,8 @@ class ConditionVerbalizer(Assembler[Comparator, None]):
         )
         return build_between(
             left,
-            self.ctx.child(range_fold.lower_expression),
-            self.ctx.child(range_fold.upper_expression),
+            self.context.child(range_fold.lower_expression),
+            self.context.child(range_fold.upper_expression),
             compact=False,
         )
 
@@ -129,7 +129,7 @@ class ConditionVerbalizer(Assembler[Comparator, None]):
         :param attribute_name: The attribute's name.
         :param number: The grammatical number the noun and copula agree with.
         :param value: The value fragment (supplied by the caller; it may itself be number-folded).
-        :return: The full *"whose <attr> <copula> <value>"* modifier.
+        :return: The full *"whose <attribute> <copula> <value>"* modifier.
         """
         return PhraseFragment(
             parts=[

@@ -22,7 +22,7 @@ from krrood.entity_query_language.verbalization.grammar.conditions.verbalizer im
 )
 from krrood.entity_query_language.verbalization.grammar.planning.inference import (
     AggregationStatus,
-    AntecedentInfo,
+    AntecedentInformation,
     ConsequentBinding,
     InferencePlanner,
     ConditionPlan,
@@ -66,8 +66,8 @@ class InferenceAssembler(Assembler[Entity, RuleStructure]):
         )
 
     @staticmethod
-    def _number(antecedent: AntecedentInfo) -> Number:
-        """:return: The grammatical number of an antecedent — plural iff aggregated."""
+    def _number(antecedent: AntecedentInformation) -> Number:
+        """:return: The grammatical number of an antecedent — plural if and only if aggregated."""
         return Number.of(antecedent.aggregation_status == AggregationStatus.AGGREGATED)
 
     # ── IF clause ───────────────────────────────────────────────────────────────
@@ -94,18 +94,18 @@ class InferenceAssembler(Assembler[Entity, RuleStructure]):
             )
 
         for condition in structure.unmatched_conditions:
-            items.append(self.ctx.child(condition))
+            items.append(self.context.child(condition))
 
         return items or [Keywords.TRUE.as_fragment()]
 
-    def _antecedent_intro(self, antecedent: AntecedentInfo) -> Fragment:
+    def _antecedent_intro(self, antecedent: AntecedentInformation) -> Fragment:
         """:return: *"there's a <Type>"* / *"there are <Types>"* — the antecedent's existential intro."""
         return ExistentialPhrase.for_number(self._number(antecedent)).build_phrase(
             antecedent.type_name, referent_id=self._antecedent_referent_id(antecedent)
         )
 
     @staticmethod
-    def _antecedent_referent_id(antecedent: AntecedentInfo) -> Optional[uuid.UUID]:
+    def _antecedent_referent_id(antecedent: AntecedentInformation) -> Optional[uuid.UUID]:
         """
         :return: The antecedent's canonical referent id — the selected variable for an entity
             root, else the root's own id (matching the variable the THEN-clause chains reference).
@@ -116,19 +116,19 @@ class InferenceAssembler(Assembler[Entity, RuleStructure]):
             return getattr(root.selected_variable, "_id_", None)
         return getattr(root, "_id_", None)
 
-    def _register_antecedent(self, antecedent: AntecedentInfo) -> None:
+    def _register_antecedent(self, antecedent: AntecedentInformation) -> None:
         """Mark the antecedent (and its selected variable) introduced, so later mentions in
         the THEN clause read *"the <Type>"*."""
         root = antecedent.root
-        self.ctx.refer.mark_introduced(root)
+        self.context.refer.mark_introduced(root)
         if isinstance(root, Entity):
             root.build()
             selected = root.selected_variable
             if selected is not None and hasattr(selected, "_id_"):
-                self.ctx.refer.mark_introduced(selected)
+                self.context.refer.mark_introduced(selected)
 
     def _condition_fragments(
-        self, conditions: List[ConditionPlan], antecedent: AntecedentInfo
+        self, conditions: List[ConditionPlan], antecedent: AntecedentInformation
     ) -> List[Fragment]:
         """:return: One fragment per antecedent condition."""
         return [
@@ -137,21 +137,21 @@ class InferenceAssembler(Assembler[Entity, RuleStructure]):
         ]
 
     def _condition_fragment(
-        self, condition_plan: ConditionPlan, antecedent: AntecedentInfo
+        self, condition_plan: ConditionPlan, antecedent: AntecedentInformation
     ) -> Fragment:
-        """:return: One rendered condition — a *"whose <attr> is …"* modifier when foldable, else
+        """:return: One rendered condition — a *"whose <attribute> is …"* modifier when foldable, else
         the recursive rendering."""
         if condition_plan.whose_attribute_name is None:
-            return self.ctx.child(condition_plan.expression)
+            return self.context.child(condition_plan.expression)
         number = self._number(antecedent)
         value = self._value(condition_plan.expression.right, number)
-        return ConditionVerbalizer(self.ctx).whose_attribute(
+        return ConditionVerbalizer(self.context).whose_attribute(
             condition_plan.whose_attribute_name, number, value
         )
 
     def _value(self, expression: SymbolicExpression, number: Number) -> Fragment:
         """:return: *expression* rendered agreeing with *number* (plural folds the chain)."""
-        return self.ctx.child(expression, number=number)
+        return self.context.child(expression, number=number)
 
     # ── THEN clause ───────────────────────────────────────────────────────────
 
@@ -170,7 +170,7 @@ class InferenceAssembler(Assembler[Entity, RuleStructure]):
     def _binding_fragment(self, binding: ConsequentBinding) -> Fragment:
         """:return: *"whose <field> is/are <value>"* — one consequent field binding."""
         number = Number.of(binding.is_plural_field)
-        return ConditionVerbalizer(self.ctx).whose_attribute(
+        return ConditionVerbalizer(self.context).whose_attribute(
             binding.field_name, number, self._binding_value(binding)
         )
 
@@ -186,26 +186,26 @@ class InferenceAssembler(Assembler[Entity, RuleStructure]):
             return PhraseFragment(
                 parts=[
                     Articles.THE.as_fragment(),
-                    self.ctx.child(binding.value_expression, number=Number.PLURAL),
+                    self.context.child(binding.value_expression, number=Number.PLURAL),
                 ]
             )
         if binding.is_plural_field:
-            return self.ctx.child(binding.value_expression, number=Number.PLURAL)
+            return self.context.child(binding.value_expression, number=Number.PLURAL)
         if binding.aggregation_status == AggregationStatus.GROUP_KEY:
             return self._group_key_value(binding.value_expression)
-        return self.ctx.child(binding.value_expression)
+        return self.context.child(binding.value_expression)
 
     def _group_key_value(self, expression: SymbolicExpression) -> Fragment:
         """:return: *"the common <field> of the <Roots>"* — a binding that refers to a GROUP BY key."""
         chain, current = walk_chain(expression)
         if not chain or not isinstance(current, Variable):
-            return self.ctx.child(expression)
+            return self.context.child(expression)
         root_type = (
             current._type_.__name__
             if getattr(current, "_type_", None)
             else FallbackNouns.ENTITY.text
         )
-        self.ctx.refer.mark_introduced(current)
+        self.context.refer.mark_introduced(current)
         parts = build_path_parts(chain)
         field = list(reversed(parts))[0][0] if parts else root_type
         return GroupKeyPhrases.COMMON_OF.build_phrase(field, root_type)

@@ -54,11 +54,11 @@ class InstantiatedAssembler(Assembler[InstantiatedVariable, InstantiatedPlan]):
         :return: *"a TypeName, where the <field> of the TypeName is <value> …, such that
             <deferred>"*.
         """
-        self.ctx.scope.push_constraint_frame()
+        self.context.scope.push_constraint_frame()
         binding_fragments, overrides = self._bindings(plan, node._type_)
-        self.ctx.scope.binding_overrides.update(overrides)
-        deferred = self.ctx.scope.pop_constraint_frame()
-        constraint_fragments = [self.ctx.child(expression) for expression in deferred]
+        self.context.scope.binding_overrides.update(overrides)
+        deferred = self.context.scope.pop_constraint_frame()
+        constraint_fragments = [self.context.child(expression) for expression in deferred]
 
         return self._phrase(
             node, plan.type_name, binding_fragments, constraint_fragments
@@ -110,7 +110,7 @@ class InstantiatedAssembler(Assembler[InstantiatedVariable, InstantiatedPlan]):
 
     def _value(self, binding: BindingPlan) -> Fragment:
         """:return: The binding's value expression, rendered in the binding's number."""
-        return self.ctx.child(binding.value, number=Number.of(binding.is_plural))
+        return self.context.child(binding.value, number=Number.of(binding.is_plural))
 
     # ── phrase assembly ──────────────────────────────────────────────────────────
 
@@ -148,7 +148,7 @@ class InstantiatedAssembler(Assembler[InstantiatedVariable, InstantiatedPlan]):
                     ]
                 )
             )
-        # A referring NP: "a <type>" first mention (+ appositive clauses), reduced to
+        # A referring noun phrase: "a <type>" first mention (+ appositive clauses), reduced to
         # "the <type>" on a repeat by the CoreferenceProcessor (which drops the modifiers).
         return NounPhrase(
             head=RoleFragment.for_variable(type_name, node),

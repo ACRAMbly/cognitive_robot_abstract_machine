@@ -9,19 +9,19 @@ from krrood.entity_query_language.core.base_expressions import SymbolicExpressio
 from krrood.entity_query_language.verbalization.microplanning.binding_scope import (
     BindingScope,
 )
-from krrood.entity_query_language.verbalization.microplanning.config import RenderConfig
+from krrood.entity_query_language.verbalization.microplanning.config import RenderConfiguration
 from krrood.entity_query_language.verbalization.microplanning.referring import (
     ReferringExpressions,
 )
 
-__all__ = ["VerbalizationContext"]
+__all__ = ["MicroplanningServices"]
 
 
 @dataclass
-class VerbalizationContext:
+class MicroplanningServices:
     """
     The three microplanning services for one verbalization pass: the referring-expression
-    service, the binding scope, and the render config.
+    service, the binding scope, and the render configuration.
 
     The split mirrors the microplanning subtasks of Reiter & Dale (2000).
     """
@@ -32,11 +32,11 @@ class VerbalizationContext:
     binding: BindingScope = field(default_factory=BindingScope)
     """Deferred-constraint frames and field-reference overrides."""
 
-    config: RenderConfig = field(default_factory=RenderConfig)
+    configuration: RenderConfiguration = field(default_factory=RenderConfiguration)
     """Render-mode flags (query depth, compact predicates)."""
 
     @classmethod
-    def from_expression(cls, expression: SymbolicExpression) -> VerbalizationContext:
+    def from_expression(cls, expression: SymbolicExpression) -> MicroplanningServices:
         """
         Create a context with the disambiguation map pre-built for *expression*.
 

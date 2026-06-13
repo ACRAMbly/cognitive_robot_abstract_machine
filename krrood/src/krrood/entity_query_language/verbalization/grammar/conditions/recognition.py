@@ -44,7 +44,7 @@ def single_hop_attribute(
     """
     :param expression: Candidate expression.
     :param subject_variable: The variable the attribute must be on.
-    :return: The attribute node when *expression* is exactly ``subject_variable.<attr>``, else
+    :return: The attribute node when *expression* is exactly ``subject_variable.<attribute>``, else
         ``None``.
     """
     if subject_variable is None or not isinstance(expression, MappedVariable):
@@ -61,7 +61,7 @@ def references(expression: SymbolicExpression, subject_variable: Variable) -> bo
     """
     :param expression: Candidate expression.
     :param subject_variable: The variable to look for.
-    :return: ``True`` when *expression* mentions *subject_variable* (so it is not a clean RHS
+    :return: ``True`` when *expression* mentions *subject_variable* (so it is not a clean right-hand side
         value).
     """
     try:

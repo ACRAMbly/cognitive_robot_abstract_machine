@@ -56,7 +56,7 @@ class AggregationValueAssembler(Assembler[Query, QueryPlan]):
         """
         aggregation_data = plan.aggregation_data
         if aggregation_data.leaf is None:
-            return self.ctx.child(aggregation_data.aggregator)
+            return self.context.child(aggregation_data.aggregator)
 
         aggregation_kind = AGGREGATION_KIND[type(aggregation_data.aggregator)]
         plural_leaf = aggregation_kind.value.child_form == ChildForm.PLURAL
@@ -88,7 +88,7 @@ class AggregationValueAssembler(Assembler[Query, QueryPlan]):
         """
         source = plan.aggregation_data.source
         source_fragment = (
-            self.ctx.child(source, number=Number.PLURAL)
+            self.context.child(source, number=Number.PLURAL)
             if source is not None
             else FallbackNouns.ENTITY.plural_fragment()
         )
@@ -99,7 +99,7 @@ class AggregationValueAssembler(Assembler[Query, QueryPlan]):
         ]
 
         if plan.subject_restriction is not None:
-            rendered = RestrictionAssembler(self.ctx).render(
+            rendered = RestrictionAssembler(self.context).render(
                 plan.subject_restriction, plan.subject
             )
             parts.extend(rendered.superlatives)
@@ -108,7 +108,7 @@ class AggregationValueAssembler(Assembler[Query, QueryPlan]):
             if rendered.residual is not None:
                 parts += [Keywords.SUCH_THAT.as_fragment(), rendered.residual]
 
-        having = HavingAssembler(self.ctx).clause(node)
+        having = HavingAssembler(self.context).clause(node)
         if having is not None:
             parts.append(having)
 

@@ -7,7 +7,7 @@ from typing_extensions import Iterator
 
 
 @dataclass
-class RenderConfig:
+class RenderConfiguration:
     """
     Mutable render-mode flags for the current verbalization pass — the small set that switch how
     a clause is realised, independent of *what* is said:

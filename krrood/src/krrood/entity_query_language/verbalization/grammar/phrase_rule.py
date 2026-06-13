@@ -10,12 +10,12 @@ from krrood.entity_query_language.verbalization.fragments.features import Number
 from krrood.entity_query_language.verbalization.grammar.selection import most_specific
 
 if TYPE_CHECKING:
-    from krrood.entity_query_language.verbalization.context import VerbalizationContext
+    from krrood.entity_query_language.verbalization.context import MicroplanningServices
     from krrood.entity_query_language.verbalization.microplanning.binding_scope import (
         BindingScope,
     )
     from krrood.entity_query_language.verbalization.microplanning.config import (
-        RenderConfig,
+        RenderConfiguration,
     )
     from krrood.entity_query_language.verbalization.microplanning.referring import (
         ReferringExpressions,
@@ -23,7 +23,7 @@ if TYPE_CHECKING:
 
 
 @dataclass
-class Ctx:
+class RuleContext:
     """
     Per-node context handed to a rule's ``build``.
 
@@ -35,8 +35,8 @@ class Ctx:
     """Recurse on a sub-expression — the fold continuation.  Accepts an optional ``number=`` to
     request a plural realisation of the child."""
 
-    context: VerbalizationContext
-    """The owning verbalization context."""
+    services: MicroplanningServices
+    """The owning microplanning services."""
 
     number: Number = Number.SINGULAR
     """Grammatical number requested for this node.  A number-aware rule reads it to build a
@@ -45,17 +45,17 @@ class Ctx:
     @property
     def refer(self) -> ReferringExpressions:
         """:return: The referring-expression service (articles, coreference, pronouns)."""
-        return self.context.referring
+        return self.services.referring
 
     @property
     def scope(self) -> BindingScope:
         """:return: The binding-scope service (deferred constraints + field overrides)."""
-        return self.context.binding
+        return self.services.binding
 
     @property
-    def config(self) -> RenderConfig:
+    def configuration(self) -> RenderConfiguration:
         """:return: The render-mode flags (query depth, compact predicates)."""
-        return self.context.config
+        return self.services.configuration
 
 
 class PhraseRule(ABC):
@@ -86,7 +86,7 @@ class PhraseRule(ABC):
     """``True`` on a rule whose construct is itself a query body, so an entity found anywhere
     within it renders as a nested noun phrase."""
 
-    def when(self, node: SymbolicExpression, ctx: Ctx) -> bool:
+    def when(self, node: SymbolicExpression, context: RuleContext) -> bool:
         """
         Extra precondition beyond ``isinstance(node, construct)``.
 
@@ -94,18 +94,18 @@ class PhraseRule(ABC):
         rule's applicability (a guarded rule outranks an unguarded one on the same construct).
 
         :param node: The candidate EQL expression.
-        :param ctx: The per-node context (recursion and services).
+        :param context: The per-node context (recursion and services).
         :return: ``True`` when the rule applies to *node*.
         """
         return True
 
     @abstractmethod
-    def build(self, node: SymbolicExpression, ctx: Ctx) -> Fragment:
+    def build(self, node: SymbolicExpression, context: RuleContext) -> Fragment:
         """
         Build the fragment for *node*.
 
         :param node: The EQL expression to verbalize.
-        :param ctx: The per-node context (recursion and services).
+        :param context: The per-node context (recursion and services).
         :return: The fragment for *node*.
         """
 
@@ -127,7 +127,7 @@ def _is_guarded(rule: PhraseRule) -> bool:
 
 
 def select(
-    node: SymbolicExpression, rules: Sequence[PhraseRule], ctx: Ctx
+    node: SymbolicExpression, rules: Sequence[PhraseRule], context: RuleContext
 ) -> Optional[PhraseRule]:
     """
     Specificity key, highest wins: ``(construct MRO depth, guarded over unguarded, explicit
@@ -135,14 +135,14 @@ def select(
 
     :param node: The EQL expression being dispatched.
     :param rules: The grammar.
-    :param ctx: The per-node context, passed to each rule's ``when``.
+    :param context: The per-node context, passed to each rule's ``when``.
     :return: The most-specific rule whose ``construct`` and ``when`` match *node*, or ``None``
         when none apply (the caller supplies the fallback).
     """
     candidates = [
         rule
         for rule in rules
-        if isinstance(node, rule.construct) and rule.when(node, ctx)
+        if isinstance(node, rule.construct) and rule.when(node, context)
     ]
     return most_specific(
         candidates,

@@ -45,7 +45,7 @@ def possessive_path(parts: List[PathPart], root_fragment: Fragment) -> Fragment:
 
 
 def pronominal_path(parts: List[PathPart], pronoun: Fragment) -> Fragment:
-    """:return: *"its attr"* (single hop) or *"the attr of its foo"* (multi-hop)."""
+    """:return: *"its attribute"* (single hop) or *"the attribute of its foo"* (multi-hop)."""
     if not parts:
         return pronoun
     reversed_parts = list(reversed(parts))
