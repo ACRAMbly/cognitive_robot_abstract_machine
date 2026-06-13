@@ -43,22 +43,28 @@ def test_noun_for_parts_returns_first_mention_form_and_records():
     refer = ReferringExpressions()
     var = variable(Robot, domain=[])
 
-    definiteness, label = refer.noun_for_parts(var)
-    assert (definiteness, label) == (Definiteness.INDEFINITE, "Robot")
+    noun_form = refer.noun_for_parts(var)
+    assert (noun_form.definiteness, noun_form.label) == (
+        Definiteness.INDEFINITE,
+        "Robot",
+    )
     assert var._id_ in refer.seen  # mention recorded for the build-time services
 
     # The subsequent-mention downgrade now lives in the CoreferenceProcessor, so
     # noun_for_parts keeps returning the first-mention (indefinite) form.
-    definiteness, label = refer.noun_for_parts(var)
-    assert (definiteness, label) == (Definiteness.INDEFINITE, "Robot")
+    noun_form = refer.noun_for_parts(var)
+    assert (noun_form.definiteness, noun_form.label) == (
+        Definiteness.INDEFINITE,
+        "Robot",
+    )
 
 
 def test_noun_for_parts_numbered_variable_takes_no_article():
     var = variable(Robot, domain=[])
     refer = ReferringExpressions(disambiguation_map={var._id_: "Robot 2"})
 
-    definiteness, label = refer.noun_for_parts(var)
-    assert (definiteness, label) == (Definiteness.BARE, "Robot 2")
+    noun_form = refer.noun_for_parts(var)
+    assert (noun_form.definiteness, noun_form.label) == (Definiteness.BARE, "Robot 2")
 
 
 def test_noun_for_parts_records_the_mention():

@@ -121,10 +121,10 @@ class VariableRule(PhraseRule):
     def build(self, node: Variable, context: RuleContext) -> Fragment:
         if context.number is Number.PLURAL:
             return self._plural(node, context)
-        definiteness, label = context.refer.noun_for_parts(node)
+        noun_form = context.refer.noun_for_parts(node)
         return NounPhrase(
-            head=RoleFragment.for_variable(label, node),
-            definiteness=definiteness,
+            head=RoleFragment.for_variable(noun_form.label, node),
+            definiteness=noun_form.definiteness,
             referent_id=node._id_,
         )
 
@@ -136,11 +136,13 @@ class VariableRule(PhraseRule):
         A numbered label (*"Robot 2"*) is surface-final — kept singular and bare; a plain type
         name is a plural indefinite noun phrase (the concord table renders it bare-then-pluralised).
         """
-        label, numbered = context.refer.numbered_label(node)
+        numbered = context.refer.numbered_label(node)
         return NounPhrase(
-            head=RoleFragment.for_variable(label, node),
-            number=Number.SINGULAR if numbered else Number.PLURAL,
-            definiteness=Definiteness.BARE if numbered else Definiteness.INDEFINITE,
+            head=RoleFragment.for_variable(numbered.text, node),
+            number=Number.SINGULAR if numbered.is_numbered else Number.PLURAL,
+            definiteness=(
+                Definiteness.BARE if numbered.is_numbered else Definiteness.INDEFINITE
+            ),
             referent_id=node._id_,
         )
 

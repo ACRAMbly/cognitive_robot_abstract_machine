@@ -106,12 +106,14 @@ class ChainAssembler(Assembler[MappedVariable, None]):
             and isinstance(analysis.chain[0], Attribute)
         ):
             return None
-        label, numbered = self.context.refer.numbered_label(root)
+        numbered = self.context.refer.numbered_label(root)
         attribute = analysis.chain[0]
         root_noun_phrase = NounPhrase(
-            head=RoleFragment.for_variable(label, root),
-            number=Number.SINGULAR if numbered else Number.PLURAL,
-            definiteness=Definiteness.BARE if numbered else Definiteness.INDEFINITE,
+            head=RoleFragment.for_variable(numbered.text, root),
+            number=Number.SINGULAR if numbered.is_numbered else Number.PLURAL,
+            definiteness=(
+                Definiteness.BARE if numbered.is_numbered else Definiteness.INDEFINITE
+            ),
             referent_id=root._id_,
         )
         return NounPhrase(

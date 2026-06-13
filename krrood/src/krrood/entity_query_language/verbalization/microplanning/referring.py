@@ -15,6 +15,28 @@ from krrood.entity_query_language.verbalization.subquery import (
 )
 
 
+@dataclass(frozen=True)
+class NumberedLabel:
+    """A variable's disambiguation label and whether it was numbered (*"Robot"* vs *"Robot 2"*)."""
+
+    text: str
+    """The display label — the plain type name, or a numbered *"TypeName N"* on a collision."""
+
+    is_numbered: bool
+    """``True`` when the label was disambiguated with a number (so it renders ``BARE``)."""
+
+
+@dataclass(frozen=True)
+class NounForm:
+    """The first-mention determiner form for a variable noun: its definiteness and label."""
+
+    definiteness: Definiteness
+    """``BARE`` for a numbered label, else ``INDEFINITE`` (*"a Robot"*)."""
+
+    label: str
+    """The display label for the noun head."""
+
+
 def _aggregation_source_ids(expression: SymbolicExpression) -> Set[uuid.UUID]:
     """
     Such a variable denotes a population to aggregate over, not a specific entity, so it must not
@@ -116,14 +138,14 @@ class ReferringExpressions:
         """Record *expression* as introduced (so a later build sharing this context seeds it)."""
         self.seen.add(expression._id_)
 
-    def numbered_label(self, variable: Variable) -> tuple[str, bool]:
+    def numbered_label(self, variable: Variable) -> NumberedLabel:
         """Records *variable* as introduced.
 
         The label is the pre-computed disambiguation label (*"Robot 2"* for a colliding type),
         else the plain type name; *is_numbered* is whether they differ.
 
         :param variable: A variable instance.
-        :return: Tuple of ``(display_label, is_numbered)``.
+        :return: The :class:`NumberedLabel` for *variable*.
         """
         type_name = (
             variable._type_.__name__
@@ -132,13 +154,16 @@ class ReferringExpressions:
         )
         label = self.disambiguation_map.get(variable._id_, type_name)
         self.seen.add(variable._id_)
-        return label, label != type_name
+        return NumberedLabel(label, label != type_name)
 
-    def noun_for_parts(self, variable: Variable) -> tuple[Definiteness, str]:
+    def noun_for_parts(self, variable: Variable) -> NounForm:
         """
         :param variable: A variable instance.
-        :return: The first-mention ``(Definiteness, label)`` for *variable* — a numbered variable
+        :return: The first-mention :class:`NounForm` for *variable* — a numbered variable
             (*"Robot 2"*) is ``BARE``, any other is ``INDEFINITE`` (*"a Robot"*).
         """
-        label, is_numbered = self.numbered_label(variable)
-        return (Definiteness.BARE if is_numbered else Definiteness.INDEFINITE), label
+        numbered = self.numbered_label(variable)
+        definiteness = (
+            Definiteness.BARE if numbered.is_numbered else Definiteness.INDEFINITE
+        )
+        return NounForm(definiteness, numbered.text)
