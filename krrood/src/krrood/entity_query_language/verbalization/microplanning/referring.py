@@ -134,10 +134,6 @@ class ReferringExpressions:
         """
         return cls(disambiguation_map=_build_disambiguation_map(expression))
 
-    def mark_introduced(self, expression: SymbolicExpression) -> None:
-        """Record *expression* as introduced (so a later build sharing this context seeds it)."""
-        self.seen.add(expression._id_)
-
     def numbered_label(self, variable: Variable) -> NumberedLabel:
         """Records *variable* as introduced.
 

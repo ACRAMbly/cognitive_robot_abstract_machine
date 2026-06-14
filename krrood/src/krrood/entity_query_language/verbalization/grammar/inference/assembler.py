@@ -77,13 +77,9 @@ class InferenceAssembler(Assembler[Entity, RuleStructure]):
         :return: One item per antecedent — *"there's a <Type> [whose …]"* — plus any unmatched
             conditions; *"true"* when there are none.
         """
-        for antecedent in structure.secondary_antecedents:
-            self._register_antecedent(antecedent)
-
         items: List[Fragment] = []
         for antecedent in structure.primary_antecedents:
             intro = self._antecedent_intro(antecedent)
-            self._register_antecedent(antecedent)
             condition_fragments = self._condition_fragments(
                 antecedent.conditions, antecedent
             )
@@ -117,17 +113,6 @@ class InferenceAssembler(Assembler[Entity, RuleStructure]):
             root.build()
             return getattr(root.selected_variable, "_id_", None)
         return getattr(root, "_id_", None)
-
-    def _register_antecedent(self, antecedent: AntecedentInformation) -> None:
-        """Mark the antecedent (and its selected variable) introduced, so later mentions in
-        the THEN clause read *"the <Type>"*."""
-        root = antecedent.root
-        self.context.refer.mark_introduced(root)
-        if isinstance(root, Entity):
-            root.build()
-            selected = root.selected_variable
-            if selected is not None and hasattr(selected, "_id_"):
-                self.context.refer.mark_introduced(selected)
 
     def _condition_fragments(
         self, conditions: List[ConditionPlan], antecedent: AntecedentInformation
@@ -207,7 +192,6 @@ class InferenceAssembler(Assembler[Entity, RuleStructure]):
             if getattr(current, "_type_", None)
             else FallbackNouns.ENTITY.text
         )
-        self.context.refer.mark_introduced(current)
         parts = build_path_parts(chain)
         field = list(reversed(parts))[0].name if parts else root_type
         return GroupKeyPhrases.COMMON_OF.build_phrase(field, root_type)
