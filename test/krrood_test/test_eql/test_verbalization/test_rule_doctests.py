@@ -32,6 +32,7 @@ _MODULES = [english, restriction, chains]
 # Names every rule docstring may use, so each example stays a single line.
 _FACTORY_NAMES = [
     "variable",
+    "a",
     "an",
     "the",
     "entity",

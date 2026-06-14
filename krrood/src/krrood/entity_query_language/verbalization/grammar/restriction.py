@@ -232,6 +232,12 @@ class AggregationSourceSubjectRule(RestrictionSubjectRule):
     The selection aggregates over a single source variable's chain (e.g.
     ``max(t.amount_details.amount)``); the ``WHERE`` restricts that aggregated entity,
     whose noun ends the selection so a *"whose …"* modifier attaches grammatically.
+
+    >>> employee = variable(Employee, [])
+    >>> verbalize_expression(
+    ...     an(entity(max(employee.salary)).where(employee.department == 'Sales'))
+    ... )
+    "Find the maximum of the salary of an Employee whose department is 'Sales'"
     """
 
     @classmethod
