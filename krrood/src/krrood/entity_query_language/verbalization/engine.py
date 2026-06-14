@@ -10,7 +10,7 @@ from krrood.entity_query_language.verbalization.grammar.framework.phrase_rule im
     PhraseRule,
     select,
 )
-from krrood.entity_query_language.verbalization.grammar.english import RULES
+from krrood.entity_query_language.verbalization.grammar.framework.registry import RULES
 from krrood.entity_query_language.verbalization.exceptions import (
     UnverbalizableExpressionError,
 )

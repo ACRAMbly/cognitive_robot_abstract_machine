@@ -22,22 +22,35 @@ import krrood.entity_query_language.factories as eql
 from krrood.entity_query_language.operators.core_logical_operators import Not
 from krrood.entity_query_language.operators.logical_quantifiers import Exists, ForAll
 from krrood.entity_query_language.verbalization import example_domain
-from krrood.entity_query_language.verbalization.grammar import english
-from krrood.entity_query_language.verbalization.grammar.conditions import restriction
+from krrood.entity_query_language.verbalization.grammar.terms import rules as terms_rules
+from krrood.entity_query_language.verbalization.grammar.conditions import (
+    restriction,
+    rules as conditions_rules,
+)
 from krrood.entity_query_language.verbalization.grammar.chain import (
     assembler as chain_assembler,
     planner as chain_planner,
+    rules as chain_rules,
 )
 from krrood.entity_query_language.verbalization.grammar.query import (
     assembler as query_assembler,
     planner as query_planner,
+    rules as query_rules,
 )
 from krrood.entity_query_language.verbalization.grammar.clauses import (
     assembler as clauses_assembler,
     planner as clauses_planner,
+    rules as clauses_rules,
 )
 from krrood.entity_query_language.verbalization.grammar.aggregation import (
     assembler as aggregation_assembler,
+    rules as aggregation_rules,
+)
+from krrood.entity_query_language.verbalization.grammar.inference import (
+    rules as inference_rules,
+)
+from krrood.entity_query_language.verbalization.grammar.instantiated import (
+    rules as instantiated_rules,
 )
 from krrood.entity_query_language.verbalization.pipeline import verbalize_expression
 
@@ -45,7 +58,14 @@ from krrood.entity_query_language.verbalization.pipeline import verbalize_expres
 # Assemblers show the rendered string (verbalize_expression); planners show the plan decision
 # they compute (a data record, not a rendered string).
 _MODULES = [
-    english,
+    terms_rules,
+    chain_rules,
+    conditions_rules,
+    query_rules,
+    inference_rules,
+    aggregation_rules,
+    clauses_rules,
+    instantiated_rules,
     restriction,
     chain_assembler,
     query_assembler,

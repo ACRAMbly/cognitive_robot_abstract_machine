@@ -35,7 +35,7 @@ class UnverbalizableExpressionError(DataclassException):
         self.message = (
             f"No verbalization rule for {type(self.node).__name__!r} "
             f"(name={getattr(self.node, '_name_', None)!r}); "
-            "add a PhraseRule in grammar/english.py."
+            "add a PhraseRule in the construct's grammar/<construct>/rules.py module."
         )
         super().__post_init__()
 

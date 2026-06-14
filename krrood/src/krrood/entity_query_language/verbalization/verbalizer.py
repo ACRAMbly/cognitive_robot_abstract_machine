@@ -8,7 +8,7 @@ from krrood.entity_query_language.core.base_expressions import SymbolicExpressio
 from krrood.entity_query_language.verbalization.context import MicroplanningServices
 from krrood.entity_query_language.verbalization.engine import fold
 from krrood.entity_query_language.verbalization.fragments.base import Fragment
-from krrood.entity_query_language.verbalization.grammar.english import RULES
+from krrood.entity_query_language.verbalization.grammar.framework.registry import RULES
 from krrood.entity_query_language.verbalization.rendering.realization import (
     realize_tree,
 )

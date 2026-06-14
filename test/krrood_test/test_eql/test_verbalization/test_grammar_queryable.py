@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from krrood.entity_query_language.factories import an, entity, variable
 from krrood.entity_query_language.operators.comparator import Comparator
-from krrood.entity_query_language.verbalization.grammar.english import RULES
+from krrood.entity_query_language.verbalization.grammar.framework.registry import RULES
 from krrood.entity_query_language.verbalization.grammar.framework.phrase_rule import PhraseRule
 
 
