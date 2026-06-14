@@ -287,10 +287,11 @@ class NotBooleanAttributeRule(PhraseRule):
 
 # ── chains (MappedVariable) ──────────────────────────────────────────────────
 #
-# One guarded rule per surface form, dispatched by ``select``: the guarded forms
-# (plural-attribute, boolean-predicative) outrank the unguarded possessive fallback, and the
-# ``tiebreak`` order reproduces the former precedence (plural before boolean). Adding a new chain
-# form is a new guarded rule here — no existing rule changes.
+# One guarded rule per surface form, dispatched by ``select``. The guards are mutually exclusive,
+# so at most one fires and no ordering between them is needed: the precedence "the bare-plural
+# noun phrase wins over the predicative" lives in ``ChainPlan.renders_as_plural_attribute``, which
+# both the plural and boolean rules consult. The guarded forms outrank the unguarded possessive
+# fallback. Adding a chain form is a new guarded rule here — no existing rule changes.
 
 
 class PluralChainAttributeRule(PhraseRule):
@@ -298,27 +299,26 @@ class PluralChainAttributeRule(PhraseRule):
 
     construct = MappedVariable
     name = "chain-plural-attribute"
-    tiebreak = 2
 
     def when(self, node: MappedVariable, context: RuleContext) -> bool:
-        return (
-            context.number is Number.PLURAL
-            and ChainPlanner(node).plan().is_single_variable_attribute
-        )
+        return ChainPlanner(node).plan().renders_as_plural_attribute(context.number)
 
     def build(self, node: MappedVariable, context: RuleContext) -> Fragment:
         return ChainAssembler(context).plural_attribute(ChainPlanner(node).plan())
 
 
 class BooleanAttributeChainRule(PhraseRule):
-    """Boolean-terminal chain → predicative *"<navigation> is <attribute>"*."""
+    """Boolean-terminal chain → predicative *"<navigation> is <attribute>"* (unless the bare-plural
+    attribute form takes precedence)."""
 
     construct = MappedVariable
     name = "chain-boolean-attribute"
-    tiebreak = 1
 
     def when(self, node: MappedVariable, context: RuleContext) -> bool:
-        return is_boolean_attribute_chain(node)
+        plan = ChainPlanner(node).plan()
+        return plan.is_boolean_terminal and not plan.renders_as_plural_attribute(
+            context.number
+        )
 
     def build(self, node: MappedVariable, context: RuleContext) -> Fragment:
         return ChainAssembler(context).boolean_predicative(ChainPlanner(node).plan())
@@ -447,17 +447,19 @@ class NestedEntityRule(PhraseRule):
         return QueryAssembler(context).assemble_nested(node)
 
 
-class InferenceRuleRule(PhraseRule):
-    """Top-level inference-rule Entity → ``IF … THEN …`` block."""
+class InferenceRuleRule(TopLevelEntityRule):
+    """Top-level inference-rule Entity → ``IF … THEN …`` block.
 
-    construct = Entity
+    A refinement of :class:`TopLevelEntityRule`: it applies exactly when that rule does *and* the
+    entity is an inference rule, so ``select`` prefers it (more-derived class) over the plain
+    top-level form without any tiebreak. Unlike the plain form it does not enter query scope.
+    """
+
     name = "inference-rule"
-    tiebreak = 1  # beats TopLevelEntityRule when both match (same construct + depth 0)
+    enters_query_scope = False
 
     def when(self, node: Entity, context: RuleContext) -> bool:
-        return context.configuration.query_depth == 0 and InferencePlanner.can_handle(
-            node
-        )
+        return super().when(node, context) and InferencePlanner.can_handle(node)
 
     def build(self, node: Entity, context: RuleContext) -> Fragment:
         return InferenceAssembler(context).assemble(node)
