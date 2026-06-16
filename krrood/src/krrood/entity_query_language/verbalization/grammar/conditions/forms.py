@@ -1,15 +1,19 @@
 from __future__ import annotations
 
 from abc import abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum, auto
 
-from typing_extensions import ClassVar, Union
+from typing_extensions import ClassVar, List, Optional, Union
 
 from krrood.entity_query_language.core.base_expressions import SymbolicExpression
 from krrood.entity_query_language.core.variable import Variable
 from krrood.entity_query_language.operators.comparator import Comparator
-from krrood.entity_query_language.verbalization.fragments.base import Fragment
+from krrood.entity_query_language.verbalization.fragments.base import (
+    BlockFragment,
+    Fragment,
+    oxford_comma,
+)
 from krrood.entity_query_language.verbalization.grammar.conditions.assembler import (
     ConditionAssembler,
 )
@@ -26,6 +30,10 @@ from krrood.entity_query_language.verbalization.grammar.framework.specificity im
 )
 from krrood.entity_query_language.verbalization.microplanning.coordination import (
     RangeFold,
+)
+from krrood.entity_query_language.verbalization.vocabulary.english import (
+    Conjunctions,
+    Keywords,
 )
 from krrood.entity_query_language.verbalization.vocabulary.words import Number
 
@@ -216,3 +224,78 @@ def place(request: Placement, context: RuleContext) -> Placed:
     """
     form = ConditionForm.most_applicable(request)
     return Placed(slot=form.slot, fragment=form.render(request, context))
+
+
+# ── placing a whole subject restriction ─────────────────────────────────────
+
+
+@dataclass(frozen=True)
+class RestrictionFragments:
+    """The placed pieces of a subject's WHERE, for the caller to position — each goes to a different
+    sentence slot, so they are kept apart rather than pre-joined."""
+
+    inline_modifiers: List[Fragment] = field(default_factory=list)
+    """Superlative selection phrases (*"with the maximum amount"*) that attach inline, right after
+    the selection noun."""
+
+    whose: Optional[Fragment] = None
+    """The *"whose"* group as a coordinated block (header *"whose"*, one bare predicate per item,
+    Oxford-joined) — a sub-list of points in hierarchical rendering, *"whose a, and b"* inline / in
+    paragraph. ``None`` when nothing folds into a *"whose"*."""
+
+    residual: Optional[Fragment] = None
+    """The residual condition for a separate *"such that …"* / *"where …"* clause; the caller picks
+    the keyword and position. ``None`` when the WHERE folds entirely into the other pieces."""
+
+
+def place_restriction(
+    folded: List[Union[SymbolicExpression, RangeFold]],
+    subject: Variable,
+    context: RuleContext,
+    number: Number = Number.SINGULAR,
+) -> RestrictionFragments:
+    """
+    Place every folded conjunct of a subject's WHERE via :func:`place`, then bucket the results by
+    slot into the pieces a caller positions: superlative noun modifiers, the shared *"whose"* group,
+    and the standalone residual. This is the list form of :func:`place` — the one place a subject's
+    restriction is turned into placed surface pieces.
+
+    :param folded: The subject's range-folded WHERE conjuncts.
+    :param subject: The variable the restriction is on.
+    :param context: The per-node context (recursion and services).
+    :param number: The number the subject agrees with — singular for a query selection, plural for
+        an aggregated inference antecedent.
+    :return: The placed restriction pieces.
+    """
+    placed = [
+        place(Placement(item=item, subject=subject, number=number), context)
+        for item in folded
+    ]
+    grouped = [item.fragment for item in placed if item.slot is Slot.WHOSE]
+    whose = (
+        BlockFragment(
+            header=Keywords.WHOSE.as_fragment(),
+            items=grouped,
+            conjunction=Conjunctions.AND.as_fragment(),
+        )
+        if grouped
+        else None
+    )
+    return RestrictionFragments(
+        inline_modifiers=[
+            item.fragment for item in placed if item.slot is Slot.SELECTION_MODIFIER
+        ],
+        whose=whose,
+        residual=_join_residual(
+            [item.fragment for item in placed if item.slot is Slot.STANDALONE]
+        ),
+    )
+
+
+def _join_residual(fragments: List[Fragment]) -> Optional[Fragment]:
+    """:return: The standalone conjuncts joined into one residual condition, or ``None``."""
+    if not fragments:
+        return None
+    if len(fragments) == 1:
+        return fragments[0]
+    return oxford_comma(fragments, Conjunctions.AND.as_fragment())
