@@ -63,23 +63,52 @@ def role_taker_field(*, kw_only: bool = True, **kwargs: Any) -> Any:
 @dataclass(eq=False)
 class Role(Symbol, SubClassSafeGeneric[T]):
     """
-    Represents a role with generic typing. This is used in the Role design pattern in OOP.
+    Base class for the Role design pattern.
 
-    Roles are extensions of the role taker's behaviour and data in different contexts.
-    Roles live side-by-side with the role taker: they never overwrite the role taker's
-    data or behaviour, only extend it.
+    A role adds context-specific attributes and behaviour to an existing object (the *role
+    taker*) without altering the role taker's identity. A role and its role taker are
+    considered the same entity — they compare equal and share the same hash (Not same memory address nor python id).
 
-    A role wraps its role taker in a single field declared with :func:`role_taker_field`.
-    Role-native attributes are accessed directly from the role instance. Attributes that
-    belong to the role taker are exposed on the role through dynamic delegation in
-    ``__getattr__`` and ``__setattr__``.
+    **Pure composition.** A role class must not inherit from its role taker type. Role
+    membership is expressed through :meth:`has_role` and :meth:`roles_for`, not through
+    ``isinstance`` checks. Constructing a role always requires the role taker to be passed
+    explicitly.
 
-    Roles and role takers are considered the same entity (same hash, equal):
+    **Defining a role.** Inherit from ``Role[T]`` (where ``T`` is the role taker type),
+    decorate with ``@dataclass(eq=False)``, and mark exactly one field as the role taker with
+    :func:`role_taker_field`. Add any role-specific fields alongside it.
+
+    **Attribute delegation.** Attributes not declared on the role are forwarded to the role
+    taker via ``__getattr__`` and ``__setattr__``. Role-native attributes are always
+    resolved first.
+
+    **Identity sharing.** The hash and equality of a role are derived from the root
+    non-role entity at the bottom of the taker chain, so any collection or dictionary keyed
+    by the taker automatically reflects the role:
+    >>> from dataclasses import dataclass
+    >>> from krrood.patterns.role import Role, role_taker_field
+    >>>
+    >>> @dataclass(unsafe_hash=True)
+    >>> class Person:
+    >>>     name: str
+    >>>
+    >>> @dataclass(eq=False)
+    >>> class Student(Role[Person]):
+    >>>     person: Person = role_taker_field()
+    >>>     major: str = ""
+    >>>
+    >>> person = Person(name="Alice")
     >>> student = Student(person=person)
+    >>> student.name is person.name
+    True
     >>> person == student
     True
     >>> hash(person) == hash(student)
     True
+    >>> person is student
+    False
+    >>> id(person) == id(student)
+    False
     """
 
     @classmethod
@@ -302,7 +331,7 @@ class Role(Symbol, SubClassSafeGeneric[T]):
         Update the SymbolGraph mapping between this role and its role taker.
 
         Silently skips if this class is not registered in the SymbolGraph class
-        diagram (e.g. test-only or dynamically created classes).
+        diagram (for example, test-only or dynamically created classes).
 
         :param role_taker: The role taker instance to link.
         """
