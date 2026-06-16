@@ -40,7 +40,7 @@ class RerunModelCallback(ModelChangeCallback):
     root_entity_path: str = field(default="world", kw_only=True)
     """Entity path under which the kinematic tree is logged."""
 
-    def _notify(self, **kwargs) -> None:
+    def on_model_change(self, **kwargs) -> None:
         self._log_model(self._world)
 
     def _log_model(self, world: World) -> None:
@@ -139,8 +139,8 @@ class RerunAdapter(StateChangeCallback):
             recording=self.recording,
             root_entity_path=self.root_entity_path,
         )
-        self.model_cb.notify()
-        self._notify()
+        self.model_cb.notify_model_change()
+        self.on_state_change()
 
     def _log_state(self, world: World, *, static: bool = False) -> None:
         """
@@ -165,7 +165,7 @@ class RerunAdapter(StateChangeCallback):
                 recording=self.recording,
             )
 
-    def _notify(self, **kwargs) -> None:
+    def on_state_change(self, **kwargs) -> None:
         if self.state_history:
             rr.set_time(
                 self.timeline,
