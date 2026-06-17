@@ -15,11 +15,12 @@ Phases measured:
   Phase 8 – End-to-end       : single call to GraphOfConvexSets.free_space_from_world
 
 Run with:
-    python3 coraplex/demos/coraplex_gcs_demo/experiments/benchmark_gcs_apartment.py
+    python3 coraplex/demos/coraplex_gcs_demo/experiments/graph_of_convex_sets_experiments.py
 
 Requirements (all installed in-repo):
     semantic_digital_twin, random_events, rtree, trimesh, urdf_parser_py, experiments
 """
+
 from __future__ import annotations
 
 import time
@@ -49,8 +50,15 @@ from semantic_digital_twin.world_description.world_entity import (
 from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix
 
 _APARTMENT_URDF_PATH = (
-    Path(__file__).parent / ".." / ".." / ".." / ".."
-    / "semantic_digital_twin" / "resources" / "urdf" / "apartment.urdf"
+    Path(__file__).parent
+    / ".."
+    / ".."
+    / ".."
+    / ".."
+    / "semantic_digital_twin"
+    / "resources"
+    / "urdf"
+    / "apartment.urdf"
 )
 
 
@@ -105,7 +113,9 @@ def _measure(function_to_time, repetitions: int = 1):
     return result, elapsed_times
 
 
-def _to_mean_and_standard_deviation_milliseconds(elapsed_seconds: List[float]) -> MeanAndStandardDeviation:
+def _to_mean_and_standard_deviation_milliseconds(
+    elapsed_seconds: List[float],
+) -> MeanAndStandardDeviation:
     return MeanAndStandardDeviation.from_measurements(
         [seconds * 1000.0 for seconds in elapsed_seconds]
     )
@@ -161,7 +171,9 @@ def main():
         for bounding_box in obstacle_bounding_boxes:
             obstacle = bounding_box.simple_event.as_composite_set() & search_event
             if not obstacle.is_empty():
-                free_space_accumulator = free_space_accumulator.subtract_disjoint(obstacle)
+                free_space_accumulator = free_space_accumulator.subtract_disjoint(
+                    obstacle
+                )
         return free_space_accumulator
 
     free_space, free_space_elapsed = _measure(_compute_free_space, repetitions=3)
@@ -173,7 +185,9 @@ def main():
             reference_frame=world.root, event=free_space
         )
 
-    free_space_collection, materialise_elapsed = _measure(_materialise_free_space, repetitions=3)
+    free_space_collection, materialise_elapsed = _measure(
+        _materialise_free_space, repetitions=3
+    )
     print(f"  Free-space bounding boxes: {len(free_space_collection)}")
 
     def _compute_connectivity():
@@ -183,7 +197,9 @@ def main():
         graph_of_convex_sets.calculate_connectivity(tolerance=0.001)
         return graph_of_convex_sets
 
-    connectivity_graph, connectivity_elapsed = _measure(_compute_connectivity, repetitions=3)
+    connectivity_graph, connectivity_elapsed = _measure(
+        _compute_connectivity, repetitions=3
+    )
     print(
         f"  Graph: {len(connectivity_graph.graph.nodes())} nodes,"
         f" {len(connectivity_graph.graph.edges())} edges"
@@ -200,24 +216,36 @@ def main():
                     max_x=12.0,
                     max_y=5.0,
                     max_z=3.0,
-                    origin=HomogeneousTransformationMatrix(reference_frame=loaded_world.root),
+                    origin=HomogeneousTransformationMatrix(
+                        reference_frame=loaded_world.root
+                    ),
                 )
             ],
             reference_frame=loaded_world.root,
         )
-        return GraphOfConvexSets.free_space_from_world(loaded_world, apartment_search_space)
+        return GraphOfConvexSets.free_space_from_world(
+            loaded_world, apartment_search_space
+        )
 
     end_to_end_graph, end_to_end_elapsed = _measure(_run_end_to_end)
     end_to_end_duration_milliseconds = end_to_end_elapsed[0] * 1000.0
 
     result = GCSFreespaceExperimentResult(
-        world_loading_duration_milliseconds=round(world_loading_duration_milliseconds, 2),
+        world_loading_duration_milliseconds=round(
+            world_loading_duration_milliseconds, 2
+        ),
         obstacle_count=len(obstacle_bounding_boxes),
-        free_space_computation_duration_milliseconds=_to_mean_and_standard_deviation_milliseconds(free_space_elapsed),
+        free_space_computation_duration_milliseconds=_to_mean_and_standard_deviation_milliseconds(
+            free_space_elapsed
+        ),
         free_space_simple_set_count=free_space_simple_set_count,
-        materialise_duration_milliseconds=_to_mean_and_standard_deviation_milliseconds(materialise_elapsed),
+        materialise_duration_milliseconds=_to_mean_and_standard_deviation_milliseconds(
+            materialise_elapsed
+        ),
         free_space_bounding_box_count=len(free_space_collection),
-        connectivity_duration_milliseconds=_to_mean_and_standard_deviation_milliseconds(connectivity_elapsed),
+        connectivity_duration_milliseconds=_to_mean_and_standard_deviation_milliseconds(
+            connectivity_elapsed
+        ),
         graph_node_count=len(connectivity_graph.graph.nodes()),
         graph_edge_count=len(connectivity_graph.graph.edges()),
         end_to_end_duration_milliseconds=round(end_to_end_duration_milliseconds, 2),
