@@ -3,11 +3,15 @@ from __future__ import annotations
 from copy import deepcopy
 from dataclasses import dataclass
 
-import numpy as np
 from typing_extensions import Any, Dict
 
 from krrood.entity_query_language.core.base_expressions import SymbolicExpression
-from krrood.entity_query_language.factories import and_, ConditionType
+from krrood.entity_query_language.factories import (
+    and_,
+    or_,
+    variable_from,
+    ConditionType,
+)
 from pycram.config.action_conf import ActionConfig
 from pycram.datastructures.dataclasses import Context
 from pycram.datastructures.enums import (
@@ -26,6 +30,7 @@ from pycram.robot_plans.motions.container import OpeningMotion, ClosingMotion
 from pycram.robot_plans.motions.gripper import MoveGripperMotion
 from pycram.view_manager import ViewManager
 from semantic_digital_twin.datastructures.definitions import GripperState
+from semantic_digital_twin.reasoning.predicates import allclose
 from semantic_digital_twin.reasoning.robot_predicates import is_body_in_gripper
 from semantic_digital_twin.robots.robot_part_mixins import HasMobileBase
 from semantic_digital_twin.robots.robot_parts import AbstractRobot
@@ -114,16 +119,20 @@ class OpenAction(ActionDescription):
         parent_connection = kwargs[
             "object_designator"
         ].get_first_parent_connection_of_type(ActiveConnection1DOF)
-        return (
-            is_body_in_gripper(kwargs["object_designator"], end_effector) > 0.9
-            or np.allclose(
-                kwargs["object_designator"].global_pose.to_position(),
-                ViewManager.get_end_effector_view(
-                    kwargs["arm"], context.robot
-                ).tool_frame.global_pose.to_position(),
-                atol=3e-2,
-            )
-        ) and bool(parent_connection.position > 0.3)
+        return and_(
+            or_(
+                is_body_in_gripper(
+                    variable_from(kwargs["object_designator"]), end_effector
+                )
+                > 0.9,
+                allclose(
+                    variable_from(kwargs["object_designator"]).global_pose.to_position(),
+                    variable_from(end_effector.tool_frame).global_pose.to_position(),
+                    atol=3e-2,
+                ),
+            ),
+            variable_from(parent_connection).position > 0.3,
+        )
 
 
 @dataclass
@@ -177,4 +186,4 @@ class CloseAction(ActionDescription):
             "object_designator"
         ].get_first_parent_connection_of_type(ActiveConnection1DOF)
 
-        return bool(close_connection.position < 0.1)
+        return variable_from(close_connection).position < 0.1

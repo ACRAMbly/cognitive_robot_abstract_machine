@@ -151,10 +151,8 @@ class ReachAction(ActionDescription):
             is_body_in_gripper(variable_from(kwargs["object_designator"]), end_effector)
             > 0.9,
             allclose(
-                variable_from(kwargs["object_designator"].global_pose.to_position()),
-                ViewManager.get_end_effector_view(
-                    kwargs["arm"], context.robot
-                ).tool_frame.global_pose.to_position(),
+                variable_from(kwargs["object_designator"]).global_pose.to_position(),
+                variable_from(end_effector.tool_frame).global_pose.to_position(),
                 atol=3e-2,
             ),
         )
@@ -250,7 +248,8 @@ class PickUpAction(ActionDescription):
         )
         return or_(
             not_(GripperIsFree(end_effector)),
-            is_body_in_gripper(kwargs["object_designator"], end_effector) > 0.9,
+            is_body_in_gripper(variable_from(kwargs["object_designator"]), end_effector)
+            > 0.9,
         )
 
 

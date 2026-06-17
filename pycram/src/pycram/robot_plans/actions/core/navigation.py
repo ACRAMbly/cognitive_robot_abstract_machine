@@ -62,7 +62,7 @@ class NavigateAction(ActionDescription):
         """
 
         return allclose(
-            context.robot.root.global_pose,
+            variable_from(context.robot.root).global_pose,
             kwargs["target_location"],
             atol=0.03,
         )

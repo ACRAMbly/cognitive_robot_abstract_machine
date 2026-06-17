@@ -8,6 +8,7 @@ from typing_extensions import Optional, Dict, Any
 
 from krrood.entity_query_language.core.base_expressions import SymbolicExpression
 from krrood.entity_query_language.core.variable import Variable
+from krrood.entity_query_language.factories import variable_from
 from pycram.datastructures.dataclasses import Context
 from pycram.robot_plans import MoveManipulatorMotion
 from semantic_digital_twin.reasoning.predicates import allclose
@@ -61,7 +62,7 @@ class MoveTorsoAction(ActionDescription):
         joint_state = context.robot.get_torso().get_joint_state_by_type(
             kwargs["torso_state"]
         )
-        return joint_state.is_achieved()
+        return variable_from(joint_state).is_achieved()
 
 
 @dataclass

@@ -2,11 +2,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-import numpy as np
 from typing_extensions import Any, Dict
 
 from krrood.entity_query_language.core.base_expressions import SymbolicExpression
-from krrood.entity_query_language.factories import or_, not_, and_
+from krrood.entity_query_language.factories import or_, not_, and_, variable_from
 from pycram.datastructures.dataclasses import Context
 from pycram.datastructures.enums import (
     Arms,
@@ -166,7 +165,8 @@ class PlaceAction(ActionDescription):
         end_effector = ViewManager.get_end_effector_view(variables["arm"], context.robot)
         return or_(
             not_(GripperIsFree(end_effector)),
-            is_body_in_gripper(kwargs["object_designator"], end_effector) > 0.9,
+            is_body_in_gripper(variable_from(kwargs["object_designator"]), end_effector)
+            > 0.9,
         )
 
     @staticmethod
@@ -179,9 +179,10 @@ class PlaceAction(ActionDescription):
         end_effector = ViewManager.get_end_effector_view(variables["arm"], context.robot)
         return and_(
             GripperIsFree(end_effector),
-            is_body_in_gripper(kwargs["object_designator"], end_effector) < 0.1,
+            is_body_in_gripper(variable_from(kwargs["object_designator"]), end_effector)
+            < 0.1,
             allclose(
-                kwargs["object_designator"].global_pose,
+                variable_from(kwargs["object_designator"]).global_pose,
                 kwargs["target_location"],
                 atol=0.03,
             ),

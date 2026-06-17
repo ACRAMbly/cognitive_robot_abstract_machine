@@ -11,10 +11,14 @@ from pycram.plans.factories import execute_single, sequential
 from pycram.robot_plans.actions.core.pick_up import ReachAction, PickUpAction
 from pycram.robot_plans.actions.core.robot_body import MoveTorsoAction, ParkArmsAction
 from pycram.robot_plans.motions.gripper import MoveToolCenterPointMotion
+from semantic_digital_twin.adapters.ros.visualization.viz_marker import (
+    VizMarkerPublisher,
+)
 from semantic_digital_twin.datastructures.definitions import TorsoState
 from semantic_digital_twin.semantic_annotations.position_descriptions import (
     VerticalSemanticDirection,
 )
+from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix
 from semantic_digital_twin.spatial_types.spatial_types import Pose, Point3
 from pycram.utils import split_list_by_type
 
@@ -33,12 +37,18 @@ def test_parse_simple_action(immutable_model_world):
     assert type(executable.execution_list[1]) == GiskardExecutable
 
 
-def test_merge_motions(immutable_model_world):
+def test_merge_motions(immutable_model_world, rclpy_node):
     world, view, context = immutable_model_world
+
+    VizMarkerPublisher(_world=world, node=rclpy_node).with_tf_publisher()
+
+    world.get_body_by_name("milk.stl").parent_connection.origin = (
+        HomogeneousTransformationMatrix.from_xyz_rpy(2, 1.5, 0.7, 0, 0, 0)
+    )
 
     plan = execute_single(
         ReachAction(
-            Pose(reference_frame=world.root),
+            Pose.from_xyz_rpy(2, 1.5, 0.7, reference_frame=world.root),
             Arms.RIGHT,
             GraspDescription(
                 ApproachDirection.FRONT,
