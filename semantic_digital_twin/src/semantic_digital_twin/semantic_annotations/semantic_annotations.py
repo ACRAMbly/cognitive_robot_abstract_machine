@@ -7,7 +7,6 @@ from typing import Iterable, Optional, Self, Tuple, TYPE_CHECKING
 from typing_extensions import List, Type, TypeVar
 
 from krrood.ormatic.utils import classproperty
-from krrood.patterns.role import Role, role_taker_field
 from krrood.symbolic_math import symbolic_math
 from random_events.interval import closed
 from random_events.product_algebra import SimpleEvent
@@ -498,51 +497,19 @@ class Room(SemanticAnnotation):
 
 
 @dataclass(eq=False)
-class Kitchen(Role[Room]):
-    """
-    A kitchen is a room that has kitchen utilities and machines.
-    """
-
-    room: Room = role_taker_field()
-    """
-    The kitchen's room.
-    """
+class Kitchen(Room): ...
 
 
 @dataclass(eq=False)
-class Bedroom(Role[Room]):
-    """
-    A bedroom is a room that is used for sleeping.
-    """
-
-    room: Room = role_taker_field()
-    """
-    The bedroom's room.
-    """
+class Bedroom(Room): ...
 
 
 @dataclass(eq=False)
-class Bathroom(Role[Room]):
-    """
-    A bathroom is a room that is used for personal hygiene activities.
-    """
-
-    room: Room = role_taker_field()
-    """
-    The bathroom's room.
-    """
+class Bathroom(Room): ...
 
 
 @dataclass(eq=False)
-class LivingRoom(Role[Room]):
-    """
-    A living room is a room that is used for social activities and relaxation.
-    """
-
-    room: Room = role_taker_field()
-    """
-    The living room's room.
-    """
+class LivingRoom(Room): ...
 
 
 @dataclass(eq=False)

@@ -348,41 +348,6 @@ def test_minimal_robot_annotation(pr2_world_state_reset):
     assert len(robot.connections) == len(pr2.connections)
 
 
-def test_room_roles():
-    floor = Floor(root=Body(name=PrefixedName("room_floor")))
-    room = Room(floor=floor)
-    kitchen = Kitchen.from_role_taker(room)
-
-    # Test ability to access Room properties
-    assert room.floor is kitchen.floor
-
-    # Test correct caching of roles
-    assert Role.roles_for(room, Kitchen)[0] == kitchen
-    assert Role.has_role(room, Kitchen)
-    assert not isinstance(room, Kitchen)
-    assert isinstance(kitchen, Room)
-
-    # Test correct caching of roles
-    living_room = LivingRoom.from_role_taker(room)
-    assert Role.roles_for(room, LivingRoom)[0] == living_room
-    assert len(Role.roles_for(room)) == 2
-    assert Role.has_role(room, LivingRoom)
-    assert not isinstance(room, LivingRoom)
-    assert not isinstance(living_room, Room)
-
-    assert living_room == kitchen
-    assert hash(living_room) == hash(kitchen)
-
-    # Create the kitchen for an explicitly constructed room.
-    kitchen = Kitchen(room=Room(floor=floor))
-    room = kitchen.room
-    assert Role.roles_for(room, Kitchen)[0] == kitchen
-    assert Role.has_role(room, Kitchen)
-    assert not isinstance(room, Kitchen)
-    assert not isinstance(kitchen, Room)
-    assert kitchen.floor is room.floor
-
-
 def test_kinematic_chain_with_root_equal_tip_has_no_connections():
 
     @dataclass(eq=False)
