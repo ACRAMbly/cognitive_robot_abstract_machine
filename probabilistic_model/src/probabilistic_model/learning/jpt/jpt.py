@@ -285,7 +285,7 @@ class JointProbabilityTree(SubclassJSONSerializer):
             max_gain = self.impurity.compute_best_split(start, end)
 
         # if the max gain is insufficient
-        if max_gain < self.min_impurity_improvement:
+        if max_gain <= self.min_impurity_improvement:
 
             # create decomposable product node
             leaf_node = self.create_leaf_node(data[self.indices[start:end]])
@@ -416,7 +416,7 @@ class JointProbabilityTree(SubclassJSONSerializer):
 
         symbols = np.array(
             [len(variable.domain.simple_sets) for variable in self.symbolic_variables],
-            dtype=np.int64
+            dtype=np.int64,
         )
         max_variances = np.array(
             [
@@ -424,7 +424,7 @@ class JointProbabilityTree(SubclassJSONSerializer):
                 for annotated_variable in self.annotated_variables
                 if annotated_variable.variable in self.numeric_targets
             ],
-            dtype=np.float64
+            dtype=np.float64,
         )
 
         min_impurity_improvement = np.array(
@@ -432,7 +432,8 @@ class JointProbabilityTree(SubclassJSONSerializer):
                 annotated_variable.min_impurity_improvement
                 for annotated_variable in self.annotated_variables
                 if annotated_variable.variable in self.numeric_features
-            ] + [
+            ]
+            + [
                 annotated_variable.min_impurity_improvement
                 for annotated_variable in self.annotated_variables
                 if annotated_variable.variable in self.symbolic_features
