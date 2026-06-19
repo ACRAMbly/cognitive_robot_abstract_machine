@@ -1,11 +1,13 @@
+from __future__ import annotations
 from dataclasses import dataclass, field
+
+from typing_extensions import TYPE_CHECKING
 
 from giskardpy.motion_statechart.monitors.payload_monitors import (
     ThreadedPredicateMonitor,
 )
 from krrood.entity_query_language.factories import ConditionType, evaluate_condition
-from pycram.exceptions import ConditionNotSatisfied
-from pycram.plans.plan_node import PlanNode
+from pycram.plans.plan_node import PlanNode, ActionNode
 
 
 @dataclass
@@ -22,6 +24,11 @@ class ConditionNode(PlanNode):
     pre_condition: bool = field(kw_only=True)
     """
     If this is a pre or post condition
+    """
+
+    action_node: ActionNode = field(kw_only=True)
+    """
+    The action node where this condition belongs to. Needed to raise the correct exception in case the condition is not satisfied.
     """
 
     def notify(self):

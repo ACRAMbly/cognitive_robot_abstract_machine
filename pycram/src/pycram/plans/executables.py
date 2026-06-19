@@ -21,10 +21,11 @@ from semantic_digital_twin.world_description.connections import Connection6DoF
 from semantic_digital_twin.world_description.world_entity import Body
 
 if TYPE_CHECKING:
+    from pycram.robot_plans.actions.base import ActionDescription
 
-    from plans.condition_nodes import ConditionNode
-    from plans.plan_node import MotionNode
-    from datastructures.dataclasses import Context
+    from pycram.plans.condition_nodes import ConditionNode
+    from pycram.plans.plan_node import MotionNode, UnderspecifiedNode, ActionNode
+    from pycram.datastructures.dataclasses import Context
 
 logger = logging.getLogger(__name__)
 
@@ -105,7 +106,10 @@ class GiskardExecutable(Executable):
             sequence_node.start_condition = pre_monitor.observation_variable
             # abort if the pre-condition is observed to be false
             pre_cancel = CancelMotion(
-                exception=self._condition_not_satisfied(self.pre_condition_node)
+                exception=self._condition_not_satisfied(
+                    self.pre_condition_node,
+                    action_node=self.pre_condition_node.action_node.action,
+                )
             )
             pre_cancel.start_condition = trinary_logic_not(
                 pre_monitor.observation_variable
@@ -120,7 +124,10 @@ class GiskardExecutable(Executable):
             end_trigger = post_monitor
             # abort if the post-condition is observed to be false
             post_cancel = CancelMotion(
-                exception=self._condition_not_satisfied(self.post_condition_node)
+                exception=self._condition_not_satisfied(
+                    self.post_condition_node,
+                    action_node=self.post_condition_node.action_node.action,
+                )
             )
             post_cancel.start_condition = trinary_logic_not(
                 post_monitor.observation_variable
@@ -133,10 +140,11 @@ class GiskardExecutable(Executable):
     @staticmethod
     def _condition_not_satisfied(
         condition_node: ConditionNode,
+        action_node: ActionDescription,
     ) -> ConditionNotSatisfied:
         return ConditionNotSatisfied(
             pre_condition=condition_node.pre_condition,
-            action=condition_node.__class__,
+            action=action_node.__class__,
             condition=condition_node.condition,
         )
 
@@ -280,3 +288,35 @@ class ModelChangeExecutable(Executable):
             )
             self.context.world.add_connection(connection)
             connection.origin = obj_transform
+
+
+@dataclass
+class UnderspecifiedExecutable(Executable):
+    """
+    Executable for an underspecified node whose resolution is deferred to execution
+    time.
+
+    Because it is not a :class:`GiskardExecutable`, it acts as a boundary in the
+    execution list: every preceding executable runs (and mutates the world) before it
+    is reached. Only then is the underspecified statement grounded, so the query sees
+    the correct world state (e.g. the torso already raised, the object already in the
+    gripper). Candidates are tried in order until one executes without raising a
+    :class:`~pycram.plans.failures.PlanFailure`; if the generator is exhausted,
+    :class:`~pycram.plans.failures.EmptyUnderspecified` is raised.
+    """
+
+    node: UnderspecifiedNode = field(kw_only=True)
+    """
+    The underspecified node that is grounded when this executable is reached.
+    """
+
+    def execute(self) -> None:
+        from pycram.plans.failures import PlanFailure, EmptyUnderspecified
+
+        while self.node.advance():
+            try:
+                self.node.current_candidate.parse().execute()
+                return
+            except PlanFailure:
+                continue
+        raise EmptyUnderspecified()

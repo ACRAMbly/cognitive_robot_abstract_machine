@@ -262,7 +262,7 @@ class AreReachableBy(PoseValidator):
 
 
 @dataclass
-class IsObjectReachableBy(Predicate):
+class IsObjectReachableBy(PoseValidator):
     """
     Reachability check that is evaluated against a *fresh* copy of the world.
 
@@ -272,11 +272,6 @@ class IsObjectReachableBy(Predicate):
     time the plan was parsed. The actual reachability simulation is delegated to
     :class:`AreReachableBy` / :class:`IsReachableBy`, which run on the throwaway
     copy so the live world is left untouched.
-    """
-
-    context: Context
-    """
-    Context providing the live world and robot to copy and check against.
     """
 
     arm: Arms

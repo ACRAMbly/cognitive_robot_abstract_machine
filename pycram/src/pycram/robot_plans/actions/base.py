@@ -75,6 +75,7 @@ class ActionDescription(Designator):
                 self.designator_parameter,
             ),
             pre_condition=True,
+            action_node=action_node,
         )
 
         sub_plan_root.plan.add_edge(action_node, pre_condition_node)
@@ -88,6 +89,7 @@ class ActionDescription(Designator):
                 self.designator_parameter,
             ),
             pre_condition=False,
+            action_node=action_node,
         )
 
         sub_plan_root.plan.add_edge(action_node, post_condition_node)

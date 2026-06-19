@@ -25,6 +25,13 @@ class PlanFailure(DataclassException):
 
 
 @dataclass
+class EmptyUnderspecified(PlanFailure):
+    """
+    Raised when a plan is empty.
+    """
+
+
+@dataclass
 class AllChildrenFailed(PlanFailure):
     """
     Thrown when all children of a plan node failed.

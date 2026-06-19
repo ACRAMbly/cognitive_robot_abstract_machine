@@ -42,12 +42,18 @@ class ConditionNotSatisfied(PlanFailure):
     condition: ConditionType
 
     def __post_init__(self):
-        if isinstance(self.condition, bool):
-            self.message = f"{"Pre" if self.pre_condition else "Post"}-Condition for Action '{self.action.__name__}' is not satisfied"
-        else:
-            false_statements = get_false_statements(self.condition)
-            self.message = f"{"Pre" if self.pre_condition else "Post"}-Condition for Action '{self.action.__name__}' is not satisfied, following statements are false: {[s._name_ for s in false_statements]}"
+        self.message = f"{"Pre" if self.pre_condition else "Post"}-Condition for Action '{self.action.__name__}' is not satisfied"
         super().__post_init__()
+
+    # TODO would be nice if the error contains the wrong statements but the error message is passed to giskards cancel motion and that is not possible at the moment
+
+    # def __post_init__(self):
+    #     if isinstance(self.condition, bool):
+    #         self.message = f"{"Pre" if self.pre_condition else "Post"}-Condition for Action '{self.action.__name__}' is not satisfied"
+    #     else:
+    #         false_statements = get_false_statements(self.condition)
+    #         self.message = f"{"Pre" if self.pre_condition else "Post"}-Condition for Action '{self.action.__name__}' is not satisfied, following statements are false: {[s._name_ for s in false_statements]}"
+    #     super().__post_init__()
 
 
 @dataclass

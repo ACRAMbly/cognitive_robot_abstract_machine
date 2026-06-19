@@ -90,27 +90,6 @@ class ReachAction(ActionDescription):
     def execute(self) -> Any:
         self.add_subplan(self.action_plan).perform()
 
-    # def execute(self) -> None:
-    #
-    # target_pre_pose, target_pose, _ = self.grasp_description._pose_sequence(
-    #     self.target_pose, self.object_designator, reverse=self.reverse_reach_order
-    # )
-    # self.add_subplan(
-    #     sequential(
-    #         children=[
-    #             MoveToolCenterPointMotion(
-    #                 target_pre_pose, self.arm, allow_gripper_collision=False
-    #             ),
-    #             MoveToolCenterPointMotion(
-    #                 target_pose,
-    #                 self.arm,
-    #                 allow_gripper_collision=False,
-    #                 movement_type=MovementType.CARTESIAN,
-    #             ),
-    #         ]
-    #     )
-    # ).perform()
-
     @staticmethod
     def pre_condition(
         variables, context: Context, kwargs: Dict[str, Any]
@@ -120,7 +99,8 @@ class ReachAction(ActionDescription):
         """
         return and_(
             IsObjectReachableBy(
-                context=context,
+                robot=context.robot,
+                world=context.world,
                 arm=kwargs["arm"],
                 object_designator=kwargs["object_designator"],
                 grasp_description=kwargs["grasp_description"],
@@ -213,7 +193,8 @@ class PickUpAction(ActionDescription):
         return and_(
             GripperIsFree(end_effector),
             IsObjectReachableBy(
-                context=context,
+                robot=context.robot,
+                world=context.world,
                 arm=kwargs["arm"],
                 object_designator=kwargs["object_designator"],
                 grasp_description=kwargs["grasp_description"],

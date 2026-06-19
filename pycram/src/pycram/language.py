@@ -32,6 +32,7 @@ from pycram.plans.failures import PlanFailure, AllChildrenFailed
 from pycram.fluent import Fluent
 from pycram.plans.plan_node import (
     PlanNode,
+    UnderspecifiedNode,
 )
 from pycram.utils import split_list_by_type, group_by_type
 
@@ -62,8 +63,14 @@ class LanguageNode(PlanNode, ABC):
             child.notify()
 
     def parse(self) -> Executable:
-        if any([isinstance(child, ModelChangeNode) for child in self.descendants]):
-            return self.parse_with_model_change()
+        # Nodes that do not parse into a single motion chart (model changes, and
+        # underspecified nodes that are only grounded during execution) split the
+        # plan into sequential execution groups instead of one merged chart.
+        if any(
+            isinstance(child, (ModelChangeNode, UnderspecifiedNode))
+            for child in self.descendants
+        ):
+            return self.parse_with_non_giskard_executable()
         child_execs = [child.parse() for child in self.children]
 
         return GiskardExecutable(
@@ -71,12 +78,8 @@ class LanguageNode(PlanNode, ABC):
             context=self.plan.context,
         )
 
-    def parse_with_model_change(self) -> Executable:
+    def parse_with_non_giskard_executable(self) -> Executable:
         child_executables = [node.parse() for node in self.children]
-
-        # model_change_split = split_list_by_type(
-        #     child_executables, ModelChangeExecutable
-        # )
 
         giskard_exec_groups = group_by_type(child_executables, GiskardExecutable)
 

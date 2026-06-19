@@ -1,29 +1,23 @@
-from pycram.plans.executables import ModelChangeExecutable
-from pycram.motion_executor import simulated_robot
-from pycram.plans.executables import GiskardExecutable, Executable
-from pycram.plans.attachment_nodes import ModelChangeNode
-from pycram.plans.executables import (
-    ConditionExecutable,
-)
+from giskardpy.motion_statechart.tasks.joint_tasks import JointPositionList
 from pycram.datastructures.enums import Arms, ApproachDirection, VerticalAlignment
 from pycram.datastructures.grasp import GraspDescription
+from pycram.motion_executor import simulated_robot
+from pycram.plans.attachment_nodes import ModelChangeNode
+from pycram.plans.executables import GiskardExecutable
+from pycram.plans.executables import ModelChangeExecutable
 from pycram.plans.factories import execute_single, sequential
+from pycram.robot_plans.actions.composite.transporting import TransportAction
 from pycram.robot_plans.actions.core.pick_up import ReachAction, PickUpAction
+from pycram.robot_plans.actions.core.placing import PlaceAction
 from pycram.robot_plans.actions.core.robot_body import MoveTorsoAction, ParkArmsAction
 from pycram.robot_plans.motions.gripper import MoveToolCenterPointMotion
-from pycram.robot_plans.actions.composite.transporting import TransportAction
-from pycram.robot_plans.actions.core.placing import PlaceAction
-from pycram.robot_plans.actions.core.robot_body import SetGripperAction
+from pycram.utils import split_list_by_type
 from semantic_digital_twin.adapters.ros.visualization.viz_marker import (
     VizMarkerPublisher,
 )
 from semantic_digital_twin.datastructures.definitions import TorsoState
-from semantic_digital_twin.semantic_annotations.position_descriptions import (
-    VerticalSemanticDirection,
-)
 from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix
 from semantic_digital_twin.spatial_types.spatial_types import Pose, Point3
-from pycram.utils import split_list_by_type
 
 
 def test_parse_simple_action(immutable_model_world):
@@ -35,9 +29,11 @@ def test_parse_simple_action(immutable_model_world):
 
     executable = plan.parse()
 
-    assert len(executable.execution_list) == 3
-    assert type(executable.execution_list[0]) == ConditionExecutable
-    assert type(executable.execution_list[1]) == GiskardExecutable
+    assert type(executable) == GiskardExecutable
+    assert executable.pre_condition_node
+    assert executable.post_condition_node
+    assert len(executable.motion_mappings) == 1
+    assert type(list(executable.motion_mappings.values())[0]) == JointPositionList
 
 
 def test_merge_motions(immutable_model_world, rclpy_node):
@@ -194,21 +190,27 @@ def test_parse_pick_place(immutable_model_world):
     assert len(executable.execution_list[1].execution_list) == 3
 
 
-def test_parse_transport_plan(immutable_model_world):
-    world, view, context = immutable_model_world
-    plan = execute_single(
-        TransportAction(
-            world.get_body_by_name("milk.stl"),
-            Pose(reference_frame=world.root),
-            Arms.RIGHT,
-        ),
+def test_parse_transport_plan(mutable_model_world, rclpy_node):
+    world, view, context = mutable_model_world
+
+    plan = sequential(
+        [
+            MoveTorsoAction(TorsoState.HIGH),
+            ParkArmsAction(Arms.BOTH),
+            TransportAction(
+                world.get_body_by_name("milk.stl"),
+                Pose.from_xyz_rpy(2.37, 2.5, 1.05, reference_frame=world.root),
+                Arms.RIGHT,
+            ),
+        ],
         context=context,
     )
 
     plan.notify()
     exec = plan.parse()
 
-    pass
+    with simulated_robot:
+        exec.execute()
 
 
 def test_split_by_type():
