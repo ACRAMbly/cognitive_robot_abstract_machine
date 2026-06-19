@@ -188,7 +188,13 @@ class WrappedField:
             return get_args(self.resolved_type)[0]
         else:
             try:
-                return get_args(self.resolved_type)[0]
+                args = get_args(self.resolved_type)
+                if len(args) > 1:
+                    # TypeVarTuple expansion produces list[A, B, ...] — use the LCA
+                    lca = common_base_class(list(args))
+                    if lca is not None:
+                        return lca
+                return args[0]
             except IndexError:
                 if self.resolved_type is Type:
                     return self.resolved_type
