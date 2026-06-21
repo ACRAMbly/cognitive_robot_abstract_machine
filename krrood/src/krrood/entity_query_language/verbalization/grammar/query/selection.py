@@ -63,7 +63,12 @@ def subject_referent_id(variable: SymbolicExpression) -> Optional[uuid.UUID]:
 @dataclass
 class SelectionAssembler:
     """Render a query's selected variables / columns into prose — the single owner of *how a
-    selection is said* (natural prose, parenthesised tuple, plural population, co-owned genitive)."""
+    selection is said* (natural prose, parenthesised tuple, plural population, co-owned genitive).
+
+    >>> employee = variable(Employee, [])
+    >>> verbalize_expression(a(set_of(employee.department, employee.name)))
+    'Find the department and name of an Employee'
+    """
 
     context: RuleContext
     """The per-node context (recursion entry and microplanning services)."""

@@ -11,6 +11,11 @@ def plural(word: str) -> str:
     """
     :param word: An English noun (assumed singular).
     :return: The plural form of *word*, unconditionally (e.g. ``"Robot"`` → ``"Robots"``).
+
+    >>> plural("Robot")
+    'Robots'
+    >>> plural("battery")
+    'batteries'
     """
     return _engine.plural(word)
 
@@ -42,6 +47,13 @@ def is_past_participle(word: str) -> bool:
     Deterministic dictionary + rule lookup (``lemminflect``): the word's verb lemma is taken, and the
     word is checked against that lemma's generated ``VBN`` forms. No statistical model, no data
     download — so it is reproducible and offline, unlike a context-sensitive POS tagger.
+
+    >>> is_past_participle("assigned")
+    True
+    >>> is_past_participle("written")
+    True
+    >>> is_past_participle("battery")
+    False
     """
     lowered = word.lower()
     return any(
@@ -63,6 +75,11 @@ def ordinal(index: int) -> str:
     """
     :param index: Zero-based integer index.
     :return: The English ordinal word for a zero-based *index* (``0`` → ``"first"``).
+
+    >>> ordinal(0)
+    'first'
+    >>> ordinal(2)
+    'third'
     """
     return _engine.ordinal(_engine.number_to_words(index + 1))
 

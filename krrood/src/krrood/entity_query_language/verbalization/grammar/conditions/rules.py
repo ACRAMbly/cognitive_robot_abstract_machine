@@ -96,9 +96,13 @@ class RangeFoldRule(PhraseRule):
     """A folded lower/upper bound pair → *"<chain> is between low and high"*.
 
     A :class:`RangeFold` is the coordination microplanning artifact produced when two complementary
-    bounds on one chain are reduced (by :func:`fold_range_pairs`). Making it a first-class
-    verbalizable means any caller that has reduced its conjuncts renders the result through the
-    normal recursion (``context.child``) — it never has to know a folding helper exists.
+    bounds on one chain are reduced (by the conjunct reducer). Making it a first-class verbalizable
+    means any caller that has reduced its conjuncts renders the result through the normal recursion
+    (``context.child``) — it never has to know a folding helper exists.
+
+    >>> robot = variable(Robot, [])
+    >>> verbalize_expression(and_(robot.battery > 10, robot.battery < 90))
+    'the battery of a Robot is between 10 and 90'
     """
 
     construct = RangeFold
@@ -305,7 +309,12 @@ class ExistsRule(PhraseRule):
 
 
 class FilterRule(PhraseRule):
-    """Transparent wrapper (Where / Having) → delegate to the condition."""
+    """Transparent wrapper (Where / Having) → delegate to the condition.
+
+    >>> robot = variable(Robot, [])
+    >>> verbalize_expression(an(entity(robot).where(robot.battery > 50)))
+    'Find a Robot whose battery is greater than 50'
+    """
 
     construct = Filter
     name = "filter"

@@ -426,3 +426,23 @@ misnomer (`transforms`) and the `rules.py`/`restriction.py` name clash are gone.
   cohesive and tightly share those private body builders; extracting them further would mean passing
   the assembler (or its body builders) into sub-objects — adding coupling for little readability gain.
   The class is now a clearer "realize a query, delegating selection rendering". Suite green.
+
+### Phase 8 — done (doctests + doc sync)
+
+- The doctest harness already auto-discovers every verbalization module (Phase 0), so new doctests
+  run automatically. Added executable `>>>` examples to high-value, deterministic spots:
+  `value_lexicon.value_phrase`, the `morphology` facade (`plural` / `ordinal` / `is_past_participle`),
+  `relational_attributes` (Phase 1), `BooleanPolarityTransform` (predication), `SelectionAssembler`
+  (selection), and the `RangeFoldRule` / `FilterRule` condition rules. (`CoindexedFoldRule`'s
+  `Period`/`Date` example needs a domain not in the doctest namespace, so it is covered by the test
+  suite rather than a doctest.)
+- Doc sync: the developer guide (`verbalization.md`) module map and cross-references were updated as
+  each phase landed — conditions (`predication` / `placement` / `subject`), the auto-discovered
+  registry, the coordination pass + folding map, the realisation-pass framework, and the removed
+  morphology override hook. The user guide needed no changes (its examples are all public-API). The
+  refactor-plan doc's "before" references are intentionally historical.
+
+## 7. Status: all phases complete
+
+Phases 0–8 (plus 3b) are done; the full verbalization suite is green throughout
+(`.venv/bin/python -m pytest test/krrood_test/test_eql/test_verbalization`).

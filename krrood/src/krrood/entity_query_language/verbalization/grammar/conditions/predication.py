@@ -144,7 +144,13 @@ class AbsenceTransform(GenericComparator):
 class BooleanPolarityTransform(GenericComparator):
     """A boolean attribute compared to a boolean value → a predicative folding the value into the
     verb's polarity (*"is decaf"* / *"is not decaf"* / *"is either decaf or not"*), never *"is decaf
-    is True"*."""
+    is True"*.
+
+    >>> verbalize_expression(variable(Task, []).completed == True)
+    'a Task is completed'
+    >>> verbalize_expression(variable(Task, []).completed == False)
+    'a Task is not completed'
+    """
 
     @classmethod
     def applies(cls, comparator: Comparator, negated: bool) -> bool:
