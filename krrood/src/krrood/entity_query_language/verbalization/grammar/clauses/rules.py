@@ -34,7 +34,7 @@ class OrderedByRule(PhraseRule):
 
     >>> employee = variable(Employee, [])
     >>> verbalize_expression(a(set_of(employee).ordered_by(employee.salary, descending=True)))
-    'Find an Employee ordered by its salary (descending)'
+    'Report Employees ordered by their salary (descending)'
     """
 
     construct = OrderedBy

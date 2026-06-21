@@ -287,10 +287,14 @@ print(verbalize_expression(query))
 # the battery is greater than 5
 ```
 
-## Reports (aggregating set-of queries)
+## Reports (presenting results, not searching)
 
-A `set_of` that *computes* an aggregate is a calculation, not a search, so it opens with **"Report"**
-rather than "Find", and drops the code-like parentheses:
+Some queries *present* results rather than *search* for a match — a calculation, or an ordered
+listing. These open with **"Report"** rather than "Find". Report-ness and conditions are
+orthogonal: a report may still be filtered.
+
+A `set_of` that *computes* an aggregate is a calculation, so it opens with "Report" and drops the
+code-like parentheses:
 
 ```{code-cell} ipython3
 employee = variable(Employee, domain=None)
@@ -310,7 +314,23 @@ print(verbalize_expression(query))
 # For each department, report the sum of salaries of Employees
 ```
 
-A plain (non-aggregating) `set_of` stays a search and also drops the parentheses:
+An **ordered** query is also a report — ordering presents *all* the (matching) results in
+sequence, which is a listing, not a hunt for one match. The subject is therefore plural, and a
+filter does not change that (it just narrows the list):
+
+```{code-cell} ipython3
+print(verbalize_expression(an(entity(employee).ordered_by(employee.salary))))
+# Report Employees ordered by their salary (ascending)
+
+print(verbalize_expression(
+    an(entity(employee).where(employee.salary > 5).ordered_by(employee.salary))
+))
+# Report Employees whose salary is greater than 5, ordered by their salary (ascending)
+```
+
+A `limit` is the exception: it ranks (*"Find the top three …"*), a distinct count-bearing form.
+
+A plain (non-aggregating, unordered) `set_of` stays a search and also drops the parentheses:
 
 ```{code-cell} ipython3
 print(verbalize_expression(a(set_of(employee.department, employee.name))))

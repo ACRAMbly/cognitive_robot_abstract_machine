@@ -20,6 +20,7 @@ from krrood.entity_query_language.verbalization.fragments.base import (
 )
 from krrood.entity_query_language.verbalization.fragments.features import (
     Definiteness,
+    Number,
     Separator,
 )
 from krrood.entity_query_language.verbalization.grammar.aggregation.assembler import (
@@ -34,6 +35,7 @@ from krrood.entity_query_language.verbalization.grammar.clauses.composer import 
 from krrood.entity_query_language.verbalization.grammar.query.planner import (
     QueryPlan,
     QueryPlanner,
+    ReportKind,
     ReportPlan,
     SelectionKind,
 )
@@ -121,33 +123,57 @@ class QueryAssembler(Assembler[Query, QueryPlan]):
         """
         :param node: The set-of query.
         :return: *"Find v1 and v2 such that …"* for a search; *"Report <columns>"* /
-            *"For each <keys>, report <columns>"* when the selection computes aggregates (a report).
+            *"For each <keys>, report <columns>"* for an aggregation report; *"Report v1 and v2
+            ordered by …"* (plural) for an ordered listing.
         """
         plan = self.plan(node)
-        if plan.report is not None:
-            return self._assemble_report(node, plan, plan.report)
-        # A ranked set-of keeps the parenthesised tuple ("Find the top three (a, b)"); the ranking
-        # pre-head needs the tuple as a unit. An unranked set-of reads as natural prose.
-        selection = (
-            self._parenthesised(node._selected_variables_)
-            if plan.ranking is not None
-            else self._selection_list(node._selected_variables_)
-        )
+        report = plan.report
+        if report is not None and report.kind is ReportKind.AGGREGATION:
+            return self._assemble_aggregation_report(node, plan, report)
         return self._query_body(
             node,
             plan,
-            selection,
+            self._set_of_selection(node, plan),
             where_items=[self._where_clause(plan)],
             find_header=self._set_of_header(plan),
         )
 
-    def _selection_list(self, variables: List[SymbolicExpression]) -> Fragment:
+    def _set_of_selection(self, node: SetOf, plan: QueryPlan) -> Fragment:
+        """:return: the set-of's rendered selection — a parenthesised tuple for a ranked set-of (the
+        ranking pre-head needs it as a unit), a plural listing for an ordered report, else natural
+        Oxford-comma prose."""
+        if plan.ranking is not None:
+            return self._parenthesised(node._selected_variables_)
+        if plan.report is not None:
+            return self._selection_list(node._selected_variables_, number=Number.PLURAL)
+        return self._selection_list(node._selected_variables_)
+
+    def _selection_list(
+        self,
+        variables: List[SymbolicExpression],
+        number: Number = Number.SINGULAR,
+    ) -> Fragment:
         """:return: the selections joined as natural prose *"a, b, and c"* (Oxford comma, no
-        parentheses) — the tuple shape reads fine without the code-like brackets."""
+        parentheses) — the tuple shape reads fine without the code-like brackets. A plural *number*
+        lists them as populations (*"Employees"*) for an ordered report."""
         return oxford_comma(
-            [self.context.child(variable) for variable in variables],
+            [self._selected(variable, number) for variable in variables],
             Conjunctions.AND.as_fragment(),
         )
+
+    def _selected(self, variable: SymbolicExpression, number: Number) -> Fragment:
+        """:return: a single selection, as a bare plural population (*"Employees"*) when *number* is
+        plural and the selection is a variable, else its default referring form."""
+        if number is Number.PLURAL and isinstance(variable, Variable):
+            return NounPhrase(
+                head=RoleFragment.for_variable(
+                    variable._type_.__name__, variable, number=Number.PLURAL
+                ),
+                number=Number.PLURAL,
+                definiteness=Definiteness.INDEFINITE,
+                referent_id=_subject_id(variable),
+            )
+        return self.context.child(variable)
 
     def _parenthesised(self, variables: List[SymbolicExpression]) -> Fragment:
         """:return: the selections as a parenthesised tuple *"(a, b)"* — for a ranked set-of, whose
@@ -164,7 +190,7 @@ class QueryAssembler(Assembler[Query, QueryPlan]):
             ]
         )
 
-    def _assemble_report(
+    def _assemble_aggregation_report(
         self, node: SetOf, plan: QueryPlan, report: ReportPlan
     ) -> Fragment:
         """:return: a calculation/report — *"Report <columns>"*, or *"For each <keys>, report
@@ -215,12 +241,13 @@ class QueryAssembler(Assembler[Query, QueryPlan]):
         return replace(fragment, text=fragment.text[:1].upper() + fragment.text[1:])
 
     def _set_of_header(self, plan: QueryPlan) -> Fragment:
-        """:return: The set-of find header — *"Find"*, or *"Find the <top three>"* when a ``limit``
-        ranks the tuples (the order key is suppressed; it is a visible tuple element). The literal
-        *"sets of"* is intentionally dropped — the parenthesised tuple carries the set shape.
+        """:return: The set-of header — *"Find the <top three>"* when a ``limit`` ranks the tuples
+        (the order key is suppressed; it is a visible tuple element), else the plain verb
+        (*"Find"* / *"Report"*). The literal *"sets of"* is intentionally dropped — the selection
+        carries the set shape.
         """
         if plan.ranking is None:
-            return Keywords.FIND.as_fragment()
+            return self._verb(plan)
         surface = ranking_surface(RankingRequest(plan=plan.ranking))
         return PhraseFragment(
             parts=[
@@ -229,6 +256,13 @@ class QueryAssembler(Assembler[Query, QueryPlan]):
                 surface.pre_head,
             ]
         )
+
+    def _verb(self, plan: QueryPlan) -> Fragment:
+        """:return: the opening verb — *"Report"* when the query presents results (a report),
+        else *"Find"* (a search)."""
+        if plan.report is not None:
+            return self._sentence_initial(Keywords.REPORT.as_fragment())
+        return Keywords.FIND.as_fragment()
 
     # ── subject selection ──────────────────────────────────────────────────────
 
@@ -249,6 +283,10 @@ class QueryAssembler(Assembler[Query, QueryPlan]):
         three Robots"*), else *"the unique Robot"* (``eql.the``) / *"a Robot"*."""
         if plan.ranking is not None:
             return self._build_ranking_selection(variable, plan)
+        if plan.report is not None and plan.report.kind is ReportKind.ORDERING:
+            # An ordered listing presents all the matching results, so the subject is plural
+            # ("Report Employees …"); a plural subject pronominalises to "their".
+            return self._selected(variable, Number.PLURAL)
         if plan.is_the:
             # "the unique <type>" first mention; the coreference pass reduces a repeat to
             # "the <type>" (UNIQUE downgrades to DEFINITE) — so it is a referring noun phrase.
@@ -350,7 +388,7 @@ class QueryAssembler(Assembler[Query, QueryPlan]):
         clauses (``None``) are simply skipped.
         """
         if find_header is None:
-            find_header = Keywords.FIND.as_fragment()
+            find_header = self._verb(plan)
         header = PhraseFragment(parts=[find_header, selection])
         clauses = [
             clause
