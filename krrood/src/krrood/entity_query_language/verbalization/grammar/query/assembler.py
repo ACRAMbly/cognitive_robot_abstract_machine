@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import uuid
 from dataclasses import replace
 
 from typing_extensions import List, Optional, Tuple
@@ -10,7 +9,6 @@ from krrood.entity_query_language.core.expression_structure import walk_chain
 from krrood.entity_query_language.core.mapped_variable import Attribute
 from krrood.entity_query_language.core.variable import Variable
 from krrood.entity_query_language.query.query import Query, SetOf
-from krrood.entity_query_language.verbalization.navigation_path import PathStep
 from krrood.entity_query_language.verbalization.fragments.base import (
     BlockFragment,
     NounPhrase,
@@ -18,21 +16,16 @@ from krrood.entity_query_language.verbalization.fragments.base import (
     PhraseFragment,
     RoleFragment,
     Fragment,
-    WordFragment,
 )
 from krrood.entity_query_language.verbalization.fragments.features import (
     Definiteness,
     Number,
-    Separator,
 )
 from krrood.entity_query_language.verbalization.grammar.aggregation.assembler import (
     AggregationValueAssembler,
 )
 from krrood.entity_query_language.verbalization.grammar.framework.assembler import (
     Assembler,
-)
-from krrood.entity_query_language.verbalization.grammar.chain.planner import (
-    ChainPlanner,
 )
 from krrood.entity_query_language.verbalization.grammar.clauses.composer import (
     ClauseComposer,
@@ -49,13 +42,9 @@ from krrood.entity_query_language.verbalization.grammar.query.ranking import (
     ranking_surface,
     RankingRequest,
 )
-from krrood.entity_query_language.verbalization.microplanning.coordination import (
-    group_consecutive_by_owner,
-    OwnerGroup,
-)
-from krrood.entity_query_language.verbalization.microplanning.possessive import (
-    attribute_fragment,
-    coordinated_genitive,
+from krrood.entity_query_language.verbalization.grammar.query.selection import (
+    SelectionAssembler,
+    subject_referent_id,
 )
 from krrood.entity_query_language.verbalization.vocabulary.english import (
     Articles,
@@ -65,12 +54,6 @@ from krrood.entity_query_language.verbalization.vocabulary.english import (
     Keywords,
     Punctuation,
 )
-
-
-def _subject_id(variable: SymbolicExpression) -> Optional[uuid.UUID]:
-    """:return: The referent id for a subject variable (``None`` when *variable* is not a single
-    variable, which suppresses pronominalisation)."""
-    return variable._id_ if isinstance(variable, Variable) else None
 
 
 class QueryAssembler(Assembler[Query, QueryPlan]):
@@ -163,8 +146,8 @@ class QueryAssembler(Assembler[Query, QueryPlan]):
         """:return: the set-of's rendered selection — a plural listing for an ordered report, else
         natural Oxford-comma prose."""
         if plan.report is not None:
-            return self._selection_list(node._selected_variables_, number=Number.PLURAL)
-        return self._selection_list(node._selected_variables_)
+            return self._selections.prose(node._selected_variables_, number=Number.PLURAL)
+        return self._selections.prose(node._selected_variables_)
 
     def _assemble_ranked_set_of(self, node: SetOf, plan: QueryPlan) -> Fragment:
         """:return: a ranked set-of reframed onto the entity its columns describe — *"Report, for the
@@ -177,7 +160,7 @@ class QueryAssembler(Assembler[Query, QueryPlan]):
             return self._query_body(
                 node,
                 plan,
-                self._parenthesised(node._selected_variables_),
+                self._selections.parenthesised(node._selected_variables_),
                 where_items=[self._where_clause(plan)],
                 find_header=self._set_of_header(plan),
             )
@@ -194,7 +177,7 @@ class QueryAssembler(Assembler[Query, QueryPlan]):
             definiteness=Definiteness.DEFINITE,
             pre_head=surface.pre_head,
             modifiers=surface.modifiers,
-            referent_id=_subject_id(subject),
+            referent_id=subject_referent_id(subject),
         )
         columns = self._ranked_columns(node, ranking)
         if not columns:
@@ -266,82 +249,10 @@ class QueryAssembler(Assembler[Query, QueryPlan]):
             selected = [s for s in selected if s._id_ != ranking.order_key._id_]
         return selected
 
-    def _selection_list(
-        self,
-        variables: List[SymbolicExpression],
-        number: Number = Number.SINGULAR,
-    ) -> Fragment:
-        """:return: the selections joined as natural prose *"a, b, and c"* (Oxford comma, no
-        parentheses) — the tuple shape reads fine without the code-like brackets. A plural *number*
-        lists them as populations (*"Employees"*) for an ordered report; otherwise contiguous
-        attributes of one owner fold into a shared genitive (*"the department and salary of an
-        Employee"*)."""
-        if number is Number.PLURAL:
-            selections = [self._selected(variable, number) for variable in variables]
-        else:
-            selections = self._folded_selections(variables)
-        return oxford_comma(selections, Conjunctions.AND.as_fragment())
-
-    def _folded_selections(self, variables: List[SymbolicExpression]) -> List[Fragment]:
-        """:return: the rendered selections, with each maximal run of plain attributes sharing one
-        owner folded into a single coordinated genitive (via the shared
-        :func:`~…coordination.group_consecutive_by_owner` aggregation primitive), and every other
-        selection rendered alone.
-        """
-        fragments: List[Fragment] = []
-        for item in group_consecutive_by_owner(variables, self._foldable_attribute):
-            if isinstance(item, OwnerGroup):
-                fragments.append(
-                    coordinated_genitive(
-                        [attribute_fragment(terminal) for terminal in item.items],
-                        self.context.child(item.owner, inline=True),
-                    )
-                )
-            else:
-                fragments.append(self._selected(item, Number.SINGULAR))
-        return fragments
-
-    def _foldable_attribute(
-        self, selection: SymbolicExpression
-    ) -> Optional[Tuple[SymbolicExpression, PathStep]]:
-        """:return: ``(owner, terminal_step)`` when *selection* is a plain genitive attribute that
-        can share an owner with siblings, else ``None`` — a relational terminal (*"the Robot to
-        which …"*) does not coordinate cleanly, so it is left alone."""
-        if not isinstance(selection, Attribute):
-            return None
-        plan = self.context.microplan.plan_for(selection, ChainPlanner)
-        if not plan.parts or plan.parts[-1].is_relation:
-            return None
-        return selection._child_, plan.parts[-1]
-
-    def _selected(self, variable: SymbolicExpression, number: Number) -> Fragment:
-        """:return: a single selection, as a bare plural population (*"Employees"*) when *number* is
-        plural and the selection is a variable, else its default referring form."""
-        if number is Number.PLURAL and isinstance(variable, Variable):
-            return NounPhrase(
-                head=RoleFragment.for_variable(
-                    variable._type_.__name__, variable, number=Number.PLURAL
-                ),
-                number=Number.PLURAL,
-                definiteness=Definiteness.INDEFINITE,
-                referent_id=_subject_id(variable),
-            )
-        return self.context.child(variable)
-
-    def _parenthesised(self, variables: List[SymbolicExpression]) -> Fragment:
-        """:return: the selections as a parenthesised tuple *"(a, b)"* — for a ranked set-of, whose
-        *"the top three"* pre-head needs the tuple grouped."""
-        tuple_phrase = PhraseFragment(
-            parts=[self.context.child(variable) for variable in variables],
-            separator=Separator.COMMA,
-        )
-        return PhraseFragment(
-            parts=[
-                Punctuation.OPEN_PAREN.as_fragment(),
-                tuple_phrase,
-                Punctuation.CLOSE_PAREN.as_fragment(),
-            ]
-        )
+    @property
+    def _selections(self) -> SelectionAssembler:
+        """:return: The selection-rendering collaborator for this node's context."""
+        return SelectionAssembler(self.context)
 
     def _assemble_aggregation_report(
         self, node: SetOf, plan: QueryPlan, report: ReportPlan
@@ -357,7 +268,7 @@ class QueryAssembler(Assembler[Query, QueryPlan]):
         return self._query_body(
             node,
             plan,
-            self._selection_list(report.columns),
+            self._selections.prose(report.columns),
             where_items=[self._where_clause(plan)],
             find_header=header,
         )
@@ -380,7 +291,7 @@ class QueryAssembler(Assembler[Query, QueryPlan]):
         selection = PhraseFragment(
             parts=[
                 GroupingPhrases.ALL.as_fragment(),
-                self._selection_list(report.columns, number=Number.PLURAL),
+                self._selections.prose(report.columns, number=Number.PLURAL),
             ]
         )
         return self._query_body(
@@ -501,14 +412,14 @@ class QueryAssembler(Assembler[Query, QueryPlan]):
         if plan.report is not None and plan.report.kind is ReportKind.ORDERING:
             # An ordered listing presents all the matching results, so the subject is plural
             # ("Report Employees …"); a plural subject pronominalises to "their".
-            return self._selected(variable, self._subject_number(plan))
+            return self._selections.one(variable, self._subject_number(plan))
         if plan.is_the:
             # "the unique <type>" first mention; the coreference pass reduces a repeat to
             # "the <type>" (UNIQUE downgrades to DEFINITE) — so it is a referring noun phrase.
             return NounPhrase(
                 head=RoleFragment.for_variable(plan.selected_type, variable),
                 definiteness=Definiteness.UNIQUE,
-                referent_id=_subject_id(variable),
+                referent_id=subject_referent_id(variable),
             )
         # context.child(variable) → VariableRule referring noun phrase; the entity shares its referent.
         return self.context.child(variable)
@@ -529,7 +440,7 @@ class QueryAssembler(Assembler[Query, QueryPlan]):
             definiteness=Definiteness.DEFINITE,
             pre_head=surface.pre_head,
             modifiers=surface.modifiers,
-            referent_id=_subject_id(variable),
+            referent_id=subject_referent_id(variable),
         )
 
     def _apply_subject_restrictions(
@@ -586,7 +497,7 @@ class QueryAssembler(Assembler[Query, QueryPlan]):
         return NounPhrase(
             head=RoleFragment.for_variable(plan.selected_type, variable),
             definiteness=definiteness,
-            referent_id=_subject_id(variable),
+            referent_id=subject_referent_id(variable),
             modifiers=modifiers,
         )
 
@@ -667,5 +578,5 @@ class QueryAssembler(Assembler[Query, QueryPlan]):
         # A referring noun phrase (referent_id below) — a repeat reduces to "the <type>" in the pass.
         return NounPhrase(
             head=RoleFragment.for_variable(type_name, variable),
-            referent_id=_subject_id(variable),
+            referent_id=subject_referent_id(variable),
         )

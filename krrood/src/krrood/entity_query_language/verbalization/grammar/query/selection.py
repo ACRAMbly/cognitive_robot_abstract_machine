@@ -1,0 +1,142 @@
+"""
+Rendering a query's *selection* — the variables / columns it selects — into prose.
+
+A selection is said differently by shape: natural Oxford-comma prose *"a, b, and c"* (no code-like
+brackets), a parenthesised tuple *"(a, b)"* for a ranked set-of whose *"top three"* pre-head needs
+the tuple grouped, or a plural population *"Employees"* for an ordered report. Contiguous attributes
+of one owner fold into a shared genitive (*"the department and salary of an Employee"*) via the
+shared :func:`~…coordination.group_consecutive_by_owner` aggregation primitive.
+
+Split out of :class:`~…query.assembler.QueryAssembler` so the selection-rendering responsibility is
+its own cohesive collaborator (the assembler delegates to it).
+"""
+
+from __future__ import annotations
+
+import uuid
+from dataclasses import dataclass
+
+from typing_extensions import List, Optional, Tuple
+
+from krrood.entity_query_language.core.base_expressions import SymbolicExpression
+from krrood.entity_query_language.core.mapped_variable import Attribute
+from krrood.entity_query_language.core.variable import Variable
+from krrood.entity_query_language.verbalization.fragments.base import (
+    Fragment,
+    NounPhrase,
+    oxford_comma,
+    PhraseFragment,
+    RoleFragment,
+)
+from krrood.entity_query_language.verbalization.fragments.features import (
+    Definiteness,
+    Number,
+    Separator,
+)
+from krrood.entity_query_language.verbalization.grammar.chain.planner import (
+    ChainPlanner,
+)
+from krrood.entity_query_language.verbalization.grammar.framework.phrase_rule import (
+    RuleContext,
+)
+from krrood.entity_query_language.verbalization.microplanning.coordination import (
+    group_consecutive_by_owner,
+    OwnerGroup,
+)
+from krrood.entity_query_language.verbalization.microplanning.possessive import (
+    attribute_fragment,
+    coordinated_genitive,
+)
+from krrood.entity_query_language.verbalization.navigation_path import PathStep
+from krrood.entity_query_language.verbalization.vocabulary.english import (
+    Conjunctions,
+    Punctuation,
+)
+
+
+def subject_referent_id(variable: SymbolicExpression) -> Optional[uuid.UUID]:
+    """:return: The referent id for a subject/selection variable (``None`` when *variable* is not a
+    single variable, which suppresses pronominalisation)."""
+    return variable._id_ if isinstance(variable, Variable) else None
+
+
+@dataclass
+class SelectionAssembler:
+    """Render a query's selected variables / columns into prose — the single owner of *how a
+    selection is said* (natural prose, parenthesised tuple, plural population, co-owned genitive)."""
+
+    context: RuleContext
+    """The per-node context (recursion entry and microplanning services)."""
+
+    def prose(
+        self,
+        variables: List[SymbolicExpression],
+        number: Number = Number.SINGULAR,
+    ) -> Fragment:
+        """:return: the selections joined as natural prose *"a, b, and c"* (Oxford comma, no
+        parentheses). A plural *number* lists them as populations (*"Employees"*) for an ordered
+        report; otherwise contiguous attributes of one owner fold into a shared genitive (*"the
+        department and salary of an Employee"*)."""
+        if number is Number.PLURAL:
+            selections = [self.one(variable, number) for variable in variables]
+        else:
+            selections = self._folded(variables)
+        return oxford_comma(selections, Conjunctions.AND.as_fragment())
+
+    def one(self, variable: SymbolicExpression, number: Number) -> Fragment:
+        """:return: a single selection, as a bare plural population (*"Employees"*) when *number* is
+        plural and the selection is a variable, else its default referring form."""
+        if number is Number.PLURAL and isinstance(variable, Variable):
+            return NounPhrase(
+                head=RoleFragment.for_variable(
+                    variable._type_.__name__, variable, number=Number.PLURAL
+                ),
+                number=Number.PLURAL,
+                definiteness=Definiteness.INDEFINITE,
+                referent_id=subject_referent_id(variable),
+            )
+        return self.context.child(variable)
+
+    def parenthesised(self, variables: List[SymbolicExpression]) -> Fragment:
+        """:return: the selections as a parenthesised tuple *"(a, b)"* — for a ranked set-of, whose
+        *"the top three"* pre-head needs the tuple grouped."""
+        tuple_phrase = PhraseFragment(
+            parts=[self.context.child(variable) for variable in variables],
+            separator=Separator.COMMA,
+        )
+        return PhraseFragment(
+            parts=[
+                Punctuation.OPEN_PAREN.as_fragment(),
+                tuple_phrase,
+                Punctuation.CLOSE_PAREN.as_fragment(),
+            ]
+        )
+
+    def _folded(self, variables: List[SymbolicExpression]) -> List[Fragment]:
+        """:return: the rendered selections, with each maximal run of plain attributes sharing one
+        owner folded into a single coordinated genitive, and every other selection rendered alone."""
+        fragments: List[Fragment] = []
+        for item in group_consecutive_by_owner(variables, self._foldable_attribute):
+            if isinstance(item, OwnerGroup):
+                fragments.append(
+                    coordinated_genitive(
+                        [attribute_fragment(terminal) for terminal in item.items],
+                        self.context.child(item.owner, inline=True),
+                    )
+                )
+            else:
+                fragments.append(self.one(item, Number.SINGULAR))
+        return fragments
+
+    def _foldable_attribute(
+        self, selection: SymbolicExpression
+    ) -> Optional[Tuple[SymbolicExpression, PathStep]]:
+        """:return: ``(owner, terminal_step)`` when *selection* is a plain genitive attribute that
+        can share an owner with siblings, else ``None`` — a relational terminal (*"the Robot to
+        which …"*) does not coordinate cleanly, so it is left alone."""
+        if not isinstance(selection, Attribute):
+            return None
+        plan = self.context.microplan.plan_for(selection, ChainPlanner)
+        if not plan.parts or plan.parts[-1].is_relation:
+            return None
+        return selection._child_, plan.parts[-1]

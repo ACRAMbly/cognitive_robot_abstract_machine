@@ -409,3 +409,20 @@ misnomer (`transforms`) and the `rules.py`/`restriction.py` name clash are gone.
   attribute but `_type_` is not, and several sites depend on a `None`/sentinel default — converting
   all 37 safely needs per-site `isinstance`/`None` guards that add verbosity and risk for little
   value. The ratchet prevents any *new* `getattr`. (Deferred, documented.)
+
+### Phase 6 — done (decompose the QueryAssembler, conservatively)
+
+- The selection-rendering responsibility (how a query's selected variables / columns are said —
+  natural prose, parenthesised tuple, plural population, co-owned genitive fold) is extracted from
+  the 660-line `QueryAssembler` into a cohesive **`SelectionAssembler`** in the new
+  `grammar/query/selection.py`. The five methods (`_selection_list` / `_folded_selections` /
+  `_foldable_attribute` / `_selected` / `_parenthesised`) became `prose` / `_folded` /
+  `_foldable_attribute` / `one` / `parenthesised`; `QueryAssembler` delegates via a `_selections`
+  property. The `_subject_id` helper moved there too (as `subject_referent_id`), so both share one
+  definition with no import cycle.
+- **Decision to review:** I stopped at this one clean seam rather than fully shredding
+  `QueryAssembler`. The remaining methods (entity/empty/subject realization, ranked set-of reframing,
+  the report/grouped-report forms, the `_query_body` / `_trailing_clauses` body builders) are
+  cohesive and tightly share those private body builders; extracting them further would mean passing
+  the assembler (or its body builders) into sub-objects — adding coupling for little readability gain.
+  The class is now a clearer "realize a query, delegating selection rendering". Suite green.
