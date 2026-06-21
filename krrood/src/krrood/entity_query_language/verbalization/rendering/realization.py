@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from typing_extensions import Iterable, Mapping, Optional
+from typing_extensions import Iterable, List, Mapping, Optional
 
 from krrood.entity_query_language.verbalization.fragments.base import (
     flatten_fragment_to_plain_text,
@@ -23,12 +23,16 @@ from krrood.entity_query_language.verbalization.rendering.morphology_processor i
 from krrood.entity_query_language.verbalization.rendering.orthography_processor import (
     OrthographyProcessor,
 )
+from krrood.entity_query_language.verbalization.rendering.passes import RealizationPass
 
-# The stateless passes are shared module-level instances; the coreference pass is
-# stateful per walk and is therefore created fresh inside realize_tree.
-_DETERMINER = DeterminerProcessor()
-_MORPHOLOGY = MorphologyProcessor()
-_ORTHOGRAPHY = OrthographyProcessor()
+# The stateless lowering passes are shared module-level instances, in pipeline order. The
+# coreference pass is stateful per walk (and parameterised by discourse / already_seen), so it is
+# created fresh per call and prepended to the pipeline in realize_tree.
+_LOWERING_PASSES: List[RealizationPass] = [
+    DeterminerProcessor(),
+    MorphologyProcessor(),
+    OrthographyProcessor(),
+]
 
 
 def realize_tree(
@@ -53,11 +57,18 @@ def realize_tree(
         (relational referents) — applied by the coreference pass.
     :return: The fully realised fragment tree.
     """
-    resolved = CoreferenceProcessor(
-        discourse=discourse, numbered_labels=dict(numbered_labels or {})
-    ).process(fragment, already_seen=already_seen)
-    inflected = _MORPHOLOGY.process(_DETERMINER.process(resolved))
-    return _ORTHOGRAPHY.process(inflected)
+    pipeline: List[RealizationPass] = [
+        CoreferenceProcessor(
+            discourse=discourse,
+            numbered_labels=dict(numbered_labels or {}),
+            already_seen=tuple(already_seen or ()),
+        ),
+        *_LOWERING_PASSES,
+    ]
+    realised = fragment
+    for realisation_pass in pipeline:
+        realised = realisation_pass.process(realised)
+    return realised
 
 
 def realize_subtree(fragment: Fragment) -> str:

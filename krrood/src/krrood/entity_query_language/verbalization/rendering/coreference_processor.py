@@ -24,6 +24,7 @@ from krrood.entity_query_language.verbalization.rendering.discourse import (
     DiscourseView,
     EMPTY_DISCOURSE,
 )
+from krrood.entity_query_language.verbalization.rendering.passes import RealizationPass
 
 
 @dataclass
@@ -39,7 +40,7 @@ class SubjectFrame:
 
 
 @dataclass
-class CoreferenceProcessor:
+class CoreferenceProcessor(RealizationPass):
     """
     Resolve every referring noun phrase in document order (first / repeat / pronoun) — the one
     place the discourse (coreference) decision is made.
@@ -70,6 +71,11 @@ class CoreferenceProcessor:
     relational referent's relative clause is built in the microplanner, with no access to the
     referring service, so the number is stamped on here instead."""
 
+    already_seen: Iterable[uuid.UUID] = ()
+    """Referents introduced by *prior* builds sharing the same context, so the same expression
+    verbalized twice against one context reads *"a Robot"* then *"the Robot"* — treated as
+    already-mentioned before the walk begins."""
+
     _seen: Set[uuid.UUID] = field(init=False, default_factory=set)
     """Referent ids already mentioned at the current point of the walk."""
 
@@ -83,19 +89,13 @@ class CoreferenceProcessor:
     to the referent that was the subject just before (centering theory, Grosz/Joshi/Weinstein
     1995)."""
 
-    def process(
-        self,
-        fragment: Fragment,
-        already_seen: Optional[Iterable[uuid.UUID]] = None,
-    ) -> Fragment:
+    def process(self, fragment: Fragment) -> Fragment:
         """
         :param fragment: Root of the fragment tree.
-        :param already_seen: Referents introduced by *prior* builds sharing the same context
-            (so the same expression verbalized twice against one context reads *"a Robot"* then
-            *"the Robot"*).  These are treated as already-mentioned before the walk begins.
-        :return: A new tree with referring noun phrases resolved.
+        :return: A new tree with referring noun phrases resolved (first / repeat / pronoun), seeded
+            with the :attr:`already_seen` referents from prior builds on a shared context.
         """
-        self._seen = set(already_seen or ())
+        self._seen = set(self.already_seen)
         self._subject_stack = []
         self._center = None
         return self._walk(fragment)

@@ -372,3 +372,21 @@ mirroring how `QueryAssembler` dispatches over the `RankingForm` registry in `qu
 conditions now follows the same assembler-plus-registry shape as the rest of the grammar. The
 misnomer (`transforms`) and the `rules.py`/`restriction.py` name clash are gone. New
 `test_conditions_layout.py` pins the layout (and that the old module names are gone). 582 passed.
+
+### Phase 5 — done (realisation passes as a pipeline)
+
+- New `rendering/passes.py` defines the shared contract: **`RealizationPass`** (*fragment in,
+  fragment out*) and **`RewritePass`** (a stateless pass fully described by one leaf rewrite —
+  `process` is `map_fragment(fragment, self.rewrite)`, so the pass declares *what* to do to a leaf,
+  never *how* to traverse).
+- The four processors now share it: `DeterminerProcessor` and `MorphologyProcessor` are
+  `RewritePass`es (their hand-rolled `map_fragment` calls are gone); `OrthographyProcessor` (phrase
+  glue) and `CoreferenceProcessor` (stateful document-order walk) are `RealizationPass`es with their
+  own `process`.
+- `realize_tree` now builds an **ordered pipeline list** and iterates it, instead of nesting calls;
+  the lowering passes are a module-level `_LOWERING_PASSES` list (open/closed — insert a pass) and
+  the per-call coreference pass is prepended. `already_seen` moved from a `process` parameter to a
+  `CoreferenceProcessor` field, so every pass has the uniform `process(fragment)` signature.
+- New `test_realization_pipeline.py` pins the contract and that `realize_tree` equals the ordered
+  composition of the four passes (the pass-ordering/state-handoff integration the suite previously
+  lacked). Suite green.

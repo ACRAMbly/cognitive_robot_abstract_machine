@@ -12,9 +12,10 @@ from krrood.entity_query_language.verbalization.fragments.features import (
     Spacing,
     Separator,
 )
+from krrood.entity_query_language.verbalization.rendering.passes import RealizationPass
 
 
-class OrthographyProcessor:
+class OrthographyProcessor(RealizationPass):
     """
     Remove the space adjacent to glued punctuation in every ``PhraseFragment`` (idempotent).
 

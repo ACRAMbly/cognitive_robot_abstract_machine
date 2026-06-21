@@ -6,7 +6,6 @@ from typing_extensions import Optional
 
 from krrood.entity_query_language.verbalization.fragments.base import (
     flatten_fragment_to_plain_text,
-    map_fragment,
     NounPhrase,
     PhraseFragment,
     RoleFragment,
@@ -17,10 +16,11 @@ from krrood.entity_query_language.verbalization.fragments.features import (
     Definiteness,
     Number,
 )
+from krrood.entity_query_language.verbalization.rendering.passes import RewritePass
 from krrood.entity_query_language.verbalization.vocabulary.english import Articles
 
 
-class DeterminerProcessor:
+class DeterminerProcessor(RewritePass):
     """
     Lower every noun phrase to a determiner-bearing phrase.
 
@@ -44,14 +44,7 @@ class DeterminerProcessor:
     (2000) — microplanning.
     """
 
-    def process(self, fragment: Fragment) -> Fragment:
-        """
-        :param fragment: Root of the fragment tree.
-        :return: A new tree with every noun phrase lowered (idempotent on noun phrase-free trees).
-        """
-        return map_fragment(fragment, self._lower_if_noun_phrase)
-
-    def _lower_if_noun_phrase(self, leaf: Fragment) -> Fragment:
+    def rewrite(self, leaf: Fragment) -> Fragment:
         """:return: A lowered noun-phrase leaf; any other leaf passes through unchanged."""
         return self._lower_noun_phrase(leaf) if isinstance(leaf, NounPhrase) else leaf
 
