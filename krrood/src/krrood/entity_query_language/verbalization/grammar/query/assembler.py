@@ -9,6 +9,7 @@ from krrood.entity_query_language.core.base_expressions import SymbolicExpressio
 from krrood.entity_query_language.core.expression_structure import walk_chain
 from krrood.entity_query_language.core.mapped_variable import Attribute
 from krrood.entity_query_language.core.variable import Variable
+from krrood.entity_query_language.operators.aggregators import Aggregator
 from krrood.entity_query_language.query.query import Query, SetOf
 from krrood.entity_query_language.verbalization.navigation_path import PathStep
 from krrood.entity_query_language.verbalization.fragments.base import (
@@ -40,6 +41,7 @@ from krrood.entity_query_language.verbalization.grammar.clauses.composer import 
 from krrood.entity_query_language.verbalization.grammar.query.planner import (
     QueryPlan,
     QueryPlanner,
+    RankingDirection,
     RankingKeyRelation,
     ReportKind,
     ReportPlan,
@@ -60,6 +62,7 @@ from krrood.entity_query_language.verbalization.vocabulary.english import (
     GroupingPhrases,
     Keywords,
     Punctuation,
+    RankingWords,
 )
 
 
@@ -141,6 +144,8 @@ class QueryAssembler(Assembler[Query, QueryPlan]):
         """
         plan = self.plan(node)
         report = plan.report
+        if report is not None and plan.ranking is not None:
+            return self._assemble_ranked_report(node, plan, report)
         if report is not None and report.kind is ReportKind.GROUPING:
             return self._assemble_grouped_report(node, plan, report)
         if report is not None and report.kind is ReportKind.AGGREGATION:
@@ -154,6 +159,94 @@ class QueryAssembler(Assembler[Query, QueryPlan]):
             where_items=[self._where_clause(plan)],
             find_header=self._set_of_header(plan),
         )
+
+    def _assemble_ranked_report(
+        self, node: SetOf, plan: QueryPlan, report: ReportPlan
+    ) -> Fragment:
+        """:return: a grouped/aggregated report whose rows are *ranked*. Picking the single best row
+        (``limit(1)``) reads as a superlative on the value being ranked — *"Report the month of the
+        begin of its period and the highest sum of …"* — so the ranking decorates the order-key
+        column rather than inventing a subject. A wider ranking (``n > 1``) keeps the count-bearing
+        *"the top three …"* reframe. Either way the grouping is never restated as a trailing
+        *"grouped by"* (the report path drops it)."""
+        if plan.ranking.n != 1:
+            return self._assemble_ranked_set_of(node, plan)
+        return self._query_body(
+            node,
+            plan,
+            self._superlative_columns(node, plan.ranking),
+            where_items=[self._where_clause(plan)],
+            find_header=self._sentence_initial(Keywords.REPORT.as_fragment()),
+        )
+
+    def _superlative_columns(self, node: SetOf, ranking) -> Fragment:
+        """:return: the reported columns with the order-key column carrying the ranking superlative
+        (*"the highest sum of …"* / *"the lowest …"*); co-owned attribute keys fold into one genitive
+        (*"the year and month of the begin of its period"*) exactly as a plain selection does."""
+        variables = list(node._selected_variables_)
+        fragments: List[Fragment] = []
+        index = 0
+        while index < len(variables):
+            run = self._co_owned_run(variables, index)
+            if len(run) > 1:
+                owner = run[0][0]._child_
+                fragments.append(
+                    coordinated_genitive(
+                        [attribute_fragment(terminal) for _, terminal in run],
+                        self.context.child(owner, inline=True),
+                    )
+                )
+                index += len(run)
+                continue
+            selection = variables[index]
+            fragment = self.context.child(selection)
+            if self._is_order_key(selection, ranking.order_key):
+                fragment = self._with_superlative(fragment, ranking.direction)
+            fragments.append(fragment)
+            index += 1
+        return oxford_comma(fragments, Conjunctions.AND.as_fragment())
+
+    def _is_order_key(
+        self, selection: SymbolicExpression, order_key: Optional[SymbolicExpression]
+    ) -> bool:
+        """:return: whether *selection* is the column the query is ordered by — matched
+        structurally, not by identity, so a re-stated aggregate (``ordered_by(sum(x))`` for a
+        selected ``sum(x)``) still lines up."""
+        if order_key is None:
+            return False
+        if selection._id_ == order_key._id_:
+            return True
+        return self._expression_signature(selection) == self._expression_signature(
+            order_key
+        )
+
+    def _expression_signature(self, expression: SymbolicExpression) -> Tuple:
+        """:return: a structural key for *expression* — its kind, root variable, and attribute path —
+        so two distinct objects describing the same navigation/aggregate compare equal."""
+        if isinstance(expression, Aggregator):
+            kind = type(expression).__name__
+            chain, root = walk_chain(expression._chain_expression_)
+        else:
+            kind = ""
+            chain, root = walk_chain(expression)
+        root_id = root._id_ if isinstance(root, Variable) else None
+        path = tuple((step._attribute_name_, step._owner_class_) for step in chain)
+        return (kind, root_id, path)
+
+    def _with_superlative(
+        self, fragment: Fragment, direction: RankingDirection
+    ) -> Fragment:
+        """:return: *fragment* qualified by the ranking superlative — *"the highest …"* (descending) /
+        *"the lowest …"* (ascending) — attached as the noun's pre-head so it reads *"the highest sum
+        of …"*."""
+        quality = (
+            RankingWords.LOWEST
+            if direction is RankingDirection.ASCENDING
+            else RankingWords.HIGHEST
+        )
+        if isinstance(fragment, NounPhrase):
+            return replace(fragment, pre_head=quality.as_fragment())
+        return PhraseFragment(parts=[quality.as_fragment(), fragment])
 
     def _set_of_selection(self, node: SetOf, plan: QueryPlan) -> Fragment:
         """:return: the set-of's rendered selection — a plural listing for an ordered report, else

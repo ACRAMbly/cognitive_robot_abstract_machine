@@ -231,19 +231,22 @@ class QueryPlanner(Planner[Query, QueryPlan]):
 
     def _report(self, ranking: Optional[RankingPlan]) -> Optional[ReportPlan]:
         """:return: The report decomposition when the query *presents* results rather than searching
-        — a set-of computing aggregates, or any query with an ``ordered_by`` listing — else ``None``.
+        — a set-of computing aggregates, any grouped query, or any query with an ``ordered_by``
+        listing — else ``None``.
 
-        A ranked query (``limit``) keeps the *"Find the top three …"* form — the ranking pre-head is
-        a distinct, count-bearing surface — so it is never treated as a report.
+        Grouping and aggregation make a query a report independently of a ``limit``: a grouped or
+        aggregated query stays a report even when ranked (the ranking then ranks its rows). Only a
+        ranked query that is *neither* grouped nor aggregated keeps the *"Find the top three …"*
+        ranked-subject form, so the ranking guard sits after those checks.
         """
-        if ranking is not None:
-            return None
         aggregation = self._aggregation_report()
         if aggregation is not None:
             return aggregation
         grouping = self._grouping_report()
         if grouping is not None:
             return grouping
+        if ranking is not None:
+            return None
         if self.node._ordered_by_builder_ is not None:
             return ReportPlan(kind=ReportKind.ORDERING)
         return None
