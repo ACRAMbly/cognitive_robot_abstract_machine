@@ -79,6 +79,11 @@ class ReferringExpressions:
         """
         :param expression: Root EQL expression or query to scan.
         :return: An instance with the disambiguation map pre-built for *expression*.
+
+        >>> first, second = variable(Robot, []), variable(Robot, [])
+        >>> referring = ReferringExpressions.from_expression(an(set_of(first, second)))
+        >>> referring.disambiguation_map[first._id_]
+        'Robot 1'
         """
         labels, numbered = cls._build_disambiguation_map(expression)
         return cls(disambiguation_map=labels, numbered_labels=numbered)
@@ -98,6 +103,11 @@ class ReferringExpressions:
         :param expression: Root expression to pre-scan.
         :return: ``(labels, numbered)`` — the full ``_id_`` → label map, and the subset whose label
             was actually numbered (the collisions).
+
+        >>> labels, numbered = ReferringExpressions._build_disambiguation_map(
+        ...     an(set_of(variable(Robot, []), variable(Robot, []))))
+        >>> sorted(labels.values()), sorted(numbered.values())
+        (['Robot 1', 'Robot 2'], ['Robot 1', 'Robot 2'])
         """
         if isinstance(expression, Query):
             expression.build()
@@ -138,6 +148,11 @@ class ReferringExpressions:
         :return: The ``_id_`` of every variable that serves as the source population of an
             aggregation sub-query (e.g. the ``BankTransaction`` behind ``max(t.amount_details.amount)``),
             to exclude from numbering.
+
+        >>> transaction = variable(BankTransaction, [])
+        >>> source = an(entity(max(transaction.amount_details.amount)))
+        >>> transaction._id_ in ReferringExpressions._aggregation_source_ids(source)
+        True
         """
         ids: Set[uuid.UUID] = set()
         for node in expression._all_expressions_:
@@ -153,6 +168,9 @@ class ReferringExpressions:
         variable, or the *value* type for a relational attribute (a verb-named hop such as
         ``assigned_to``, whose relative clause names a distinct entity that must be told apart from
         other same-type entities). ``None`` for anything that does not denote a numberable entity.
+
+        >>> ReferringExpressions._numberable_type_name(variable(Robot, []))
+        'Robot'
         """
         if isinstance(node, Variable) and not isinstance(node, Literal):
             return (
@@ -176,6 +194,11 @@ class ReferringExpressions:
 
         :param variable: A variable instance.
         :return: The :class:`NumberedLabel` for *variable*.
+
+        >>> first, second = variable(Robot, []), variable(Robot, [])
+        >>> referring = ReferringExpressions.from_expression(an(set_of(first, second)))
+        >>> referring.numbered_label(second).text
+        'Robot 2'
         """
         type_name = (
             variable._type_.__name__
@@ -191,6 +214,9 @@ class ReferringExpressions:
         :param variable: A variable instance.
         :return: The first-mention :class:`NounForm` for *variable* — a numbered variable
             (*"Robot 2"*) is ``BARE``, any other is ``INDEFINITE`` (*"a Robot"*).
+
+        >>> ReferringExpressions().noun_for_parts(variable(Robot, [])).label
+        'Robot'
         """
         numbered = self.numbered_label(variable)
         definiteness = (

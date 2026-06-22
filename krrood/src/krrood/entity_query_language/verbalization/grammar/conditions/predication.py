@@ -87,6 +87,9 @@ class PredicateTransform(SpecificityRule):
         :param comparator: The comparator being said as a predicate.
         :param negated: Whether an outer negation applies.
         :return: ``True`` when this transform renders *comparator*.
+
+        >>> verbalize_expression(variable(Robot, []).battery > 50)
+        'the battery of a Robot is greater than 50'
         """
 
     @classmethod
@@ -99,6 +102,9 @@ class PredicateTransform(SpecificityRule):
         :param context: The per-node context (recursion and services).
         :param negated: Whether an outer negation applies.
         :return: *comparator* rendered in this transform's form.
+
+        >>> verbalize_expression(variable(Robot, []).battery > 50)
+        'the battery of a Robot is greater than 50'
         """
 
 
@@ -107,12 +113,22 @@ class GenericComparator(PredicateTransform):
 
     @classmethod
     def applies(cls, comparator: Comparator, negated: bool) -> bool:
+        """The unguarded base applies to every comparator.
+
+        >>> verbalize_expression(variable(Robot, []).battery > 50)
+        'the battery of a Robot is greater than 50'
+        """
         return True
 
     @classmethod
     def render(
         cls, comparator: Comparator, context: RuleContext, negated: bool
     ) -> Fragment:
+        """Render *"<left> <operator> <right>"* with the right side in value position.
+
+        >>> verbalize_expression(variable(Robot, []).battery > 50)
+        'the battery of a Robot is greater than 50'
+        """
         return PhraseFragment(
             parts=[
                 context.child(comparator.left),
@@ -128,6 +144,11 @@ class AbsenceTransform(GenericComparator):
 
     @classmethod
     def applies(cls, comparator: Comparator, negated: bool) -> bool:
+        """Fires on a non-negated ``<chain> == None`` comparison.
+
+        >>> verbalize_expression(variable(Mission, []).priority == None)
+        'a Mission has no priority'
+        """
         return (
             not negated
             and comparator.operation is operator.eq
@@ -138,6 +159,11 @@ class AbsenceTransform(GenericComparator):
     def render(
         cls, comparator: Comparator, context: RuleContext, negated: bool
     ) -> Fragment:
+        """Render the absence predicate instead of a value comparison.
+
+        >>> verbalize_expression(variable(Mission, []).priority == None)
+        'a Mission has no priority'
+        """
         return render_absence(comparator, context)
 
 
@@ -154,6 +180,11 @@ class BooleanPolarityTransform(GenericComparator):
 
     @classmethod
     def applies(cls, comparator: Comparator, negated: bool) -> bool:
+        """Fires on a boolean attribute compared to a boolean value/domain.
+
+        >>> verbalize_expression(variable(Task, []).completed == True)
+        'a Task is completed'
+        """
         return (
             comparator.operation in (operator.eq, operator.ne)
             and is_boolean_attribute_chain(comparator.left)
@@ -164,6 +195,11 @@ class BooleanPolarityTransform(GenericComparator):
     def render(
         cls, comparator: Comparator, context: RuleContext, negated: bool
     ) -> Fragment:
+        """Fold the boolean value into the verb's polarity, never *"is completed is True"*.
+
+        >>> verbalize_expression(variable(Task, []).completed == False)
+        'a Task is not completed'
+        """
         constraint = _boolean_constraint(comparator.right)
         plan = context.microplan.plan_for(comparator.left, ChainPlanner)
         chain = ChainAssembler(context)
@@ -209,6 +245,9 @@ def comparator_operator(
         ``services.configuration.compact_predicates`` when ``None``.
     :param number: The grammatical number the predicative copula agrees with.
     :return: The operator fragment.
+
+    >>> verbalize_expression(variable(Robot, []).battery > 50)
+    'the battery of a Robot is greater than 50'
     """
     if compact is None:
         compact = services.configuration.compact_predicates
@@ -240,6 +279,14 @@ def coindexed_operator(operation) -> Fragment:
         to"* for ``eq`` (the calculation-equality reading, since two coordinated lists cannot read a
         bare *"are"*), *"are greater than"* for ``gt``, etc. The plural copula agrees because the
         coordinated terminals are the grammatical subject.
+
+    >>> from krrood.entity_query_language.verbalization.fragments.base import (
+    ...     flatten_fragment_to_plain_text,
+    ... )
+    >>> flatten_fragment_to_plain_text(coindexed_operator(operator.eq))
+    'is equal to'
+    >>> flatten_fragment_to_plain_text(coindexed_operator(operator.gt))
+    'is greater than'
     """
     phrase = (
         Operators.CALC_EQ
@@ -270,6 +317,11 @@ def render_absence(
     :param context: The per-node context (recursion and services).
     :param number: The number the verb agrees with (plural owner → *"have no"* / *"do not exist"*).
     :return: The absence predicate fragment.
+
+    >>> verbalize_expression(variable(Mission, []).priority == None)
+    'a Mission has no priority'
+    >>> verbalize_expression(variable(Robot, []) == None)
+    'a Robot does not exist'
     """
     left = comparator.left
     if not isinstance(left, Attribute):
@@ -300,7 +352,15 @@ def render_absence(
 def _relation_target(attribute: Attribute) -> List[Fragment]:
     """:return: The object of a passive absence — *"any <Type>"* using the attribute's declared
     related type (*"any Robot"*), or the bare *"anything"* when that type is not a nameable class
-    (a primitive, a typing generic, or unknown)."""
+    (a primitive, a typing generic, or unknown).
+
+    >>> from krrood.entity_query_language.verbalization.fragments.base import (
+    ...     flatten_fragment_to_plain_text,
+    ... )
+    >>> attribute = (variable(Mission, []).assigned_to == None).left
+    >>> [flatten_fragment_to_plain_text(part) for part in _relation_target(attribute)]
+    ['any', 'Robot']
+    """
     related_type = getattr(attribute, "_type_", None)
     if isinstance(related_type, type) and related_type.__module__ != "builtins":
         return [Quantifiers.ANY.as_fragment(), RoleFragment.for_type(related_type)]
@@ -311,6 +371,11 @@ def _boolean_constraint(right: SymbolicExpression) -> Optional[Set[bool]]:
     """:return: The set of boolean values *right* constrains a boolean attribute to — ``{True}`` /
     ``{False}`` for a boolean literal or singleton domain, ``{True, False}`` for an open domain — or
     ``None`` when *right* is not a boolean literal / bounded boolean-domain variable.
+
+    >>> _boolean_constraint((variable(Task, []).completed == True).right)
+    {True}
+    >>> _boolean_constraint((variable(Robot, []).battery > 50).right) is None
+    True
     """
     if isinstance(right, Literal) and isinstance(right._value_, bool):
         return {right._value_}

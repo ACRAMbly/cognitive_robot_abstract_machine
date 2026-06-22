@@ -113,12 +113,27 @@ class InferencePlanner(Planner[Entity, RuleStructure]):
         """
         :param entity: Candidate query.
         :return: ``True`` when *entity*'s selected variable is an instantiated variable.
+
+        >>> from krrood.entity_query_language.factories import inference
+        >>> connection = variable(FixedConnection, [])
+        >>> drawer = inference(Drawer)(container=connection.parent, handle=connection.child)
+        >>> InferencePlanner.can_handle(entity(drawer))
+        True
+        >>> InferencePlanner.can_handle(entity(variable(Robot, [])))
+        False
         """
         entity.build()
         return isinstance(entity.selected_variable, InstantiatedVariable)
 
     def plan(self) -> RuleStructure:
-        """:return: The IF/THEN decomposition: antecedents, consequent bindings, and grouping."""
+        """:return: The IF/THEN decomposition: antecedents, consequent bindings, and grouping.
+
+        >>> from krrood.entity_query_language.factories import inference
+        >>> connection = variable(FixedConnection, [])
+        >>> drawer = inference(Drawer)(container=connection.parent, handle=connection.child)
+        >>> InferencePlanner(entity(drawer)).plan().consequent_type
+        'Drawer'
+        """
         self.node.build()
         group_key_ids = self._group_key_ids()
         antecedents, unmatched = self._plan_antecedents(group_key_ids)

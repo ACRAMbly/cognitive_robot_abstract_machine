@@ -56,7 +56,14 @@ from krrood.entity_query_language.verbalization.vocabulary.english import (
 
 def subject_referent_id(variable: SymbolicExpression) -> Optional[uuid.UUID]:
     """:return: The referent id for a subject/selection variable (``None`` when *variable* is not a
-    single variable, which suppresses pronominalisation)."""
+    single variable, which suppresses pronominalisation).
+
+    >>> robot = variable(Robot, [])
+    >>> subject_referent_id(robot) == robot._id_
+    True
+    >>> subject_referent_id(robot.battery) is None
+    True
+    """
     return variable._id_ if isinstance(variable, Variable) else None
 
 
@@ -81,7 +88,12 @@ class SelectionAssembler:
         """:return: the selections joined as natural prose *"a, b, and c"* (Oxford comma, no
         parentheses). A plural *number* lists them as populations (*"Employees"*) for an ordered
         report; otherwise contiguous attributes of one owner fold into a shared genitive (*"the
-        department and salary of an Employee"*)."""
+        department and salary of an Employee"*).
+
+        >>> employee = variable(Employee, [])
+        >>> verbalize_expression(a(set_of(employee.department, employee.name)))
+        'Find the department and name of an Employee'
+        """
         if number is Number.PLURAL:
             selections = [self.one(variable, number) for variable in variables]
         else:
@@ -90,7 +102,12 @@ class SelectionAssembler:
 
     def one(self, variable: SymbolicExpression, number: Number) -> Fragment:
         """:return: a single selection, as a bare plural population (*"Employees"*) when *number* is
-        plural and the selection is a variable, else its default referring form."""
+        plural and the selection is a variable, else its default referring form.
+
+        >>> employee = variable(Employee, [])
+        >>> verbalize_expression(a(set_of(employee)).ordered_by(employee.salary, descending=True))
+        'Report Employees ordered by their salaries from highest to lowest'
+        """
         if number is Number.PLURAL and isinstance(variable, Variable):
             return NounPhrase(
                 head=RoleFragment.for_variable(
@@ -104,7 +121,14 @@ class SelectionAssembler:
 
     def parenthesised(self, variables: List[SymbolicExpression]) -> Fragment:
         """:return: the selections as a parenthesised tuple *"(a, b)"* — for a ranked set-of, whose
-        *"the top three"* pre-head needs the tuple grouped."""
+        *"the top three"* pre-head needs the tuple grouped.
+
+        >>> employee = variable(Employee, [])
+        >>> robot = variable(Robot, [])
+        >>> verbalize_expression(a(set_of(employee.name, robot.name)).ordered_by(
+        ...     employee.salary, descending=True).limit(2))
+        'Find the top two (the name of an Employee, the name of a Robot)'
+        """
         tuple_phrase = PhraseFragment(
             parts=[self.context.child(variable) for variable in variables],
             separator=Separator.COMMA,

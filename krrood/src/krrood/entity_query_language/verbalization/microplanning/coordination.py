@@ -145,6 +145,12 @@ class RangeBoundFold(ConjunctFold):
     (*"x is between low and high"*)."""
 
     def apply(self, conjuncts: ConjunctList) -> ConjunctList:
+        """:return: *conjuncts* with each complementary bound pair folded to a :class:`RangeFold`.
+
+        >>> robot = variable(Robot, [])
+        >>> isinstance(RangeBoundFold().apply([robot.battery >= 20, robot.battery <= 80])[0], RangeFold)
+        True
+        """
         return fold_range_pairs(conjuncts)
 
 
@@ -153,6 +159,17 @@ class CoindexedComparisonFold(ConjunctFold):
     :class:`CoindexedFold` (*"the begin and end … have the same month and year"*)."""
 
     def apply(self, conjuncts: ConjunctList) -> ConjunctList:
+        """:return: *conjuncts* with each co-indexed comparison group folded to a
+        :class:`CoindexedFold`.
+
+        >>> import dataclasses
+        >>> Span = dataclasses.make_dataclass("Span", [("low", int), ("high", int)])
+        >>> Pair = dataclasses.make_dataclass("Pair", [("left", Span), ("right", Span)])
+        >>> pair = variable(Pair, [])
+        >>> folded = CoindexedComparisonFold().apply([pair.left.low == pair.right.low, pair.left.high == pair.right.high])
+        >>> isinstance(folded[0], CoindexedFold)
+        True
+        """
         return fold_coindexed_groups(conjuncts)
 
 
@@ -170,7 +187,12 @@ class ConjunctReducer:
 
     def reduce(self, conjuncts: List[SymbolicExpression]) -> ConjunctList:
         """:param conjuncts: A flat conjunct list (e.g. an ``AND``'s operands).
-        :return: The list with each fold's recognised groups reduced to artifacts."""
+        :return: The list with each fold's recognised groups reduced to artifacts.
+
+        >>> robot = variable(Robot, [])
+        >>> len(ConjunctReducer().reduce([robot.battery >= 20, robot.battery <= 80]))
+        1
+        """
         items: ConjunctList = list(conjuncts)
         for fold in self.folds:
             items = fold.apply(items)
@@ -184,6 +206,10 @@ def reduce_conjuncts(conjuncts: List[SymbolicExpression]) -> ConjunctList:
 
     :param conjuncts: A flat list of conjuncts (e.g. the operands of an ``AND``).
     :return: The reduced list (raw expressions interleaved with range / co-indexed folds).
+
+    >>> robot = variable(Robot, [])
+    >>> [type(item).__name__ for item in reduce_conjuncts([robot.battery >= 20, robot.battery <= 80])]
+    ['RangeFold']
     """
     return ConjunctReducer().reduce(conjuncts)
 
@@ -200,7 +226,14 @@ class _Bound(Enum):
 
 def _chain_key(expression: SymbolicExpression) -> Optional[ChainKey]:
     """:return: The hashable identity of a pure attribute chain — ``(root_id, ((name, owner),
-    …))`` — or ``None``."""
+    …))`` — or ``None``.
+
+    >>> robot = variable(Robot, [])
+    >>> _chain_key(robot.battery) == _chain_key(robot.battery)
+    True
+    >>> _chain_key(robot) is None
+    True
+    """
     if not isinstance(expression, MappedVariable):
         return None
     chain, root = walk_chain(expression)
@@ -218,6 +251,12 @@ def _classify(conjunct: SymbolicExpression) -> Optional[Tuple[ChainKey, _Bound]]
     """
     :param conjunct: A candidate conjunct.
     :return: ``(chain_key, _Bound)`` when *conjunct* is a bound comparison, else ``None``.
+
+    >>> robot = variable(Robot, [])
+    >>> _classify(robot.battery >= 20)[1] is _Bound.LOWER
+    True
+    >>> _classify(robot) is None
+    True
     """
     if not isinstance(conjunct, Comparator):
         return None
@@ -245,6 +284,14 @@ def fold_range_pairs(
 
     :param conjuncts: A flat list of conjuncts (e.g. the operands of an ``AND``).
     :return: A list whose items are either the original expressions or range folds.
+
+    The fold surfaces as a *"between … and …"* rendering:
+
+    >>> transaction = variable(BankTransaction, [])
+    >>> verbalize_expression(an(entity(transaction).where(
+    ...     transaction.booking_date >= datetime.datetime(2026, 5, 15),
+    ...     transaction.booking_date <= datetime.datetime(2026, 5, 30))))
+    'Find a BankTransaction whose booking_date is between May 15, 2026 and May 30, 2026'
     """
     classifications = [_classify(conjunct) for conjunct in conjuncts]
     slots: List[Union[SymbolicExpression, RangeFold]] = list(conjuncts)
@@ -279,6 +326,12 @@ def has_pair(conjuncts: List[SymbolicExpression]) -> bool:
     """
     :param conjuncts: A flat list of conjuncts.
     :return: ``True`` when range folding would produce at least one range fold.
+
+    >>> robot = variable(Robot, [])
+    >>> has_pair([robot.battery >= 20, robot.battery <= 80])
+    True
+    >>> has_pair([robot.battery >= 20])
+    False
     """
     return any(isinstance(item, RangeFold) for item in fold_range_pairs(conjuncts))
 
@@ -287,7 +340,12 @@ def has_pair(conjuncts: List[SymbolicExpression]) -> bool:
 
 
 def _attribute_pair(node: SymbolicExpression) -> Optional[Tuple[str, type]]:
-    """:return: ``(name, owner)`` when *node* is an ``Attribute`` hop, else ``None``."""
+    """:return: ``(name, owner)`` when *node* is an ``Attribute`` hop, else ``None``.
+
+    >>> terminal, _ = walk_chain(variable(LoveBirds, []).bird_1.name)
+    >>> _attribute_pair(terminal[-1]) == ("name", Bird)
+    True
+    """
     if isinstance(node, Attribute):
         return (node._attribute_name_, node._owner_class_)
     return None
@@ -295,7 +353,11 @@ def _attribute_pair(node: SymbolicExpression) -> Optional[Tuple[str, type]]:
 
 def _terminal_attribute(expression: SymbolicExpression) -> Optional[Attribute]:
     """:return: The leaf ``Attribute`` of a ``MappedVariable`` chain (e.g. ``month`` of
-    ``p.begin.month``), or ``None`` when the chain does not end in an attribute."""
+    ``p.begin.month``), or ``None`` when the chain does not end in an attribute.
+
+    >>> _terminal_attribute(variable(LoveBirds, []).bird_1.name)._attribute_name_
+    'name'
+    """
     chain, _ = walk_chain(expression)
     if chain and isinstance(chain[-1], Attribute):
         return chain[-1]
@@ -316,6 +378,12 @@ def coindexed_signature(
     :param conjunct: A candidate conjunct.
     :return: ``((operation, left_prefix_key, right_prefix_key), (terminal_name, terminal_owner))``
         — the grouping signature and the co-indexed leaf — or ``None``.
+
+    >>> lovebirds = variable(LoveBirds, [])
+    >>> coindexed_signature(lovebirds.bird_1.name == lovebirds.bird_2.name)[1] == ("name", Bird)
+    True
+    >>> coindexed_signature(lovebirds.bird_1.name != lovebirds.bird_2.name) is None
+    True
     """
     if not isinstance(conjunct, Comparator):
         return None
@@ -349,6 +417,14 @@ def fold_coindexed_groups(
     :param items: A list of conjuncts, possibly already containing :class:`RangeFold` items.
     :return: The list with each co-indexed group reduced to a single fold at the group's first
         position.
+
+    >>> import dataclasses
+    >>> Span = dataclasses.make_dataclass("Span", [("low", int), ("high", int)])
+    >>> Pair = dataclasses.make_dataclass("Pair", [("left", Span), ("right", Span)])
+    >>> pair = variable(Pair, [])
+    >>> [term[0] for term in fold_coindexed_groups(
+    ...     [pair.left.low == pair.right.low, pair.left.high == pair.right.high])[0].terminals]
+    ['low', 'high']
     """
     signatures = [
         (
@@ -419,6 +495,11 @@ def group_by_owner(
     :param items: The sibling items to group.
     :param classify: Maps an item to ``(owner, payload)`` or ``None`` (does not group).
     :return: ``(groups, ungrouped)`` — the owner groups and the items that did not classify.
+
+    >>> employee = variable(Employee, [])
+    >>> groups, ungrouped = group_by_owner(["department", "salary"], lambda item: (employee, item))
+    >>> groups[0].items, ungrouped
+    (['department', 'salary'], [])
     """
     builders: Dict[object, Tuple[SymbolicExpression, List[object]]] = {}
     order: List[object] = []
@@ -453,6 +534,11 @@ def group_consecutive_by_owner(
     :param classify: Maps an item to ``(owner, payload)`` or ``None`` (not foldable).
     :return: The items with each consecutive same-owner run of length ≥ 2 replaced by an
         ``OwnerGroup``; everything else passes through unchanged.
+
+    >>> employee = variable(Employee, [])
+    >>> folded = group_consecutive_by_owner(["department", "salary"], lambda item: (employee, item))
+    >>> folded[0].items
+    ['department', 'salary']
     """
     result: List[Union[OwnerGroup, _Item]] = []
     run_owner: Optional[SymbolicExpression] = None
@@ -497,6 +583,14 @@ def coindexed_natural_parts(fold: CoindexedFold) -> Optional[CoindexedNaturalPar
 
     :param fold: The co-indexed fold.
     :return: The natural-form pieces, or ``None`` for the faithful fallback.
+
+    >>> import dataclasses
+    >>> Span = dataclasses.make_dataclass("Span", [("low", int), ("high", int)])
+    >>> Pair = dataclasses.make_dataclass("Pair", [("left", Span), ("right", Span)])
+    >>> pair = variable(Pair, [])
+    >>> [fold] = fold_coindexed_groups([pair.left.low == pair.right.low, pair.left.high == pair.right.high])
+    >>> coindexed_natural_parts(fold).left_hop[0], coindexed_natural_parts(fold).right_hop[0]
+    ('left', 'right')
     """
     if fold.operation is not operator.eq:
         return None
@@ -541,6 +635,10 @@ def build_between(
     :param compact: Drop the copula (for HAVING / post-nominal contexts).
     :param number: The number the copula agrees with — *"are between"* for a plural subject.
     :return: The range phrase fragment.
+
+    >>> from krrood.entity_query_language.verbalization.fragments.base import flatten_fragment_to_plain_text, WordFragment
+    >>> flatten_fragment_to_plain_text(build_between(WordFragment("x"), WordFragment("1"), WordFragment("10"), compact=False))
+    'x is between 1 and 10'
     """
     op = _between_operator(compact, number)
     bounds = oxford_comma(
@@ -551,7 +649,14 @@ def build_between(
 
 def _between_operator(compact: bool, number: Number) -> Fragment:
     """:return: the *between* operator fragment — the copula-less core when *compact*, else an
-    agreeing copula plus *"between"* (*"is between"* / *"are between"*)."""
+    agreeing copula plus *"between"* (*"is between"* / *"are between"*).
+
+    >>> from krrood.entity_query_language.verbalization.fragments.base import flatten_fragment_to_plain_text
+    >>> flatten_fragment_to_plain_text(_between_operator(True, Number.SINGULAR))
+    'between'
+    >>> flatten_fragment_to_plain_text(_between_operator(False, Number.SINGULAR))
+    'is between'
+    """
     if compact:
         return RangePhrases.BETWEEN.as_fragment()
     return copula_with(RangePhrases.BETWEEN.text, number)

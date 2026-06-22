@@ -26,6 +26,14 @@ class GroupedByRule(PhraseRule):
     name = "grouped-by"
 
     def build(self, node: GroupedBy, context: RuleContext) -> Fragment:
+        """:return: The *"grouped by …"* clause for the GROUP BY node.
+
+        >>> employee = variable(Employee, [])
+        >>> verbalize_expression(
+        ...     a(set_of(employee.department, sum(employee.salary)).grouped_by(employee.department))
+        ... )
+        'For each department, report the sum of salaries of Employees'
+        """
         return GroupedByAssembler(context).assemble(node)
 
 
@@ -41,4 +49,10 @@ class OrderedByRule(PhraseRule):
     name = "ordered-by"
 
     def build(self, node: OrderedBy, context: RuleContext) -> Fragment:
+        """:return: The *"ordered by …"* clause for the ORDER BY node.
+
+        >>> employee = variable(Employee, [])
+        >>> verbalize_expression(a(set_of(employee).ordered_by(employee.salary, descending=True)))
+        'Report Employees ordered by their salaries from highest to lowest'
+        """
         return OrderedByAssembler(context).assemble(node)

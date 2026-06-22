@@ -59,7 +59,13 @@ class RankingSurface:
 
 def _quality(direction: RankingDirection, n: int) -> RankingWords:
     """:return: The leading quality word for a (direction, n): *first* (no order), *highest*/*top*
-    (descending, n=1/n>1), *lowest*/*bottom* (ascending, n=1/n>1)."""
+    (descending, n=1/n>1), *lowest*/*bottom* (ascending, n=1/n>1).
+
+    >>> _quality(RankingDirection.DESCENDING, 1).name
+    'HIGHEST'
+    >>> _quality(RankingDirection.DESCENDING, 3).name
+    'TOP'
+    """
     if direction is RankingDirection.DESCENDING:
         return RankingWords.HIGHEST if n == 1 else RankingWords.TOP
     if direction is RankingDirection.ASCENDING:
@@ -68,13 +74,21 @@ def _quality(direction: RankingDirection, n: int) -> RankingWords:
 
 
 def _cardinal(n: int) -> Fragment:
-    """:return: The cardinal-word fragment for *n* (``3`` → *"three"*)."""
+    """:return: The cardinal-word fragment for *n* (``3`` → *"three"*).
+
+    >>> _cardinal(3).text
+    'three'
+    """
     return WordFragment(text=morphology.cardinal(n))
 
 
 def _key_attribute(order_key: SymbolicExpression) -> Fragment:
     """:return: The order key's terminal attribute as a bare attribute word (*"salary"*, not the
-    verbose *"the salary of the Employee"*)."""
+    verbose *"the salary of the Employee"*).
+
+    >>> _key_attribute(variable(Employee, []).salary).text
+    'salary'
+    """
     chain, _ = walk_chain(order_key)
     attribute = chain[-1]
     return RoleFragment.for_attribute(
@@ -183,5 +197,13 @@ def ranking_surface(request: RankingRequest) -> RankingSurface:
 
     :param request: The ranking and selection-type label.
     :return: The ranking pieces for the selection noun phrase.
+
+    The chosen form drives the selection's surface — *"the top three Employees by salary"* for a
+    descending attribute ranking of several:
+
+    >>> employee = variable(Employee, [])
+    >>> verbalize_expression(
+    ...     the(entity(employee)).ordered_by(employee.salary, descending=True).limit(3))
+    'Find the top three Employees by salary'
     """
     return RankingForm.most_applicable(request).render(request)

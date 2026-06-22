@@ -66,6 +66,11 @@ class ComparatorRule(PhraseRule):
     name = "comparator"
 
     def build(self, node: Comparator, context: RuleContext) -> Fragment:
+        """Say the comparator as a standalone predicate.
+
+        >>> verbalize_expression(variable(Robot, []).battery > 50)
+        'the battery of a Robot is greater than 50'
+        """
         return ConditionAssembler(context).predicate(node)
 
 
@@ -85,6 +90,12 @@ class AndRule(PhraseRule):
     name = "and"
 
     def build(self, node: AND, context: RuleContext) -> Fragment:
+        """Say the flattened conjuncts, comma-joined with a trailing *"and"*.
+
+        >>> robot = variable(Robot, [])
+        >>> verbalize_expression(and_(robot.battery > 50, robot.name == 'x'))
+        "the battery of a Robot is greater than 50, and the name of the Robot is 'x'"
+        """
         parts = ConditionAssembler(context).as_statements(flatten_operands(node, AND))
         if len(parts) == 1:
             return parts[0]
@@ -109,6 +120,12 @@ class RangeFoldRule(PhraseRule):
     name = "range-fold"
 
     def build(self, node: RangeFold, context: RuleContext) -> Fragment:
+        """Say the folded pair as *"<chain> is between low and high"*.
+
+        >>> robot = variable(Robot, [])
+        >>> verbalize_expression(and_(robot.battery > 10, robot.battery < 90))
+        'the battery of a Robot is between 10 and 90'
+        """
         return build_between(
             context.child(node.chain_expression),
             context.child(node.lower_expression),
@@ -134,6 +151,14 @@ class CoindexedFoldRule(PhraseRule):
     name = "coindexed-fold"
 
     def build(self, node: CoindexedFold, context: RuleContext) -> Fragment:
+        """Say the factored clause once — the natural *"have the same"* form over sibling prefixes.
+
+        >>> pair = variable(LoveBirds, [])
+        >>> verbalize_expression(
+        ...     and_(pair.bird_1.name == pair.bird_2.name, pair.bird_1.name == pair.bird_2.name)
+        ... )
+        'the bird_1 and bird_2 of a LoveBirds have the same name and name'
+        """
         terminals = oxford_comma(
             [self._attribute(pair) for pair in node.terminals],
             Conjunctions.AND.as_fragment(),
@@ -168,7 +193,14 @@ class CoindexedFoldRule(PhraseRule):
 
     @staticmethod
     def _attribute(pair: tuple) -> RoleFragment:
-        """:return: The role-tagged attribute fragment for a ``(name, owner)`` hop."""
+        """:return: The role-tagged attribute fragment for a ``(name, owner)`` hop.
+
+        >>> from krrood.entity_query_language.verbalization.fragments.base import (
+        ...     flatten_fragment_to_plain_text,
+        ... )
+        >>> flatten_fragment_to_plain_text(CoindexedFoldRule._attribute(('name', Bird)))
+        'name'
+        """
         name, owner = pair
         return RoleFragment.for_attribute(owner, name)
 
@@ -185,6 +217,12 @@ class OrRule(PhraseRule):
     name = "or"
 
     def build(self, node: OR, context: RuleContext) -> Fragment:
+        """Say the flattened disjuncts as *"either a, b, or c"*.
+
+        >>> robot = variable(Robot, [])
+        >>> verbalize_expression(or_(robot.battery > 50, robot.battery < 10))
+        'either the battery of a Robot is greater than 50, or the battery of the Robot is less than 10'
+        """
         parts = [context.child(conjunct) for conjunct in flatten_operands(node, OR)]
         if len(parts) == 1:
             return parts[0]
@@ -213,6 +251,11 @@ class NotRule(PhraseRule):
     name = "not"
 
     def build(self, node: Not, context: RuleContext) -> Fragment:
+        """Wrap the child in *"not (<child>)"* via the orthography pass.
+
+        >>> verbalize_expression(Not(IsReachable(variable(Location, []))))
+        'not (a Location is reachable)'
+        """
         child_fragment = context.child(node._child_)
         # The parens glue to the child via the orthography pass → "not (child)".
         return PhraseFragment(
@@ -236,9 +279,19 @@ class NotComparatorRule(PhraseRule):
     name = "not-comparator"
 
     def when(self, node: Not, context: RuleContext) -> bool:
+        """Fires when the negation wraps a comparator.
+
+        >>> verbalize_expression(Not(variable(Robot, []).battery > 50))
+        'the battery of a Robot is not greater than 50'
+        """
         return isinstance(node._child_, Comparator)
 
     def build(self, node: Not, context: RuleContext) -> Fragment:
+        """Say the inner comparator with the negation folded into the operator.
+
+        >>> verbalize_expression(Not(variable(Robot, []).battery > 50))
+        'the battery of a Robot is not greater than 50'
+        """
         return ConditionAssembler(context).predicate(node._child_, negated=True)
 
 
@@ -253,9 +306,19 @@ class NotBooleanAttributeRule(PhraseRule):
     name = "not-bool-attribute"
 
     def when(self, node: Not, context: RuleContext) -> bool:
+        """Fires when the negation wraps a boolean-attribute chain.
+
+        >>> verbalize_expression(Not(variable(Task, []).completed))
+        'a Task is not completed'
+        """
         return is_boolean_attribute_chain(node._child_)
 
     def build(self, node: Not, context: RuleContext) -> Fragment:
+        """Say the negated predicative *"<nav> is not <attribute>"*.
+
+        >>> verbalize_expression(Not(variable(Task, []).completed))
+        'a Task is not completed'
+        """
         plan = context.microplan.plan_for(node._child_, ChainPlanner)
         return ChainAssembler(context).boolean_predicative(plan, negated=True)
 
@@ -272,6 +335,12 @@ class ForAllRule(PhraseRule):
     name = "for-all"
 
     def build(self, node: ForAll, context: RuleContext) -> Fragment:
+        """Say *"for all <plural var>, <condition>"*.
+
+        >>> robot = variable(Robot, [])
+        >>> verbalize_expression(for_all(robot, robot.battery > 0))
+        'for all Robots, the battery of the Robot is greater than 0'
+        """
         variable_fragment = context.child(node.variable, number=Number.PLURAL)
         condition_fragment = context.child(node.condition)
         return PhraseFragment(
@@ -296,6 +365,12 @@ class ExistsRule(PhraseRule):
     name = "exists"
 
     def build(self, node: Exists, context: RuleContext) -> Fragment:
+        """Say *"there exists <variable> such that <condition>"*.
+
+        >>> robot = variable(Robot, [])
+        >>> verbalize_expression(exists(robot, robot.battery > 0))
+        'there exists a Robot such that the battery of the Robot is greater than 0'
+        """
         variable_fragment = context.child(node.variable)
         condition_fragment = context.child(node.condition)
         return PhraseFragment(
@@ -320,4 +395,10 @@ class FilterRule(PhraseRule):
     name = "filter"
 
     def build(self, node: Filter, context: RuleContext) -> Fragment:
+        """Delegate transparently to the wrapped condition.
+
+        >>> robot = variable(Robot, [])
+        >>> verbalize_expression(an(entity(robot).where(robot.battery > 50)))
+        'Find a Robot whose battery is greater than 50'
+        """
         return context.child(node.condition)

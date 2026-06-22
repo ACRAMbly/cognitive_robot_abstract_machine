@@ -24,9 +24,20 @@ class TopLevelEntityRule(PhraseRule):
     enters_query_scope = True
 
     def when(self, node: Entity, context: RuleContext) -> bool:
+        """:return: ``True`` only for a top-level (query depth 0), non-inline entity.
+
+        >>> verbalize_expression(an(entity(variable(Robot, []))))
+        'Find a Robot'
+        """
         return context.configuration.query_depth == 0 and not context.inline
 
     def build(self, node: Entity, context: RuleContext) -> Fragment:
+        """:return: the imperative *"Find …"* form built by the query assembler.
+
+        >>> robot = variable(Robot, [])
+        >>> verbalize_expression(an(entity(robot).where(robot.battery > 50)))
+        'Find a Robot whose battery is greater than 50'
+        """
         return QueryAssembler(context).assemble(node)
 
 
@@ -45,9 +56,25 @@ class NestedEntityRule(PhraseRule):
     enters_query_scope = True
 
     def when(self, node: Entity, context: RuleContext) -> bool:
+        """:return: ``True`` only for a nested (query depth > 0), non-inline entity.
+
+        >>> worker = variable(Worker, [])
+        >>> verbalize_expression(
+        ...     an(entity(worker).where(contains(worker.tasks, an(entity(variable(Task, []))))))
+        ... )
+        'Find a Worker whose tasks contains a Task'
+        """
         return context.configuration.query_depth > 0 and not context.inline
 
     def build(self, node: Entity, context: RuleContext) -> Fragment:
+        """:return: the noun-phrase form built by the query assembler (never *"Find …"*).
+
+        >>> worker = variable(Worker, [])
+        >>> verbalize_expression(
+        ...     an(entity(worker).where(contains(worker.tasks, an(entity(variable(Task, []))))))
+        ... )
+        'Find a Worker whose tasks contains a Task'
+        """
         return QueryAssembler(context).assemble_nested(node)
 
 
@@ -64,6 +91,11 @@ class SetOfRule(PhraseRule):
     enters_query_scope = True
 
     def build(self, node: SetOf, context: RuleContext) -> Fragment:
+        """:return: the set-of form built by the query assembler.
+
+        >>> verbalize_expression(an(set_of(variable(Robot, []), variable(Task, []))))
+        'Find a Robot and a Task'
+        """
         return QueryAssembler(context).assemble_set_of(node)
 
 
@@ -77,9 +109,19 @@ class InlineEntityRule(PhraseRule):
     name = "inline-entity"
 
     def when(self, node: Entity, context: RuleContext) -> bool:
+        """:return: ``True`` only when the fold recurses in inline (chain-root) position.
+
+        >>> verbalize_expression(an(entity(variable(Robot, []))).name)
+        'the name of a Robot'
+        """
         return context.inline
 
     def build(self, node: Entity, context: RuleContext) -> Fragment:
+        """:return: the inline-noun form *"a Robot"* (no *"Find"*; the entity's WHERE deferred).
+
+        >>> verbalize_expression(an(entity(variable(Robot, []))).name)
+        'the name of a Robot'
+        """
         return QueryAssembler(context).inline_noun(node)
 
 
@@ -91,4 +133,9 @@ class ResultQuantifierRule(PhraseRule):
     name = "result-quantifier"
 
     def build(self, node: ResultQuantifier, context: RuleContext) -> Fragment:
+        """:return: the child's fragment, forwarding the render context (the wrapper is transparent).
+
+        >>> verbalize_expression(the(entity(variable(Robot, []))))
+        'Find the unique Robot'
+        """
         return context.child(node._child_, inline=context.inline)

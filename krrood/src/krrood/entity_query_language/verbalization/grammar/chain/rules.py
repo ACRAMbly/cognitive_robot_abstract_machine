@@ -29,10 +29,20 @@ class PluralChainAttributeRule(PhraseRule):
     name = "chain-plural-attribute"
 
     def when(self, node: MappedVariable, context: RuleContext) -> bool:
+        """:return: ``True`` when the chain is a plural single attribute on a variable.
+
+        >>> verbalize_expression(count(variable(Employee, []).salary))
+        'the number of salaries of Employees'
+        """
         plan = context.microplan.plan_for(node, ChainPlanner)
         return plan.renders_as_plural_attribute(context.number)
 
     def build(self, node: MappedVariable, context: RuleContext) -> Fragment:
+        """:return: The bare plural *"attributes of Roots"*.
+
+        >>> verbalize_expression(sum(variable(Robot, []).battery))
+        'the sum of batteries of Robots'
+        """
         plan = context.microplan.plan_for(node, ChainPlanner)
         return ChainAssembler(context).plural_attribute(plan)
 
@@ -49,12 +59,22 @@ class BooleanAttributeChainRule(PhraseRule):
     name = "chain-boolean-attribute"
 
     def when(self, node: MappedVariable, context: RuleContext) -> bool:
+        """:return: ``True`` for a boolean-terminal chain that is not a bare-plural attribute.
+
+        >>> verbalize_expression(variable(Robot, []).operational)
+        'a Robot is operational'
+        """
         plan = context.microplan.plan_for(node, ChainPlanner)
         return plan.is_boolean_terminal and not plan.renders_as_plural_attribute(
             context.number
         )
 
     def build(self, node: MappedVariable, context: RuleContext) -> Fragment:
+        """:return: The predicative *"<navigation> is <attribute>"*.
+
+        >>> verbalize_expression(variable(Task, []).completed)
+        'a Task is completed'
+        """
         plan = context.microplan.plan_for(node, ChainPlanner)
         return ChainAssembler(context).boolean_predicative(plan)
 
@@ -71,5 +91,10 @@ class PossessiveChainRule(PhraseRule):
     name = "chain-possessive"
 
     def build(self, node: MappedVariable, context: RuleContext) -> Fragment:
+        """:return: The possessive path *"the attribute of the Root"*.
+
+        >>> verbalize_expression(variable(Robot, []).battery)
+        'the battery of a Robot'
+        """
         plan = context.microplan.plan_for(node, ChainPlanner)
         return ChainAssembler(context).possessive(plan)

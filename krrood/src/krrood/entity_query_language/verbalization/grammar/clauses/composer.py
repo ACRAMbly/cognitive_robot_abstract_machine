@@ -40,7 +40,12 @@ class ClauseComposer:
     ) -> Optional[RestrictionFragments]:
         """:return: The placed subject-restriction pieces (superlatives / whose / residual), or
         ``None`` when the query has no groupable subject restriction. The predicate agrees with
-        *number* — a plural subject gives *"whose salaries are …"*."""
+        *number* — a plural subject gives *"whose salaries are …"*.
+
+        >>> robot = variable(Robot, [])
+        >>> verbalize_expression(an(entity(robot).where(robot.battery > 50)))
+        'Find a Robot whose battery is greater than 50'
+        """
         if plan.subject_restriction is None:
             return None
         return as_subject_restrictions(
@@ -48,13 +53,33 @@ class ClauseComposer:
         )
 
     def grouped_by(self, node: Query) -> Optional[Fragment]:
-        """:return: The *"grouped by …"* clause, or ``None`` when the query has no GROUP BY."""
+        """:return: The *"grouped by …"* clause, or ``None`` when the query has no GROUP BY.
+
+        >>> employee = variable(Employee, [])
+        >>> verbalize_expression(
+        ...     a(set_of(employee.department, sum(employee.salary)).grouped_by(employee.department))
+        ... )
+        'For each department, report the sum of salaries of Employees'
+        """
         return GroupedByAssembler(self.context).clause(node)
 
     def having(self, node: Query) -> Optional[Fragment]:
-        """:return: The *"having …"* clause, or ``None`` when the query has no HAVING."""
+        """:return: The *"having …"* clause, or ``None`` when the query has no HAVING.
+
+        >>> employee = variable(Employee, [])
+        >>> total = sum(employee.salary)
+        >>> verbalize_expression(
+        ...     a(set_of(employee.department, total).grouped_by(employee.department).having(total > 30000))
+        ... )
+        'For each department, report the sum of salaries of Employees having the sum greater than 30000'
+        """
         return HavingAssembler(self.context).clause(node)
 
     def ordered_by(self, node: Query) -> Optional[Fragment]:
-        """:return: The *"ordered by …"* clause, or ``None`` when the query has no ORDER BY."""
+        """:return: The *"ordered by …"* clause, or ``None`` when the query has no ORDER BY.
+
+        >>> employee = variable(Employee, [])
+        >>> verbalize_expression(an(entity(employee).ordered_by(employee.salary)))
+        'Report Employees ordered by their salaries from lowest to highest'
+        """
         return OrderedByAssembler(self.context).clause(node)

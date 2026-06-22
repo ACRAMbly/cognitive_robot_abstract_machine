@@ -61,6 +61,10 @@ class CoreferenceProcessor(RealizationPass):
 
     Reference: Reiter & Dale (2000) — referring-expression generation as a microplanning subtask;
     Gatt & Reiter (2009), SimpleNLG — ordered realisation stages.
+
+    >>> employee = variable(Employee, [])
+    >>> verbalize_expression(an(entity(employee).where(employee.salary > employee.starting_salary)))
+    'Find an Employee such that its salary is greater than its starting_salary'
     """
 
     discourse: DiscourseView = EMPTY_DISCOURSE
@@ -94,6 +98,20 @@ class CoreferenceProcessor(RealizationPass):
         :param fragment: Root of the fragment tree.
         :return: A new tree with referring noun phrases resolved (first / repeat / pronoun), seeded
             with the referents from prior builds (:attr:`previously_introduced_referents`).
+
+        Verbalizing one expression twice against a shared context reads *"a Robot"* then *"the
+        Robot"* — the second build's referents were seeded from the first:
+
+        >>> from krrood.entity_query_language.verbalization.context import MicroplanningServices
+        >>> from krrood.entity_query_language.verbalization.verbalizer import EQLVerbalizer
+        >>> from krrood.entity_query_language.verbalization.fragments.base import flatten_fragment_to_plain_text
+        >>> robot = variable(Robot, [])
+        >>> query = a(entity(robot))
+        >>> shared = MicroplanningServices.from_expression(robot)
+        >>> flatten_fragment_to_plain_text(EQLVerbalizer().build(query, shared))
+        'Find a Robot'
+        >>> flatten_fragment_to_plain_text(EQLVerbalizer().build(query, shared))
+        'Find the Robot'
         """
         self._seen = set(self.previously_introduced_referents)
         self._subject_stack = []
@@ -105,6 +123,10 @@ class CoreferenceProcessor(RealizationPass):
 
         A fragment built from a query node opens a discourse scope whose focus the
         :class:`DiscourseView` supplies (``None`` suppresses pronominalisation, e.g. a set-of).
+
+        >>> mission = variable(Mission, [])
+        >>> verbalize_expression(a(entity(mission).where(mission.assigned_to.battery > 50)))
+        'Find a Mission such that the battery of the Robot to which it is assigned is greater than 50'
         """
         if self.discourse.is_scope(fragment.source):
             self._subject_stack.append(
@@ -117,7 +139,12 @@ class CoreferenceProcessor(RealizationPass):
         return self._dispatch(fragment)
 
     def _dispatch(self, fragment: Fragment) -> Fragment:
-        """Resolve *fragment* by kind (the scope, if any, is already on the stack)."""
+        """Resolve *fragment* by kind (the scope, if any, is already on the stack).
+
+        >>> employee = variable(Employee, [])
+        >>> verbalize_expression(an(entity(employee).where(employee.salary > employee.starting_salary)))
+        'Find an Employee such that its salary is greater than its starting_salary'
+        """
         match fragment:
             case NounPhrase():
                 return self._noun_phrase(fragment)
@@ -140,7 +167,12 @@ class CoreferenceProcessor(RealizationPass):
         After resolving, the centre advances to this clause's subject — unless the clause was itself
         an *"its …"* continuation of the current centre, which *keeps* it (a centering CONTINUE), so
         a run of attributes on one referent stays uniformly pronominal (*"its battery … its
-        power"*) rather than mixing *"its battery … the power of the Robot"*."""
+        power"*) rather than mixing *"its battery … the power of the Robot"*.
+
+        >>> mission = variable(Mission, [])
+        >>> verbalize_expression(a(entity(mission).where(mission.assigned_to.battery > 50)))
+        'Find a Mission such that the battery of the Robot to which it is assigned is greater than 50'
+        """
         reduced_quantity = self._reduced_selected_quantity(possessive_chain)
         if reduced_quantity is not None:
             resolved = reduced_quantity
@@ -169,6 +201,13 @@ class CoreferenceProcessor(RealizationPass):
 
         :return: The bare definite attribute on a repeat of the selected quantity, or ``None`` when
             the chain is not a selected quantity (or is its first mention, recorded here).
+
+        The measured ``battery`` spells out in full where the aggregation names it, and the WHERE on
+        that same attribute reduces to a bare *"the battery"*:
+
+        >>> mission = variable(Mission, [])
+        >>> verbalize_expression(an(entity(max(mission.assigned_to.battery)).where(mission.assigned_to.battery > 5)))
+        'Find the maximum of the battery of the Robot to which a Mission is assigned such that the battery is greater than 5'
         """
         if not self.discourse.is_selected_quantity(possessive_chain.node_id):
             return None
@@ -184,7 +223,12 @@ class CoreferenceProcessor(RealizationPass):
     def _outermost_relation(parts: List[PathStep]) -> Optional[Tuple[uuid.UUID, List]]:
         """:return: ``(referent_id, tail)`` for the chain's outermost relational hop — the related
         entity it introduces and the attributes hanging off it — or ``None`` when the chain has no
-        relational hop (or it carries no referent id)."""
+        relational hop (or it carries no referent id).
+
+        >>> mission = variable(Mission, [])
+        >>> verbalize_expression(a(entity(mission).where(mission.assigned_to.battery > 50)))
+        'Find a Mission such that the battery of the Robot to which it is assigned is greater than 50'
+        """
         for index in reversed(range(len(parts))):
             if parts[index].is_relation:
                 referent_id = parts[index].relation.referent_id
@@ -204,7 +248,12 @@ class CoreferenceProcessor(RealizationPass):
         *"its power"* (which a reader would bind to the battery) but spells out *"the power of the
         Robot"*. This is also why an aggregation's measured quantity (*"the average of the battery
         …"*) clears the centre: the battery heads the phrase, not the Robot. ``None`` when no
-        relational referent heads the clause."""
+        relational referent heads the clause.
+
+        >>> mission = variable(Mission, [])
+        >>> verbalize_expression(a(entity(mission).where(mission.assigned_to.battery > 50)))
+        'Find a Mission such that the battery of the Robot to which it is assigned is greater than 50'
+        """
         relation = self._outermost_relation(parts)
         if relation is None:
             return None
@@ -224,6 +273,10 @@ class CoreferenceProcessor(RealizationPass):
 
         :return: The pronominalised tail, or ``None`` when the chain's relational referent is not the
             current centre (leaving the subject / possessive forms to apply).
+
+        >>> mission = variable(Mission, [])
+        >>> verbalize_expression(a(entity(mission).where(mission.assigned_to.battery > 50)))
+        'Find a Mission such that the battery of the Robot to which it is assigned is greater than 50'
         """
         relation = self._outermost_relation(possessive_chain.parts)
         if relation is None:
@@ -234,7 +287,12 @@ class CoreferenceProcessor(RealizationPass):
         return pronominal_path(tail, Number.SINGULAR)
 
     def _pronominalises(self, possessive_chain: PossessiveChain) -> bool:
-        """:return: ``True`` when the chain root is the current, already-introduced, non-numbered subject."""
+        """:return: ``True`` when the chain root is the current, already-introduced, non-numbered subject.
+
+        >>> employee = variable(Employee, [])
+        >>> verbalize_expression(an(entity(employee).where(employee.salary > employee.starting_salary)))
+        'Find an Employee such that its salary is greater than its starting_salary'
+        """
         if (
             possessive_chain.root_referent_id is None
             or possessive_chain.root_referent_id not in self._seen
@@ -260,6 +318,10 @@ class CoreferenceProcessor(RealizationPass):
 
         :return: The resolved referring noun phrase (first / repeat), or the non-referring noun
             phrase rebuilt around its recursed children.
+
+        >>> robot_one, robot_two = variable(Robot, []), variable(Robot, [])
+        >>> verbalize_expression(a(entity(robot_one).where(robot_one.battery > robot_two.battery)))
+        'Find Robot 1 whose battery is greater than the battery of Robot 2'
         """
         if noun_phrase.referent_id is None:
             return self._rebuilt(noun_phrase)
@@ -278,6 +340,10 @@ class CoreferenceProcessor(RealizationPass):
         left untouched, so this never re-numbers a variable.
 
         :return: The numbered noun phrase, or *noun_phrase* unchanged when it has no number.
+
+        >>> robot_one, robot_two = variable(Robot, []), variable(Robot, [])
+        >>> verbalize_expression(a(entity(robot_one).where(robot_one.battery > robot_two.battery)))
+        'Find Robot 1 whose battery is greater than the battery of Robot 2'
         """
         label = self.numbered_labels.get(noun_phrase.referent_id)
         if label is None or noun_phrase.definiteness is Definiteness.BARE:
@@ -291,6 +357,17 @@ class CoreferenceProcessor(RealizationPass):
     def _reduced(self, noun_phrase: NounPhrase) -> Fragment:
         """:return: A repeat mention reduced to its head — the first-mention modifiers dropped — as a
         bare label (*"Robot 1"*) when numbered, else a definite reference (*"the Robot"*).
+
+        Verbalizing one expression twice against a shared context reduces the repeat to *"the Robot"*:
+
+        >>> from krrood.entity_query_language.verbalization.context import MicroplanningServices
+        >>> from krrood.entity_query_language.verbalization.verbalizer import EQLVerbalizer
+        >>> from krrood.entity_query_language.verbalization.fragments.base import flatten_fragment_to_plain_text
+        >>> robot = variable(Robot, [])
+        >>> query, shared = a(entity(robot)), MicroplanningServices.from_expression(robot)
+        >>> _ = EQLVerbalizer().build(query, shared)
+        >>> flatten_fragment_to_plain_text(EQLVerbalizer().build(query, shared))
+        'Find the Robot'
         """
         return NounPhrase(
             head=self._walk(noun_phrase.head),
@@ -307,6 +384,12 @@ class CoreferenceProcessor(RealizationPass):
         """If this noun phrase *is* an enclosing scope's subject, record its grammatical number on
         that frame — the subject is rendered before the chains that refer to it, so the number
         (*"its"*/*"their"*) is known by the time pronominalisation is decided. Rules supply none.
+
+        A plural subject records a plural number, so its possessive reads *"their"*:
+
+        >>> employee = variable(Employee, [])
+        >>> verbalize_expression(an(entity(employee).ordered_by(employee.salary)))
+        'Report Employees ordered by their salaries from lowest to highest'
         """
         for frame in reversed(self._subject_stack):
             if frame.subject_id == noun_phrase.referent_id:
@@ -319,7 +402,12 @@ class CoreferenceProcessor(RealizationPass):
         A referring noun phrase is the discourse subject *of its own modifiers*: a restrictive
         modifier predicates over the head, so a chain rooted at the head pronominalises (*"a Robot
         whose battery exceeds its threshold"*). This is inferred from structure — the modifiers
-        slot — so rules never mark the scope."""
+        slot — so rules never mark the scope.
+
+        >>> employee = variable(Employee, [])
+        >>> verbalize_expression(an(entity(employee).where(employee.salary > employee.starting_salary)))
+        'Find an Employee such that its salary is greater than its starting_salary'
+        """
         head = self._walk(noun_phrase.head)
         if noun_phrase.referent_id is None or not noun_phrase.subject_of_modifiers:
             modifiers = [self._walk(modifier) for modifier in noun_phrase.modifiers]

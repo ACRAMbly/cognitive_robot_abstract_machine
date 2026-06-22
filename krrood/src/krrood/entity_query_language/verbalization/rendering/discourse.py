@@ -59,6 +59,17 @@ class DiscourseModel:
         :param microplan: The shared plan read model (query plans are taken from it).
         :return: A discourse model mapping each query scope to its focus referent (``None`` for a
             scope with no single subject, e.g. a set-of).
+
+        >>> from krrood.entity_query_language.verbalization.context import MicroplanningServices
+        >>> robot = variable(Robot, [])
+        >>> query = a(entity(robot).where(robot.battery > 50))
+        >>> services = MicroplanningServices.from_expression(query)
+        >>> model = DiscourseModel.from_expression(query, services.microplan)
+        >>> scope = next(node for node in query._all_expressions_ if isinstance(node, Entity))
+        >>> model.is_scope(scope)
+        True
+        >>> model.focus_of(scope) == robot._id_
+        True
         """
         focus: Dict[uuid.UUID, Optional[uuid.UUID]] = {}
         selected_quantities: set[uuid.UUID] = set()
@@ -77,6 +88,11 @@ class DiscourseModel:
         """:return: The focus referent id for a query plan — the aggregation source for an
         aggregation value-subquery, else the WHERE subject, else the single common chain root (so a
         subject-less query like a ``set_of`` still pronominalises *"its …"*), else ``None``.
+
+        >>> robot = variable(Robot, [])
+        >>> scope = entity(robot).where(robot.battery > 50)
+        >>> DiscourseModel._focus(QueryPlanner(scope).plan()) == robot._id_
+        True
         """
         if plan.is_aggregation_subquery and plan.aggregation_data is not None:
             source = plan.aggregation_data.source
@@ -86,16 +102,27 @@ class DiscourseModel:
         return plan.discourse_root
 
     def is_scope(self, source: Optional[SymbolicExpression]) -> bool:
-        """:return: ``True`` when *source* is a query node that opens a discourse scope."""
+        """:return: ``True`` when *source* is a query node that opens a discourse scope.
+
+        >>> EMPTY_DISCOURSE.is_scope(None)
+        False
+        """
         return getattr(source, "_id_", None) in self._focus_by_scope
 
     def focus_of(self, source: Optional[SymbolicExpression]) -> Optional[uuid.UUID]:
-        """:return: The focus referent of *source*'s scope, or ``None``."""
+        """:return: The focus referent of *source*'s scope, or ``None``.
+
+        >>> EMPTY_DISCOURSE.focus_of(None) is None
+        True
+        """
         return self._focus_by_scope.get(getattr(source, "_id_", None))
 
     def is_selected_quantity(self, node_id: Optional[uuid.UUID]) -> bool:
         """:return: ``True`` when *node_id* is a quantity the query selects (e.g. an aggregation's
         measured attribute), so its repeat mention reduces to a bare *"the <attribute>"*.
+
+        >>> EMPTY_DISCOURSE.is_selected_quantity(None)
+        False
         """
         return node_id is not None and node_id in self._selected_quantities
 

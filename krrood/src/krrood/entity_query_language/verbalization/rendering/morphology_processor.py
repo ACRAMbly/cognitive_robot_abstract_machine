@@ -36,6 +36,15 @@ class MorphologyProcessor(RewritePass):
     """
 
     def rewrite(self, leaf: Fragment) -> Fragment:
+        """:return: *leaf* with grammatical number realised — a plural-tagged noun pluralised, a
+        plural-tagged copula replaced by its suppletion (*"is"* → *"are"*) — and reset to singular;
+        any leaf not tagged plural is returned unchanged.
+
+        >>> MorphologyProcessor().rewrite(WordFragment(text="Robot", number=Number.PLURAL)).text
+        'Robots'
+        >>> MorphologyProcessor().rewrite(WordFragment(text="Robot")).text
+        'Robot'
+        """
         if not isinstance(leaf, (WordFragment, RoleFragment)):
             return leaf
         if leaf.number is not Number.PLURAL:

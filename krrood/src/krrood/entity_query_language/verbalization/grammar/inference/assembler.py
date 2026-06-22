@@ -57,6 +57,12 @@ class InferenceAssembler(Assembler[Entity, RuleStructure]):
         :param node: The inference-rule query.
         :param plan: The IF/THEN rule structure.
         :return: *"If <antecedents…>, then <consequent…>"* — the two-block IF/THEN form.
+
+        >>> from krrood.entity_query_language.factories import inference
+        >>> connection = variable(FixedConnection, [])
+        >>> drawer = inference(Drawer)(container=connection.parent, handle=connection.child)
+        >>> verbalize_expression(entity(drawer).where(connection.parent == variable(Container, [])))
+        "If there's a FixedConnection whose parent is a Container, then there's a Drawer whose container is the parent of the FixedConnection, and handle is the child of the FixedConnection"
         """
         return BlockFragment(
             header=None,
@@ -72,7 +78,13 @@ class InferenceAssembler(Assembler[Entity, RuleStructure]):
 
     @staticmethod
     def _number(antecedent: AntecedentInformation) -> Number:
-        """:return: The grammatical number of an antecedent — plural if and only if aggregated."""
+        """:return: The grammatical number of an antecedent — plural if and only if aggregated.
+
+        >>> aggregated = AntecedentInformation(root=None, variable=None, type_name='Drawer',
+        ...     aggregation_status=AggregationStatus.AGGREGATED)
+        >>> InferenceAssembler._number(aggregated).name
+        'PLURAL'
+        """
         return Number.of(antecedent.aggregation_status == AggregationStatus.AGGREGATED)
 
     # ── IF clause ───────────────────────────────────────────────────────────────
@@ -81,6 +93,14 @@ class InferenceAssembler(Assembler[Entity, RuleStructure]):
         """
         :return: One item per antecedent — *"there's a <Type> whose …, and …"* — plus any unmatched
             conditions; *"true"* when there are none.
+
+        >>> from krrood.entity_query_language.factories import inference
+        >>> connection = variable(FixedConnection, [])
+        >>> drawer = inference(Drawer)(container=connection.parent, handle=connection.child)
+        >>> verbalize_expression(entity(drawer).where(
+        ...     connection.parent == variable(Container, []))).startswith(
+        ...     "If there's a FixedConnection whose parent is a Container")
+        True
         """
         items: List[Fragment] = [
             self._antecedent(antecedent) for antecedent in structure.primary_antecedents
@@ -96,6 +116,13 @@ class InferenceAssembler(Assembler[Entity, RuleStructure]):
         existential intro woven with its conditions by the shared restriction machinery (the same
         *"whose"* group / *"such that …"* form a query selection uses). Inline / in paragraph this
         reads *"there's a <Type> whose a, and b"*; in hierarchical the conditions are sub-points.
+
+        >>> from krrood.entity_query_language.factories import inference
+        >>> connection = variable(FixedConnection, [])
+        >>> drawer = inference(Drawer)(container=connection.parent, handle=connection.child)
+        >>> "there's a FixedConnection whose parent is a Container" in verbalize_expression(
+        ...     entity(drawer).where(connection.parent == variable(Container, [])))
+        True
         """
         intro = self._antecedent_intro(antecedent)
         if not antecedent.conditions or antecedent.variable is None:
@@ -125,7 +152,15 @@ class InferenceAssembler(Assembler[Entity, RuleStructure]):
         return BlockFragment(header=header, items=items, bulleted_header=True)
 
     def _antecedent_intro(self, antecedent: AntecedentInformation) -> Fragment:
-        """:return: *"there's a <Type>"* / *"there are <Types>"* — the antecedent's existential intro."""
+        """:return: *"there's a <Type>"* / *"there are <Types>"* — the antecedent's existential intro.
+
+        >>> from krrood.entity_query_language.factories import inference
+        >>> connection = variable(FixedConnection, [])
+        >>> drawer = inference(Drawer)(container=connection.parent, handle=connection.child)
+        >>> verbalize_expression(entity(drawer).where(
+        ...     connection.parent == variable(Container, []))).startswith("If there's a FixedConnection")
+        True
+        """
         return ExistentialPhrase.for_number(self._number(antecedent)).build_phrase(
             antecedent.type_name, referent_id=self._antecedent_referent_id(antecedent)
         )
@@ -137,6 +172,16 @@ class InferenceAssembler(Assembler[Entity, RuleStructure]):
         """
         :return: The antecedent's canonical referent id — the selected variable for an entity
             root, else the root's own id (matching the variable the THEN-clause chains reference).
+
+        The shared referent lets the THEN clause refer back to the antecedent (*"the
+        FixedConnection"*):
+
+        >>> from krrood.entity_query_language.factories import inference
+        >>> connection = variable(FixedConnection, [])
+        >>> drawer = inference(Drawer)(container=connection.parent, handle=connection.child)
+        >>> verbalize_expression(entity(drawer).where(
+        ...     connection.parent == variable(Container, []))).count("FixedConnection")
+        3
         """
         root = antecedent.root
         if isinstance(root, Entity):
@@ -150,6 +195,13 @@ class InferenceAssembler(Assembler[Entity, RuleStructure]):
         """:return: The consequent as a single bulleted entry — *"there's a <Consequent>"* with its
         field bindings under one *"whose"* group (the same form a query subject restriction uses):
         *"whose <field> is <value>, and …"* inline / in paragraph, sub-points in hierarchical.
+
+        >>> from krrood.entity_query_language.factories import inference
+        >>> connection = variable(FixedConnection, [])
+        >>> drawer = inference(Drawer)(container=connection.parent, handle=connection.child)
+        >>> "then there's a Drawer whose container is the parent of the FixedConnection" in (
+        ...     verbalize_expression(entity(drawer).where(connection.parent == variable(Container, []))))
+        True
         """
         intro: Fragment = ExistentialPhrase.for_number(Number.SINGULAR).build_phrase(
             structure.consequent_type
@@ -169,7 +221,15 @@ class InferenceAssembler(Assembler[Entity, RuleStructure]):
 
     def _binding_predicate(self, binding: ConsequentBinding) -> Fragment:
         """:return: The bare *"<field> is/are <value>"* predicate for one consequent binding (the
-        shared *"whose"* envelope is added once by :meth:`_then_items`)."""
+        shared *"whose"* envelope is added once by :meth:`_then_items`).
+
+        >>> from krrood.entity_query_language.factories import inference
+        >>> connection = variable(FixedConnection, [])
+        >>> drawer = inference(Drawer)(container=connection.parent, handle=connection.child)
+        >>> "handle is the child of the FixedConnection" in verbalize_expression(
+        ...     entity(drawer).where(connection.parent == variable(Container, [])))
+        True
+        """
         number = Number.of(binding.is_plural_field)
         return ConditionAssembler(self.context).attribute_predicate(
             binding.field_name, number, self._binding_value(binding)
@@ -179,6 +239,12 @@ class InferenceAssembler(Assembler[Entity, RuleStructure]):
         """
         :return: The binding's value: *"the <plural chain>"* (aggregated), bare plural, the
             group-key *"common …"* phrase, or the plain rendering.
+
+        >>> from krrood.entity_query_language.factories import inference
+        >>> container = variable(Container, [])
+        >>> cabinet = inference(Cabinet)(container=container, drawers=variable(Drawer, []))
+        >>> verbalize_expression(entity(cabinet).grouped_by(container))
+        "If true, then there's a Cabinet whose container is a Container, and drawers are the Drawers"
         """
         if (
             binding.is_plural_field
@@ -197,7 +263,14 @@ class InferenceAssembler(Assembler[Entity, RuleStructure]):
         return self.context.child(binding.value_expression)
 
     def _group_key_value(self, expression: SymbolicExpression) -> Fragment:
-        """:return: *"the common <field> of the <Roots>"* — a binding that refers to a GROUP BY key."""
+        """:return: *"the common <field> of the <Roots>"* — a binding that refers to a GROUP BY key.
+
+        >>> from krrood.entity_query_language.factories import inference
+        >>> container = variable(Container, [])
+        >>> cabinet = inference(Cabinet)(container=container, drawers=variable(Drawer, []))
+        >>> "container is a Container" in verbalize_expression(entity(cabinet).grouped_by(container))
+        True
+        """
         chain, current = walk_chain(expression)
         if not chain or not isinstance(current, Variable):
             return self.context.child(expression)

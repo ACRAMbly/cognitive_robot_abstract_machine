@@ -32,6 +32,15 @@ class OrthographyProcessor(RealizationPass):
         """
         :param fragment: Root of the fragment tree.
         :return: A new tree with punctuation spacing fixed.
+
+        >>> from krrood.entity_query_language.verbalization.fragments.base import flatten_fragment_to_plain_text
+        >>> parens = PhraseFragment(parts=[WordFragment(text="(", spacing=Spacing.RIGHT),
+        ...                                WordFragment(text="x"),
+        ...                                WordFragment(text=")", spacing=Spacing.LEFT)])
+        >>> flatten_fragment_to_plain_text(parens)
+        '( x )'
+        >>> flatten_fragment_to_plain_text(OrthographyProcessor().process(parens))
+        '(x)'
         """
         rebuilt = map_structural_children(fragment, self.process)
         node = rebuilt if rebuilt is not None else fragment
@@ -47,6 +56,11 @@ class OrthographyProcessor(RealizationPass):
         :param parts: The phrase's parts.
         :return: *parts* regrouped so a ``LEFT`` token hugs the previous part and a ``RIGHT``
             token the next.
+
+        >>> glued = OrthographyProcessor()._apply_glue(
+        ...     [WordFragment(text="x"), WordFragment(text=",", spacing=Spacing.LEFT), WordFragment(text="y")])
+        >>> len(glued)
+        2
         """
         out: List[Fragment] = []
         # A RIGHT token (e.g. "(") held until its following part arrives, to attach to it.
@@ -69,7 +83,14 @@ class OrthographyProcessor(RealizationPass):
 
     @staticmethod
     def _merge(items: List[Fragment]) -> Fragment:
-        """:return: A zero-separator group of *items* (the single item itself when there is only one)."""
+        """:return: A zero-separator group of *items* (the single item itself when there is only one).
+
+        >>> only = WordFragment(text="x")
+        >>> OrthographyProcessor._merge([only]) is only
+        True
+        >>> OrthographyProcessor._merge([only, WordFragment(text="y")]).separator
+        <Separator.NONE: ''>
+        """
         return (
             items[0]
             if len(items) == 1

@@ -44,6 +44,10 @@ class EQLVerbalizer:
         :param expression: Any EQL symbolic expression.
         :param services: Shared verbalization state; created automatically when omitted.
         :return: Root of the fragment tree representing *expression* in natural language.
+
+        >>> from krrood.entity_query_language.verbalization.fragments.base import flatten_fragment_to_plain_text
+        >>> flatten_fragment_to_plain_text(EQLVerbalizer().build(a(entity(variable(Robot, [])))))
+        'Find a Robot'
         """
         # A match is not a foldable EQL node but a builder; it routes to its own assembler and
         # everything inside it (selection, values, conditions) is scanned/folded through its

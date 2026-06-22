@@ -23,6 +23,11 @@ def most_specific(candidates: Sequence[_T], key: Callable[[_T], Any]) -> Optiona
     :param candidates: Items already filtered to those that apply.
     :param key: Specificity key; the maximum wins.
     :return: The single most-specific candidate by *key*, or ``None`` when empty.
+
+    >>> most_specific(["a", "abc", "ab"], key=len)
+    'abc'
+    >>> most_specific([], key=len) is None
+    True
     """
     return max(candidates, key=key, default=None)
 
@@ -32,6 +37,11 @@ def mro_depth(cls: type) -> int:
     :param cls: A class.
     :return: Its specificity — deeper in the hierarchy ⇒ more specific (a subclass outranks the
         alternative it refines).
+
+    >>> mro_depth(object)
+    1
+    >>> mro_depth(bool) > mro_depth(int)
+    True
     """
     return len(cls.__mro__)
 
@@ -45,6 +55,10 @@ def concrete_subclasses(base: Type[_T]) -> List[Type[_T]]:
 
     :param base: The family / rule base class.
     :return: Its concrete transitive subclasses.
+
+    >>> from krrood.entity_query_language.verbalization.grammar.query.ranking import RankingForm
+    >>> sorted(rule.__name__ for rule in concrete_subclasses(RankingForm))
+    ['AttributeRankedByForm', 'AttributeSuperlativeForm', 'LeadingRankForm']
     """
     return [
         subclass
@@ -75,7 +89,12 @@ class SpecificityRule(ABC):
     @classmethod
     def alternatives(cls) -> List[Type[SpecificityRule]]:
         """:return: The concrete alternative subclasses of this family (transitive; abstract
-        family bases are excluded)."""
+        family bases are excluded).
+
+        >>> from krrood.entity_query_language.verbalization.grammar.query.ranking import RankingForm
+        >>> sorted(rule.__name__ for rule in RankingForm.alternatives())
+        ['AttributeRankedByForm', 'AttributeSuperlativeForm', 'LeadingRankForm']
+        """
         return concrete_subclasses(cls)
 
     @classmethod
@@ -85,6 +104,15 @@ class SpecificityRule(ABC):
         the subfamily fixes that signature (e.g. ``(item, subject)``).
 
         :return: The most-specific alternative whose ``applies(*args)`` holds, or ``None``.
+
+        >>> from krrood.entity_query_language.verbalization.grammar.query.ranking import (
+        ...     RankingForm, RankingRequest)
+        >>> from krrood.entity_query_language.verbalization.grammar.query.planner import (
+        ...     RankingPlan, RankingDirection, RankingKeyRelation)
+        >>> plan = RankingPlan(n=3, direction=RankingDirection.DESCENDING,
+        ...     relation=RankingKeyRelation.ATTRIBUTE, order_key=None)
+        >>> RankingForm.most_applicable(RankingRequest(plan=plan)).__name__
+        'AttributeRankedByForm'
         """
         applicable = [alt for alt in cls.alternatives() if alt.applies(*args)]
         return most_specific(applicable, key=mro_depth)

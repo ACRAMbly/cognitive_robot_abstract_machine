@@ -100,6 +100,11 @@ def build_path_parts(
     :param relation_verb: Optional name → split-verb recogniser, injected so this module stays
         decoupled from the grammar's recognizers; ``None`` disables relational rendering.
     :return: Ordered list of :class:`PathStep`, innermost hop first.
+
+    >>> from krrood.entity_query_language.core.expression_structure import walk_chain
+    >>> chain, _ = walk_chain(variable(BankTransaction, []).amount_details.amount)
+    >>> [step.name for step in build_path_parts(chain)]
+    ['amount_details', 'amount']
     """
     parts: List[PathStep] = []
     for node in chain:
@@ -137,12 +142,20 @@ def build_path_parts(
 
 def _is_scalar_value(value_type: object) -> bool:
     """:return: ``True`` when *value_type* is an atomic scalar — a primitive value, not an entity
-    (an entity is a dataclass and reads as an owner, not a distributable value)."""
+    (an entity is a dataclass and reads as an owner, not a distributable value).
+
+    >>> _is_scalar_value(int), _is_scalar_value(Robot), _is_scalar_value(None)
+    (True, False, False)
+    """
     return value_type is not None and not is_dataclass(value_type)
 
 
 def _index_step(key: object) -> PathStep:
-    """:return: An ordinal hop (*"first"*) for an integer *key*, else the bracketed *"[key]"* form."""
+    """:return: An ordinal hop (*"first"*) for an integer *key*, else the bracketed *"[key]"* form.
+
+    >>> _index_step(0).name, _index_step("a").name
+    ('first', "['a']")
+    """
     if isinstance(key, int) and not isinstance(key, bool):
         return PathStep(morphology.ordinal(key), None)
     return PathStep(f"[{repr(key)}]", None)

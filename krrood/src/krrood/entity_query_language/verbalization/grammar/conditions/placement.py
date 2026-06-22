@@ -120,6 +120,10 @@ class ConditionForm(SpecificityRule):
         """
         :param request: The condition and the subject it may attach to.
         :return: ``True`` when this form renders *request*.
+
+        >>> robot = variable(Robot, [])
+        >>> verbalize_expression(an(entity(robot).where(robot.battery > 50)))
+        'Find a Robot whose battery is greater than 50'
         """
 
     @classmethod
@@ -129,6 +133,10 @@ class ConditionForm(SpecificityRule):
         :param request: The condition and its subject.
         :param context: The per-node context (recursion and services).
         :return: *request* rendered in this form.
+
+        >>> robot = variable(Robot, [])
+        >>> verbalize_expression(an(entity(robot).where(robot.battery > 50)))
+        'Find a Robot whose battery is greater than 50'
         """
 
 
@@ -142,10 +150,22 @@ class StandaloneForm(ConditionForm):
 
     @classmethod
     def applies(cls, request: Placement) -> bool:
+        """A self-referential comparator folds onto no subject noun, so it falls here.
+
+        >>> employee = variable(Employee, [])
+        >>> verbalize_expression(an(entity(employee).where(employee.salary > employee.starting_salary)))
+        'Find an Employee such that its salary is greater than its starting_salary'
+        """
         return True
 
     @classmethod
     def render(cls, request: Placement, context: RuleContext) -> Fragment:
+        """Render the residual condition as its own clause via the normal recursion.
+
+        >>> employee = variable(Employee, [])
+        >>> verbalize_expression(an(entity(employee).where(employee.salary > employee.starting_salary)))
+        'Find an Employee such that its salary is greater than its starting_salary'
+        """
         return context.child(request.item)
 
 
@@ -167,10 +187,26 @@ class SuperlativeForm(StandaloneForm):
 
     @classmethod
     def applies(cls, request: Placement) -> bool:
+        """Fires on ``subject.<chain> == max/min(over the same-type population)``.
+
+        >>> employee, peers = variable(Employee, []), variable(Employee, [])
+        >>> verbalize_expression(
+        ...     an(entity(employee).where(employee.salary == the(entity(max(peers.salary)))))
+        ... )
+        'Find an Employee with the maximum salary'
+        """
         return superlative_aggregation(request.item, request.subject) is not None
 
     @classmethod
     def render(cls, request: Placement, context: RuleContext) -> Fragment:
+        """Render the post-nominal superlative modifier *"with the maximum/minimum <leaf>"*.
+
+        >>> employee, peers = variable(Employee, []), variable(Employee, [])
+        >>> verbalize_expression(
+        ...     an(entity(employee).where(employee.salary == the(entity(min(peers.salary)))))
+        ... )
+        'Find an Employee with the minimum salary'
+        """
         return ConditionAssembler(context).superlative_modifier(
             request.item, request.subject
         )
@@ -190,6 +226,14 @@ class WhoseRangeForm(StandaloneForm):
 
     @classmethod
     def applies(cls, request: Placement) -> bool:
+        """Fires when a lower/upper bound pair on a single-hop subject attribute has folded.
+
+        >>> employee = variable(Employee, [])
+        >>> verbalize_expression(
+        ...     an(entity(employee).where(and_(employee.salary > 100, employee.salary < 200)))
+        ... )
+        'Find an Employee whose salary is between 100 and 200'
+        """
         return (
             isinstance(request.item, RangeFold)
             and single_hop_attribute(request.item.chain_expression, request.subject)
@@ -198,6 +242,14 @@ class WhoseRangeForm(StandaloneForm):
 
     @classmethod
     def render(cls, request: Placement, context: RuleContext) -> Fragment:
+        """Render the *"<attribute> is between low and high"* whose-modifier.
+
+        >>> employee = variable(Employee, [])
+        >>> verbalize_expression(
+        ...     an(entity(employee).where(and_(employee.salary > 100, employee.salary < 200)))
+        ... )
+        'Find an Employee whose salary is between 100 and 200'
+        """
         return ConditionAssembler(context).range_modifier(
             request.item, request.subject, request.number
         )
@@ -216,6 +268,12 @@ class WhosePredicateForm(StandaloneForm):
 
     @classmethod
     def applies(cls, request: Placement) -> bool:
+        """Fires on a single-hop, non-boolean subject attribute compared to a subject-free value.
+
+        >>> robot = variable(Robot, [])
+        >>> verbalize_expression(an(entity(robot).where(robot.battery > 50)))
+        'Find a Robot whose battery is greater than 50'
+        """
         item, subject = request.item, request.subject
         if not isinstance(item, Comparator):
             return False
@@ -230,6 +288,12 @@ class WhosePredicateForm(StandaloneForm):
 
     @classmethod
     def render(cls, request: Placement, context: RuleContext) -> Fragment:
+        """Render the bare *"<attribute> <operator> <value>"* the *"whose"* envelope wraps.
+
+        >>> robot = variable(Robot, [])
+        >>> verbalize_expression(an(entity(robot).where(robot.battery > 50)))
+        'Find a Robot whose battery is greater than 50'
+        """
         return ConditionAssembler(context).attribute_modifier(
             request.item, request.subject, request.number
         )
@@ -250,6 +314,12 @@ class AbsenceForm(StandaloneForm):
 
     @classmethod
     def applies(cls, request: Placement) -> bool:
+        """Fires on a non-negated ``<chain> == None`` comparison.
+
+        >>> mission = variable(Mission, [])
+        >>> verbalize_expression(an(entity(mission).where(mission.priority == None)))
+        'Find a Mission such that the Mission has no priority'
+        """
         item = request.item
         return (
             isinstance(item, Comparator)
@@ -259,6 +329,12 @@ class AbsenceForm(StandaloneForm):
 
     @classmethod
     def render(cls, request: Placement, context: RuleContext) -> Fragment:
+        """Render the standalone absence predicate *"<owner> has no <attribute>"*.
+
+        >>> mission = variable(Mission, [])
+        >>> verbalize_expression(an(entity(mission).where(mission.priority == None)))
+        'Find a Mission such that the Mission has no priority'
+        """
         return render_absence(request.item, context, number=request.number)
 
 
@@ -271,6 +347,10 @@ def place(request: Placement, context: RuleContext) -> Placed:
     :param request: The condition and the subject it may attach to.
     :param context: The per-node context (recursion and services).
     :return: The rendered condition tagged with its surface slot.
+
+    >>> robot = variable(Robot, [])
+    >>> verbalize_expression(an(entity(robot).where(robot.battery > 50)))
+    'Find a Robot whose battery is greater than 50'
     """
     form = ConditionForm.most_applicable(request)
     return Placed(slot=form.slot, fragment=form.render(request, context))
@@ -322,6 +402,10 @@ def as_subject_restrictions(
     :param number: The number the subject agrees with — singular for a query selection, plural for
         an aggregated inference antecedent.
     :return: The placed restriction pieces.
+
+    >>> robot = variable(Robot, [])
+    >>> verbalize_expression(an(entity(robot).where(and_(robot.battery > 50, robot.name == None))))
+    'Find a Robot whose battery is greater than 50, such that the Robot has no name'
     """
     placed = [
         place(Placement(item=item, subject=subject, number=number), context)
@@ -349,7 +433,14 @@ def as_subject_restrictions(
 
 
 def _join_residual(fragments: List[Fragment]) -> Optional[Fragment]:
-    """:return: The standalone conjuncts joined into one residual condition, or ``None``."""
+    """:return: The standalone conjuncts joined into one residual condition, or ``None``.
+
+    >>> mission = variable(Mission, [])
+    >>> verbalize_expression(
+    ...     an(entity(mission).where(and_(mission.priority == None, mission.assigned_to == None)))
+    ... )
+    'Find a Mission such that the Mission has no priority, and the Mission has not been assigned to any Robot'
+    """
     if not fragments:
         return None
     # Residual conjuncts are independent clauses, so a two-clause pair keeps its comma.

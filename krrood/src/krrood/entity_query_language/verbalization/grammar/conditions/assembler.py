@@ -54,6 +54,10 @@ class ConditionAssembler(Assembler[Comparator, None]):
         :param node: The condition (comparator) to render.
         :param plan: Unused (this assembler has no plan).
         :return: The default form — a standalone predicate.
+
+        >>> robot = variable(Robot, [])
+        >>> verbalize_expression(robot.battery > 50)
+        'the battery of a Robot is greater than 50'
         """
         return self.predicate(node)
 
@@ -65,6 +69,10 @@ class ConditionAssembler(Assembler[Comparator, None]):
             so the generic *"<left> <operator> <right>"* is one transform alongside the absence
             (*"has no …"* / *"does not exist"*) and boolean-polarity (*"is [not] <attr>"*) forms; the
             most-specific applicable one wins, and adding a new one is a new subclass.
+
+        >>> mission = variable(Mission, [])
+        >>> verbalize_expression(mission.priority == None)
+        'a Mission has no priority'
         """
         transform = PredicateTransform.most_applicable(comparator, negated)
         return transform.render(comparator, self.context, negated)
@@ -83,6 +91,10 @@ class ConditionAssembler(Assembler[Comparator, None]):
 
         :param conditions: The conditions to say, in order.
         :return: One standalone-statement fragment per condition (after reduction), in order.
+
+        >>> robot = variable(Robot, [])
+        >>> verbalize_expression(and_(robot.battery > 50, robot.name == 'x'))
+        "the battery of a Robot is greater than 50, and the name of the Robot is 'x'"
         """
         return [self.context.child(item) for item in reduce_conjuncts(list(conditions))]
 
@@ -101,6 +113,10 @@ class ConditionAssembler(Assembler[Comparator, None]):
         :return: The bare *"<attribute> <operator> <value>"* grouped predicate a *"whose …"* envelope
             wraps, all agreeing with *number* — the predicative operator factors its copula out so a
             plural subject reads *"are greater than"* (see :func:`~…predication.comparator_operator`).
+
+        >>> robot = variable(Robot, [])
+        >>> verbalize_expression(an(entity(robot).where(robot.battery > 50)))
+        'Find a Robot whose battery is greater than 50'
         """
         attribute = single_hop_attribute(comparator.left, subject)
         return PhraseFragment(
@@ -123,6 +139,12 @@ class ConditionAssembler(Assembler[Comparator, None]):
         :param subject: The subject variable.
         :return: The superlative selection modifier *"with the maximum <leaf>"* / *"with the
             minimum <leaf>"*.
+
+        >>> employee, peers = variable(Employee, []), variable(Employee, [])
+        >>> verbalize_expression(
+        ...     an(entity(employee).where(employee.salary == the(entity(max(peers.salary)))))
+        ... )
+        'Find an Employee with the maximum salary'
         """
         fold = superlative_aggregation(comparator, subject)
         leaf = fold.aggregator._leaf_attribute_
@@ -147,6 +169,12 @@ class ConditionAssembler(Assembler[Comparator, None]):
         :param number: The number the attribute noun and copula agree with — *"salaries are between
             …"* for a plural subject.
         :return: The modifier *"<attribute> is between low and high"*.
+
+        >>> employee = variable(Employee, [])
+        >>> verbalize_expression(
+        ...     an(entity(employee).where(and_(employee.salary > 100, employee.salary < 200)))
+        ... )
+        'Find an Employee whose salary is between 100 and 200'
         """
         attribute = single_hop_attribute(range_fold.chain_expression, subject)
         left = RoleFragment.for_attribute(

@@ -44,4 +44,15 @@ class RewritePass(RealizationPass, ABC):
         """:param leaf: A leaf fragment. :return: Its replacement (or *leaf* unchanged)."""
 
     def process(self, fragment: Fragment) -> Fragment:
+        """:return: *fragment* rebuilt bottom-up with :meth:`rewrite` applied to every leaf.
+
+        >>> from krrood.entity_query_language.verbalization.fragments.base import (
+        ...     RoleFragment, PhraseFragment, flatten_fragment_to_plain_text)
+        >>> class Shout(RewritePass):
+        ...     def rewrite(self, leaf):
+        ...         return RoleFragment.for_operator(leaf.text.upper())
+        >>> phrase = PhraseFragment(parts=[RoleFragment.for_operator("is"), RoleFragment.for_literal(42)])
+        >>> flatten_fragment_to_plain_text(Shout().process(phrase))
+        'IS 42'
+        """
         return map_fragment(fragment, self.rewrite)

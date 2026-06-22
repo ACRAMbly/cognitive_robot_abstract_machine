@@ -30,7 +30,12 @@ def attribute_fragment(
     step: PathStep, number: Number = Number.SINGULAR
 ) -> RoleFragment:
     """:return: A role-tagged attribute fragment for *step*, tagged with *number* for inflection
-    (a single-hop possessive of a plural subject distributes — *"their salaries"*)."""
+    (a single-hop possessive of a plural subject distributes — *"their salaries"*).
+
+    >>> from krrood.entity_query_language.verbalization.fragments.base import flatten_fragment_to_plain_text
+    >>> flatten_fragment_to_plain_text(attribute_fragment(PathStep("salary")))
+    'salary'
+    """
     return RoleFragment(
         text=step.name,
         role=SemanticRole.ATTRIBUTE,
@@ -40,7 +45,12 @@ def attribute_fragment(
 
 
 def _genitive_step(step: PathStep, owner_fragment: Fragment) -> Fragment:
-    """:return: *"the <attribute> of <owner>"* — one plain (noun) hop wrapping its owner."""
+    """:return: *"the <attribute> of <owner>"* — one plain (noun) hop wrapping its owner.
+
+    >>> from krrood.entity_query_language.verbalization.fragments.base import flatten_fragment_to_plain_text, WordFragment
+    >>> flatten_fragment_to_plain_text(_genitive_step(PathStep("battery"), WordFragment(text="Robot")))
+    'the battery of Robot'
+    """
     return PhraseFragment(
         parts=[
             Articles.THE.as_fragment(),
@@ -62,7 +72,11 @@ def _relative_clause(
 
     The clause is a *referring* noun phrase headed by the related type, so a repeat mention of the
     same navigation reduces to a bare *"the <Type>"* during coreference (the relative clause is a
-    first-mention modifier)."""
+    first-mention modifier).
+
+    >>> verbalize_expression(variable(Mission, []).assigned_to)
+    'the Robot to which a Mission is assigned'
+    """
     relation = step.relation
     return NounPhrase(
         head=RoleFragment.for_type(relation.value_type),
@@ -85,7 +99,13 @@ def coordinated_genitive(
 ) -> Fragment:
     """:return: *"the <a, b, and c> of <owner>"* — several attributes sharing one genitive owner,
     coordinated under it (right-node raising: *"the department and salary of an Employee"*) rather
-    than repeated owner by owner (*"the department of an Employee and its salary"*)."""
+    than repeated owner by owner (*"the department of an Employee and its salary"*).
+
+    >>> from krrood.entity_query_language.verbalization.fragments.base import flatten_fragment_to_plain_text, WordFragment
+    >>> attributes = [attribute_fragment(PathStep("department")), attribute_fragment(PathStep("salary"))]
+    >>> flatten_fragment_to_plain_text(coordinated_genitive(attributes, WordFragment(text="Employee")))
+    'the department and salary of Employee'
+    """
     return PhraseFragment(
         parts=[
             Articles.THE.as_fragment(),
@@ -98,7 +118,12 @@ def coordinated_genitive(
 
 def _extend_hop(step: PathStep, owner_fragment: Fragment) -> Fragment:
     """:return: *owner_fragment* wrapped by one more hop — the relative clause for a relational hop,
-    else the genitive. The shared hop builder both path readouts extend their owner with."""
+    else the genitive. The shared hop builder both path readouts extend their owner with.
+
+    >>> from krrood.entity_query_language.verbalization.fragments.base import flatten_fragment_to_plain_text, WordFragment
+    >>> flatten_fragment_to_plain_text(_extend_hop(PathStep("battery"), WordFragment(text="Robot")))
+    'the battery of Robot'
+    """
     return (
         _relative_clause(step, owner_fragment)
         if step.is_relation
@@ -110,7 +135,13 @@ def possessive_path(parts: List[PathStep], root_fragment: Fragment) -> Fragment:
     """:return: the navigation read out from the root, hop by hop (parts innermost-first) — a plain
     hop as the genitive *"the <attribute> of <owner>"*, a relational hop as the relative clause
     *"the <Type> <prep> which <owner> is <participle>"*. With only plain hops this is the familiar
-    *"the <outer> of the <inner> of <root>"*."""
+    *"the <outer> of the <inner> of <root>"*.
+
+    >>> verbalize_expression(variable(Robot, []).battery)
+    'the battery of a Robot'
+    >>> verbalize_expression(variable(BankTransaction, []).amount_details.amount)
+    'the amount of the amount_details of a BankTransaction'
+    """
     owner = root_fragment
     for step in parts:
         owner = _extend_hop(step, owner)
@@ -126,6 +157,11 @@ def pronominal_path(parts: List[PathStep], subject_number: Number) -> Fragment:
 
     :param parts: The chain hops, innermost-first.
     :param subject_number: The discourse subject's number (its/it singular, their/they plural).
+
+    >>> from krrood.entity_query_language.verbalization.fragments.base import flatten_fragment_to_plain_text
+    >>> from krrood.entity_query_language.verbalization.fragments.features import Number
+    >>> flatten_fragment_to_plain_text(pronominal_path([], Number.SINGULAR))
+    'its'
     """
     possessive_pronoun = Pronouns.possessive(subject_number).as_fragment()
     if not parts:

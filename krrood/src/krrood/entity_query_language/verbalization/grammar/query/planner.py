@@ -151,7 +151,13 @@ class ReportPlan:
 
     @property
     def is_grouped(self) -> bool:
-        """:return: ``True`` when the report has a GROUP BY (the *"for each …"* frame applies)."""
+        """:return: ``True`` when the report has a GROUP BY (the *"for each …"* frame applies).
+
+        >>> ReportPlan(kind=ReportKind.AGGREGATION).is_grouped
+        False
+        >>> ReportPlan(kind=ReportKind.AGGREGATION, group_keys=['department']).is_grouped
+        True
+        """
         return bool(self.group_keys)
 
 
@@ -212,7 +218,11 @@ class QueryPlanner(Planner[Query, QueryPlan]):
     """
 
     def plan(self) -> QueryPlan:
-        """:return: The plan: selection shape, definiteness, restriction partition, aggregation."""
+        """:return: The plan: selection shape, definiteness, restriction partition, aggregation.
+
+        >>> QueryPlanner(entity(variable(Robot, []))).plan().kind.name
+        'SUBJECT'
+        """
         self.node.build()
         ranking = self._ranking()
         return QueryPlan(

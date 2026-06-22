@@ -57,6 +57,12 @@ class GroupedByAssembler(Assembler[Union[Query, GroupedBy], GroupPlan]):
         :param plan: The group plan.
         :return: *"grouped by <keys>"* — or *"and the <aggregated> are grouped by <keys>"* when
             the query also selects aggregations (bare *"grouped"* when there are no keys).
+
+        >>> employee = variable(Employee, [])
+        >>> verbalize_expression(
+        ...     a(set_of(employee.department, sum(employee.salary)).grouped_by(employee.department))
+        ... )
+        'For each department, report the sum of salaries of Employees'
         """
         if not plan.has_keys:
             return Keywords.GROUPED.as_fragment()
@@ -85,6 +91,12 @@ class GroupedByAssembler(Assembler[Union[Query, GroupedBy], GroupPlan]):
         """
         :param node: The query being rendered.
         :return: The in-query GROUP BY clause, or ``None`` when there are no group keys.
+
+        >>> employee = variable(Employee, [])
+        >>> verbalize_expression(
+        ...     an(entity(employee).grouped_by(employee.department))
+        ... )
+        'For each department, report all Employees'
         """
         plan = self.plan(node)
         return self.realize(node, plan) if plan.has_keys else None
@@ -93,6 +105,12 @@ class GroupedByAssembler(Assembler[Union[Query, GroupedBy], GroupPlan]):
         """
         :param variables: The group-by key expressions.
         :return: The comma-joined group keys *"<key1>, <key2>, …"*.
+
+        >>> employee = variable(Employee, [])
+        >>> verbalize_expression(
+        ...     a(set_of(employee.department, employee.name, sum(employee.salary)).grouped_by(employee.department, employee.name))
+        ... )
+        'For each department and name, report the sum of salaries of Employees'
         """
         return PhraseFragment(
             parts=[self.context.child(variable) for variable in variables],
@@ -120,6 +138,10 @@ class OrderedByAssembler(Assembler[Union[OrderedBy, OrderedByBuilder], None]):
         :param plan: Unused (this assembler has no plan).
         :return: The clause *"ordered by <variable> from lowest to highest"* (ascending) or
             *"… from highest to lowest"* (descending).
+
+        >>> employee = variable(Employee, [])
+        >>> verbalize_expression(a(set_of(employee).ordered_by(employee.salary, descending=True)))
+        'Report Employees ordered by their salaries from highest to lowest'
         """
         direction = (
             SortDirections.DESCENDING if node.descending else SortDirections.ASCENDING
@@ -136,6 +158,10 @@ class OrderedByAssembler(Assembler[Union[OrderedBy, OrderedByBuilder], None]):
         """
         :param query: The query being rendered.
         :return: The in-query ORDER BY clause, or ``None`` when the query is unordered.
+
+        >>> employee = variable(Employee, [])
+        >>> verbalize_expression(an(entity(employee).ordered_by(employee.salary)))
+        'Report Employees ordered by their salaries from lowest to highest'
         """
         builder = query._ordered_by_builder_
         return self.realize(builder) if builder is not None else None
@@ -158,6 +184,13 @@ class HavingAssembler(Assembler[Query, None]):
         :param plan: Unused (this assembler has no plan).
         :return: *"having <condition>"* — the condition rendered with compact (copula-less)
             comparators.
+
+        >>> employee = variable(Employee, [])
+        >>> total = sum(employee.salary)
+        >>> verbalize_expression(
+        ...     a(set_of(employee.department, total).grouped_by(employee.department).having(total > 30000))
+        ... )
+        'For each department, report the sum of salaries of Employees having the sum greater than 30000'
         """
         with self.context.configuration.compact_predicates_scope():
             having_fragment = self.context.child(node._having_expression_.condition)
@@ -167,5 +200,12 @@ class HavingAssembler(Assembler[Query, None]):
         """
         :param query: The query being rendered.
         :return: The in-query HAVING clause, or ``None`` when there is no HAVING.
+
+        >>> employee = variable(Employee, [])
+        >>> headcount = count(employee.name)
+        >>> verbalize_expression(
+        ...     a(set_of(employee.department, headcount).grouped_by(employee.department).having(headcount > 5))
+        ... )
+        'For each department, report the number of names of Employees having the number greater than 5'
         """
         return self.realize(query) if query._having_expression_ is not None else None

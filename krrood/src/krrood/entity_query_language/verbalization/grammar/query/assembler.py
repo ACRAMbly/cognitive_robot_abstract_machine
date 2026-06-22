@@ -83,6 +83,10 @@ class QueryAssembler(Assembler[Query, QueryPlan]):
         :param plan: The query plan.
         :return: The top-level imperative form *"Find X such that …"*, dispatched on the
             selection shape.
+
+        >>> robot = variable(Robot, [])
+        >>> verbalize_expression(an(entity(robot).where(robot.battery > 50)))
+        'Find a Robot whose battery is greater than 50'
         """
         if plan.report is not None and plan.report.kind is ReportKind.GROUPING:
             return self._assemble_grouped_report(node, plan, plan.report)
@@ -94,7 +98,11 @@ class QueryAssembler(Assembler[Query, QueryPlan]):
         return handlers[plan.kind](node, plan)
 
     def _realize_entity_selector(self, node: Query, plan: QueryPlan) -> Fragment:
-        """:return: *"Find <a Robot where …> such that …"* — the selected variable is itself an entity."""
+        """:return: *"Find <a Robot where …> such that …"* — the selected variable is itself an entity.
+
+        >>> verbalize_expression(an(entity(an(entity(variable(Task, []))))))
+        'Find a Task'
+        """
         selection = self._as_noun(node.selected_variable)
         return self._query_body(
             node, plan, selection, where_items=[self._where_clause(plan)]
@@ -113,6 +121,12 @@ class QueryAssembler(Assembler[Query, QueryPlan]):
         """
         :param node: The nested entity.
         :return: The noun-phrase form for a nested entity (never emits *"Find …"*).
+
+        >>> worker = variable(Worker, [])
+        >>> verbalize_expression(
+        ...     an(entity(worker).where(contains(worker.tasks, an(entity(variable(Task, []))))))
+        ... )
+        'Find a Worker whose tasks contains a Task'
         """
         plan = self.plan(node)
         if plan.is_aggregation_subquery:
@@ -125,6 +139,9 @@ class QueryAssembler(Assembler[Query, QueryPlan]):
         :return: *"Find v1 and v2 such that …"* for a search; *"Report <columns>"* /
             *"For each <keys>, report <columns>"* for an aggregation report; *"Report v1 and v2
             ordered by …"* (plural) for an ordered listing.
+
+        >>> verbalize_expression(an(set_of(variable(Robot, []), variable(Task, []))))
+        'Find a Robot and a Task'
         """
         plan = self.plan(node)
         report = plan.report
@@ -259,7 +276,13 @@ class QueryAssembler(Assembler[Query, QueryPlan]):
     ) -> Fragment:
         """:return: a calculation/report — *"Report <columns>"*, or *"For each <keys>, report
         <columns>"* when grouped (the grouping stated first, so it frames the whole report and the
-        trailing *"grouped by"* clause is dropped as redundant)."""
+        trailing *"grouped by"* clause is dropped as redundant).
+
+        >>> employee = variable(Employee, [])
+        >>> verbalize_expression(a(set_of(employee.department, sum(employee.salary)).grouped_by(
+        ...     employee.department)))
+        'For each department, report the sum of salaries of Employees'
+        """
         header = (
             self._for_each_header(report.group_keys)
             if report.is_grouped
@@ -279,7 +302,12 @@ class QueryAssembler(Assembler[Query, QueryPlan]):
         """:return: a grouped report with no aggregates — *"For each <keys>, report all <columns>"*
         (the columns listed as per-group populations), or *"Report the distinct <keys>"* when the
         selection is exactly the group key (so there is nothing left to report but the keys
-        themselves). The trailing *"grouped by"* clause is dropped as redundant."""
+        themselves). The trailing *"grouped by"* clause is dropped as redundant.
+
+        >>> employee = variable(Employee, [])
+        >>> verbalize_expression(a(set_of(employee.department).grouped_by(employee.department)))
+        'Report the distinct departments'
+        """
         if not report.columns:
             return self._query_body(
                 node,
@@ -394,7 +422,12 @@ class QueryAssembler(Assembler[Query, QueryPlan]):
 
     def _assemble_subject(self, node: Query, plan: QueryPlan) -> Fragment:
         """:return: *"Find a Robot whose battery is high, such that … [clauses]"* — the
-        plain-variable selection with its WHERE woven in."""
+        plain-variable selection with its WHERE woven in.
+
+        >>> robot = variable(Robot, [])
+        >>> verbalize_expression(an(entity(robot).where(robot.battery > 50)))
+        'Find a Robot whose battery is greater than 50'
+        """
         variable = node.selected_variable
         selected = self._build_selection(node, variable, plan)
         selected, where_items = self._apply_subject_restrictions(plan, selected)
@@ -472,6 +505,12 @@ class QueryAssembler(Assembler[Query, QueryPlan]):
 
         :param entity: The nested entity selector.
         :return: The standalone-noun form *"a Robot where …"*.
+
+        >>> worker = variable(Worker, [])
+        >>> verbalize_expression(
+        ...     an(entity(worker).where(contains(worker.tasks, an(entity(variable(Task, []))))))
+        ... )
+        'Find a Worker whose tasks contains a Task'
         """
         plan = self.plan(entity)
         variable = entity.selected_variable
@@ -566,6 +605,9 @@ class QueryAssembler(Assembler[Query, QueryPlan]):
 
         :param entity: The entity used as a chain root inside an instantiated variable.
         :return: The inline-noun form for *entity*.
+
+        >>> verbalize_expression(an(entity(variable(Robot, []))).name)
+        'the name of a Robot'
         """
         entity.build()
         variable = entity.selected_variable
