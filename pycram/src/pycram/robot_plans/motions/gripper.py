@@ -259,7 +259,6 @@ class MoveManipulatorMotion(BaseMotion):
             if isinstance(robot, HasMobileBase)
             else False
         )
-
         root = self.world.root if full_body_controlled else robot.root
         task = CartesianPose(
             root_link=root,

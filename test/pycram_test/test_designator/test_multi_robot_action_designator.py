@@ -599,11 +599,13 @@ def test_open(immutable_multiple_robot_apartment):
     ).position == pytest.approx(0.45, abs=0.1)
 
 
-def test_close(immutable_multiple_robot_apartment):
+def test_close(immutable_multiple_robot_apartment, rclpy_node):
     world, robot, context = immutable_multiple_robot_apartment
 
     world.get_connection_by_name("cabinet10_drawer_middle_joint").position = 0.3
     world.notify_state_change()
+
+    navigate_position = [1.5, 1.85, 0] if isinstance(robot, Tiago) else [1.65, 2.0, 0]
 
     plan = sequential(
         [
@@ -611,7 +613,7 @@ def test_close(immutable_multiple_robot_apartment):
             ParkArmsAction(Arms.BOTH),
             NavigateAction(
                 Pose(
-                    Point3.from_iterable([1.65, 2.0, 0]),
+                    Point3.from_iterable(navigate_position),
                     Quaternion.from_iterable([0, 0, 0.4, 1]),
                     reference_frame=world.root,
                 )
