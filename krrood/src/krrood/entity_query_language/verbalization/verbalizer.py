@@ -7,9 +7,8 @@ from typing_extensions import Optional
 from krrood.entity_query_language.core.base_expressions import SymbolicExpression
 from krrood.entity_query_language.query.match import Match
 from krrood.entity_query_language.verbalization.context import MicroplanningServices
-from krrood.entity_query_language.verbalization.engine import fold
+from krrood.entity_query_language.verbalization.engine import fold, root_context
 from krrood.entity_query_language.verbalization.fragments.base import Fragment
-from krrood.entity_query_language.verbalization.fragments.features import Number
 from krrood.entity_query_language.verbalization.grammar.framework.phrase_rule import (
     RuleContext,
 )
@@ -45,6 +44,10 @@ class EQLVerbalizer:
         :param expression: Any EQL symbolic expression.
         :param services: Shared verbalization state; created automatically when omitted.
         :return: Root of the fragment tree representing *expression* in natural language.
+
+        >>> from krrood.entity_query_language.verbalization.fragments.base import flatten_fragment_to_plain_text
+        >>> flatten_fragment_to_plain_text(EQLVerbalizer().build(a(entity(variable(Robot, [])))))
+        'Find a Robot'
         """
         # A match is not a foldable EQL node but a builder; it routes to its own assembler and
         # everything inside it (selection, values, conditions) is scanned/folded through its
@@ -57,7 +60,7 @@ class EQLVerbalizer:
         # Referents already introduced by prior builds on these (shared) services, so the same
         # expression verbalized twice reads "a Robot" then "the Robot".  Snapshot BEFORE the
         # fold, which records this build's own mentions in the same set.
-        already_seen = set(services.referring.seen)
+        previously_introduced_referents = set(services.referring.seen)
         if isinstance(expression, Match):
             fragment = MatchAssembler(self._match_context(services)).assemble(
                 expression
@@ -67,7 +70,12 @@ class EQLVerbalizer:
         # The discourse focus per query scope, projected once from the shared plan read model; the
         # coreference pass consults it instead of rule-emitted subject markers.
         discourse = DiscourseModel.from_expression(scan_target, services.microplan)
-        return realize_tree(fragment, already_seen=already_seen, discourse=discourse)
+        return realize_tree(
+            fragment,
+            previously_introduced_referents=previously_introduced_referents,
+            discourse=discourse,
+            numbered_labels=services.referring.numbered_labels,
+        )
 
     @staticmethod
     def _match_context(services: MicroplanningServices) -> RuleContext:
@@ -76,9 +84,4 @@ class EQLVerbalizer:
         :return: A root context whose ``child`` is the fold continuation, so the match assembler
             recurses its selection / values / conditions through the standard grammar.
         """
-        return RuleContext(
-            child=lambda child_node, number=Number.SINGULAR, inline=False: fold(
-                child_node, services, RULES, number=number, inline=inline
-            ),
-            services=services,
-        )
+        return root_context(services, RULES)

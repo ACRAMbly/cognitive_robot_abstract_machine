@@ -1,0 +1,505 @@
+from __future__ import annotations
+
+import inspect
+import operator
+from abc import abstractmethod
+from dataclasses import dataclass, field
+from enum import Enum, auto
+
+from typing_extensions import ClassVar, List, Optional, Union
+
+from krrood.entity_query_language.core.base_expressions import SymbolicExpression
+from krrood.entity_query_language.core.variable import Variable
+from krrood.entity_query_language.operators.comparator import Comparator
+from krrood.entity_query_language.verbalization.exceptions import (
+    UndeclaredFormSlotError,
+)
+from krrood.entity_query_language.verbalization.fragments.base import (
+    BlockFragment,
+    Fragment,
+    oxford_comma,
+)
+from krrood.entity_query_language.verbalization.grammar.conditions.assembler import (
+    ConditionAssembler,
+)
+from krrood.entity_query_language.verbalization.grammar.conditions.recognition import (
+    is_boolean_attribute_chain,
+    is_none_literal,
+    references,
+    single_hop_attribute,
+    superlative_aggregation,
+)
+from krrood.entity_query_language.verbalization.grammar.conditions.predication import (
+    render_absence,
+)
+from krrood.entity_query_language.verbalization.grammar.framework.phrase_rule import (
+    RuleContext,
+)
+from krrood.entity_query_language.verbalization.grammar.framework.specificity import (
+    SpecificityRule,
+)
+from krrood.entity_query_language.verbalization.microplanning.coordination import (
+    reduce_conjuncts,
+    RangeFold,
+)
+from krrood.entity_query_language.verbalization.vocabulary.english import (
+    Conjunctions,
+    Keywords,
+)
+from krrood.entity_query_language.verbalization.vocabulary.words import Number
+
+
+class Slot(Enum):
+    """Where a condition's rendered form attaches in a sentence — the surface-slot taxonomy a
+    caller maps to an actual position (a noun modifier vs. a standalone clause)."""
+
+    SELECTION_MODIFIER = auto()
+    """A post-nominal prepositional phrase on the selection — *"<noun> with the maximum amount"*."""
+    WHOSE = auto()
+    """A bare predicate gathered under a shared *"whose …, and …"* envelope on the subject noun."""
+    STANDALONE = auto()
+    """Not attachable to the subject noun — said as its own clause (*"such that …"* / *"where …"*)."""
+
+
+@dataclass(frozen=True)
+class Placement:
+    """The request a :class:`ConditionForm` reads: one condition to say relative to a subject."""
+
+    item: Union[SymbolicExpression, RangeFold]
+    """The folded ``WHERE`` conjunct (a raw expression or a range fold)."""
+
+    subject: Variable
+    """The variable the condition may attach to."""
+
+    number: Number = Number.SINGULAR
+    """The number the subject (and so the predicate) agrees with — singular for a query subject,
+    plural for an aggregated inference antecedent (*"whose children are …"*)."""
+
+
+@dataclass(frozen=True)
+class Placed:
+    """A rendered condition together with the slot it occupies, for the caller to position."""
+
+    slot: Slot
+    """The surface slot the fragment occupies."""
+
+    fragment: Fragment
+    """The rendered condition."""
+
+
+class ConditionForm(SpecificityRule):
+    """
+    One surface form a condition can take next to a subject noun — recognise it, render it, and
+    declare its :class:`Slot`. The single, *total* registry of these forms is the one authority on
+    *how a condition is said relative to a subject*: every position-aware caller (a query's subject
+    restriction) asks it via :func:`place` and never picks a form itself.
+
+    The registry is total because :class:`StandaloneForm` is the unguarded base every specific form
+    refines, so :meth:`~SpecificityRule.most_applicable` always returns a form (the more-derived
+    specific form when it applies, else the standalone fallback) — no ``None``, no residual special
+    case. Adding a form is a new subclass; nothing else changes (open/closed).
+
+    Reference: Dale & Reiter (1995) — referring expressions / post-nominal modification;
+    production-rule selection (the most-specific guarded alternative wins).
+    """
+
+    slot: ClassVar[Slot]
+    """The surface slot this form's output occupies."""
+
+    def __init_subclass__(cls, **kwargs: object) -> None:
+        """Fail fast at class-definition time when a concrete form forgets to declare its
+        :attr:`slot` (otherwise the omission is a silent ``AttributeError`` deep in :func:`place`).
+        """
+        super().__init_subclass__(**kwargs)
+        if not inspect.isabstract(cls) and not hasattr(cls, "slot"):
+            raise UndeclaredFormSlotError(form=cls)
+
+    @classmethod
+    @abstractmethod
+    def applies(cls, request: Placement) -> bool:
+        """
+        :param request: The condition and the subject it may attach to.
+        :return: ``True`` when this form renders *request*.
+
+        It is the gate each concrete form overrides to claim a situation; here the winning override
+        (:class:`WhosePredicateForm`) is what routes ``robot.battery > 50`` into the *whose* slot, so
+        the example renders *whose battery is greater than 50* rather than a standalone clause.
+
+        >>> robot = variable(Robot, [])
+        >>> verbalize_expression(an(entity(robot).where(robot.battery > 50)))
+        'Find a Robot whose battery is greater than 50'
+        """
+
+    @classmethod
+    @abstractmethod
+    def render(cls, request: Placement, context: RuleContext) -> Fragment:
+        """
+        :param request: The condition and its subject.
+        :param context: The per-node context (recursion and services).
+        :return: *request* rendered in this form.
+
+        It emits the condition's surface text; here the selected form's override produces *battery is
+        greater than 50*, the span the *whose* envelope then wraps to give the shown sentence.
+
+        >>> robot = variable(Robot, [])
+        >>> verbalize_expression(an(entity(robot).where(robot.battery > 50)))
+        'Find a Robot whose battery is greater than 50'
+        """
+
+
+class StandaloneForm(ConditionForm):
+    """The unguarded fallback: a condition that does not fold onto the subject noun is said as its
+    own clause, via the normal recursion. Being the base every specific form refines, it makes the
+    registry total — it applies to anything, and a more-specific form outranks it when one fits.
+    """
+
+    slot = Slot.STANDALONE
+
+    @classmethod
+    def applies(cls, request: Placement) -> bool:
+        """A self-referential comparator folds onto no subject noun, so it falls here.
+
+        Returning ``True`` unconditionally, it is the catch-all gate that claims the comparator no
+        specific form accepts — which is why the example lands in a *such that …* clause instead of
+        the *whose* slot a one-sided attribute comparison would take.
+
+        >>> employee = variable(Employee, [])
+        >>> verbalize_expression(an(entity(employee).where(employee.salary > employee.starting_salary)))
+        'Find an Employee such that its salary is greater than its starting_salary'
+        """
+        return True
+
+    @classmethod
+    def render(cls, request: Placement, context: RuleContext) -> Fragment:
+        """Render the residual condition as its own clause via the normal recursion.
+
+        Deferring to the recursion is what supplies the whole *its salary is greater than its
+        starting_salary* clause; this form contributes only the decision to render it standalone (its
+        :attr:`slot` is :attr:`Slot.STANDALONE`), so the caller frames it with *such that*.
+
+        >>> employee = variable(Employee, [])
+        >>> verbalize_expression(an(entity(employee).where(employee.salary > employee.starting_salary)))
+        'Find an Employee such that its salary is greater than its starting_salary'
+        """
+        return context.child(request.item)
+
+
+class SuperlativeForm(StandaloneForm):
+    """``subject.<chain> == max/min(over all <same-type>.<same chain>)`` → the superlative selection
+    modifier *"with the maximum/minimum <leaf>"*.
+
+    >>> t1 = variable(BankTransaction, domain=None)
+    >>> t2 = variable(BankTransaction, domain=None)
+    >>> verbalize_expression(
+    ...     the(entity(t1).where(
+    ...         t1.amount_details.amount == an(entity(max(t2.amount_details.amount)))
+    ...     ))
+    ... )
+    'Find the unique BankTransaction with the maximum amount'
+    """
+
+    slot = Slot.SELECTION_MODIFIER
+
+    @classmethod
+    def applies(cls, request: Placement) -> bool:
+        """Fires on ``subject.<chain> == max/min(over the same-type population)``.
+
+        Recognising the equality-against-an-aggregate shape is the gate that selects this form over
+        the plain :class:`WhosePredicateForm`, which is why the example collapses to the selection
+        modifier *with the maximum salary* instead of *whose salary is equal to …*.
+
+        >>> employee, peers = variable(Employee, []), variable(Employee, [])
+        >>> verbalize_expression(
+        ...     an(entity(employee).where(employee.salary == the(entity(max(peers.salary)))))
+        ... )
+        'Find an Employee with the maximum salary'
+        """
+        return superlative_aggregation(request.item, request.subject) is not None
+
+    @classmethod
+    def render(cls, request: Placement, context: RuleContext) -> Fragment:
+        """Render the post-nominal superlative modifier *"with the maximum/minimum <leaf>"*.
+
+        It owns the entire *with the minimum salary* span, reading the aggregator to choose *minimum*
+        over *maximum* and naming the leaf attribute *salary*.
+
+        >>> employee, peers = variable(Employee, []), variable(Employee, [])
+        >>> verbalize_expression(
+        ...     an(entity(employee).where(employee.salary == the(entity(min(peers.salary)))))
+        ... )
+        'Find an Employee with the minimum salary'
+        """
+        return ConditionAssembler(context).superlative_modifier(
+            request.item, request.subject
+        )
+
+
+class WhoseRangeForm(StandaloneForm):
+    """A range fold on a single-hop subject attribute → *"<attribute> is between low and high"*.
+
+    >>> employee = variable(Employee, [])
+    >>> verbalize_expression(
+    ...     an(entity(employee).where(and_(employee.salary > 100, employee.salary < 200)))
+    ... )
+    'Find an Employee whose salary is between 100 and 200'
+    """
+
+    slot = Slot.WHOSE
+
+    @classmethod
+    def applies(cls, request: Placement) -> bool:
+        """Fires when a lower/upper bound pair on a single-hop subject attribute has folded.
+
+        Detecting the folded :class:`RangeFold` is the gate that selects this form over two separate
+        :class:`WhosePredicateForm` comparisons, which is why the bound pair reads as the single
+        *whose salary is between 100 and 200* rather than *whose salary is greater than 100, and …*.
+
+        >>> employee = variable(Employee, [])
+        >>> verbalize_expression(
+        ...     an(entity(employee).where(and_(employee.salary > 100, employee.salary < 200)))
+        ... )
+        'Find an Employee whose salary is between 100 and 200'
+        """
+        return (
+            isinstance(request.item, RangeFold)
+            and single_hop_attribute(request.item.chain_expression, request.subject)
+            is not None
+        )
+
+    @classmethod
+    def render(cls, request: Placement, context: RuleContext) -> Fragment:
+        """Render the *"<attribute> is between low and high"* whose-modifier.
+
+        It owns the *salary is between 100 and 200* span — naming the attribute and emitting the
+        *between … and …* frame over the two bounds — which the *whose* envelope then wraps.
+
+        >>> employee = variable(Employee, [])
+        >>> verbalize_expression(
+        ...     an(entity(employee).where(and_(employee.salary > 100, employee.salary < 200)))
+        ... )
+        'Find an Employee whose salary is between 100 and 200'
+        """
+        return ConditionAssembler(context).range_modifier(
+            request.item, request.subject, request.number
+        )
+
+
+class WhosePredicateForm(StandaloneForm):
+    """A single-hop, non-boolean subject-attribute comparator whose right side does not reference the
+    subject → *"<attribute> is greater than 100"* / *"<attribute> is equal to <calc>"*.
+
+    >>> robot = variable(Robot, [])
+    >>> verbalize_expression(an(entity(robot).where(robot.battery > 50)))
+    'Find a Robot whose battery is greater than 50'
+    """
+
+    slot = Slot.WHOSE
+
+    @classmethod
+    def applies(cls, request: Placement) -> bool:
+        """Fires on a single-hop, non-boolean subject attribute compared to a subject-free value.
+
+        Passing this guard is what selects the *whose* form for ``robot.battery > 50``, so the
+        example reads *whose battery is greater than 50* rather than the standalone *such that …*
+        clause the fallback would produce; the rejected branches route absence, boolean, and
+        superlative comparisons to their own forms instead.
+
+        >>> robot = variable(Robot, [])
+        >>> verbalize_expression(an(entity(robot).where(robot.battery > 50)))
+        'Find a Robot whose battery is greater than 50'
+        """
+        item, subject = request.item, request.subject
+        if not isinstance(item, Comparator):
+            return False
+        attribute = single_hop_attribute(item.left, subject)
+        if attribute is None or is_boolean_attribute_chain(item.left):
+            return False  # a boolean attribute uses the predicative form, not "whose"
+        if is_none_literal(item.right):
+            return False  # an absence comparison is AbsenceForm's (standalone, not "whose")
+        if superlative_aggregation(item, subject) is not None:
+            return False  # a superlative comparator is SuperlativeForm's
+        return not references(item.right, subject)
+
+    @classmethod
+    def render(cls, request: Placement, context: RuleContext) -> Fragment:
+        """Render the bare *"<attribute> <operator> <value>"* the *"whose"* envelope wraps.
+
+        It owns the *battery is greater than 50* span of the example — the attribute noun, operator,
+        and value with the subject dropped — leaving only the *whose* header for the envelope to add.
+
+        >>> robot = variable(Robot, [])
+        >>> verbalize_expression(an(entity(robot).where(robot.battery > 50)))
+        'Find a Robot whose battery is greater than 50'
+        """
+        return ConditionAssembler(context).attribute_modifier(
+            request.item, request.subject, request.number
+        )
+
+
+class AbsenceForm(StandaloneForm):
+    """A non-negated ``<chain> == None`` comparison → the absence predicate *"<owner> has no
+    <attribute>"* (an owned attribute) or *"<subject> does not exist"* (a bare variable), said as
+    its own clause rather than folded onto the subject noun (the subject/object flip cannot sit in a
+    *"whose …"* coordination).
+
+    >>> mission = variable(Mission, [])
+    >>> verbalize_expression(an(entity(mission).where(mission.priority == None)))
+    'Find a Mission such that the Mission has no priority'
+    """
+
+    slot = Slot.STANDALONE
+
+    @classmethod
+    def applies(cls, request: Placement) -> bool:
+        """Fires on a non-negated ``<chain> == None`` comparison.
+
+        Recognising the ``== None`` shape is the gate that selects this form over
+        :class:`WhosePredicateForm`, which is why the example becomes the standalone *such that the
+        Mission has no priority* rather than being folded into a *whose* group.
+
+        >>> mission = variable(Mission, [])
+        >>> verbalize_expression(an(entity(mission).where(mission.priority == None)))
+        'Find a Mission such that the Mission has no priority'
+        """
+        item = request.item
+        return (
+            isinstance(item, Comparator)
+            and item.operation is operator.eq
+            and is_none_literal(item.right)
+        )
+
+    @classmethod
+    def render(cls, request: Placement, context: RuleContext) -> Fragment:
+        """Render the standalone absence predicate *"<owner> has no <attribute>"*.
+
+        It owns the *the Mission has no priority* span, flipping owner and attribute into the *has
+        no* frame; tagged :attr:`Slot.STANDALONE`, it is why the caller frames the result with *such
+        that* rather than *whose*.
+
+        >>> mission = variable(Mission, [])
+        >>> verbalize_expression(an(entity(mission).where(mission.priority == None)))
+        'Find a Mission such that the Mission has no priority'
+        """
+        return render_absence(request.item, context, number=request.number)
+
+
+def place(request: Placement, context: RuleContext) -> Placed:
+    """
+    Render a condition relative to its subject and report the slot it occupies — the single entry a
+    position-aware caller uses. The form is chosen by the registry (most-specific applicable; the
+    standalone fallback guarantees a match), so the caller never inspects the condition's shape.
+
+    :param request: The condition and the subject it may attach to.
+    :param context: The per-node context (recursion and services).
+    :return: The rendered condition tagged with its surface slot.
+
+    Pairing the rendered fragment with the winning form's :attr:`slot` is what lets the caller route
+    ``robot.battery > 50`` to the *whose* position, producing the *whose battery is greater than 50*
+    placement in the example.
+
+    >>> robot = variable(Robot, [])
+    >>> verbalize_expression(an(entity(robot).where(robot.battery > 50)))
+    'Find a Robot whose battery is greater than 50'
+    """
+    form = ConditionForm.most_applicable(request)
+    return Placed(slot=form.slot, fragment=form.render(request, context))
+
+
+# ── placing a whole subject restriction ─────────────────────────────────────
+
+
+@dataclass(frozen=True)
+class RestrictionFragments:
+    """The placed pieces of a subject's WHERE, for the caller to position — each goes to a different
+    sentence slot, so they are kept apart rather than pre-joined."""
+
+    inline_modifiers: List[Fragment] = field(default_factory=list)
+    """Superlative selection phrases (*"with the maximum amount"*) that attach inline, right after
+    the selection noun."""
+
+    whose: Optional[Fragment] = None
+    """The *"whose"* group as a coordinated block (header *"whose"*, one bare predicate per item,
+    Oxford-joined) — a sub-list of points in hierarchical rendering, *"whose a, and b"* inline / in
+    paragraph. ``None`` when nothing folds into a *"whose"*."""
+
+    residual: Optional[Fragment] = None
+    """The residual condition for a separate *"such that …"* / *"where …"* clause; the caller picks
+    the keyword and position. ``None`` when the WHERE folds entirely into the other pieces."""
+
+
+def as_subject_restrictions(
+    conditions: List[SymbolicExpression],
+    subject: Variable,
+    context: RuleContext,
+    number: Number = Number.SINGULAR,
+) -> RestrictionFragments:
+    """
+    Say a subject's WHERE conjuncts as restrictions on its noun — the counterpart to
+    :meth:`ConditionAssembler.as_statements` for when conditions attach to a subject rather than
+    standing alone. Each conjunct is placed and the results bucketed by slot into the pieces a
+    caller positions: superlative noun modifiers, the shared *"whose"* group, and the standalone
+    residual. This is the list form of :func:`place`.
+
+    The conjuncts are reduced here first (a complementary lower/upper bound pair on one chain
+    becomes a single *"… is between …"*; co-indexed comparisons across two prefixes fold into one
+    *"… have the same …"*), so the caller hands over the raw conditions and never invokes the fold
+    itself — the same reduction :meth:`ConditionAssembler.as_statements` applies.
+
+    :param conditions: The subject's WHERE conjuncts (an ``AND`` already flattened to a list).
+    :param subject: The variable the restriction is on.
+    :param context: The per-node context (recursion and services).
+    :param number: The number the subject agrees with — singular for a query selection, plural for
+        an aggregated inference antecedent.
+    :return: The placed restriction pieces.
+
+    Bucketing each placed conjunct by slot is what splits the two conditions in the example: the
+    battery comparison fills the *whose* group while the ``== None`` conjunct becomes the standalone
+    residual, so the sentence joins *whose battery is greater than 50* with *such that the Robot has
+    no name*.
+
+    >>> robot = variable(Robot, [])
+    >>> verbalize_expression(an(entity(robot).where(and_(robot.battery > 50, robot.name == None))))
+    'Find a Robot whose battery is greater than 50, such that the Robot has no name'
+    """
+    placed = [
+        place(Placement(item=item, subject=subject, number=number), context)
+        for item in reduce_conjuncts(list(conditions))
+    ]
+    grouped = [item.fragment for item in placed if item.slot is Slot.WHOSE]
+    whose = (
+        BlockFragment(
+            header=Keywords.WHOSE.as_fragment(),
+            items=grouped,
+            conjunction=Conjunctions.AND.as_fragment(),
+        )
+        if grouped
+        else None
+    )
+    return RestrictionFragments(
+        inline_modifiers=[
+            item.fragment for item in placed if item.slot is Slot.SELECTION_MODIFIER
+        ],
+        whose=whose,
+        residual=_join_residual(
+            [item.fragment for item in placed if item.slot is Slot.STANDALONE]
+        ),
+    )
+
+
+def _join_residual(fragments: List[Fragment]) -> Optional[Fragment]:
+    """:return: The standalone conjuncts joined into one residual condition, or ``None``.
+
+    It supplies the comma-and join that knits the two absence clauses of the example into the single
+    residual *the Mission has no priority, and the Mission has not been assigned to any Robot* the
+    caller frames with *such that*.
+
+    >>> mission = variable(Mission, [])
+    >>> verbalize_expression(
+    ...     an(entity(mission).where(and_(mission.priority == None, mission.assigned_to == None)))
+    ... )
+    'Find a Mission such that the Mission has no priority, and the Mission has not been assigned to any Robot'
+    """
+    if not fragments:
+        return None
+    # Residual conjuncts are independent clauses, so a two-clause pair keeps its comma.
+    return oxford_comma(fragments, Conjunctions.AND.as_fragment(), pair_comma=True)

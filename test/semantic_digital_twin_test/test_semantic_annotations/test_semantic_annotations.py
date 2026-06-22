@@ -8,12 +8,16 @@ from krrood.entity_query_language.core.base_expressions import SymbolicExpressio
 from krrood.entity_query_language.explanation.explanation import explain_inference
 from krrood.entity_query_language.factories import entity, variable, in_, inference, an
 from krrood.entity_query_language.verbalization.rendering.renderer import HierarchicalRenderer
-from krrood.entity_query_language.verbalization.pipeline import verbalize_expression
+from krrood.entity_query_language.verbalization.pipeline import (
+    verbalize_expression,
+    VerbalizationPipeline,
+)
 from semantic_digital_twin.adapters.world_entity_kwargs_tracker import (
     WorldEntityWithIDKwargsTracker,
 )
+from semantic_digital_twin.datastructures.joint_state import JointState
 from semantic_digital_twin.reasoning.world_reasoner import WorldReasoner
-from semantic_digital_twin.robots.robot_parts import AbstractRobot
+from semantic_digital_twin.robots.robot_parts import AbstractRobot, KinematicChain
 from semantic_digital_twin.robots.minimal_robot import MinimalRobot
 from semantic_digital_twin.semantic_annotations.semantic_annotations import *
 from semantic_digital_twin.testing import *
@@ -157,10 +161,10 @@ def test_has_hinge_has_slider_aggregate_bodies():
         world.add_semantic_annotation(slider)
         world.add_semantic_annotation(drawer)
         world.add_semantic_annotation(door)
-        door.add_handle(handle2)
-        door.add_hinge(hinge)
-        drawer.add_handle(handle1)
-        drawer.add_slider(slider)
+        door.add(handle2)
+        door.add(hinge)
+        drawer.add(handle1)
+        drawer.add(slider)
 
     expected_door_bodies = {door_body, handle2_body, hinge_body}
     expected_drawer_bodies = {drawer_body, handle1_body, slider_body}
@@ -264,13 +268,15 @@ def test_explain_inferred_semantic_annotations(apartment_world_copy):
 
 
 @pytest.mark.order("fourth_to_last")
-def test_verbalize_query_that_inferred_semantic_annotations(apartment_world_setup):
-    world_reasoner = WorldReasoner(apartment_world_setup)
+def test_verbalize_query_that_inferred_semantic_annotations(_apartment_world_setup):
+    world_reasoner = WorldReasoner(_apartment_world_setup)
     found_semantic_annotations = list(world_reasoner.infer_semantic_annotations())
     drawer = next(ann for ann in found_semantic_annotations if isinstance(ann, Drawer))
     explanation = explain_inference(drawer)
     verbalization_paragraph = verbalize_expression(explanation.query_root)
-    verbalization_hierarchical = verbalize_expression(explanation.query_root, renderer=HierarchicalRenderer())
+    verbalization_hierarchical = VerbalizationPipeline(
+        HierarchicalRenderer()
+    ).verbalize(explanation.query_root)
     assert verbalization_paragraph == (
         "If there's a FixedConnection whose parent is the child of a PrismaticConnection,"
         " there's a Handle whose root is the child of the FixedConnection,"
@@ -348,3 +354,44 @@ def test_minimal_robot_annotation(pr2_world_state_reset):
     pr2 = pr2_world_state_reset.get_semantic_annotations_by_type(AbstractRobot)[0]
     assert len(robot.bodies) == len(pr2.bodies)
     assert len(robot.connections) == len(pr2.connections)
+
+
+def test_kinematic_chain_with_root_equal_tip_has_no_connections():
+
+    @dataclass(eq=False)
+    class ReviewKinematicChain(KinematicChain):
+        """Minimal concrete KinematicChain for chain tests."""
+
+        def setup_hardware_interfaces(self):
+            pass
+
+        def setup_joint_states(self) -> List[JointState]:
+            return []
+
+        @classmethod
+        def setup_default_configuration_in_world_below_robot_root(
+            cls, robot_root: KinematicStructureEntity
+        ):
+            raise NotImplementedError
+
+    world = World()
+    root = Body(name=PrefixedName("root", prefix="review"))
+    link = Body(name=PrefixedName("link", prefix="review"))
+    collision = Box(
+        scale=Scale(),
+        origin=HomogeneousTransformationMatrix.from_xyz_rpy(reference_frame=link),
+    )
+    link.collision = ShapeCollection([collision], reference_frame=link)
+    with world.modify_world():
+        world.add_kinematic_structure_entity(root)
+        world.add_kinematic_structure_entity(link)
+        joint = RevoluteConnection.create_with_dofs(
+            world=world, parent=root, child=link, axis=Vector3.Z(reference_frame=root)
+        )
+        world.add_connection(joint)
+        chain = ReviewKinematicChain(
+            name=PrefixedName("chain", prefix="review"), root=link, tip=link
+        )
+        world.add_semantic_annotation(chain)
+
+    assert chain.connections == []

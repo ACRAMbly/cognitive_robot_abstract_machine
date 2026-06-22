@@ -16,7 +16,7 @@ from krrood.entity_query_language.factories import a, variable, set_of
 import krrood.entity_query_language.factories as eql
 from krrood.entity_query_language.verbalization.pipeline import verbalize_expression
 
-from ...dataset.department_and_employee import Employee
+from ...dataset.department_and_employee import Department, Employee
 
 
 @dataclass
@@ -52,22 +52,48 @@ class ProfitAndLossStatement:
 def test_set_of_drops_the_sets_of_head():
     e = variable(Employee, [])
     text = verbalize_expression(a(set_of(e.department, e.salary)))
-    assert text.startswith("Find (")
+    # the two attributes of one owner fold into a shared genitive, not "… and its salary"
+    assert text == "Find the department and salary of an Employee"
     assert "sets of" not in text
+    assert "(" not in text  # the code-like tuple parentheses are gone
+
+
+def test_three_co_owned_attributes_fold_with_oxford_comma():
+    e = variable(Employee, [])
+    text = verbalize_expression(a(set_of(e.name, e.salary, e.starting_salary)))
+    assert text == "Find the name, salary, and starting_salary of an Employee"
+
+
+def test_attributes_of_different_owners_do_not_fold():
+    e = variable(Employee, [])
+    d = variable(Department, [])
+    text = verbalize_expression(a(set_of(e.salary, d.name)))
+    assert text == "Find the salary of an Employee and the name of a Department"
 
 
 # ── single-root pronominalisation ─────────────────────────────────────────────
 
 
-def test_single_root_set_of_pronominalises():
-    """Every chain roots at one Employee → the repeated root collapses to "its"/"their"."""
+def test_non_grouped_aggregation_reads_as_a_report():
+    """An aggregation set-of with no GROUP BY is a calculation, so it opens with *"Report"* (not
+    *"Find"*) and carries no *"for each"* frame."""
+    e = variable(Employee, [])
+    text = verbalize_expression(a(set_of(eql.sum(e.salary))))
+    assert text == "Report the sum of salaries of Employees"
+    assert "For each" not in text and "Find" not in text
+
+
+def test_grouped_aggregation_reads_as_a_for_each_report():
+    """A grouped aggregation set-of is a report, not a search: it fronts the grouping as
+    *"For each <key>, report …"*, names the key bare (no *"of the Employee"*), and drops the
+    redundant key column."""
     e = variable(Employee, [])
     text = verbalize_expression(
         a(set_of(e.department, eql.sum(e.salary)).grouped_by(e.department))
     )
-    # the grouped-by key no longer restates "of the Employee"
-    assert "grouped by their department" in text
-    assert "grouped by the department of the Employee" not in text
+    assert text == "For each department, report the sum of salaries of Employees"
+    assert "grouped by" not in text  # fronted, not a trailing SQL-ish clause
+    assert "of the Employee" not in text  # the key is the bare group label
 
 
 def test_multi_root_set_of_does_not_pronominalise():
@@ -79,10 +105,11 @@ def test_multi_root_set_of_does_not_pronominalise():
     assert "their " not in text
 
 
-def test_unlimited_ordered_set_of_keeps_clause_pronominalised():
+def test_unlimited_ordered_set_of_reports_pronominalised():
+    """An unranked ordered set-of reports the plural population, pronominalised to "their"."""
     e = variable(Employee, [])
     text = verbalize_expression(a(set_of(e).ordered_by(e.salary, descending=True)))
-    assert text == "Find (an Employee) ordered by its salary (descending)"
+    assert text == "Report Employees ordered by their salaries from highest to lowest"
 
 
 # ── limit on a set_of → ranking, ordered-by suppressed ───────────────────────
@@ -102,15 +129,17 @@ def _pnl_query(n: int):
 
 def test_set_of_limit_renders_ranking_and_suppresses_ordered_by():
     text = verbalize_expression(_pnl_query(3))
+    # The ranked tuple is reframed onto the entity its columns describe — no code-like "(a, b)".
     assert text == (
-        "Find the top three (the period of a ProfitAndLossStatement, "
-        "the sum of the amount of the money of its revenue) "
-        "such that the month of the begin of its period is the month of the end of its period, "
-        "grouped by its period"
+        "Report, for the top three ProfitAndLossStatements, "
+        "their period and the sum of the amount of the money of their revenue "
+        "such that the month of the begin of their period is the month of the end of their period, "
+        "grouped by their period"
     )
     # the ranking conveys the ordering — no standalone clause, and the root appears once
     assert "ordered by" not in text
     assert "descending" not in text
+    assert "(" not in text  # the code-like tuple parentheses are gone
     assert text.count("ProfitAndLossStatement") == 1
 
 
@@ -121,5 +150,6 @@ def test_set_of_limit_ascending_is_bottom():
         set_of(pnl.period, revenue).grouped_by(pnl.period).ordered_by(revenue).limit(2)
     )
     text = verbalize_expression(q)
-    assert text.startswith("Find the bottom two (")
+    assert text.startswith("Report, for the bottom two ProfitAndLossStatements,")
+    assert "(" not in text
     assert "ordered by" not in text

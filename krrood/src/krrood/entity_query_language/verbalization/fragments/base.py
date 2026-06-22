@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass, field, replace
-from typing_extensions import Callable, List, Optional, TypeVar
+from typing_extensions import Any, Callable, List, Optional, TypeVar
 
 from krrood.entity_query_language.core.base_expressions import SymbolicExpression
 from krrood.entity_query_language.verbalization.fragments.features import (
@@ -17,6 +17,7 @@ from krrood.entity_query_language.verbalization.fragments.source_reference impor
 )
 from krrood.entity_query_language.verbalization.navigation_path import PathStep
 from krrood.entity_query_language.verbalization.exceptions import UnloweredFragmentError
+from krrood.entity_query_language.verbalization.value_lexicon import value_phrase
 
 _T = TypeVar("_T")
 
@@ -94,6 +95,9 @@ class RoleFragment(HasText, HasNumber, Fragment):
         :param expression: Expression whose ``_type_`` attribute supplies the source reference.
         :param number: Grammatical-number feature.
         :return: A fragment with the ``VARIABLE`` role.
+
+        >>> RoleFragment.for_variable("Robot", variable(Robot, [])).text
+        'Robot'
         """
         return cls(
             text=label,
@@ -106,7 +110,12 @@ class RoleFragment(HasText, HasNumber, Fragment):
 
     @classmethod
     def for_attribute(
-        cls, owner: type, attribute_name: str, number: Number = Number.SINGULAR
+        cls,
+        owner: Optional[type],
+        attribute_name: str,
+        number: Number = Number.SINGULAR,
+        *,
+        text: Optional[str] = None,
     ) -> RoleFragment:
         """
         Build a fragment for an attribute access, linked to its owner class.
@@ -114,17 +123,73 @@ class RoleFragment(HasText, HasNumber, Fragment):
         Inflection is not applied here; a plural *number* is a feature realised later, and the
         source link always uses the canonical name.
 
-        :param owner: Owner class of the attribute (used for source linking).
-        :param attribute_name: Canonical attribute name on *owner*.
+        :param owner: Owner class of the attribute (for source linking), or ``None`` for no link
+            (when the access is referred to by name only, without a navigable owner in scope).
+        :param attribute_name: Canonical attribute name on *owner* (always used for the link).
         :param number: Grammatical-number feature.
+        :param text: Surface word override — a display name or a relational verb phrase
+            (*"assigned to"*); defaults to *attribute_name*.
         :return: A fragment with the ``ATTRIBUTE`` role.
+
+        >>> RoleFragment.for_attribute(Robot, "battery").text
+        'battery'
         """
         return cls(
-            text=attribute_name,
+            text=text if text is not None else attribute_name,
             role=SemanticRole.ATTRIBUTE,
-            source_reference=SourceReference.for_attribute(owner, attribute_name),
+            source_reference=(
+                SourceReference.for_attribute(owner, attribute_name)
+                if owner is not None
+                else None
+            ),
             number=number,
         )
+
+    @classmethod
+    def for_type(
+        cls,
+        type_: object,
+        number: Number = Number.SINGULAR,
+        *,
+        text: Optional[str] = None,
+    ) -> RoleFragment:
+        """
+        Build a fragment for a type rendered as a noun (*"Robot"*), with the ``VARIABLE`` role.
+
+        :param type_: The class to name; linked to its source when it is a class (a non-class —
+            a typing generic or unknown — yields no link).
+        :param number: Grammatical-number feature.
+        :param text: Surface word override; defaults to the class ``__name__``.
+        :return: A fragment with the ``VARIABLE`` role.
+
+        >>> RoleFragment.for_type(Robot).text
+        'Robot'
+        """
+        is_class = isinstance(type_, type)
+        return cls(
+            text=(
+                text
+                if text is not None
+                else (type_.__name__ if is_class else str(type_))
+            ),
+            role=SemanticRole.VARIABLE,
+            source_reference=SourceReference.for_type(type_) if is_class else None,
+            number=number,
+        )
+
+    @classmethod
+    def for_literal(cls, value: Any) -> RoleFragment:
+        """
+        Build a fragment for a literal value (*42*, *"hello"*, an enum member), with the ``LITERAL``
+        role; the surface text is the shared value lexicalisation.
+
+        :param value: The Python value to render.
+        :return: A fragment with the ``LITERAL`` role.
+
+        >>> RoleFragment.for_literal(42).text
+        '42'
+        """
+        return cls(text=value_phrase(value), role=SemanticRole.LITERAL)
 
     @classmethod
     def for_operator(cls, label: str) -> RoleFragment:
@@ -133,6 +198,9 @@ class RoleFragment(HasText, HasNumber, Fragment):
 
         :param label: Display text (e.g. ``"is"``, ``"not"``, ``"greater than"``).
         :return: A fragment with the ``OPERATOR`` role.
+
+        >>> RoleFragment.for_operator("greater than").text
+        'greater than'
         """
         return cls(text=label, role=SemanticRole.OPERATOR)
 
@@ -178,6 +246,12 @@ class NounPhrase(HasNumber, Fragment):
     """When set, this noun phrase is a referring expression for that entity, and its
     definiteness holds the first-mention form."""
 
+    subject_of_modifiers: bool = True
+    """Whether this referring noun phrase is the discourse subject *of its own modifiers* — true for
+    an entity with restrictive modifiers (*"a Robot whose battery exceeds its threshold"*), false
+    for a quantity whose modifiers are a complement rooted elsewhere (*"the sum of the amount of its
+    revenue"* — the complement keeps the outer subject, so it must not be re-scoped to the sum)."""
+
     pre_head: Optional[Fragment] = None
     """A qualifier placed between the determiner and the head (*"the [first two] Robots"*), e.g. a
     ``limit`` ranking phrase. Pre-nominal, so distinct from the post-nominal :attr:`modifiers`."""
@@ -200,6 +274,11 @@ class PossessiveChain(Fragment):
     root_referent_id: Optional[uuid.UUID] = None
     """The root variable's referent id — the chain pronominalises only when this is the current
     subject (and the root is not a numbered label)."""
+
+    node_id: Optional[uuid.UUID] = None
+    """The chain's own terminal node id. When the chain is a query's selected / measured quantity,
+    a later mention of that same quantity (a WHERE on the very attribute being aggregated) reduces
+    to a bare *"the <attribute>"* instead of repeating the whole possessive."""
 
 
 @dataclass
@@ -260,6 +339,12 @@ def fold_fragment(
     :param phrase: Handler for ``PhraseFragment`` ``(folded_parts, separator)``.
     :param block: Handler for a raw ``BlockFragment`` (controls its own recursion).
     :return: The folded value.
+
+    >>> phrase = PhraseFragment(parts=[RoleFragment.for_operator("is"), RoleFragment.for_literal(42)])
+    >>> fold_fragment(phrase, word=lambda text: [text], role=lambda text, role, ref: [text],
+    ...               phrase=lambda parts, separator: [w for part in parts for w in part],
+    ...               block=lambda block: [])
+    ['is', '42']
     """
     match fragment:
         case WordFragment(text=text):
@@ -292,6 +377,9 @@ def map_structural_children(
     :param fragment: Node to rebuild.
     :param recurse: Transform applied to each child.
     :return: The rebuilt container, or ``None`` when *fragment* is not a structural container.
+
+    >>> map_structural_children(RoleFragment.for_operator("is"), lambda f: f) is None
+    True
     """
     match fragment:
         case PhraseFragment(parts=parts):
@@ -319,6 +407,11 @@ def map_fragment(fragment: Fragment, leaf: Callable[[Fragment], Fragment]) -> Fr
     :param fragment: Root of the tree to transform.
     :param leaf: Transform applied to each leaf fragment (identity for unaffected leaves).
     :return: The rebuilt tree.
+
+    >>> phrase = PhraseFragment(parts=[RoleFragment.for_operator("is"), RoleFragment.for_literal(42)])
+    >>> shouted = map_fragment(phrase, lambda leaf: RoleFragment.for_operator(leaf.text.upper()))
+    >>> flatten_fragment_to_plain_text(shouted)
+    'IS 42'
     """
     rebuilt = map_structural_children(fragment, lambda f: map_fragment(f, leaf))
     return rebuilt if rebuilt is not None else leaf(fragment)
@@ -333,6 +426,10 @@ def flatten_fragment_to_plain_text(fragment: Fragment) -> str:
 
     :param fragment: Root of the fragment tree to flatten.
     :return: Plain-text representation with spaces between tokens.
+
+    >>> flatten_fragment_to_plain_text(
+    ...     PhraseFragment(parts=[RoleFragment.for_operator("is"), RoleFragment.for_literal(42)]))
+    'is 42'
     """
 
     def _block(b: BlockFragment) -> str:
@@ -358,18 +455,31 @@ def flatten_fragment_to_plain_text(fragment: Fragment) -> str:
 # ── Fragment joining utilities ─────────────────────────────────────────────────
 
 
-def oxford_comma(parts: list[Fragment], conjunction: Fragment) -> Fragment:
+def oxford_comma(
+    parts: list[Fragment], conjunction: Fragment, *, pair_comma: bool = False
+) -> Fragment:
     """
     Join *parts* with Oxford-comma style: ``f1, f2, conj f3``.
 
     :param parts: Fragments to join.
     :param conjunction: Conjunction fragment (e.g. *"and"*, *"or"*).
+    :param pair_comma: Whether a two-element list keeps a comma before the conjunction. Defaults to
+        ``False`` — *"a and b"*, standard English (the serial comma is defined only for a series of
+        three or more, so a pair takes none); pass ``True`` only to join two independent clauses.
     :return: A single fragment representing the joined sequence.
+
+    >>> words = [RoleFragment.for_operator(w) for w in ("a", "b", "c")]
+    >>> flatten_fragment_to_plain_text(oxford_comma(words, RoleFragment.for_operator("and")))
+    'a, b, and c'
+    >>> flatten_fragment_to_plain_text(oxford_comma(words[:2], RoleFragment.for_operator("and")))
+    'a and b'
     """
     if not parts:
         return WordFragment(text="")
     if len(parts) == 1:
         return parts[0]
+    if len(parts) == 2 and not pair_comma:
+        return PhraseFragment(parts=[parts[0], conjunction, parts[1]])
     head = parts[:-1]
     tail = parts[-1]
     result: list[Fragment] = []
