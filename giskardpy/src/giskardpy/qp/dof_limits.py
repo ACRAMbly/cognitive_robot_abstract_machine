@@ -569,7 +569,7 @@ class DofLimits:
                 base_weight=qp_controller_config.get_dof_weight(
                     degree_of_freedom.name, derivative
                 ),
-                point_in_horizon=t,
+                horizon_index=t,
                 total_horizon_length=qp_controller_config.prediction_horizon - 3,
                 growth_factor=qp_controller_config.horizon_weight_gain_scalar,
             )
@@ -580,7 +580,7 @@ class DofLimits:
         self,
         variable_limit: float | None,
         base_weight: float,
-        point_in_horizon: int,
+        horizon_index: int,
         total_horizon_length: int,
         growth_factor: float,
     ) -> sm.Scalar:
@@ -590,19 +590,17 @@ class DofLimits:
         """
 
         def linear(
-            point_in_horizon: float,
+            horizon_index: float,
             weight: float,
             total_horizon_length: int,
             growth_factor: float,
         ) -> float:
             start = weight * growth_factor
             slope = (weight - start) / total_horizon_length
-            return slope * point_in_horizon + start
+            return slope * horizon_index + start
 
         if variable_limit is None:
             return 0.0
-        weight = linear(
-            point_in_horizon, base_weight, total_horizon_length, growth_factor
-        )
+        weight = linear(horizon_index, base_weight, total_horizon_length, growth_factor)
 
         return weight * (1 / variable_limit) ** 2

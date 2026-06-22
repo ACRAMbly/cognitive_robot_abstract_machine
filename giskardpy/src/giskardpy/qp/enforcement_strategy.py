@@ -504,30 +504,30 @@ class SystemDynamicsStrategy(EnforcementStrategy):
                 self.number_of_velocity_columns + self.number_of_jerk_columns,
             )
         )
-        for k in range(self.config.prediction_horizon):
-            row_start = k * self.number_of_free_variables
-            row_end = (k + 1) * self.number_of_free_variables
+        for horizon_index in range(self.config.prediction_horizon):
+            row_start = horizon_index * self.number_of_free_variables
+            row_end = (horizon_index + 1) * self.number_of_free_variables
 
             # velocity at k
-            if k < self.config.prediction_horizon - 2:
-                col_start = k * self.number_of_free_variables
-                col_end = (k + 1) * self.number_of_free_variables
+            if horizon_index < self.config.prediction_horizon - 2:
+                col_start = horizon_index * self.number_of_free_variables
+                col_end = (horizon_index + 1) * self.number_of_free_variables
                 matrix[row_start:row_end, col_start:col_end] -= np.eye(
                     self.number_of_free_variables
                 )
 
             # velocity at k-1
-            if 0 < k < self.config.prediction_horizon - 1:
-                col_start = (k - 1) * self.number_of_free_variables
-                col_end = k * self.number_of_free_variables
+            if 0 < horizon_index < self.config.prediction_horizon - 1:
+                col_start = (horizon_index - 1) * self.number_of_free_variables
+                col_end = horizon_index * self.number_of_free_variables
                 matrix[row_start:row_end, col_start:col_end] += 2 * np.eye(
                     self.number_of_free_variables
                 )
 
             # velocity at k-2
-            if k > 1:
-                col_start = (k - 2) * self.number_of_free_variables
-                col_end = (k - 1) * self.number_of_free_variables
+            if horizon_index > 1:
+                col_start = (horizon_index - 2) * self.number_of_free_variables
+                col_end = (horizon_index - 1) * self.number_of_free_variables
                 matrix[row_start:row_end, col_start:col_end] -= np.eye(
                     self.number_of_free_variables
                 )
