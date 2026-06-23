@@ -430,10 +430,10 @@ class Mesh(Shape):
         origin = from_json(data["origin"], **kwargs)
         scale = from_json(data["scale"], **kwargs)
         file_type = data["file_type"]
-        # Per-vertex colors only survive the temporary export/reload in a
-        # color-preserving format, so prefer PLY when colors are present.
+        # Export colored meshes as OBJ, which preserves per-vertex colors and is
+        # readable by the visualizer and the collision loader.
         if vertex_colors is not None:
-            file_type = "ply"
+            file_type = "obj"
         return cls.from_trimesh(
             mesh=mesh, origin=origin, scale=scale, file_type=file_type
         )
