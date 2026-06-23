@@ -77,9 +77,10 @@ class Verbalizable(ABC):
     """
 
     @classmethod
+    @abstractmethod
     def _verbalization_fragment_(cls, fields: Mapping[str, Fragment]) -> Fragment:
         """
-        Optional structured verbalization for this predicate.
+        Structured verbalization for this predicate — a required clause (no string fallback).
 
         Build the clause from the typed part-of-speech vocabulary
         (:func:`~…vocabulary.parts_of_speech.clause` with ``Noun`` / ``Verb`` / ``Copula`` /
@@ -88,7 +89,12 @@ class Verbalizable(ABC):
         as its lemma, and the realisation passes inflect it (*"work"* → *"works"*) and agree its
         number. Returning a typed clause rather than a string keeps the predicate composable — a
         wrapping ``Not`` negates it automatically (a verb with do-support, *"does not love"*; a copula
-        with suppletion, *"is not reachable"*) and coreference still reduces the operands. Example::
+        with suppletion, *"is not reachable"*) and coreference still reduces the operands.
+
+        ..note:: Abstract, so every concrete predicate must supply a clause; a missing implementation
+            fails at (concrete) instantiation rather than only when the predicate is verbalized.
+
+        Example::
 
             @dataclass(eq=False)
             class Loves(Predicate):
@@ -102,7 +108,6 @@ class Verbalizable(ABC):
         :param fields: The rendered fragment for each predicate field, keyed by field name.
         :return: The predicate's verbalization fragment.
         """
-        raise NotImplementedError()
 
 
 @dataclass(eq=False)

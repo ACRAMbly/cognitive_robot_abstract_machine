@@ -11,6 +11,7 @@ from krrood.entity_query_language.verbalization.fragments.base import (
     RoleFragment,
     WordFragment,
 )
+from krrood.entity_query_language.verbalization.fragments.features import Number
 from krrood.entity_query_language.verbalization.fragments.roles import SemanticRole
 from krrood.entity_query_language.verbalization.vocabulary.english import Copulas
 from krrood.entity_query_language.verbalization.vocabulary.words import (
@@ -59,13 +60,17 @@ class Verb(ClauseElement):
     lemma: str
     """The verb's base form (*"work"*, *"contain"*, *"love"*)."""
 
+    number: Number = Number.SINGULAR
+    """The subject number the verb agrees with — ``PLURAL`` reads the bare *"work"* / *"have"* for a
+    coordinated or plural subject."""
+
     def as_fragment(self) -> RoleFragment:
         """:return: a ``VERB``-role leaf carrying the lemma for the morphology pass to inflect.
 
         >>> Verb("work").as_fragment().role
         <SemanticRole.VERB: 'verb'>
         """
-        return RoleFragment(text=self.lemma, role=SemanticRole.VERB)
+        return RoleFragment(text=self.lemma, role=SemanticRole.VERB, number=self.number)
 
 
 @dataclass(frozen=True)
