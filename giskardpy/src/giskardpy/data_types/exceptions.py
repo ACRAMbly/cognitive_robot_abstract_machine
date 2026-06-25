@@ -86,7 +86,7 @@ class JointRegistrationRequiresStandaloneModeError(SetupException):
         return "Joints only need to be registered in StandAlone mode."
 
     def suggest_correction(self) -> str:
-        return "Remove the manuel registration. For real robots, the joints are retrieved from the connected controllers."
+        return "Remove the manual registration. For real robots, the joints are retrieved from the connected controllers."
 
 
 @dataclass
