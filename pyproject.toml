@@ -35,6 +35,7 @@ dev = [
     "treon",
     "jupytext",
     "bokeh",
+    "jupyterquiz",
 
 ]
 
