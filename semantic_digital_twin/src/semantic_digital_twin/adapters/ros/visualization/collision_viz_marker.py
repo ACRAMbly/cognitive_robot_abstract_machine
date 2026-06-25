@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 from geometry_msgs.msg import Point as RosPoint
 from rclpy.node import Node
+from rclpy.publisher import Publisher
 from rclpy.qos import QoSProfile, DurabilityPolicy
 from std_msgs.msg import ColorRGBA
 from visualization_msgs.msg import Marker, MarkerArray
@@ -66,7 +67,7 @@ class CollisionVisualizationMarkerPublisher(CollisionConsumer):
         )
     )
     """
-    QoS profile for the publisher. Volatile because contacts are a live stream.
+    QoS profile for the publisher. Uses TRANSIENT_LOCAL because it shares a topic with the VizMarkerPublisher.
     """
 
     _root_frame_name: str = field(init=False, default="")
@@ -77,6 +78,11 @@ class CollisionVisualizationMarkerPublisher(CollisionConsumer):
     _call_counter: int = field(init=False, default=0)
     """
     Counts collision checks to implement throttling.
+    """
+
+    _publisher: Publisher = field(init=False)
+    """
+    The ROS publisher for the marker.
     """
 
     def __post_init__(self):
