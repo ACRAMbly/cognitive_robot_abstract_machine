@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 
 import rerun
 from typing_extensions import Optional
@@ -14,7 +14,7 @@ from semantic_digital_twin.callbacks.callback import (
 from semantic_digital_twin.world import World
 
 
-class RerunMode(Enum):
+class RerunMode(StrEnum):
     """
     Where the Rerun recording stream sends its data.
     """
