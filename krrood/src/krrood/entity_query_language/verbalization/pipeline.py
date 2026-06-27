@@ -7,6 +7,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing_extensions import TYPE_CHECKING, Optional
 
+from jinja2 import Template
+
 from krrood.entity_query_language.core.base_expressions import SymbolicExpression
 from krrood.entity_query_language.verbalization.context import MicroplanningServices
 from krrood.entity_query_language.verbalization.fragments.base import Fragment
@@ -32,35 +34,36 @@ if TYPE_CHECKING:
 
 _log = logging.getLogger(__name__)
 
-_HTML_PAGE_TEMPLATE = """\
+_HTML_PAGE_TEMPLATE = Template("""\
 <!DOCTYPE html>
 <html>
 <head>
 <meta charset="utf-8">
 <style>
-  body {{
+  body {
     background: #1e1e1e;
     color: #d4d4d4;
     font-family: monospace;
     font-size: 14px;
     padding: 1.5em;
     line-height: 1.8;
-  }}
-  a {{ color: inherit; }}
+  }
+  a { color: inherit; }
 </style>
 </head>
-<body>{body}</body>
+<body>{{ body }}</body>
 </html>
-"""
+""")
+"""Standalone dark page for browser display; the rendered markup fills ``body``."""
 
-# Inline dark wrapper for HTML cell output (Jupyter / built docs). Mirrors
-# _HTML_PAGE_TEMPLATE so the colors read correctly in both environments.
-_HTML_CELL_WRAPPER = (
+_HTML_CELL_WRAPPER = Template(
     '<div style="background:#1e1e1e;color:#d4d4d4;font-family:monospace;'
     'font-size:14px;padding:0.75em;border-radius:0.4em;line-height:1.8;">'
-    "{body}"
+    "{{ body }}"
     "</div>"
 )
+"""Inline dark wrapper for HTML cell output (Jupyter / built docs); mirrors the page colours so
+the markup reads correctly in both environments."""
 
 
 def _is_ipython() -> bool:
@@ -141,7 +144,7 @@ class VerbalizationPipeline:
         """
         result = self.renderer.render(fragment)
         if self._is_html_renderer():
-            return _HTML_CELL_WRAPPER.format(body=result)
+            return _HTML_CELL_WRAPPER.render(body=result)
         return result
 
     def display(self, expression: SymbolicExpression) -> None:
@@ -164,13 +167,13 @@ class VerbalizationPipeline:
             from IPython.display import display as _ipython_display, HTML
 
             wrapped = (
-                _HTML_CELL_WRAPPER.format(body=raw_html)
+                _HTML_CELL_WRAPPER.render(body=raw_html)
                 if self._is_html_renderer()
                 else raw_html
             )
             _ipython_display(HTML(wrapped))
             return
-        full_page = _HTML_PAGE_TEMPLATE.format(body=raw_html)
+        full_page = _HTML_PAGE_TEMPLATE.render(body=raw_html)
         with tempfile.NamedTemporaryFile(
             mode="w",
             suffix=".html",
