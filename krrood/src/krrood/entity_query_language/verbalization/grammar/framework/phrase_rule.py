@@ -5,7 +5,9 @@ from dataclasses import dataclass, field
 from typing_extensions import TYPE_CHECKING, Callable, ClassVar, Optional, Sequence
 
 from krrood.entity_query_language.core.base_expressions import SymbolicExpression
-from krrood.entity_query_language.verbalization.fragments.base import Fragment
+from krrood.entity_query_language.verbalization.fragments.base import (
+    VerbalizationFragment,
+)
 from krrood.entity_query_language.verbalization.fragments.features import (
     GrammaticalNumber,
 )
@@ -62,7 +64,7 @@ class RuleContext:
     for cross-cutting state directly.
     """
 
-    recurse: Callable[[SymbolicExpression, "RenderOptions"], Fragment]
+    recurse: Callable[[SymbolicExpression, "RenderOptions"], VerbalizationFragment]
     """The fold continuation — given a sub-expression and its render options, returns its fragment.
     Rules do not call this directly; they call :meth:`child`."""
 
@@ -79,7 +81,7 @@ class RuleContext:
         number: GrammaticalNumber = GrammaticalNumber.SINGULAR,
         inline: bool = False,
         as_value: bool = False,
-    ) -> Fragment:
+    ) -> VerbalizationFragment:
         """Recurse on a sub-expression, requesting its render flags (all reset by default — they do
         not inherit from this node).
 
@@ -173,7 +175,9 @@ class PhraseRule(ABC):
         return True
 
     @abstractmethod
-    def build(self, node: SymbolicExpression, context: RuleContext) -> Fragment:
+    def build(
+        self, node: SymbolicExpression, context: RuleContext
+    ) -> VerbalizationFragment:
         """
         Build the fragment for *node*.
 

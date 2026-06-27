@@ -18,7 +18,9 @@ if TYPE_CHECKING:
     from krrood.entity_query_language.core.base_expressions import SymbolicExpression
     from krrood.entity_query_language.core.variable import InstantiatedVariable
     from krrood.entity_query_language.operators.aggregators import Aggregator
-    from krrood.entity_query_language.verbalization.fragments.base import Fragment
+    from krrood.entity_query_language.verbalization.fragments.base import (
+        VerbalizationFragment,
+    )
     from krrood.entity_query_language.verbalization.grammar.conditions.placement import (
         ConditionForm,
     )
@@ -52,7 +54,7 @@ class PredicateFragmentRequiredError(DataclassException):
 @dataclass
 class NonFragmentPredicateError(DataclassException):
     """
-    A predicate's ``_verbalization_fragment_`` returned something that is not a :class:`Fragment`
+    A predicate's ``_verbalization_fragment_`` returned something that is not a :class:`VerbalizationFragment`
     (e.g. a leftover format string). Fragments are required so the surface composes with the
     realisation passes (negation, coreference, morphology).
     """
@@ -66,12 +68,12 @@ class NonFragmentPredicateError(DataclassException):
     def error_message(self) -> str:
         return (
             f"{self.predicate_type.__name__}._verbalization_fragment_ returned a "
-            f"{type(self.returned).__name__}, not a Fragment."
+            f"{type(self.returned).__name__}, not a VerbalizationFragment."
         )
 
     def suggest_correction(self) -> str:
         return (
-            "Return a Fragment — build the clause with "
+            "Return a VerbalizationFragment — build the clause with "
             "`vocabulary.parts_of_speech.clause(...)`, not a string template."
         )
 
@@ -105,7 +107,7 @@ class UnloweredFragmentError(DataclassException):
     leaving an un-lowered ``NounPhrase`` or ``PossessiveChain`` in the tree.
     """
 
-    fragment: "Fragment"
+    fragment: "VerbalizationFragment"
     """The un-lowered fragment that reached the renderer."""
 
     def error_message(self) -> str:

@@ -11,7 +11,9 @@ from jinja2 import Template
 
 from krrood.entity_query_language.core.base_expressions import SymbolicExpression
 from krrood.entity_query_language.verbalization.context import MicroplanningServices
-from krrood.entity_query_language.verbalization.fragments.base import Fragment
+from krrood.entity_query_language.verbalization.fragments.base import (
+    VerbalizationFragment,
+)
 from krrood.entity_query_language.verbalization.rendering.formatter import (
     ANSIFormatter,
     HTMLFormatter,
@@ -125,7 +127,7 @@ class VerbalizationPipeline:
         """:return: ``True`` when this pipeline's renderer emits HTML."""
         return isinstance(self.renderer.formatter, HTMLFormatter)
 
-    def verbalize_fragment(self, fragment: Fragment) -> str:
+    def verbalize_fragment(self, fragment: VerbalizationFragment) -> str:
         """
         Render a pre-built fragment using this pipeline's renderer.
 
@@ -156,7 +158,7 @@ class VerbalizationPipeline:
         """
         self.display_fragment(self._verbalizer.build(expression))
 
-    def display_fragment(self, fragment: Fragment) -> None:
+    def display_fragment(self, fragment: VerbalizationFragment) -> None:
         """
         Display a pre-built fragment, with the same environment routing as ``display``.
 
