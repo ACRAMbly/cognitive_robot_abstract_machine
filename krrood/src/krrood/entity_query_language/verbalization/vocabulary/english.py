@@ -5,11 +5,23 @@ import uuid
 from dataclasses import dataclass
 from enum import Enum
 
-from typing_extensions import Callable, Dict, List, Optional
+from typing_extensions import Callable, ClassVar, Dict, List, Optional, Type
 
+from krrood.entity_query_language.operators.aggregators import (
+    Aggregator,
+    Average,
+    Count,
+    CountAll,
+    Max,
+    Min,
+    Mode,
+    MultiMode,
+    Sum,
+)
 from krrood.entity_query_language.operators.comparator import not_contains
 
 from krrood.entity_query_language.verbalization import morphology
+from krrood.entity_query_language.verbalization.exceptions import UnknownAggregatorError
 
 from krrood.entity_query_language.verbalization.fragments.base import (
     NounPhrase,
@@ -222,6 +234,21 @@ class Aggregations(VocabEnum):
     MODE = AggregationWord("mode")
     MULTI_MODE = AggregationWord("all modes")
 
+    @classmethod
+    def for_aggregator(cls, aggregator_type: Type[Aggregator]) -> Aggregations:
+        """:return: The aggregation phrase that verbalizes an aggregator type.
+
+        :raises UnknownAggregatorError: When the aggregator type has no phrase.
+
+        >>> from krrood.entity_query_language.operators.aggregators import Sum
+        >>> Aggregations.for_aggregator(Sum) is Aggregations.SUM
+        True
+        """
+        phrase = _AGGREGATOR_PHRASES.get(aggregator_type)
+        if phrase is None:
+            raise UnknownAggregatorError(aggregator_type=aggregator_type)
+        return phrase
+
     @property
     def has_child(self) -> bool:
         """:return: ``True`` when the aggregation takes a complement (*"sum of <x>"*); ``False``
@@ -280,6 +307,20 @@ class Aggregations(VocabEnum):
         if self.value.child_form is GrammaticalNumber.PLURAL:
             return [Prepositions.OF.as_fragment(), leaf]
         return [leaf]
+
+
+#: Maps each standard aggregator subtype to its lexicon phrase; consulted by
+#: :meth:`Aggregations.for_aggregator`.
+_AGGREGATOR_PHRASES: Dict[Type[Aggregator], Aggregations] = {
+    Count: Aggregations.COUNT,
+    CountAll: Aggregations.COUNT_ALL,
+    Sum: Aggregations.SUM,
+    Average: Aggregations.AVERAGE,
+    Max: Aggregations.MAX,
+    Min: Aggregations.MIN,
+    Mode: Aggregations.MODE,
+    MultiMode: Aggregations.MULTI_MODE,
+}
 
 
 class Copulas(VocabEnum):

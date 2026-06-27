@@ -12,7 +12,7 @@ from krrood.entity_query_language.core.base_expressions import SymbolicExpressio
 from krrood.entity_query_language.core.variable import Variable
 from krrood.entity_query_language.operators.comparator import Comparator
 from krrood.entity_query_language.verbalization.exceptions import (
-    UndeclaredFormSlotError,
+    UndeclaredFormPositionError,
 )
 from krrood.entity_query_language.verbalization.fragments.base import (
     BlockFragment,
@@ -118,7 +118,7 @@ class ConditionForm(SpecificityRule):
         """
         super().__init_subclass__(**kwargs)
         if not inspect.isabstract(cls) and not hasattr(cls, "position"):
-            raise UndeclaredFormSlotError(form=cls)
+            raise UndeclaredFormPositionError(form=cls)
 
     @classmethod
     @abstractmethod
