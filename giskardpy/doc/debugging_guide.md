@@ -1,5 +1,7 @@
 # Debugging Guide
 
+**Warning:** You should only use these tools actively while debugging and preferably only in simulation, because it slows down the control loop.
+
 When a motion does the wrong thing — or the controller fails to produce a command at all — you
 need to see what Giskard is computing internally. This guide covers three tools, each answering
 a different question:

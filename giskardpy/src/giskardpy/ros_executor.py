@@ -27,7 +27,12 @@ class Ros2Executor(Executor):
     ros_node: Node = field(kw_only=True)
 
     publish_debug_expressions: bool = field(kw_only=True, default=False)
-    """Whether the debug expressions of the compiled nodes are visualized as RViz markers."""
+    """
+    Whether the debug expressions of the compiled nodes are visualized as RViz markers.
+    
+    ..warning: 
+        You should only use these tools actively while debugging and preferably only in simulation, because it slows down the control loop.
+    """
 
     _debug_expression_publisher: DebugExpressionPublisher | None = field(
         init=False, default=None
