@@ -24,15 +24,6 @@ from typing_extensions import Any, Callable, Self, Tuple, Type
 from krrood.class_diagrams.exceptions import FactoryMethodDecoratorError
 from krrood.class_diagrams.factory_method_registry import FactoryMethodRegistry
 
-try:  # ``typing.Self`` exists on Python 3.11+; ``typing_extensions`` backfills the rest.
-    from typing import Self as _TypingSelf
-except ImportError:  # pragma: no cover - depends on the interpreter version
-    _TypingSelf = None
-
-_SELF_ANNOTATIONS = {
-    annotation for annotation in (Self, _TypingSelf) if annotation is not None
-}
-
 
 class FactoryMethodMarker:
     """
@@ -100,7 +91,7 @@ def _return_annotation_is_self_or_owner(func: Callable, cls: Type) -> bool:
     if isinstance(annotation, str):
         name = annotation.strip().strip("\"'")
         return name in ("Self", cls.__name__) or name.endswith("." + cls.__name__)
-    return annotation in _SELF_ANNOTATIONS or annotation is cls
+    return annotation is Self or annotation is cls
 
 
 @lru_cache(maxsize=None)

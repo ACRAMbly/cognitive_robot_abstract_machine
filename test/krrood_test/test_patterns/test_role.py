@@ -6,7 +6,7 @@ from typing import Type
 
 import pytest
 
-from krrood.class_diagrams import ClassDiagram
+from krrood.class_diagrams.class_diagram import ClassDiagram
 from krrood.class_diagrams.class_diagram import (
     HasRoleTaker,
     AssociationThroughRoleTaker,
