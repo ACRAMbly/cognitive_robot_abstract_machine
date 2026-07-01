@@ -342,11 +342,12 @@ class WrappedField:
 
         :return: True if the type hint is an underspecified generic class.
         """
-        # A type-variable endpoint is specified to its bound (or is simply an unresolved variable),
-        # never a bare underspecified generic, so it must not be skipped even though its bound may be
-        # a generic class with free parameters.
-        if isinstance(self._unresolved_type_endpoint, TypeVar):
-            return False
+        # A bounded type variable is specified to its bound, so it is not underspecified even when
+        # that bound is a generic class with free parameters. An unbounded type variable specifies
+        # nothing and is therefore underspecified.
+        endpoint = self._unresolved_type_endpoint
+        if isinstance(endpoint, TypeVar):
+            return endpoint.__bound__ is None
 
         # A class is underspecified only if it still has free TypeVar parameters.
         # Concrete subclasses of generic parents (e.g. HSRBMobileBase(MobileBase, HasTorso[HSRBTorso]))
