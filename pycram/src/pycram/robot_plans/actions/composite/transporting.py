@@ -478,9 +478,80 @@ class EfficientTransportAction(ActionDescription):
             cls, object_designator=object_designator, target_location=target_location
         )
 
+@dataclass
+class StackingAction(ActionDescription):
+    """
+    Stacks an object on top of another object
+    """
+
+    object_designator: Body
+    """
+    Object designator_description describing the object that should be transported.
+    """
+    target: Body
+    """
+    Object designator_description describing the target object on top of which the object is supposed to be stacked.
+    """
+    arm: Arms
+    """
+    Arm that should be used
+    """
+    grasp_description: GraspDescription
+    """
+    Description of the grasp to pick up the target
+    """
+    _pre_perform_callbacks = []
+    """
+    List to save the callbacks which should be called before performing the action.
+    """
+
+    def __post_init__(self):
+        super().__post_init__()
+
+    def execute(self) -> None:
+        # Calculate the target position
+        target_location = PoseStamped.from_matrix(self.target.parent_connection.origin.to_np(), self.target.parent_connection.parent)
+        target_location.pose.position.z = target_location.pose.position.z + (self.object_designator.collision.scale.z/2 + self.target.collision.scale.z/2)
+
+        SequentialPlan(
+            self.context,
+            ParkArmsActionDescription(Arms.BOTH),
+            PickUpActionDescription(
+                self.object_designator,
+                self.arm,
+                grasp_description=self.grasp_description,
+            ),
+            PlaceActionDescription(
+                self.object_designator, target_location, self.arm
+            ),
+            ParkArmsActionDescription(Arms.BOTH),
+        ).perform()
+
+    def validate(
+        self, result: Optional[Any] = None, max_wait_time: Optional[timedelta] = None
+    ):
+        pass
+
+    @classmethod
+    def description(
+        cls,
+        object_designator: Union[Iterable[Body], Body],
+        target: Union[Iterable[Body], Body],
+        arm: Union[Iterable[Arms], Arms] = None,
+        grasp_description=GraspDescription,
+    ) -> PartialDesignator[StackingAction]:
+        return PartialDesignator(
+            cls,
+            object_designator=object_designator,
+            target=target,
+            arm=arm,
+            grasp_description=grasp_description,
+        )
+
 
 TransportActionDescription = TransportAction.description
 PickAndPlaceActionDescription = PickAndPlaceAction.description
 MoveAndPlaceActionDescription = MoveAndPlaceAction.description
 MoveAndPickUpActionDescription = MoveAndPickUpAction.description
 EfficientTransportActionDescription = EfficientTransportAction.description
+StackingActionDescription = StackingAction.description
