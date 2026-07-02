@@ -342,6 +342,7 @@ def _wrapped_part_whole_relationship_fields(
     ]
 
 
+@dataclass
 class IsPartWholeRelationship(FieldMetadata):
     """Marks a field as holding a structural *part* of its owner (the part-whole relation).
 

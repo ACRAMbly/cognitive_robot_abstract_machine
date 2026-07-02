@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from dataclasses import field, fields
+from dataclasses import field, fields, dataclass
 
 from typing_extensions import ClassVar, Dict, List, Optional, Type, TypeVar, Self
 
 
+@dataclass
 class FieldMetadata:
     """Krrood-specific metadata carried inside a dataclass field's ``metadata`` mapping.
 
@@ -55,6 +56,7 @@ MetadataType = TypeVar("MetadataType", bound=FieldMetadata)
 A type that is a subclass of :class:`FieldMetadata`.
 """
 
+@dataclass
 class GrammarMetadata(FieldMetadata):
     """Grammar / verbalization hints for a field."""
 
