@@ -517,8 +517,11 @@ class HasLegs(PartWholeRelationship, ABC):
     A mixin class for semantic annotations that have legs.
     """
 
-    legs: List[Leg] = part_whole_relationship_field(
-        default_factory=list, hash=False, kw_only=True
+    legs: List[Leg] = field(
+        default_factory=list,
+        hash=False,
+        kw_only=True,
+        metadata=FieldMetadata(other_metadata=[IsPartWholeRelationship()]).as_dict(),
     )
     """
     The legs of the semantic annotation.
@@ -531,7 +534,10 @@ class HasSink(PartWholeRelationship, ABC):
     A mixin class for semantic annotations that have a sink.
     """
 
-    sink: Optional[Sink] = part_whole_relationship_field(default=None)
+    sink: Optional[Sink] = field(
+        default=None,
+        metadata=FieldMetadata(other_metadata=[IsPartWholeRelationship()]).as_dict(),
+    )
     """
     The sink of the semantic annotation.
     """
