@@ -25,7 +25,7 @@ from krrood.patterns.role_registry import RoleRegistry
 from krrood.patterns.subclass_safe_generic import SubClassSafeGeneric
 from typing_extensions import Generic
 from krrood.symbol_graph.symbol_graph import Symbol
-from krrood.utils import get_generic_type_params
+from krrood.utils import get_generic_type_parameters
 
 
 @dataclass(eq=False)
@@ -118,7 +118,7 @@ class Role(Symbol, Generic[T], SubClassSafeGeneric):
         """
         :return: The concrete type of this role's role taker.
         """
-        type_ = get_generic_type_params(cls, Role)[0]
+        type_ = get_generic_type_parameters(cls, Role)[0]
         if isinstance(type_, str):
             module_namespace = sys.modules[cls.__module__].__dict__
             if type_ in module_namespace:

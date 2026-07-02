@@ -79,7 +79,7 @@ class SpatialTypeMarkerRenderer(Generic[SpatialTypeInput], SubClassSafeGeneric, 
     @classmethod
     def input_type(cls) -> type[SpatialTypeInput]:
         """The spatial type category handled by this renderer."""
-        return cls.get_generic_type()
+        return cls.get_generic_type_parameters()[0]
 
     @classmethod
     def can_render(cls, spatial_type: SpatialType) -> bool:
