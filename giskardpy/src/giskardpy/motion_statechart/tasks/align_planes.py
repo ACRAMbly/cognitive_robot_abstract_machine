@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 
-from giskardpy.motion_statechart.context import BuildContext
+from giskardpy.motion_statechart.context import MotionStatechartContext
 from giskardpy.motion_statechart.data_types import DefaultWeights
 from giskardpy.motion_statechart.graph_node import Task, NodeArtifacts, DebugExpression
 from semantic_digital_twin.spatial_types import Vector3
@@ -31,7 +31,7 @@ class AlignPlanes(Task):
     reference_velocity: float = field(default=0.5, kw_only=True)
     weight: float = field(default=DefaultWeights.WEIGHT_ABOVE_CA, kw_only=True)
 
-    def build(self, context: BuildContext) -> NodeArtifacts:
+    def build(self, context: MotionStatechartContext) -> NodeArtifacts:
         artifacts = NodeArtifacts()
 
         tip_V_tip_normal = context.world.transform(
@@ -49,7 +49,7 @@ class AlignPlanes(Task):
         root_V_tip_normal = root_R_tip @ tip_V_tip_normal
         root_V_tip_normal.scale(1)
 
-        root_V_tip_normal.vis_frame = self.tip_link
+        root_V_tip_normal.visualisation_frame = self.tip_link
         current_dbg = DebugExpression(
             name=f"{self.name}/current_normal",
             expression=root_V_tip_normal,
@@ -63,11 +63,11 @@ class AlignPlanes(Task):
         artifacts.debug_expressions.append(current_dbg)
         artifacts.debug_expressions.append(goal_dbg)
 
-        artifacts.constraints.add_vector_goal_constraints(
+        artifacts.geometry.add_vector_goal_constraints(
             frame_V_current=root_V_tip_normal,
             frame_V_goal=root_V_root_normal,
             reference_velocity=self.reference_velocity,
-            weight=self.weight,
+            quadratic_weight=self.weight,
         )
         artifacts.observation = (
             root_V_tip_normal.angle_between(root_V_root_normal) <= self.threshold

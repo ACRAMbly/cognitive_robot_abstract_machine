@@ -5,32 +5,42 @@ from dataclasses import dataclass, field
 from typing_extensions import Optional, Tuple, Union, List
 from urdf_parser_py import urdf as urdfpy
 
-from .package_resolver import CompositePathResolver, PathResolver
-from ..datastructures.prefixed_name import PrefixedName
-from ..spatial_types.derivatives import Derivatives, DerivativeMap
-from ..spatial_types.spatial_types import HomogeneousTransformationMatrix, Vector3
-from ..utils import (
+from semantic_digital_twin.adapters.package_resolver import (
+    CompositePathResolver,
+    PathResolver,
+)
+from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
+from semantic_digital_twin.exceptions import NegativeConnectionVelocity
+from semantic_digital_twin.spatial_types.derivatives import Derivatives, DerivativeMap
+from semantic_digital_twin.spatial_types.spatial_types import (
+    HomogeneousTransformationMatrix,
+    Vector3,
+)
+from semantic_digital_twin.utils import (
     suppress_stdout_stderr,
     hacky_urdf_parser_fix,
     robot_name_from_urdf_string,
 )
-from ..world import World
-from ..world_description.connections import (
+from semantic_digital_twin.world import World
+from semantic_digital_twin.world_description.connections import (
     RevoluteConnection,
     PrismaticConnection,
     FixedConnection,
 )
-from ..world_description.degree_of_freedom import DegreeOfFreedom, DegreeOfFreedomLimits
-from ..world_description.geometry import (
+from semantic_digital_twin.world_description.degree_of_freedom import (
+    DegreeOfFreedom,
+    DegreeOfFreedomLimits,
+)
+from semantic_digital_twin.world_description.geometry import (
     Box,
     Sphere,
     Cylinder,
-    FileMesh,
+    Mesh,
     Scale,
     Color,
 )
-from ..world_description.shape_collection import ShapeCollection
-from ..world_description.world_entity import Body, Connection
+from semantic_digital_twin.world_description.shape_collection import ShapeCollection
+from semantic_digital_twin.world_description.world_entity import Body, Connection
 
 connection_type_map = {  # 'unknown': JointType.UNKNOWN,
     "revolute": RevoluteConnection,
@@ -79,27 +89,14 @@ def urdf_joint_to_limits(
         upper_limits.position = upper
 
     velocity = getattr(limit, "velocity", None) if limit is not None else None
+
+    if velocity is not None and velocity < 0:
+        raise NegativeConnectionVelocity(
+            connection_name=urdf_joint.name, velocity=velocity
+        )
     lower_limits.velocity = -velocity if velocity is not None else None
     upper_limits.velocity = velocity if velocity is not None else None
 
-    if urdf_joint.mimic is not None:
-        multiplier = (
-            urdf_joint.mimic.multiplier
-            if urdf_joint.mimic.multiplier is not None
-            else 1
-        )
-        offset = urdf_joint.mimic.offset if urdf_joint.mimic.offset is not None else 0
-
-        for d2 in Derivatives.range(Derivatives.position, Derivatives.velocity):
-            lower_limits[d2] -= offset
-            upper_limits[d2] -= offset
-            if multiplier < 0:
-                upper_limits[d2], lower_limits[d2] = (
-                    lower_limits[d2],
-                    upper_limits[d2],
-                )
-            upper_limits[d2] /= multiplier
-            lower_limits[d2] /= multiplier
     return lower_limits, upper_limits
 
 
@@ -132,17 +129,26 @@ class URDFParser:
             self.prefix = robot_name_from_urdf_string(self.urdf)
 
     @classmethod
-    def from_file(cls, file_path: str, prefix: Optional[str] = None) -> URDFParser:
+    def from_file(
+        cls,
+        file_path: str,
+        prefix: Optional[str] = None,
+        path_resolver: Optional[PathResolver] = None,
+    ) -> URDFParser:
         if file_path.endswith(".xacro"):
             return cls.from_xacro(file_path, prefix)
 
-        file_path = CompositePathResolver().resolve(file_path)
+        path_resolver = path_resolver or CompositePathResolver()
+
+        file_path = path_resolver.resolve(file_path)
         if file_path is not None:
             with open(file_path, "r") as file:
                 # Since parsing URDF causes a lot of warning messages which can't be deactivated, we suppress them
                 with suppress_stdout_stderr():
                     urdf = file.read()
-        return URDFParser(urdf=urdf, prefix=prefix)
+        urdf_parser = URDFParser(urdf=urdf, prefix=prefix)
+        urdf_parser.path_resolver = path_resolver
+        return urdf_parser
 
     @classmethod
     def from_xacro(cls, xacro_path: str, prefix: Optional[str] = None) -> URDFParser:
@@ -163,14 +169,23 @@ class URDFParser:
         world.name = self.prefix
         with world.modify_world():
             world.add_kinematic_structure_entity(root)
-            joints = []
+            main_joints = []
+            mimic_joints = []
+
             for joint in self.parsed.joints:
+                if joint.mimic is not None:
+                    mimic_joints.append(joint)
+                else:
+                    main_joints.append(joint)
+
+            parsed_joints = []
+            for joint in main_joints + mimic_joints:
                 parent = [link for link in links if link.name.name == joint.parent][0]
                 child = [link for link in links if link.name.name == joint.child][0]
                 parsed_joint = self.parse_joint(joint, parent, child, world, prefix)
-                joints.append(parsed_joint)
+                parsed_joints.append(parsed_joint)
 
-            [world.add_connection(joint) for joint in joints]
+            [world.add_connection(joint) for joint in parsed_joints]
 
         return world
 
@@ -215,9 +230,8 @@ class URDFParser:
                 parent_T_connection_expression=parent_T_connection,
             )
 
-        lower_limits, upper_limits = urdf_joint_to_limits(joint)
         dof_name = connection_name
-        multiplier = offset = None
+        multiplier, offset = 1.0, 0.0
         if joint.mimic:
             multiplier = (
                 joint.mimic.multiplier if joint.mimic.multiplier is not None else 1
@@ -226,6 +240,7 @@ class URDFParser:
             dof_name = PrefixedName(joint.mimic.joint, prefix)
 
         if dof_name not in [d.name for d in world.degrees_of_freedom]:
+            lower_limits, upper_limits = urdf_joint_to_limits(joint)
             dof = DegreeOfFreedom(
                 name=dof_name,
                 limits=DegreeOfFreedomLimits(lower=lower_limits, upper=upper_limits),
@@ -243,7 +258,7 @@ class URDFParser:
             multiplier=multiplier,
             offset=offset,
             axis=Vector3(*map(int, joint.axis), reference_frame=parent),
-            dof_id=dof.id,
+            raw_dof=dof,
         )
         return result
 
@@ -323,7 +338,7 @@ class URDFParser:
                 res.append(
                     Cylinder(
                         origin=origin_transform,
-                        width=geom.geometry.radius,
+                        width=geom.geometry.radius * 2,
                         height=geom.geometry.length,
                         color=color,
                     )
@@ -332,7 +347,7 @@ class URDFParser:
                 if geom.geometry.filename is None:
                     raise ValueError("Mesh geometry must have a filename.")
                 res.append(
-                    FileMesh(
+                    Mesh(
                         origin=origin_transform,
                         filename=self.path_resolver.resolve(geom.geometry.filename),
                         scale=Scale(*(geom.geometry.scale or (1, 1, 1))),

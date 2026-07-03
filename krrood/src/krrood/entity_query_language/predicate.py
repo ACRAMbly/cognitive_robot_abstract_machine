@@ -1,3 +1,10 @@
+"""
+Predicates and symbolic function utilities for the Entity Query Language.
+
+This module defines predicate classes for boolean checks and a decorator to build symbolic expressions
+from regular Python functions when variables are present.
+"""
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
@@ -11,23 +18,23 @@ from typing_extensions import (
     Type,
     Tuple,
     ClassVar,
+    Sized,
+    Dict,
+    Union,
 )
 
-from .enums import PredicateType
-from .symbol_graph import (
-    WrappedInstance,
-    SymbolGraph,
+from krrood.entity_query_language.utils import T, merge_args_and_kwargs
+from krrood.entity_query_language.core.variable import Variable, InstantiatedVariable
+from krrood.entity_query_language.core.base_expressions import (
+    Selectable,
+    SymbolicExpression,
 )
-from .symbolic import (
-    Variable,
-    _any_of_the_kwargs_is_a_variable,
-)
-from .utils import T, merge_args_and_kwargs
+from krrood.symbol_graph.symbol_graph import Symbol
 
 
 def symbolic_function(
     function: Callable[..., T],
-) -> Callable[..., Variable[T]]:
+) -> Union[Callable[..., Variable[T]], T]:
     """
     Function decorator that constructs a symbolic expression representing the function call
      when inside a symbolic_rule context.
@@ -43,25 +50,13 @@ def symbolic_function(
     def wrapper(*args, **kwargs) -> Optional[Any]:
         all_kwargs = merge_args_and_kwargs(function, args, kwargs)
         if _any_of_the_kwargs_is_a_variable(all_kwargs):
-            return Variable(
-                _name__=function.__name__,
+            return InstantiatedVariable(
                 _type_=function,
                 _kwargs_=all_kwargs,
-                _predicate_type_=PredicateType.DecoratedMethod,
             )
         return function(*args, **kwargs)
 
     return wrapper
-
-
-@dataclass(eq=False)
-class Symbol:
-    """Base class for things that can be cached in the symbol graph."""
-
-    def __new__(cls, *args, **kwargs):
-        instance = super().__new__(cls)
-        update_cache(instance)
-        return instance
 
 
 @dataclass(eq=False)
@@ -70,20 +65,42 @@ class Predicate(Symbol, ABC):
     The super predicate class that represents a filtration operation or asserts a relation.
     """
 
-    is_expensive: ClassVar[bool] = False
+    _cache_instances_: ClassVar[bool] = False
+    """
+    Predicates should not be cached for now as they are not persisting.
+    """
 
     def __new__(cls, *args, **kwargs):
         all_kwargs = merge_args_and_kwargs(
             cls.__init__, args, kwargs, ignore_first=True
         )
         if _any_of_the_kwargs_is_a_variable(all_kwargs):
-            return Variable(
+            return InstantiatedVariable(
                 _type_=cls,
-                _name__=cls.__name__,
                 _kwargs_=all_kwargs,
-                _predicate_type_=PredicateType.SubClassOfPredicate,
             )
         return super().__new__(cls)
+
+    @classmethod
+    def _construct_normally_(cls, **kwargs) -> "Predicate":
+        """
+        Construct a concrete predicate instance directly, bypassing the symbolic ``__new__`` check.
+
+        Normally, calling ``cls(**kwargs)`` when any kwarg is a :class:`Selectable` redirects
+        construction to an :class:`~krrood.entity_query_language.core.variable.InstantiatedVariable`
+        so the call can be represented as a symbolic expression in a query graph.  During evaluation,
+        however, the bound values themselves may be :class:`Selectable` objects (e.g. in a
+        meta-query that reasons about EQL nodes).  In that case the redirect is wrong — we want the
+        real predicate instance so its :meth:`__call__` can be evaluated immediately.
+
+        :meth:`_construct_normally_` is the escape hatch for that situation.  It calls
+        ``object.__new__`` directly (skipping ``__new__`` entirely) and then ``__init__``, so the
+        caller always receives a fully initialised concrete predicate regardless of what the kwargs
+        contain.
+        """
+        instance = object.__new__(cls)
+        instance.__init__(**kwargs)
+        return instance
 
     @abstractmethod
     def __call__(self) -> bool:
@@ -92,6 +109,9 @@ class Predicate(Symbol, ABC):
         """
 
     def __bool__(self):
+        """
+        Bool casting a predicate evaluates it.
+        """
         return bool(self.__call__())
 
 
@@ -136,11 +156,18 @@ class HasTypes(HasType):
     """
 
 
-def update_cache(instance: Symbol):
+@symbolic_function
+def length(iterable: Sized) -> int:
     """
-    Updates the cache with the given instance of a symbolic type.
+    :param iterable: The iterable.
+    :return: The length of the iterable.
+    """
+    return len(iterable)
 
-    :param instance: The symbolic instance to be cached.
+
+def _any_of_the_kwargs_is_a_variable(bindings: Dict[str, Any]) -> bool:
     """
-    if not isinstance(instance, Predicate):
-        SymbolGraph().add_node(WrappedInstance(instance))
+    :param bindings: A kwarg like dict mapping strings to objects
+    :return: ``True`` if any value in ``bindings`` is a :class:`~krrood.entity_query_language.core.base_expressions.SymbolicExpression`, ``False`` otherwise.
+    """
+    return any(isinstance(binding, SymbolicExpression) for binding in bindings.values())

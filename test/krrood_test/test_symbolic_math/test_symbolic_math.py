@@ -4,6 +4,7 @@ import casadi as ca
 import numpy as np
 import pytest
 import scipy
+import scipy.sparse as sp
 
 import krrood.symbolic_math.symbolic_math as sm
 from krrood.symbolic_math.exceptions import (
@@ -332,6 +333,23 @@ class TestFloatVariable:
         with pytest.raises(HasFreeVariablesError):
             bool(v)
 
+    def test_free_variables(self):
+        """
+        Use a method to create the variable to test if the weak ref dict cleans them up.
+        """
+
+        def create_variables(name: str) -> sm.FloatVariable:
+            return sm.FloatVariable(name=name)
+
+        expression = create_variables("muh") + create_variables("kikariki")
+        assert len(expression.free_variables()) == 2
+        assert expression.free_variables()[0].name == "muh"
+        assert expression.free_variables()[1].name == "kikariki"
+
+    def test_create_with_resolver(self):
+        v = sm.FloatVariable.create_with_resolver("v", lambda: 42)
+        assert v.evaluate() == 42
+
     def test_float_casting(self):
         v = sm.FloatVariable(name="v")
         with pytest.raises(HasFreeVariablesError):
@@ -410,7 +428,7 @@ class TestFloatVariable:
 class TestExpression:
 
     def test_free_variables(self):
-        m = sm.Vector(sm.create_float_variables(["a", "b", "c", "d"]))
+        m = sm.Vector(v := sm.create_float_variables(["a", "b", "c", "d"]))
         assert len(m.free_variables()) == 4
         a = sm.FloatVariable(name="a")
         assert a.equivalent(a.free_variables()[0])
@@ -902,7 +920,7 @@ class TestVector:
         assert v.to_list() == data.tolist()
 
     def test_to_list_raises_on_variables(self):
-        v = sm.Vector([sm.FloatVariable(name="a"), 2.0])
+        v = sm.Vector(vec := [sm.FloatVariable(name="a"), 2.0])
         with pytest.raises(HasFreeVariablesError):
             _ = v.to_list()
 
@@ -1088,6 +1106,61 @@ class TestVector:
         assert np.allclose(sm.concatenate(v1, v1, v1), np.concatenate([v1, v1, v1]))
 
 
+class TestSubstitutionCache:
+    def test_substitution_cache_args(self):
+        @sm.substitution_cache
+        def add_vectors(v1: sm.Vector, v2: sm.Vector | None = None) -> sm.Vector:
+            if v2 is None:
+                v2 = sm.Vector([10, 10])
+            return v1 + v2
+
+        vec1 = sm.Vector([1, 2])
+        vec2 = sm.Vector([3, 4])
+
+        # First call: builds cache
+        result1 = add_vectors(vec1, vec2)
+        assert np.allclose(result1.to_np(), [4, 6])
+
+        # Second call: uses cache
+        vec3 = sm.Vector([5, 6])
+        vec4 = sm.Vector([7, 8])
+        result2 = add_vectors(vec3, vec4)
+        assert np.allclose(result2.to_np(), [12, 14])
+
+        # First call with kwargs: builds cache
+        result1 = add_vectors(v1=vec1, v2=vec2)
+        assert np.allclose(result1.to_np(), [4, 6])
+
+        # Second call with different kwargs: uses cache
+        vec3 = sm.Vector([5, 6])
+        vec4 = sm.Vector([7, 8])
+        result2 = add_vectors(v1=vec3, v2=vec4)
+        assert np.allclose(result2.to_np(), [12, 14])
+
+        # Mixed call
+        result3 = add_vectors(vec1, v2=vec2)
+        assert np.allclose(result3.to_np(), [4, 6])
+
+        # Reordered kwargs
+        result4 = add_vectors(v2=vec2, v1=vec1)
+        assert np.allclose(result4.to_np(), [4, 6])
+
+        vec1 = sm.Vector([1, 2])
+
+        # First call with default
+        result1 = add_vectors(vec1)
+        assert np.allclose(result1.to_np(), [11, 12])
+
+        # Second call with explicit value
+        vec2 = sm.Vector([3, 4])
+        result2 = add_vectors(vec1, vec2)
+        assert np.allclose(result2.to_np(), [4, 6])
+
+        # Third call with default again
+        result3 = add_vectors(sm.Vector([5, 6]))
+        assert np.allclose(result3.to_np(), [15, 16])
+
+
 class TestMatrix:
     @pytest.mark.parametrize("shape", [(1, 1), (1, 5), (3, 1), (2, 3), (4, 4)])
     def test_create_filled_with_variables(self, shape):
@@ -1107,6 +1180,13 @@ class TestMatrix:
         assert np.allclose(np.array(flat), np_flat)
         # Shape should be (n,1) like Vector
         assert flat.shape == (np_flat.size, 1)
+
+    @pytest.mark.parametrize("sparse_format", ["csc", "csr", "coo"])
+    def test_from_sparse_matrix(self, sparse_format):
+        dense = np.array([[1.0, 0.0, 2.0], [0.0, 3.0, 0.0], [4.0, 0.0, 5.0]])
+        matrix = sp.coo_matrix(dense).asformat(sparse_format)
+        sm_matrix = sm.Matrix(matrix)
+        assert np.allclose(sm_matrix.to_np(), dense)
 
     def test_flatten_empty(self):
         data = np.eye(0)

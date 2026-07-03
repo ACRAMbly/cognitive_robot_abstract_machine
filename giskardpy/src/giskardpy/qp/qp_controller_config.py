@@ -4,39 +4,19 @@ import logging
 from collections import defaultdict
 from dataclasses import dataclass, field
 from functools import cached_property
-from typing import Optional, Dict, Type
+from typing import Dict, Type
 
-from giskardpy.qp.exceptions import QPSolverException
-from giskardpy.qp.qp_formulation import QPFormulation
-from giskardpy.qp.solvers.qp_solver import QPSolver
-from giskardpy.qp.solvers.qp_solver_ids import SupportedQPSolver
-from giskardpy.utils.utils import get_all_classes_in_module
+from typing_extensions import TYPE_CHECKING
+
+from giskardpy.qp.solvers.qp_solver_piqp import QPSolverPIQP
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 from semantic_digital_twin.spatial_types.derivatives import DerivativeMap
 from semantic_digital_twin.spatial_types.derivatives import Derivatives
 
+if TYPE_CHECKING:
+    from giskardpy.qp.solvers.qp_solver import QPSolver
+
 logger = logging.getLogger(__name__)
-
-available_solvers: Dict[SupportedQPSolver, Type[QPSolver]] = {}
-
-
-def detect_solvers():
-    global available_solvers
-    qp_solver_class: Type[QPSolver]
-    for qp_solver_name in SupportedQPSolver:
-        module_name = f"giskardpy.qp.solvers.qp_solver_{qp_solver_name.name}"
-        try:
-            qp_solver_class = list(
-                get_all_classes_in_module(module_name, QPSolver).items()
-            )[0][1]
-            available_solvers[qp_solver_name] = qp_solver_class
-        except Exception:
-            continue
-    solver_names = [solver_name.name for solver_name in available_solvers.keys()]
-    print(f"Found these qp solvers: {solver_names}")
-
-
-detect_solvers()
 
 
 @dataclass
@@ -107,18 +87,6 @@ class QPControllerConfig:
     ..warning:: Only change if you really know what you are doing.
     """
 
-    qp_solver_id: SupportedQPSolver = field(default=SupportedQPSolver.qpSWIFT)
-    """
-    The solver used for solving the QP formulation.
-    .. warning:: only qpSWIFT is well tested.
-    """
-
-    qp_formulation: Optional[QPFormulation] = field(default_factory=QPFormulation)
-    """
-    Changes the formulation of the QP problem.
-    Check QPFormulation for more information.
-    """
-
     retries_with_relaxed_constraints: int = field(default=5)
     """
     If the QP insolvable, the constraints will be relaxed with high weight slack variables 
@@ -131,7 +99,7 @@ class QPControllerConfig:
     """
 
     # %% init false
-    mpc_dt: float = field(init=False)
+    model_predictive_control_time_step: float = field(init=False)
     """
     The time step of the MPC in seconds.
     control_dt == mpc_dt:
@@ -146,7 +114,7 @@ class QPControllerConfig:
     .. warning:: Don't change this.  
     """
 
-    qp_solver_class: Type[QPSolver] = field(init=False)
+    qp_solver_class: Type[QPSolver] = field(default=QPSolverPIQP)
     """
     Reference to the resolved QP solver class.
     """
@@ -156,14 +124,10 @@ class QPControllerConfig:
             logging.warning(
                 f"Hertz ({self.target_frequency}) is below 20Hz. This might cause instability."
             )
-        self.mpc_dt = self.control_dt
-        if not self.qp_formulation.is_mpc:
-            self.prediction_horizon = 1
-            self.max_derivative = Derivatives.velocity
+        self.model_predictive_control_time_step = self.control_dt
 
         if self.prediction_horizon < 4:
             raise ValueError("prediction horizon must be >= 4.")
-        self.set_qp_solver()
 
     @cached_property
     def control_dt(self) -> float:
@@ -172,36 +136,42 @@ class QPControllerConfig:
         """
         return 1 / self.target_frequency
 
+    @property
+    def control_horizon(self) -> int:
+        """
+        Number of time steps over which commands are applied, two fewer than the prediction
+        horizon because the final two steps only bring the system to rest.
+        """
+        return self.prediction_horizon - 2
+
     @classmethod
     def create_with_simulation_defaults(cls):
+        """
+        Creates a configuration with the default values used for kinematic simulation.
+        """
         return cls(
             target_frequency=20,
             prediction_horizon=7,
         )
 
-    def set_qp_solver(self) -> None:
-        if self.qp_solver_id is not None:
-            self.qp_solver_class = available_solvers[self.qp_solver_id]
-        else:
-            for qp_solver_id in SupportedQPSolver:
-                if qp_solver_id in available_solvers:
-                    self.qp_solver_class = available_solvers[qp_solver_id]
-                    break
-            else:
-                raise QPSolverException(f"No qp solver found")
-            self.qp_solver_id = self.qp_solver_class.solver_id
-        logger.debug(f'QP Solver set to "{self.qp_solver_class.solver_id.name}"')
-
     def set_dof_weight(
         self, dof_name: PrefixedName, derivative: Derivatives, weight: float
     ):
-        """Set weight for a specific DOF derivative."""
+        """
+        Sets the objective weight of a single degree-of-freedom derivative.
+        """
         self.dof_weights[dof_name][derivative] = weight
 
     def set_dof_weights(self, dof_name: PrefixedName, weight_map: DerivativeMap[float]):
-        """Set multiple weights for a DOF."""
+        """
+        Sets the objective weights of all derivatives of a degree of freedom.
+        """
         self.dof_weights[dof_name] = weight_map
 
-    def get_dof_weight(self, dof_name: PrefixedName, derivative: Derivatives) -> float:
-        """Get weight for a specific DOF derivative."""
+    def get_degree_of_freedom_weight(
+        self, dof_name: PrefixedName, derivative: Derivatives
+    ) -> float:
+        """
+        Returns the objective weight of a single degree-of-freedom derivative.
+        """
         return self.dof_weights[dof_name][derivative]

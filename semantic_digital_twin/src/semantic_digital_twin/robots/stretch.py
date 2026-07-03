@@ -1,221 +1,384 @@
-from dataclasses import dataclass
-from typing import Self
+from __future__ import annotations
 
-from .abstract_robot import (
+import os
+from abc import ABC
+from collections import defaultdict
+from dataclasses import dataclass, field
+from importlib.resources import files
+from pathlib import Path
+from typing_extensions import Self, Union, List
+
+from semantic_digital_twin.collision_checking.collision_rules import (
+    AvoidExternalCollisions,
+    SelfCollisionMatrixRule,
+)
+from semantic_digital_twin.datastructures.definitions import (
+    GripperState,
+    StaticJointState,
+    TorsoState,
+)
+from semantic_digital_twin.datastructures.joint_state import JointState
+from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
+from semantic_digital_twin.robots.robot_part_mixins import (
+    HasNeck,
+    HasOneArm,
+    HasTorso,
+    HasMobileBase,
+    HasTwoFingers,
+    HasEndEffector,
+    HasSensors,
+)
+from semantic_digital_twin.robots.robot_parts import (
     AbstractRobot,
     Arm,
-    Neck,
-    Finger,
-    ParallelGripper,
     Camera,
+    Finger,
+    Neck,
     Torso,
-    Base,
+    MobileBase,
+    EndEffector,
 )
-from .robot_mixins import HasNeck, HasArms
-from ..datastructures.definitions import StaticJointState, GripperState, TorsoState
-from ..datastructures.joint_state import JointState
-from ..datastructures.prefixed_name import PrefixedName
-from ..spatial_types import Quaternion
-from ..spatial_types.spatial_types import Vector3
-from ..world import World
-from ..world_description.connections import FixedConnection
+from semantic_digital_twin.datastructures.field_of_view import FieldOfView
+from semantic_digital_twin.spatial_types import Quaternion, Vector3
+from semantic_digital_twin.world_description.world_entity import (
+    KinematicStructureEntity,
+)
 
 
 @dataclass(eq=False)
-class Stretch(AbstractRobot, HasArms, HasNeck):
-    """
-    Class that describes the Stretch Robot.
-    """
+class StretchLeftFinger(Finger):
 
-    def load_srdf(self):
-        """
-        Loads the SRDF file for the Stretch robot, if it exists.
-        """
-        ...
+    def setup_hardware_interfaces(self):
+        pass
+
+    def setup_joint_states(self) -> List[JointState]:
+        return []
 
     @classmethod
-    def from_world(cls, world: World) -> Self:
-        """
-        Creates a Stretch robot view from the given world.
+    def setup_default_configuration_in_world_below_robot_root(
+        cls, robot_root: KinematicStructureEntity
+    ) -> Self:
+        return cls(
+            root=robot_root._world.get_body_in_branch_by_name(
+                robot_root, "link_gripper_finger_left"
+            ),
+            tip=robot_root._world.get_body_in_branch_by_name(
+                robot_root, "link_gripper_fingertip_left"
+            ),
+        )
 
-        :param world: The world from which to create the robot view.
 
-        :return: A Stretch robot view.
-        """
+@dataclass(eq=False)
+class StretchRightFinger(Finger):
 
-        with world.modify_world():
-            stretch = cls(
-                name=PrefixedName("stretch", prefix=world.name),
-                root=world.get_body_by_name("base_link"),
-                _world=world,
+    def setup_hardware_interfaces(self):
+        pass
+
+    def setup_joint_states(self) -> List[JointState]:
+        return []
+
+    @classmethod
+    def setup_default_configuration_in_world_below_robot_root(
+        cls, robot_root: KinematicStructureEntity
+    ) -> Self:
+        return cls(
+            root=robot_root._world.get_body_in_branch_by_name(
+                robot_root, "link_gripper_finger_right"
+            ),
+            tip=robot_root._world.get_body_in_branch_by_name(
+                robot_root, "link_gripper_fingertip_right"
+            ),
+        )
+
+
+@dataclass(eq=False)
+class StretchGripper(EndEffector, HasTwoFingers[StretchLeftFinger, StretchRightFinger]):
+
+    def setup_hardware_interfaces(self):
+        self._setup_hardware_interfaces_for_active_connections()
+
+    def setup_joint_states(self) -> List[JointState]:
+        gripper_joints = self.active_connections
+
+        gripper_open = JointState.from_mapping(
+            name=PrefixedName("gripper_open", prefix=self.name.name),
+            mapping=dict(zip(gripper_joints, [0.109, 0.109])),
+            state_type=GripperState.OPEN,
+        )
+
+        gripper_close = JointState.from_mapping(
+            name=PrefixedName("gripper_close", prefix=self.name.name),
+            mapping=dict(zip(gripper_joints, [0.0, 0.0])),
+            state_type=GripperState.CLOSE,
+        )
+
+        return [gripper_open, gripper_close]
+
+    @classmethod
+    def setup_default_configuration_in_world_below_robot_root(
+        cls, robot_root: KinematicStructureEntity
+    ) -> Self:
+        return cls(
+            root=robot_root._world.get_body_in_branch_by_name(
+                robot_root, "link_straight_gripper"
+            ),
+            tool_frame=robot_root._world.get_body_in_branch_by_name(
+                robot_root, "link_grasp_center"
+            ),
+            front_facing_orientation=Quaternion(0, 0, 0, 1),
+        )
+
+
+@dataclass(eq=False)
+class StretchArm(Arm[StretchGripper]):
+
+    def setup_hardware_interfaces(self):
+        self._setup_hardware_interfaces_for_active_connections()
+
+    def setup_joint_states(self) -> List[JointState]:
+        arm_park = JointState.from_mapping(
+            name=PrefixedName("arm_park", prefix=self.name.name),
+            mapping={self._world.get_connection_by_name("joint_lift"): 0.5},
+            state_type=StaticJointState.PARK,
+        )
+
+        return [arm_park]
+
+    @classmethod
+    def setup_default_configuration_in_world_below_robot_root(
+        cls, robot_root: KinematicStructureEntity
+    ) -> Self:
+        return cls(
+            root=robot_root._world.get_body_in_branch_by_name(robot_root, "link_mast"),
+            tip=robot_root._world.get_body_in_branch_by_name(
+                robot_root, "link_wrist_roll"
+            ),
+        )
+
+
+@dataclass(eq=False)
+class StretchCameraColor(Camera):
+
+    def setup_hardware_interfaces(self):
+        pass
+
+    def setup_joint_states(self) -> List[JointState]:
+        return []
+
+    @classmethod
+    def setup_default_configuration_in_world_below_robot_root(
+        cls, robot_root: KinematicStructureEntity
+    ) -> Self:
+        return cls(
+            root=robot_root._world.get_body_in_branch_by_name(
+                robot_root, "camera_color_optical_frame"
+            ),
+            forward_facing_axis=Vector3.Z(),
+            minimal_height=1.322,
+            maximal_height=1.322,
+            field_of_view=FieldOfView(horizontal_angle=0.99483, vertical_angle=0.75049),
+            default_camera=True,
+        )
+
+
+@dataclass(eq=False)
+class StretchCameraDepth(Camera):
+
+    def setup_hardware_interfaces(self):
+        pass
+
+    def setup_joint_states(self) -> List[JointState]:
+        return []
+
+    @classmethod
+    def setup_default_configuration_in_world_below_robot_root(
+        cls, robot_root: KinematicStructureEntity
+    ) -> Self:
+        return cls(
+            root=robot_root._world.get_body_in_branch_by_name(
+                robot_root, "camera_depth_optical_frame"
+            ),
+            forward_facing_axis=Vector3.Z(),
+            minimal_height=1.307,
+            maximal_height=1.307,
+            field_of_view=FieldOfView(horizontal_angle=0.99483, vertical_angle=0.75049),
+        )
+
+
+@dataclass(eq=False)
+class StretchCameraInfra1(Camera):
+
+    def setup_hardware_interfaces(self):
+        pass
+
+    def setup_joint_states(self) -> List[JointState]:
+        return []
+
+    @classmethod
+    def setup_default_configuration_in_world_below_robot_root(
+        cls, robot_root: KinematicStructureEntity
+    ) -> Self:
+        return cls(
+            root=robot_root._world.get_body_in_branch_by_name(
+                robot_root, "camera_infra1_optical_frame"
+            ),
+            forward_facing_axis=Vector3.Z(),
+            minimal_height=1.307,
+            maximal_height=1.307,
+            field_of_view=FieldOfView(horizontal_angle=0.99483, vertical_angle=0.75049),
+        )
+
+
+@dataclass(eq=False)
+class StretchCameraInfra2(Camera):
+
+    def setup_hardware_interfaces(self):
+        pass
+
+    def setup_joint_states(self) -> List[JointState]:
+        return []
+
+    @classmethod
+    def setup_default_configuration_in_world_below_robot_root(
+        cls, robot_root: KinematicStructureEntity
+    ) -> Self:
+        return cls(
+            root=robot_root._world.get_body_in_branch_by_name(
+                robot_root, "camera_infra2_optical_frame"
+            ),
+            forward_facing_axis=Vector3.Z(),
+            minimal_height=1.257,
+            maximal_height=1.257,
+            field_of_view=FieldOfView(horizontal_angle=0.99483, vertical_angle=0.75049),
+        )
+
+
+@dataclass(eq=False)
+class StretchNeck(
+    Neck[
+        StretchCameraColor,
+        StretchCameraDepth,
+        StretchCameraInfra1,
+        StretchCameraInfra2,
+    ],
+):
+
+    def setup_hardware_interfaces(self):
+        self._setup_hardware_interfaces_for_active_connections()
+
+    def setup_joint_states(self) -> List[JointState]:
+        return []
+
+    @classmethod
+    def setup_default_configuration_in_world_below_robot_root(
+        cls, robot_root: KinematicStructureEntity
+    ) -> Self:
+        return cls(
+            root=robot_root._world.get_body_in_branch_by_name(robot_root, "link_head"),
+            tip=robot_root._world.get_body_in_branch_by_name(
+                robot_root, "link_head_tilt"
+            ),
+        )
+
+
+@dataclass(eq=False)
+class StretchTorso(Torso, HasNeck[StretchNeck], HasOneArm[StretchArm]):
+
+    def setup_hardware_interfaces(self):
+        self._setup_hardware_interfaces_for_active_connections()
+
+    def setup_joint_states(self) -> List[JointState]:
+        torso_joint = self.active_connections
+        torso_low = JointState.from_mapping(
+            name=PrefixedName("torso_low", prefix=self.name.name),
+            mapping=dict(zip(torso_joint, [0.0])),
+            state_type=TorsoState.LOW,
+        )
+
+        torso_mid = JointState.from_mapping(
+            name=PrefixedName("torso_mid", prefix=self.name.name),
+            mapping=dict(zip(torso_joint, [0.5])),
+            state_type=TorsoState.MID,
+        )
+
+        torso_high = JointState.from_mapping(
+            name=PrefixedName("torso_high", prefix=self.name.name),
+            mapping=dict(zip(torso_joint, [1])),
+            state_type=TorsoState.HIGH,
+        )
+
+        return [torso_low, torso_mid, torso_high]
+
+    @classmethod
+    def setup_default_configuration_in_world_below_robot_root(
+        cls, robot_root: KinematicStructureEntity
+    ) -> Self:
+        return cls(
+            root=robot_root._world.get_body_in_branch_by_name(robot_root, "link_mast"),
+            tip=robot_root._world.get_body_in_branch_by_name(robot_root, "link_lift"),
+        )
+
+
+@dataclass(eq=False)
+class StretchMobileBase(MobileBase, HasTorso[StretchTorso]):
+
+    full_body_controlled: bool = field(default=True, kw_only=True)
+    forward_axis: Vector3 = field(default_factory=Vector3.NEGATIVE_Y)
+
+    def setup_hardware_interfaces(self):
+        pass
+
+    def setup_joint_states(self) -> List[JointState]:
+        return []
+
+    @classmethod
+    def setup_default_configuration_in_world_below_robot_root(
+        cls, robot_root: KinematicStructureEntity
+    ) -> Self:
+        return cls(
+            root=robot_root._world.get_body_in_branch_by_name(robot_root, "base_link"),
+        )
+
+
+@dataclass(eq=False)
+class Stretch(AbstractRobot, HasMobileBase[StretchMobileBase]):
+    """
+    The Stretch 2 robot by Hello Robot. https://teal-blue-zpt3.squarespace.com/stretch-2
+    """
+
+    @classmethod
+    def get_ros_file_path(cls) -> str:
+        return "package://stretch_description/urdf/stretch_from_our_robot.urdf"
+
+    @classmethod
+    def _get_root_body_name(cls) -> str:
+        return "base_link"
+
+    def _setup_collision_rules(self):
+        srdf_path = os.path.join(
+            Path(files("semantic_digital_twin")).parent.parent,
+            "resources",
+            "collision_configs",
+            "stretch.srdf",
+        )
+        self._world.collision_manager.add_ignore_collision_rule(
+            SelfCollisionMatrixRule.from_collision_srdf(srdf_path, self._world)
+        )
+        self._world.collision_manager.add_default_rule(
+            AvoidExternalCollisions(
+                buffer_zone_distance=0.05, violated_distance=0.0, robot=self
             )
+        )
 
-            # Create arm
-            gripper_thumb = Finger(
-                name=PrefixedName("gripper_thumb", prefix=stretch.name.name),
-                root=world.get_body_by_name("link_gripper_finger_left"),
-                tip=world.get_body_by_name("link_gripper_fingertip_left"),
-                _world=world,
-            )
-
-            gripper_finger = Finger(
-                name=PrefixedName("gripper_finger", prefix=stretch.name.name),
-                root=world.get_body_by_name("link_gripper_finger_right"),
-                tip=world.get_body_by_name("link_gripper_fingertip_right"),
-                _world=world,
-            )
-
-            gripper = ParallelGripper(
-                name=PrefixedName("gripper", prefix=stretch.name.name),
-                root=world.get_body_by_name("link_straight_gripper"),
-                tool_frame=world.get_body_by_name("link_grasp_center"),
-                front_facing_orientation=Quaternion(0, 0, 0, 1),
-                front_facing_axis=Vector3(1, 0, 0),
-                thumb=gripper_thumb,
-                finger=gripper_finger,
-                _world=world,
-            )
-
-            arm = Arm(
-                name=PrefixedName("arm", prefix=stretch.name.name),
-                root=world.get_body_by_name("link_mast"),
-                tip=world.get_body_by_name("link_wrist_roll"),
-                manipulator=gripper,
-                _world=world,
-            )
-
-            stretch.add_arm(arm)
-
-            # Create camera and neck
-            camera_color = Camera(
-                name=PrefixedName(
-                    "camera_color_optical_frame", prefix=stretch.name.name
-                ),
-                root=world.get_body_by_name("camera_color_optical_frame"),
-                forward_facing_axis=Vector3(0, 0, 1),
-                minimal_height=1.322,
-                maximal_height=1.322,
-                _world=world,
-            )
-
-            camera_depth = Camera(
-                name=PrefixedName(
-                    "camera_depth_optical_frame", prefix=stretch.name.name
-                ),
-                root=world.get_body_by_name("camera_depth_optical_frame"),
-                forward_facing_axis=Vector3(0, 0, 1),
-                minimal_height=1.307,
-                maximal_height=1.307,
-                _world=world,
-            )
-
-            camera_infra1 = Camera(
-                name=PrefixedName(
-                    "camera_infra1_optical_frame", prefix=stretch.name.name
-                ),
-                root=world.get_body_by_name("camera_infra1_optical_frame"),
-                forward_facing_axis=Vector3(0, 0, 1),
-                minimal_height=1.307,
-                maximal_height=1.307,
-                _world=world,
-            )
-
-            camera_infra2 = Camera(
-                name=PrefixedName(
-                    "camera_infra2_optical_frame", prefix=stretch.name.name
-                ),
-                root=world.get_body_by_name("camera_infra2_optical_frame"),
-                forward_facing_axis=Vector3(0, 0, 1),
-                minimal_height=1.257,
-                maximal_height=1.257,
-                _world=world,
-            )
-
-            neck = Neck(
-                name=PrefixedName("neck", prefix=stretch.name.name),
-                sensors=[camera_color, camera_depth, camera_infra1, camera_infra2],
-                root=world.get_body_by_name("link_head"),
-                tip=world.get_body_by_name("link_head_tilt"),
-                pitch_body=world.get_body_by_name("link_head_tilt"),
-                yaw_body=world.get_body_by_name("link_head_pan"),
-                _world=world,
-            )
-            stretch.add_neck(neck)
-
-            # Create torso
-            torso = Torso(
-                name=PrefixedName("torso", prefix=stretch.name.name),
-                root=world.get_body_by_name("link_mast"),
-                tip=world.get_body_by_name("link_lift"),
-                _world=world,
-            )
-            stretch.add_torso(torso)
-
-            # Create states
-            arm_park = JointState.from_mapping(
-                name=PrefixedName("arm_park", prefix=stretch.name.name),
-                mapping={world.get_connection_by_name("joint_lift"): 0.5},
-                state_type=StaticJointState.PARK,
-            )
-
-            arm.add_joint_state(arm_park)
-
-            gripper_joints = [
-                world.get_connection_by_name("joint_gripper_finger_left"),
-                world.get_connection_by_name("joint_gripper_finger_right"),
-            ]
-
-            gripper_open = JointState.from_mapping(
-                name=PrefixedName("gripper_open", prefix=stretch.name.name),
-                mapping=dict(zip(gripper_joints, [0.59, 0.59])),
-                state_type=GripperState.OPEN,
-            )
-
-            gripper_close = JointState.from_mapping(
-                name=PrefixedName("gripper_close", prefix=stretch.name.name),
-                mapping=dict(zip(gripper_joints, [0.0, 0.0])),
-                state_type=GripperState.CLOSE,
-            )
-
-            gripper.add_joint_state(gripper_open)
-            gripper.add_joint_state(gripper_close)
-
-            torso_joint = [world.get_connection_by_name("joint_lift")]
-
-            torso_low = JointState.from_mapping(
-                name=PrefixedName("torso_low", prefix=stretch.name.name),
-                mapping=dict(zip(torso_joint, [0.0])),
-                state_type=TorsoState.LOW,
-            )
-
-            torso_mid = JointState.from_mapping(
-                name=PrefixedName("torso_mid", prefix=stretch.name.name),
-                mapping=dict(zip(torso_joint, [0.5])),
-                state_type=TorsoState.MID,
-            )
-
-            torso_high = JointState.from_mapping(
-                name=PrefixedName("torso_high", prefix=stretch.name.name),
-                mapping=dict(zip(torso_joint, [1.0])),
-                state_type=TorsoState.HIGH,
-            )
-
-            torso.add_joint_state(torso_low)
-            torso.add_joint_state(torso_mid)
-            torso.add_joint_state(torso_high)
-
-            # Create the robot base
-            base = Base(
-                name=PrefixedName("base", prefix=stretch.name.name),
-                root=world.get_body_by_name("base_link"),
-                tip=world.get_body_by_name("base_link"),
-                _world=world,
-                main_axis=Vector3(0, -1, 0, world.get_body_by_name("base_link")),
-            )
-
-            stretch.add_base(base)
-            stretch.full_body_controlled = True
-
-            world.add_semantic_annotation(stretch)
-
-        return stretch
+    def _setup_velocity_limits(self):
+        vel_limits = defaultdict(lambda: 0.1)
+        vel_limits[self._world.get_connection_by_name("joint_gripper_finger_left")] = (
+            0.01
+        )
+        vel_limits[self._world.get_connection_by_name("joint_gripper_finger_right")] = (
+            0.01
+        )
+        vel_limits[self._world.get_connection_by_name("joint_wrist_yaw")] = 0.4
+        vel_limits[self._world.get_connection_by_name("joint_head_tilt")] = 0.5
+        vel_limits[self._world.get_connection_by_name("joint_head_pan")] = 0.5
+        self.tighten_dof_velocity_limits_of_1dof_connections(new_limits=vel_limits)

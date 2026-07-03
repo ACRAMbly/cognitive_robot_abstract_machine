@@ -1,23 +1,26 @@
 import re
 
-from ...datastructures.prefixed_name import PrefixedName
-from ...datastructures.variables import SpatialVariables
-from ...semantic_annotations.position_descriptions import (
+from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
+from semantic_digital_twin.datastructures.variables import SpatialVariables
+from semantic_digital_twin.semantic_annotations.position_descriptions import (
     SemanticPositionDescription,
     HorizontalSemanticDirection,
     VerticalSemanticDirection,
 )
-from ...semantic_annotations.semantic_annotations import (
+from semantic_digital_twin.semantic_annotations.semantic_annotations import (
     Handle,
     Dresser,
     Drawer,
     Door,
     Hinge,
 )
-from ...spatial_types.spatial_types import HomogeneousTransformationMatrix, Vector3
-from ...world import World
-from ...world_description.geometry import Scale
-from ...world_description.world_entity import Body
+from semantic_digital_twin.spatial_types.spatial_types import (
+    HomogeneousTransformationMatrix,
+    Vector3,
+)
+from semantic_digital_twin.world import World
+from semantic_digital_twin.world_description.geometry import Scale
+from semantic_digital_twin.world_description.world_entity import Body
 
 
 def drawer_from_body_in_world(drawer_body: Body, world: World) -> Drawer:
@@ -34,7 +37,7 @@ def drawer_from_body_in_world(drawer_body: Body, world: World) -> Drawer:
             scale=drawer_scale,
             world=world,
         )
-        world_T_drawer = drawer_body.global_pose
+        world_T_drawer = drawer_body.global_transform
         drawer_T_handle = HomogeneousTransformationMatrix.from_xyz_rpy(
             x=drawer_scale.x / 2
         )
@@ -47,7 +50,7 @@ def drawer_from_body_in_world(drawer_body: Body, world: World) -> Drawer:
             world=world,
             world_root_T_self=world_T_handle,
         )
-        drawer.add_handle(handle)
+        drawer.add(handle)
 
     return drawer
 
@@ -73,7 +76,7 @@ def door_from_body_in_world(door_body: Body, world: World) -> Door:
     door_T_handle = HomogeneousTransformationMatrix.from_xyz_rpy(
         x=scale.x / 2, y=sampled_2d_point[0], z=sampled_2d_point[1]
     )
-    world_T_door = door_body.global_pose
+    world_T_door = door_body.global_transform
     world_T_handle = world_T_door @ door_T_handle
 
     with world.modify_world():
@@ -89,7 +92,7 @@ def door_from_body_in_world(door_body: Body, world: World) -> Door:
             world=world,
             world_root_T_self=world_T_handle,
         )
-        door.add_handle(handle)
+        door.add(handle)
     with world.modify_world():
         world_T_hinge = door.calculate_world_T_hinge_based_on_handle(Vector3.Z())
         hinge = Hinge.create_with_new_body_in_world(
@@ -98,7 +101,7 @@ def door_from_body_in_world(door_body: Body, world: World) -> Door:
             world_root_T_self=world_T_hinge,
             active_axis=Vector3.Z(),
         )
-        door.add_hinge(hinge)
+        door.add(hinge)
 
     return door
 
@@ -125,9 +128,9 @@ def dresser_from_body_in_world(dresser: Body, world: World) -> Dresser:
             child: Body
             if bool(drawer_pattern.fullmatch(child.name.name)):
                 drawer = drawer_from_body_in_world(child, world)
-                dresser.add_drawer(drawer)
+                dresser.add(drawer)
             elif bool(door_pattern.fullmatch(child.name.name)):
                 door = door_from_body_in_world(child, world)
-                dresser.add_door(door)
+                dresser.add(door)
 
     return dresser

@@ -2,31 +2,48 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 import krrood.symbolic_math.symbolic_math as sm
-from giskardpy.data_types.exceptions import GiskardException
-from giskardpy.motion_statechart.context import ExecutionContext, BuildContext
+from giskardpy.motion_statechart.context import MotionStatechartContext
 from giskardpy.motion_statechart.goals.templates import Sequence
 from giskardpy.motion_statechart.graph_node import (
     MotionStatechartNode,
     Goal,
     NodeArtifacts,
     CancelMotion,
-    EndMotion,
 )
 from giskardpy.motion_statechart.monitors.payload_monitors import (
     CountControlCycles,
     Pulse,
 )
+from giskardpy.data_types.exceptions import GiskardException
+
+
+@dataclass
+class TestNodeAssertionError(GiskardException):
+    """
+    Raised by test motion statechart nodes when a behaviour they assert on is violated.
+    """
+
+    reason: str
+    """
+    Description of the violated assertion.
+    """
+
+    def error_message(self) -> str:
+        return self.reason
+
+    def suggest_correction(self) -> str:
+        return ""
 
 
 @dataclass(eq=False, repr=False)
 class ConstTrueNode(MotionStatechartNode):
-    def build(self, context: BuildContext) -> NodeArtifacts:
+    def build(self, context: MotionStatechartContext) -> NodeArtifacts:
         return NodeArtifacts(observation=sm.Scalar.const_true())
 
 
 @dataclass(eq=False, repr=False)
 class ConstFalseNode(MotionStatechartNode):
-    def build(self, context: BuildContext) -> NodeArtifacts:
+    def build(self, context: MotionStatechartContext) -> NodeArtifacts:
         return NodeArtifacts(observation=sm.Scalar.const_false())
 
 
@@ -34,19 +51,19 @@ class ConstFalseNode(MotionStatechartNode):
 class ChangeStateOnEvents(MotionStatechartNode):
     state: Optional[str] = None
 
-    def on_start(self, context: ExecutionContext):
+    def on_start(self, context: MotionStatechartContext):
         self.state = "on_start"
 
-    def on_pause(self, context: ExecutionContext):
+    def on_pause(self, context: MotionStatechartContext):
         self.state = "on_pause"
 
-    def on_unpause(self, context: ExecutionContext):
+    def on_unpause(self, context: MotionStatechartContext):
         self.state = "on_unpause"
 
-    def on_end(self, context: ExecutionContext):
+    def on_end(self, context: MotionStatechartContext):
         self.state = "on_end"
 
-    def on_reset(self, context: ExecutionContext):
+    def on_reset(self, context: MotionStatechartContext):
         self.state = "on_reset"
 
 
@@ -55,7 +72,7 @@ class TestGoal(Goal):
     sub_node1: ConstTrueNode = field(init=False)
     sub_node2: ConstTrueNode = field(init=False)
 
-    def expand(self, context: BuildContext) -> None:
+    def expand(self, context: MotionStatechartContext) -> None:
         self.sub_node1 = ConstTrueNode(name="sub muh1")
         self.add_node(self.sub_node1)
         self.sub_node2 = ConstTrueNode(name="sub muh2")
@@ -63,7 +80,7 @@ class TestGoal(Goal):
         self.sub_node1.end_condition = self.sub_node1.observation_variable
         self.sub_node2.start_condition = self.sub_node1.observation_variable
 
-    def build(self, context: BuildContext) -> NodeArtifacts:
+    def build(self, context: MotionStatechartContext) -> NodeArtifacts:
         return NodeArtifacts(observation=self.sub_node2.observation_variable)
 
 
@@ -73,11 +90,11 @@ class TestNestedGoal(Goal):
     sub_node2: TestGoal = field(init=False)
     inner: TestGoal = field(init=False)
 
-    def expand(self, context: BuildContext) -> None:
+    def expand(self, context: MotionStatechartContext) -> None:
         self.inner = TestGoal(name="inner")
         self.add_node(self.inner)
 
-    def build(self, context: BuildContext) -> NodeArtifacts:
+    def build(self, context: MotionStatechartContext) -> NodeArtifacts:
         return NodeArtifacts(observation=sm.Scalar(self.inner.observation_variable))
 
 
@@ -92,12 +109,14 @@ class TestRunAfterStop(Goal):
     ticking2: CountControlCycles = field(init=False)
     cancel: CancelMotion = field(init=False)
 
-    def expand(self, context: BuildContext) -> None:
+    def expand(self, context: MotionStatechartContext) -> None:
         self.ticking1 = CountControlCycles(name="3ticks", control_cycles=3)
         self.ticking2 = CountControlCycles(name="2ticks", control_cycles=2)
         self.cancel = CancelMotion(
             name="Cancel_on_tick_after_done",
-            exception=GiskardException("Node ticked after template stopped"),
+            exception=TestNodeAssertionError(
+                reason="Node ticked after template stopped"
+            ),
         )
 
         self.add_nodes(
@@ -109,7 +128,7 @@ class TestRunAfterStop(Goal):
         )
         self.cancel.start_condition = self.ticking1.observation_variable
 
-    def build(self, context: BuildContext) -> NodeArtifacts:
+    def build(self, context: MotionStatechartContext) -> NodeArtifacts:
         return NodeArtifacts(observation=sm.Scalar(self.ticking2.observation_variable))
 
 
@@ -127,7 +146,7 @@ class TestEndBeforeStart(Goal):
     node2: ConstTrueNode = field(init=False)
     node3: ConstTrueNode = field(init=False)
 
-    def expand(self, context: BuildContext) -> None:
+    def expand(self, context: MotionStatechartContext) -> None:
         self.node1 = CountControlCycles(control_cycles=1)
         self.node2 = ConstTrueNode()
         self.node3 = ConstTrueNode()
@@ -137,7 +156,7 @@ class TestEndBeforeStart(Goal):
         self.node3.start_condition = self.node1.observation_variable
         self.node3.end_condition = self.node2.observation_variable
 
-    def build(self, context: BuildContext) -> NodeArtifacts:
+    def build(self, context: MotionStatechartContext) -> NodeArtifacts:
         return NodeArtifacts(observation=sm.Scalar(self.node3.observation_variable))
 
 
@@ -154,7 +173,7 @@ class TestRunAfterStopFromPause(Goal):
     pulse: Pulse = field(init=False)
     cancel: CancelMotion = field(init=False)
 
-    def expand(self, context: BuildContext) -> None:
+    def expand(self, context: MotionStatechartContext) -> None:
         self.ticking1 = CountControlCycles(name="3ticks", control_cycles=3)
         self.ticking2 = CountControlCycles(
             name="trigger_cancel_after_unpause", control_cycles=4
@@ -163,7 +182,9 @@ class TestRunAfterStopFromPause(Goal):
         self.pulse = Pulse()
         self.cancel = CancelMotion(
             name="Cancel_on_tick_after_done",
-            exception=GiskardException("Node ticked after template stopped"),
+            exception=TestNodeAssertionError(
+                reason="Node ticked after template stopped"
+            ),
         )
 
         self.add_nodes(
@@ -173,7 +194,7 @@ class TestRunAfterStopFromPause(Goal):
         self.ticking2.pause_condition = self.pulse.observation_variable
         self.cancel.start_condition = self.ticking2.observation_variable
 
-    def build(self, context: BuildContext) -> NodeArtifacts:
+    def build(self, context: MotionStatechartContext) -> NodeArtifacts:
         return NodeArtifacts(observation=sm.Scalar(self.ticking1.observation_variable))
 
 
@@ -189,12 +210,12 @@ class TestUnpauseUnknownFromParentPause(Goal):
     count_ticks2: CountControlCycles = field(init=False)
     cancel: CancelMotion = field(init=False)
 
-    def expand(self, context: BuildContext) -> None:
+    def expand(self, context: MotionStatechartContext) -> None:
         self.count_ticks1 = CountControlCycles(control_cycles=2)
         self.count_ticks2 = CountControlCycles(control_cycles=5)
         self.cancel = CancelMotion(
             name="check_unpause_failed",
-            exception=GiskardException("Node did not unpause correctly"),
+            exception=TestNodeAssertionError(reason="Node did not unpause correctly"),
         )
 
         self.add_node(self.count_ticks1)
@@ -203,7 +224,7 @@ class TestUnpauseUnknownFromParentPause(Goal):
         self.count_ticks1.pause_condition = sm.Scalar.const_trinary_unknown()
         self.count_ticks1.end_condition = self.count_ticks1.observation_variable
 
-    def build(self, context: BuildContext) -> NodeArtifacts:
+    def build(self, context: MotionStatechartContext) -> NodeArtifacts:
         return NodeArtifacts(
             observation=sm.Scalar(self.count_ticks1.observation_variable)
         )
