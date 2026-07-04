@@ -780,14 +780,14 @@ def test_verbalize_and_stops_at_or():
     cond = and_(x > 1, or_(x < 10, x == 5))
     text = verbalize_expression(cond)
     assert "greater than" in text
-    assert "either" in text  # the inner OR produces "either ..."
+    assert " or " in text  # the inner OR renders as an (inclusive) disjunction
 
 
 def test_verbalize_or_chain():
     x = variable(int, [])
     cond = or_(x > 10, x < 0)
     text = verbalize_expression(cond)
-    assert "either" in text
+    assert " or " in text
     assert "greater than" in text
     assert "less than" in text
 
@@ -818,7 +818,7 @@ def test_verbalize_not_complex_fallback():
     x = variable(int, [])
     text = verbalize_expression(not_(or_(x > 50, x < 10)))
     assert text.startswith("not (")
-    assert "either" in text
+    assert " or " in text
 
 
 # ── Unit tests: aggregators ────────────────────────────────────────────────────
@@ -1378,7 +1378,7 @@ def test_verbalize_condition_graph_example():
     text = verbalize_expression(query)
 
     assert "Item" in text
-    assert "either" in text
+    assert " or " in text
     # The bare-variable bound pair folds to "between" inside its relative clause.
     assert "between 5 and 10" in text
     assert "is 11" in text

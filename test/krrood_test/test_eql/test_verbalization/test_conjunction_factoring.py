@@ -2,7 +2,7 @@
 Tests for conjunction factoring: an AND whose conjuncts are all value comparisons on the *same bare
 variable* is said as one main clause — *"an Integer is greater than 1, less than 10, and is not 5"* —
 the subject and the lead copula stated once and only the predicate tails coordinated (the conjunctive
-analogue of the *"… is either … or …"* disjunction). Scoped to a bare variable; an attribute-chain
+analogue of the *"… is … or …"* disjunction). Scoped to a bare variable; an attribute-chain
 conjunction keeps its per-clause surface.
 """
 

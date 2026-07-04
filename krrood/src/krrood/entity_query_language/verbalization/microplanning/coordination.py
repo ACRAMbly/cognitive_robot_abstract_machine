@@ -113,7 +113,7 @@ class CoindexedFold:
 class SharedSubjectComparisons:
     """Two or more value comparators on the *same* subject chain, factored so the subject and its
     copula are said once and only the predicate tails are coordinated — *"the battery of a Robot is
-    either greater than 50 or less than 10"* instead of repeating *"the battery of … is …"* per
+    greater than 50 or less than 10"* instead of repeating *"the battery of … is …"* per
     disjunct.
 
     This is coordination reduction over a shared subject: the disjunctive analogue of

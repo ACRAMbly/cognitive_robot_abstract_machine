@@ -76,8 +76,9 @@ print(verbalize_expression(or_(x > 10, x < 0)))
 print(verbalize_expression(not_(x > 5)))
 ```
 
-Notice the `or_` form opens with *"either … or …"* for readability, and chained `and_` conditions
-separate each clause with a comma and the final *"and"*.
+Notice the `or_` form coordinates the disjuncts with a plain *"… or …"* (inclusive — it is not
+fronted with *"either"*, which would read as exclusive-or), and chained `and_` conditions separate
+each clause with a comma and the final *"and"*.
 
 ## Boolean and Indexed Attributes
 
