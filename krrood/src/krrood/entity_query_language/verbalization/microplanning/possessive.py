@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 
-from typing_extensions import List, Optional
+from typing_extensions import List, Optional, TYPE_CHECKING
 
 from krrood.entity_query_language.verbalization import morphology
 from krrood.entity_query_language.verbalization.navigation_path import PathStep
@@ -29,6 +29,11 @@ from krrood.entity_query_language.verbalization.vocabulary.english import (
     Prepositions,
     Pronouns,
 )
+
+if TYPE_CHECKING:
+    from krrood.entity_query_language.verbalization.relational_attributes import (
+        RelationVerb,
+    )
 
 
 def attribute_fragment(
@@ -171,6 +176,41 @@ def _relative_clause(
         modifiers=modifiers,
         referent_id=relation.referent_id,
         relative_clause=True,
+    )
+
+
+def subject_relative_relation(
+    owner_class: type,
+    attribute_name: str,
+    relation: RelationVerb,
+    object_fragment: VerbalizationFragment,
+    number: GrammaticalNumber = GrammaticalNumber.SINGULAR,
+) -> VerbalizationFragment:
+    """:return: a *subject*-relative clause *"that is <participle> <preposition> <object>"* — the
+    subject noun this modifies stays the clause subject and *object_fragment* the object (*"a Robot
+    that is assigned to a Mission"*).
+
+    Always passive: a relational attribute is a past participle, so its owning subject is the verb's
+    *patient* (*"a Book that is owned by a Person"*), never the agent — an active reading would reverse
+    the meaning. This is the mirror of :func:`_relative_clause`, which instead heads on the related
+    type. The copula agrees with *number* (*"that are assigned to …"* for a plural subject).
+
+    >>> from krrood.entity_query_language.verbalization.fragments.base import flatten_fragment_to_plain_text, WordFragment
+    >>> from krrood.entity_query_language.verbalization.relational_attributes import relational_verb
+    >>> verb = relational_verb("assigned_to")
+    >>> flatten_fragment_to_plain_text(subject_relative_relation(object, "assigned_to", verb, WordFragment(text="a Mission")))
+    'that is assigned to a Mission'
+    """
+    return PhraseFragment(
+        parts=[
+            Keywords.THAT.as_fragment(),
+            Copulas.for_number(number),
+            RoleFragment.for_attribute(
+                owner_class, attribute_name, text=relation.participle
+            ),
+            WordFragment(text=relation.preposition),
+            object_fragment,
+        ]
     )
 
 

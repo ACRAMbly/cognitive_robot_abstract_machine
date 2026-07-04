@@ -154,6 +154,21 @@ query = an(entity(m).where(m.assigned_to.battery > 5, m.assigned_to.power > 10))
 print(verbalize_expression(query))
 ```
 
+### Nesting a Related Entity's Restriction
+
+When a query **binds** a related entity through a relational attribute (``m.assigned_to == r``) and
+separately **restricts** that entity (``r.battery > 50``), the two conditions fold into one relative
+clause on the subject noun — the binding names the entity, and the entity carries its own restriction
+nested onto it — rather than an orphaned *"such that …"* clause repeating *"the Robot"*. A single
+attribute compared with an order operator reads as the compact *"with <attribute> <comparison>"*
+(other shapes keep the *"whose … is …"* form):
+
+```{code-cell} ipython3
+r = variable(Robot, domain=None)
+query = an(entity(m).where(m.assigned_to == r, r.battery > 50))
+print(verbalize_expression(query))
+```
+
 ## Absence Conditions (`== None`)
 
 A comparison to `None` is read as an *absence*, not as a value. The exact wording adapts to the
