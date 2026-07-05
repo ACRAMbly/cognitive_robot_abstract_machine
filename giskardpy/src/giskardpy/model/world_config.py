@@ -66,7 +66,8 @@ class WorldWithFixedRobot(WorldConfig):
         self.robot_root = world_with_robot.root
         map_C_robot = FixedConnection(parent=map, child=self.robot_root)
 
-        self.world.merge_world(world_with_robot, map_C_robot)
+        self.world.merge_world(world_with_robot)
+        self.world.add_connection(map_C_robot)
 
 
 @dataclass
