@@ -1,6 +1,8 @@
 import threading
 import time
 import rclpy
+import typer
+from typing import Literal
 
 from semantic_digital_twin.adapters.urdf import URDFParser
 from semantic_digital_twin.robots.tracy import Tracy
@@ -78,7 +80,7 @@ def setup_world(node):
     print("Getting live world from Giskard...")
     tracy_world = fetch_world_from_service(node, timeout_seconds=300)
     print(f"World received with {len(list(tracy_world.bodies))} bodies.")
-    world_synchronizer = WorldSynchronizer(_world=tracy_world, node=node, synchronous=True)
+    WorldSynchronizer(_world=tracy_world, node=node, synchronous=True)
     print("Synchronized.")
 
     print("Adding boxes to world.")
@@ -87,7 +89,7 @@ def setup_world(node):
     blue = spawn_box(tracy_world, "blue", (0.8, 0, 0.93), 0.1, 0.0, 0.0, 1.0)
     return tracy_world, red, green, blue
 
-def build_plan(world: World, tracy: Tracy, context: Context, red_box: Body, green_box: Body, blue_box: Body) -> Plan | None:
+def build_plan_cubes(world: World, tracy: Tracy, context: Context, red_box: Body, green_box: Body, blue_box: Body) -> Plan | None:
     return sequential(
         [
             ParkArmsAction(Arms.BOTH),
@@ -140,7 +142,15 @@ def build_plan(world: World, tracy: Tracy, context: Context, red_box: Body, gree
         context=context,
     ).plan
 
-def main():
+def build_park_arms_plan(context: Context) -> Plan | None:
+    return sequential(
+        [
+            ParkArmsAction(Arms.BOTH),
+        ],
+        context=context,
+    ).plan
+
+def main(plan_name: Literal["park_arms", "cubes"]):
     rclpy.init()
 
     node = rclpy.create_node("coraplex_real_stacking")
@@ -161,18 +171,23 @@ def main():
     context = Context(world=world, robot=tracy, ros_node=node)
     context.evaluate_conditions = False
 
-    plan = build_plan(world, tracy, context, red_box, green_box, blue_box)
+    if plan_name == "cubes":
+        plan = build_plan_cubes(world, tracy, context, red_box, green_box, blue_box)
+    else:
+        plan = build_park_arms_plan(context)
 
     print("Executing ParkArmsAction on REAL robot through Giskard...")
     print("Keep E-stop reachable.")
 
-    with real_robot:
-        plan.perform()
-
-    node.destroy_node()
-    rclpy.shutdown()
-    print("ParkArmsAction completed.")
-
+    try:
+        with real_robot:
+            plan.perform()
+            print("Plan completed.")
+    except Exception as e:
+        print(f"Error during plan execution: {e}")
+    finally:
+        node.destroy_node()
+        rclpy.shutdown()
 
 if __name__ == "__main__":
-    main()
+    typer.run(main)
