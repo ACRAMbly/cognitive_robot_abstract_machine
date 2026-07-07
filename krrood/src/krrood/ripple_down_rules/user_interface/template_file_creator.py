@@ -18,11 +18,10 @@ from krrood.ripple_down_rules.utils import (
     get_imports_from_scope,
     make_list,
     stringify_hint,
-    extract_function_or_class_file,
     get_types_to_import_from_type_hints,
-    extract_function_or_class_from_source,
 )
 from krrood.code_generation.imports import get_imports_from_types
+from krrood.code_generation.source_extraction_utils import extract_function_source
 from krrood.utils import get_scope_from_imports
 
 
@@ -218,9 +217,9 @@ class TemplateFileCreator:
                     )
                 else:
                     func_args[k] = (
-                        type(v).__name__
+                        stringify_hint(type(v))
                         if not isinstance(v, type)
-                        else f"Type[{v.__name__}]"
+                        else f"Type[{stringify_hint(v)}]"
                     )
             func_args = ", ".join(
                 [
@@ -374,9 +373,9 @@ class TemplateFileCreator:
                 )
                 break
         if updates:
-            all_code_lines = extract_function_or_class_from_source(
-                source, [func_name], join_lines=False
-            )[func_name]
+            all_code_lines = extract_function_source(
+                [func_name], source=source, join_lines=False
+            ).source_of(func_name)
             return all_code_lines, updates
         else:
             print_func(

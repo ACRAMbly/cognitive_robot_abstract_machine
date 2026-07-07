@@ -8,9 +8,9 @@ import sys
 from abc import ABC, abstractmethod
 from dataclasses import is_dataclass
 from textwrap import dedent, indent
-from typing_extensions import Tuple, Dict
 
 from typing_extensions import Optional, TYPE_CHECKING, List
+from typing_extensions import Tuple, Dict
 
 from krrood.ripple_down_rules.datastructures.callable_expression import (
     CallableExpression,
@@ -18,12 +18,18 @@ from krrood.ripple_down_rules.datastructures.callable_expression import (
 from krrood.ripple_down_rules.datastructures.case import show_current_and_corner_cases
 from krrood.ripple_down_rules.datastructures.dataclasses import CaseQuery
 from krrood.ripple_down_rules.datastructures.enums import PromptFor
-from krrood.ripple_down_rules.exceptions import NoSavePathFoundForExpertAnswers, NoLoadPathFoundForExpertAnswers
+from krrood.ripple_down_rules.exceptions import (
+    NoSavePathFoundForExpertAnswers,
+    NoLoadPathFoundForExpertAnswers,
+)
 from krrood.ripple_down_rules.user_interface.template_file_creator import (
     TemplateFileCreator,
 )
+from krrood.code_generation.source_extraction_utils import (
+    extract_class_source,
+    extract_function_source,
+)
 from krrood.ripple_down_rules.utils import (
-    extract_function_or_class_file,
     get_imports_from_scope,
     get_class_file_path,
 )
@@ -65,11 +71,17 @@ class Expert(ABC):
         self.all_expert_answers = []
         self.use_loaded_answers = use_loaded_answers
         self.answers_save_path = answers_save_path
-        if answers_save_path is not None and os.path.exists(answers_save_path + ".py"):
+        if answers_save_path is not None and (
+            os.path.exists(answers_save_path + ".py")
+            or os.path.exists(answers_save_path + ".json")
+        ):
             if use_loaded_answers:
                 self.load_answers(answers_save_path)
             if not append:
-                os.remove(answers_save_path + ".py")
+                try:
+                    os.remove(answers_save_path + ".py")
+                except FileNotFoundError:
+                    pass
         self.append = True
 
     @abstractmethod
@@ -215,9 +227,12 @@ class Expert(ABC):
         file_path = path + ".py"
         with open(file_path, "r") as f:
             all_answers = f.read().split("\n\n\n'===New Answer==='\n\n\n")[:-1]
-        all_function_sources = extract_function_or_class_file(
-            file_path, [], as_list=True
-        )
+        all_function_sources = [
+            definition.source
+            for definition in extract_function_source(
+                [], file_path=file_path
+            ).definitions
+        ]
         for i, answer in enumerate(all_answers):
             answer = answer.strip("\n").strip()
             if "def " not in answer and "pass" in answer:
@@ -270,12 +285,9 @@ class AI(Expert):
 
         def get_class_source(cls):
             cls_source_file = get_class_file_path(cls)
-            found_class_source = extract_function_or_class_file(
-                cls_source_file,
-                function_names=[cls.__name__],
-                is_class=True,
-                as_list=True,
-            )[0]
+            found_class_source = extract_class_source(
+                [cls.__name__], file_path=cls_source_file
+            ).source_of(cls.__name__)
             class_signature = found_class_source.split("\n")[0]
             if "(" in class_signature:
                 parent_class_names = list(
