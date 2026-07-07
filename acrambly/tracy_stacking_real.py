@@ -18,6 +18,7 @@ from semantic_digital_twin.adapters.ros.world_synchronizer import WorldSynchroni
 from coraplex.datastructures.dataclasses import Context
 from coraplex.motion_executor import real_robot
 from coraplex.plans.factories import sequential
+from coraplex.plans.plan import Plan
 
 from coraplex.robot_plans.actions.composite.transporting import PickAndPlaceAction
 from coraplex.robot_plans.actions.core.robot_body import ParkArmsAction
@@ -86,6 +87,59 @@ def setup_world(node):
     blue = spawn_box(tracy_world, "blue", (0.8, 0, 0.93), 0.1, 0.0, 0.0, 1.0)
     return tracy_world, red, green, blue
 
+def build_plan(world: World, tracy: Tracy, context: Context, red_box: Body, green_box: Body, blue_box: Body) -> Plan | None:
+    return sequential(
+        [
+            ParkArmsAction(Arms.BOTH),
+            PickAndPlaceAction(
+                red_box,
+                Pose.from_xyz_rpy(
+                    0.6,
+                    0.0,
+                    0.93,
+                    reference_frame=world.root
+                ),
+                Arms.RIGHT,
+                GraspDescription(
+                    ApproachDirection.FRONT,
+                    VerticalAlignment.TOP,
+                    Tracy.get_end_effectors(tracy)[1],
+                ),
+            ),
+            PickAndPlaceAction(
+                green_box,
+                Pose.from_xyz_rpy(
+                    0.6,
+                    0.0,
+                    1.03,
+                    reference_frame=world.root
+                ),
+                Arms.LEFT,
+                GraspDescription(
+                    ApproachDirection.FRONT,
+                    VerticalAlignment.TOP,
+                    Tracy.get_end_effectors(tracy)[0]
+                ),
+            ),
+            PickAndPlaceAction(
+                blue_box,
+                Pose.from_xyz_rpy(
+                    0.6,
+                    0.0,
+                    1.13,
+                    reference_frame=world.root
+                ),
+                Arms.RIGHT,
+                GraspDescription(
+                    ApproachDirection.FRONT,
+                    VerticalAlignment.TOP,
+                    Tracy.get_end_effectors(tracy)[1]
+                ),
+            ),
+        ],
+        context=context,
+    ).plan
+
 def main():
     rclpy.init()
 
@@ -107,57 +161,7 @@ def main():
     context = Context(world=world, robot=tracy, ros_node=node)
     context.evaluate_conditions = False
 
-    plan = sequential(
-        [
-            ParkArmsAction(Arms.BOTH),
-            PickAndPlaceAction(
-                red_box,
-                Pose.from_xyz_rpy(
-                    0.6,
-                    0.0,
-                    0.93,
-                    reference_frame=world.root
-                ),
-                Arms.RIGHT,
-                GraspDescription(
-                    ApproachDirection.FRONT,
-                    VerticalAlignment.TOP,
-                    Tracy.get_end_effectors(tracy)[1],
-                ),
-            ),
-            PickAndPlaceAction(
-                world.get_body_by_name("box1"),
-                Pose.from_xyz_rpy(
-                    0.6,
-                    0.0,
-                    1.03,
-                    reference_frame=world.root
-                ),
-                Arms.LEFT,
-                GraspDescription(
-                    ApproachDirection.FRONT,
-                    VerticalAlignment.TOP,
-                    Tracy.get_end_effectors(tracy)[0]
-                ),
-            ),
-            PickAndPlaceAction(
-                world.get_body_by_name("box2"),
-                Pose.from_xyz_rpy(
-                    0.6,
-                    0.0,
-                    1.13,
-                    reference_frame=world.root
-                ),
-                Arms.RIGHT,
-                GraspDescription(
-                    ApproachDirection.FRONT,
-                    VerticalAlignment.TOP,
-                    Tracy.get_end_effectors(tracy)[1]
-                ),
-            ),
-        ],
-        context=context,
-    ).plan
+    plan = build_plan(world, tracy, context, red_box, green_box, blue_box)
 
     print("Executing ParkArmsAction on REAL robot through Giskard...")
     print("Keep E-stop reachable.")
