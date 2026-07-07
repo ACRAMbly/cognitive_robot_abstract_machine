@@ -18,7 +18,7 @@ from semantic_digital_twin.adapters.ros.world_fetcher import fetch_world_from_se
 from semantic_digital_twin.adapters.ros.world_synchronizer import WorldSynchronizer
 
 from coraplex.datastructures.dataclasses import Context
-from coraplex.motion_executor import real_robot
+from coraplex.execution_environment import real_robot
 from coraplex.plans.factories import sequential
 from coraplex.plans.plan import Plan
 
