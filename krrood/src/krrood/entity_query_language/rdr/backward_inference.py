@@ -55,7 +55,7 @@ class GuardCondition:
     condition is False (i.e. the expression must evaluate to False).
 
     ``expression`` is always a leaf-level EQL node (e.g. a ``Comparator``),
-    never a ``ConclusionSelector`` — ``_flatten_guard`` decomposes selectors
+    never a ``ConclusionSelector`` — ``_leaf_guards`` decomposes selectors
     before they reach ``GuardCondition``.
     """
 
@@ -143,7 +143,7 @@ class _RulePath:
     """Conclusion nodes at the leaf of this rule path."""
 
 
-def _flatten_guard(
+def _leaf_guards(
     expr: SymbolicExpression,
     negated: bool,
 ) -> List[GuardCondition]:
@@ -184,19 +184,19 @@ def _flatten_guard(
     if isinstance(expr, Alternative):
         if negated:
             # NOT(A OR B) == NOT(A) AND NOT(B)
-            return _flatten_guard(expr.left, True) + _flatten_guard(expr.right, True)
-        # A OR (NOT(A) AND B) — flattened to both sides as leaf conditions
-        return _flatten_guard(expr.left, False) + _flatten_guard(expr.right, False)
+            return _leaf_guards(expr.left, True) + _leaf_guards(expr.right, True)
+        # A OR (NOT(A) AND B) — decomposed to both sides as leaf conditions
+        return _leaf_guards(expr.left, False) + _leaf_guards(expr.right, False)
     if isinstance(expr, Refinement):
-        return _flatten_guard(expr.left, negated)
+        return _leaf_guards(expr.left, negated)
     if isinstance(expr, Next):
         result: List[GuardCondition] = []
         for child in expr._operation_children_:
-            result.extend(_flatten_guard(child, negated))
+            result.extend(_leaf_guards(child, negated))
         return result
     if isinstance(expr, Not) and isinstance(expr._child_, ConclusionSelector):
         # Push negation through the selector — refines NOT(Refinement), NOT(Alternative), NOT(Next)
-        return _flatten_guard(expr._child_, not negated)
+        return _leaf_guards(expr._child_, not negated)
     return [GuardCondition(expr, negated)]
 
 
@@ -213,25 +213,25 @@ def _collect_rule_paths(
       override); right fires when ``left`` (parent fired — positive guard).
     * ``Next``: each child is a separate disjunct (same depth, no cross-guards).
 
-    Guards that are ConclusionSelector nodes are flattened via
-    :func:`_flatten_guard` — a single ``NOT(Alternative(A, B))`` becomes the
+    Guards that are ConclusionSelector nodes are decomposed via
+    :func:`_leaf_guards` — a single ``NOT(Alternative(A, B))`` becomes the
     two guards ``NOT(A), NOT(B)``, and ``Refinement(A, B)`` reduces to ``A``.
     This keeps the guard list semantically precise and human-readable.
     """
     if isinstance(node, Refinement):
         yield from _collect_rule_paths(
             node.left,
-            guard + _flatten_guard(node.right, negated=True),
+            guard + _leaf_guards(node.right, negated=True),
         )
         yield from _collect_rule_paths(
             node.right,
-            guard + _flatten_guard(node.left, negated=False),
+            guard + _leaf_guards(node.left, negated=False),
         )
     elif isinstance(node, Alternative):
         yield from _collect_rule_paths(node.left, guard)
         yield from _collect_rule_paths(
             node.right,
-            guard + _flatten_guard(node.left, negated=True),
+            guard + _leaf_guards(node.left, negated=True),
         )
     elif isinstance(node, Next):
         for child in node._operation_children_:
