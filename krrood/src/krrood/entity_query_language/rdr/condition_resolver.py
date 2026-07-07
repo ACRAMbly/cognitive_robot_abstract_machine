@@ -29,7 +29,7 @@ from krrood.entity_query_language.rdr.backward_inference import ConclusionKnowle
 
 if TYPE_CHECKING:
     from krrood.entity_query_language.core.base_expressions import SymbolicExpression
-    from krrood.entity_query_language.core.mapped_variable import CanBehaveLikeAVariable
+    from krrood.entity_query_language.core.variable import Variable
     from krrood.entity_query_language.rdr.backward_inference import (
         GuardCondition,
         SufficientConditionSet,
@@ -72,9 +72,9 @@ class ConditionResolver(ABC):
     def resolve(
         self,
         case: Any,
-        case_variable: CanBehaveLikeAVariable,
-        target: Any,
-        current: Any,
+        case_variable: Variable,
+        target_conclusion: Any,
+        current_conclusion: Any,
         corner_case: Any,
         target_knowledge: ConclusionKnowledge,
         current_knowledge: ConclusionKnowledge,
@@ -82,27 +82,24 @@ class ConditionResolver(ABC):
     ) -> Optional[ResolvedCondition]:
         """Attempt to auto-derive a differentiating condition.
 
-        :param case: The new case being fit (must be classified as ``target``).
+        :param case: The new case being fit (classified as ``target_conclusion``).
         :param case_variable: The RDR's shared EQL variable.
-        :param target: The correct conclusion for ``case``.
-        :param current: The wrong conclusion currently returned by the firing rule.
-        :param corner_case: The case that triggered the currently-firing rule's creation.
-        :param target_knowledge: Backward-inference knowledge for ``target``.
-        :param current_knowledge: Backward-inference knowledge for ``current``.
-        :param firing_anchor: The condition expression of the rule that fired; used by
-            resolvers to identify the active path without re-evaluating the rule tree.
-        :return: A :class:`ResolvedCondition`, or ``None`` if this resolver cannot resolve.
+        :param target_conclusion: The correct conclusion for ``case``.
+        :param current_conclusion: The wrong conclusion returned by the firing rule.
+        :param corner_case: The case that triggered the firing rule's creation.
+        :param target_knowledge: Backward-inference knowledge for ``target_conclusion``.
+        :param current_knowledge: Backward-inference knowledge for ``current_conclusion``.
+        :param firing_anchor: Condition expression of the rule that fired, used to
+            identify the active path without re-evaluating the rule tree.
+        :return: A :class:`ResolvedCondition`, or ``None`` if resolution is not possible.
         """
 
 
-def _materialize(guard: "GuardCondition") -> "SymbolicExpression":
-    """Apply negation to produce the EQL expression used as a new rule's condition.
+def _materialize(guard: GuardCondition) -> SymbolicExpression:
+    """Produce the EQL expression for a new rule's condition, applying negation.
 
-    A ``negated=True`` guard fires when its expression is False, so materializing it
-    for use as a new rule's condition requires wrapping it with ``not_``.
-
-    :return: ``not_(guard.expression)`` when ``guard.negated`` is ``True``, otherwise
-        ``guard.expression``.
+    A negated guard is wrapped with ``not_`` so the new rule fires when the guard's
+    expression is False.
     """
     return not_(guard.expression) if guard.negated else guard.expression
 
@@ -118,9 +115,9 @@ class TargetKnowledgeResolver(ConditionResolver):
     def resolve(
         self,
         case: Any,
-        case_variable: CanBehaveLikeAVariable,
-        target: Any,
-        current: Any,
+        case_variable: Variable,
+        target_conclusion: Any,
+        current_conclusion: Any,
         corner_case: Any,
         target_knowledge: ConclusionKnowledge,
         current_knowledge: ConclusionKnowledge,
@@ -146,10 +143,6 @@ class CornerCaseKnowledgeResolver(ConditionResolver):
 
     The matching guard is returned without negation, producing a stable positive condition
     grounded in a different characterisation of the wrong conclusion.
-
-    The active path is identified via the ``firing_anchor`` expression using an identity check
-    on guard expressions — no re-evaluation of the rule tree is needed.  When ``firing_anchor``
-    is ``None``, all paths are considered (safe degradation).
     """
 
     def _active_path(
@@ -157,15 +150,10 @@ class CornerCaseKnowledgeResolver(ConditionResolver):
         firing_anchor: Optional[SymbolicExpression],
         current_knowledge: ConclusionKnowledge,
     ) -> Optional[SufficientConditionSet]:
-        """Return the :class:`SufficientConditionSet` that contains ``firing_anchor``
-        as a positive (non-negated) guard expression.
+        """:return: The sufficient condition set in which ``firing_anchor`` appears as a
+        positive (non-negated) guard, or ``None`` if none does.
 
-        Searches every guard in every sufficient condition set using an identity check
-        on ``guard.expression``.  The ``not guard.negated`` clause excludes paths where
-        the same expression node appears as a negated ancestor guard in a sibling path —
-        only the sufficient condition set in which the anchor fires positively is considered active.
-
-        :return: The matching :class:`SufficientConditionSet`, or ``None`` if not found.
+        A ``None`` anchor yields ``None`` so every path is treated as non-active.
         """
         if firing_anchor is None:
             return None
@@ -184,21 +172,17 @@ class CornerCaseKnowledgeResolver(ConditionResolver):
     def resolve(
         self,
         case: Any,
-        case_variable: CanBehaveLikeAVariable,
-        target: Any,
-        current: Any,
+        case_variable: Variable,
+        target_conclusion: Any,
+        current_conclusion: Any,
         corner_case: Any,
         target_knowledge: ConclusionKnowledge,
         current_knowledge: ConclusionKnowledge,
         firing_anchor: Optional[SymbolicExpression] = None,
     ) -> Optional[ResolvedCondition]:
-        """Search non-active paths in ``current_knowledge`` for a positive discriminating guard.
+        """Search non-active paths for a guard that holds for ``case`` but not ``corner_case``.
 
-        Skips the active path (identified via ``firing_anchor``) and returns the first guard
-        from any other path that holds for ``case`` but not for ``corner_case``.  The guard
-        is materialized via :func:`_materialize`; for the typical non-negated guard this is a
-        no-op, but a negated guard in a non-active path will be wrapped with ``not_()`` if
-        encountered.
+        The active path, identified via ``firing_anchor``, is skipped.
 
         :return: A :class:`ResolvedCondition`, or ``None`` if no discriminating guard is found.
         """
@@ -224,9 +208,9 @@ class ChainConditionResolver(ConditionResolver):
     def resolve(
         self,
         case: Any,
-        case_variable: CanBehaveLikeAVariable,
-        target: Any,
-        current: Any,
+        case_variable: Variable,
+        target_conclusion: Any,
+        current_conclusion: Any,
         corner_case: Any,
         target_knowledge: ConclusionKnowledge,
         current_knowledge: ConclusionKnowledge,
@@ -241,8 +225,8 @@ class ChainConditionResolver(ConditionResolver):
             result = resolver.resolve(
                 case,
                 case_variable,
-                target,
-                current,
+                target_conclusion,
+                current_conclusion,
                 corner_case,
                 target_knowledge,
                 current_knowledge,
@@ -254,14 +238,7 @@ class ChainConditionResolver(ConditionResolver):
 
     @classmethod
     def backward_inference_default(cls) -> ChainConditionResolver:
-        """Return the standard two-resolver chain.
-
-        :class:`TargetKnowledgeResolver` runs first, searching the target conclusion's
-        backward-inference paths for a positive discriminating guard.
-        :class:`CornerCaseKnowledgeResolver` runs second, searching non-active paths to the
-        wrong conclusion for a direct positive condition; it uses the firing anchor to skip the
-        active path efficiently without re-evaluating the rule tree.
-
-        :return: A :class:`ChainConditionResolver` with both resolvers in priority order.
+        """Return the standard chain: :class:`TargetKnowledgeResolver` then
+        :class:`CornerCaseKnowledgeResolver`, in priority order.
         """
         return cls([TargetKnowledgeResolver(), CornerCaseKnowledgeResolver()])

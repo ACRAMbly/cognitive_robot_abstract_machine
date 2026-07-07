@@ -1,44 +1,26 @@
-"""General utility objects for the EQL-RDR subsystem."""
+"""Sentinel value for the EQL-RDR subsystem."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-
-from typing_extensions import TYPE_CHECKING, Any, List
-
-from krrood.entity_query_language.core.variable import Literal
-from krrood.entity_query_language.rules.conclusion import Add
-
-if TYPE_CHECKING:
-    from krrood.entity_query_language.core.base_expressions import SymbolicExpression
+from enum import Enum
 
 
-@dataclass(frozen=True, eq=False, repr=False)
-class _Unset:
+class Unset(Enum):
+    """Sentinel enum for a missing current/target conclusion.
+
+    A single-member enum yields a hashable, identity-stable sentinel (compared
+    with ``is UNSET``) without a hand-rolled singleton class.
     """
-    Class for UNSET Sentinel for "no current/target conclusion was supplied" (useful, for example, for ask-for-rule path).
-    """
+
+    UNSET = "unset"
+    """The sole sentinel member, exported module-wide as :data:`UNSET`."""
 
     def __repr__(self) -> str:
         return "UNSET"
 
-    def __eq__(self, other):
-        return isinstance(other, _Unset)
-
-    def __hash__(self):
-        return hash(type(self))
+    def __str__(self) -> str:
+        return "UNSET"
 
 
-#: Sentinel for "no current/target conclusion was supplied" (useful, for example, for ask-for-rule path).
-UNSET: _Unset = _Unset()
-
-
-def _extract_value(add_node: Add) -> Any:
-    """:return: The Python value from an ``Add`` conclusion's right-hand side."""
-    target = add_node.right
-    return target._value_ if isinstance(target, Literal) else target
-
-
-def _conclusions_of(node: "SymbolicExpression") -> List[Add]:
-    """:return: The ``Add`` conclusion nodes attached to *node*."""
-    return [c for c in node._conclusions_ if isinstance(c, Add)]
+UNSET: Unset = Unset.UNSET
+"""Sentinel for "no current/target conclusion was supplied" (e.g. the ask-for-rule path)."""

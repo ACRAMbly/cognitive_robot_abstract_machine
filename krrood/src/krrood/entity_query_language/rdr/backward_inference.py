@@ -28,25 +28,22 @@ from typing_extensions import (
 )
 
 from krrood.entity_query_language.core.base_expressions import OperationResult
+from krrood.entity_query_language.operators.core_logical_operators import Not
+from krrood.entity_query_language.rules.conclusion import Add
 from krrood.entity_query_language.rules.conclusion_selector import (
     Alternative,
     ConclusionSelector,
     Next,
     Refinement,
 )
-from krrood.entity_query_language.rdr.utils import _conclusions_of, _extract_value
 
 if TYPE_CHECKING:
     from krrood.entity_query_language.core.base_expressions import SymbolicExpression
-    from krrood.entity_query_language.core.mapped_variable import (
-        CanBehaveLikeAVariable,
-    )
-    from krrood.entity_query_language.rules.conclusion import Add as AddConclusion
+    from krrood.entity_query_language.core.variable import Variable
 
 
-# ---------------------------------------------------------------------------
+# %%
 # Data structures
-# ---------------------------------------------------------------------------
 
 
 @dataclass(frozen=True)
@@ -63,11 +60,13 @@ class GuardCondition:
     """
 
     expression: SymbolicExpression
+    """The leaf-level EQL predicate to evaluate (e.g. a ``Comparator``)."""
     negated: bool = False
+    """When ``True`` the guard is satisfied only if :attr:`expression` is False."""
 
     def holds_for(
         self,
-        shared_variable: CanBehaveLikeAVariable,
+        shared_variable: Variable,
         case: Any,
     ) -> bool:
         """Evaluate this guard against *case* bound to *shared_variable*.
@@ -80,9 +79,9 @@ class GuardCondition:
         :return: ``True`` if the guard is satisfied.
         """
         shared_variable._update_domain_([case])
-        results = list(self.expression.evaluate())
         truth = any(
-            r.is_true if isinstance(r, OperationResult) else bool(r) for r in results
+            result.is_true if isinstance(result, OperationResult) else bool(result)
+            for result in self.expression.evaluate()
         )
         return not truth if self.negated else truth
 
@@ -100,7 +99,7 @@ class SufficientConditionSet:
 
     def evaluate_against(
         self,
-        shared_variable: CanBehaveLikeAVariable,
+        shared_variable: Variable,
         case: Any,
     ) -> bool:
         """Evaluate every condition against *case* bound to *shared_variable*.
@@ -130,9 +129,8 @@ class ConclusionKnowledge:
         return bool(self.sufficient_condition_sets)
 
 
-# ---------------------------------------------------------------------------
+# %%
 # Tree traversal
-# ---------------------------------------------------------------------------
 
 
 @dataclass
@@ -141,7 +139,7 @@ class _RulePath:
 
     conditions: Tuple[GuardCondition, ...]
     """Guard conditions accumulated along the path to these add nodes."""
-    add_nodes: Tuple[AddConclusion, ...]
+    add_nodes: Tuple[Add, ...]
     """Conclusion nodes at the leaf of this rule path."""
 
 
@@ -183,8 +181,6 @@ def _flatten_guard(
     :param negated: Whether the guard polarity is negated.
     :return: The flat list of leaf :class:`GuardCondition` objects.
     """
-    from krrood.entity_query_language.operators.core_logical_operators import Not
-
     if isinstance(expr, Alternative):
         if negated:
             # NOT(A OR B) == NOT(A) AND NOT(B)
@@ -241,7 +237,7 @@ def _collect_rule_paths(
         for child in node._operation_children_:
             yield from _collect_rule_paths(child, guard)
     else:
-        add_nodes = _conclusions_of(node)
+        add_nodes = node.conclusions_of_type(Add)
         if add_nodes:
             yield _RulePath(
                 conditions=tuple(guard + [GuardCondition(node, negated=False)]),
@@ -249,12 +245,11 @@ def _collect_rule_paths(
             )
 
 
-# ---------------------------------------------------------------------------
+# %%
 # Indexed cache
-# ---------------------------------------------------------------------------
 
 
-def _build_full_index(
+def _index_conclusions_by_value(
     conditions_root: SymbolicExpression,
 ) -> Dict[Any, ConclusionKnowledge]:
     """One full traversal of the rule tree; buckets every conclusion value once.
@@ -266,7 +261,7 @@ def _build_full_index(
     for path in _collect_rule_paths(conditions_root, []):
         seen: Set[Any] = set()
         for add_node in path.add_nodes:
-            value = _extract_value(add_node)
+            value = add_node.unwrapped_value
             if value not in seen:
                 buckets[value].append(SufficientConditionSet(path.conditions))
                 seen.add(value)
@@ -304,24 +299,15 @@ class BackwardInferenceIndex:
         if conditions_root is None:
             return ConclusionKnowledge(conclusion_value, ())
         if self._cache is None:
-            self._cache = _build_full_index(conditions_root)
+            self._cache = _index_conclusions_by_value(conditions_root)
         return self._cache.get(
             conclusion_value,
             ConclusionKnowledge(conclusion_value, ()),
         )
 
 
-# ---------------------------------------------------------------------------
+# %%
 # Public API
-# ---------------------------------------------------------------------------
-
-
-__all__ = [
-    "BackwardInferenceIndex",
-    "ConclusionKnowledge",
-    "SufficientConditionSet",
-    "what_do_we_know_about",
-]
 
 
 def what_do_we_know_about(
