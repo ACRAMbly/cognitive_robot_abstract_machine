@@ -1,9 +1,9 @@
 import rclpy
-import typer
+
 from coraplex.datastructures.dataclasses import Context
 from coraplex.datastructures.enums import ApproachDirection, Arms, VerticalAlignment
 from coraplex.datastructures.grasp import GraspDescription
-from coraplex.motion_executor import real_robot, semi_real_robot, simulated_robot
+from coraplex.execution_environment import simulated_robot
 from coraplex.plans.factories import sequential
 from coraplex.plans.plan import Plan
 from coraplex.robot_plans.actions.composite.transporting import PickAndPlaceAction
@@ -93,18 +93,12 @@ def build_plan(world: World, tracy: Tracy, context: Context) -> Plan | None:
         context=context,
     ).plan
 
-def run_simulation(real: bool = False):
+def run_simulation():
     world = setup_world()
     tracy = Tracy.from_world(world)
 
     node = rclpy.create_node("viz_marker")
     VizMarkerPublisher(_world=world, node=node).with_tf_publisher()
-
-    print("Real:", real)
-
-    if real:
-        # Synchronize the world with ROS to visualize it in RViz
-        WorldSynchronizer(node=node, _world=world)
 
     context = Context(world=world, robot=tracy)
     context.evaluate_conditions = False
@@ -114,22 +108,17 @@ def run_simulation(real: bool = False):
         print("No valid plan could be generated. Exiting.")
         return
 
-    if real:
-        with real_robot:
-            plan.perform()
-        return
-
     with simulated_robot:
         plan.perform()
 
-def main(real: bool = False):
+def main():
     rclpy.init()
     try:
-        run_simulation(real)
+        run_simulation()
     except KeyboardInterrupt:
         print("Simulation interrupted by user.")
     finally:
         rclpy.shutdown()
 
 if __name__ == "__main__":
-    typer.run(main)
+    main()
