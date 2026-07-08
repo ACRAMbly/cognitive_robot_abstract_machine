@@ -1,265 +1,104 @@
 """
 tracy_motion_mapping.py
-=======================
+========================
+Coraplex alternative motion mapping for Tracy grippers in REAL execution mode.
 
-Coraplex alternative motion mapping for Tracy's real Robotiq parallel grippers.
+Tracy's current gripper action interface uses:
+    control_msgs/action/ParallelGripperCommand
+with list fields:
+    goal.command.position = [position]
+    goal.command.effort   = [effort]
 
-This overrides:
-
-    MoveGripperMotion -> TracyRealMoveGripperMotion
-
-for:
-
-    robot = Tracy
-    execution_type = REAL
-For closing, `stalled=True` is accepted as contact/grasp.
-
-Usage (in any demo / script):
-    import coraplex.alternative_motion_mappings.tracy_motion_mapping  # noqa: F401
-    That single import registers the alternative.  Nothing else is needed.
-    When executing inside `with real_robot:`, every MoveGripperMotion issued
-    for a Tracy robot will automatically use TracyRealMoveGripperMotion.
+Verified command-line shape:
+    ros2 action send_goal /left_gripper/robotiq_gripper_controller/gripper_cmd \
+      control_msgs/action/ParallelGripperCommand \
+      "{command: {position: [0.8], effort: [10.0]}}"
 """
 
 from __future__ import annotations
 
 import logging
-import time
+from typing import Any
 
-from rclpy.action import ActionClient
+import rclpy
 from control_msgs.action import ParallelGripperCommand
-
+from rclpy.action import ActionClient
 from semantic_digital_twin.datastructures.definitions import GripperState
 from semantic_digital_twin.robots.tracy import Tracy
 
-from coraplex.datastructures.enums import ExecutionType, Arms
+from coraplex.datastructures.enums import Arms, ExecutionType
 from coraplex.robot_plans.motions.base import AlternativeMotion
 from coraplex.robot_plans.motions.gripper import MoveGripperMotion
-
-from coraplex.view_manager import ViewManager
-from giskardpy.motion_statechart.tasks.joint_tasks import JointPositionList
-
 
 logger = logging.getLogger(__name__)
 
 
-class _RealParallelGripperClient:
-    """
-    Thin wrapper around Tracy's real left/right Robotiq gripper action servers.
+LEFT_GRIPPER_ACTION_TOPIC = "/left_gripper/robotiq_gripper_controller/gripper_cmd"
+RIGHT_GRIPPER_ACTION_TOPIC = "/right_gripper/robotiq_gripper_controller/gripper_cmd"
 
-    Uses the shared ROS node from the Coraplex Context.
-    It assumes your demo already has a background rclpy spinner running.
-    """
+# These are the values you verified with ros2 action send_goal.
+GRIPPER_OPEN_POSITION = 0.0
+GRIPPER_CLOSE_TO_CUBE_POSITION = 0.8
+GRIPPER_EFFORT = 10.0
 
-    TOPIC_TEMPLATE = "/{side}_gripper/robotiq_gripper_controller/gripper_cmd"
+_client_cache: dict[tuple[int, str], ActionClient] = {}
 
-    # Tested Tracy values
-    OPEN_POSITION: float = 0.0
-    CLOSE_POSITION: float = 0.8
-    DEFAULT_EFFORT: float = 10.0
-
-    WAIT_FOR_SERVER_TIMEOUT: float = 3.0
-    GOAL_HANDLE_TIMEOUT: float = 5.0
-    RESULT_TIMEOUT: float = 10.0
-    DEFAULT_WAIT_AFTER_RESULT: float = 1.0
-
-    def __init__(self, node):
-        self._node = node
-
-        # Create both clients immediately.
-        # This avoids races with an already-running executor/spinner.
-        self._clients: dict[str, ActionClient] = {
-            side: ActionClient(
-                node,
-                ParallelGripperCommand,
-                self.TOPIC_TEMPLATE.format(side=side),
-            )
-            for side in ("left", "right")
-        }
-
-        logger.info("[TracyGripper] Created left/right ParallelGripperCommand clients")
-
-    def _get_client(self, side: str) -> ActionClient:
-        if side not in self._clients:
-            raise ValueError(f"Unknown gripper side: {side!r}. Expected 'left' or 'right'.")
-        return self._clients[side]
-
-    def command(
-        self,
-        side: str,
-        position: float,
-        effort: float = DEFAULT_EFFORT,
-        *,
-        closing: bool = False,
-        wait_time: float = DEFAULT_WAIT_AFTER_RESULT,
-    ) -> None:
-        """
-        Send one ParallelGripperCommand goal.
-
-        :param side: 'left' or 'right'
-        :param position: command position, e.g. 0.0 open, 0.8 close
-        :param effort: command effort, e.g. 10.0
-        :param closing: True when this is a close/grasp command
-        :param wait_time: extra sleep after action result
-        """
-
-        client = self._get_client(side)
-
-        if not client.wait_for_server(timeout_sec=self.WAIT_FOR_SERVER_TIMEOUT):
-            logger.error(
-                "[TracyGripper] Action server not available: %s",
-                self.TOPIC_TEMPLATE.format(side=side),
-            )
-            return
-
-        # ParallelGripperCommand
-        # CLI command for close: ros2 action send_goal /left_gripper/robotiq_gripper_controller/gripper_cmd control_msgs/action/ParallelGripperCommand "{command: {position: [0.8], effort: [10.0]}}"
-        # CLI command for open: ros2 action send_goal /left_gripper/robotiq_gripper_controller/gripper_cmd control_msgs/action/ParallelGripperCommand "{command: {position: [0.0], effort: [10.0]}}"
-        goal = ParallelGripperCommand.Goal()
-        goal.command.position = [float(position)]
-        goal.command.effort = [float(effort)]
-
-        logger.info(
-            "[TracyGripper] Sending %s gripper command: position=[%.3f], effort=[%.1f]",
-            side.upper(),
-            position,
-            effort,
-        )
-
-        goal_future = client.send_goal_async(goal)
-
-        deadline = time.monotonic() + self.GOAL_HANDLE_TIMEOUT
-        while not goal_future.done() and time.monotonic() < deadline:
-            time.sleep(0.02)
-
-        if not goal_future.done():
-            logger.error("[TracyGripper] Timeout waiting for %s goal handle", side)
-            return
-
-        goal_handle = goal_future.result()
-
-        if not goal_handle.accepted:
-            logger.error("[TracyGripper] Goal rejected for %s gripper", side)
-            return
-
-        result_future = goal_handle.get_result_async()
-
-        deadline = time.monotonic() + self.RESULT_TIMEOUT
-        while not result_future.done() and time.monotonic() < deadline:
-            time.sleep(0.02)
-
-        if not result_future.done():
-            logger.warning("[TracyGripper] Result timeout for %s gripper; continuing", side)
-            time.sleep(wait_time)
-            return
-
-        result_response = result_future.result()
-        result = result_response.result
-
-        logger.info(
-            "[TracyGripper] %s result: position=%s, stalled=%s, reached_goal=%s",
-            side.upper(),
-            list(result.state.position),
-            result.stalled,
-            result.reached_goal,
-        )
-
-        if closing:
-            # For grasping an object, stalled=True often means contact.
-            if result.reached_goal or result.stalled:
-                logger.info("[TracyGripper] %s close/grasp accepted", side.upper())
-            else:
-                logger.warning(
-                    "[TracyGripper] %s close finished without reaching goal or contact",
-                    side.upper(),
-                )
-        else:
-            # For opening, we normally want the open target to be reached.
-            if result.reached_goal and not result.stalled:
-                logger.info("[TracyGripper] %s open reached goal", side.upper())
-            else:
-                logger.warning(
-                    "[TracyGripper] %s open did not fully reach goal "
-                    "(stalled=%s, reached_goal=%s)",
-                    side.upper(),
-                    result.stalled,
-                    result.reached_goal,
-                )
-
-        time.sleep(wait_time)
-
-
-_client_cache: dict[int, _RealParallelGripperClient] = {}
-
-
-def _get_real_gripper_client(node) -> _RealParallelGripperClient:
-    """
-    one gripper client wrapper per ROS node.
-    """
-    key = id(node)
-
+def _get_client(node: Any, topic: str) -> ActionClient:
+    """Return one cached ActionClient per node/topic."""
+    key = (id(node), topic)
     if key not in _client_cache:
-        _client_cache[key] = _RealParallelGripperClient(node)
-
+        _client_cache[key] = ActionClient(node, ParallelGripperCommand, topic)
     return _client_cache[key]
-
 
 class TracyRealMoveGripperMotion(MoveGripperMotion, AlternativeMotion[Tracy]):
     """
-    Real Tracy override for MoveGripperMotion.
+    Real-robot override of MoveGripperMotion for Tracy.
 
-    This directly commands the physical gripper in perform(), then returns a no-op
-    Giskard JointPositionList in _motion_chart so the rest of the Coraplex/Giskard
-    pipeline remains satisfied.
+    MoveGripperMotion.perform() calls this alternative's perform() directly.
+
+    Therefore the ROS2 ParallelGripperCommand action is sent here, not through _motion_chart_.
     """
 
     execution_type = ExecutionType.REAL
 
+    _POSITION_MAP = {
+        GripperState.OPEN: GRIPPER_OPEN_POSITION,
+        GripperState.CLOSE: GRIPPER_CLOSE_TO_CUBE_POSITION,
+    }
+
     def perform(self) -> None:
         side = "right" if self.gripper == Arms.RIGHT else "left"
-
-        if self.motion == GripperState.OPEN:
-            position = _RealParallelGripperClient.OPEN_POSITION
-            closing = False
-
-        elif self.motion == GripperState.CLOSE:
-            position = _RealParallelGripperClient.CLOSE_POSITION
-            closing = True
-
-        else:
-            raise ValueError(f"Unsupported Tracy gripper motion: {self.motion!r}")
+        topic = RIGHT_GRIPPER_ACTION_TOPIC if self.gripper == Arms.RIGHT else LEFT_GRIPPER_ACTION_TOPIC
+        position = float(self._POSITION_MAP[self.motion])
+        effort = float(GRIPPER_EFFORT)
 
         node = self.plan.context.ros_node
-        if node is None:
-            logger.error(
-                "[TracyGripper] Context has no ros_node. "
-                "Make sure your Coraplex Context was created with ros_node=node."
-            )
-            return
+        client = _get_client(node, topic)
 
-        _get_real_gripper_client(node).command(
-            side=side,
-            position=position,
-            effort=_RealParallelGripperClient.DEFAULT_EFFORT,
-            closing=closing,
+        logger.info(
+            "[TracyGripper] Sending %s gripper command: position=%s effort=%s topic=%s",
+            side.upper(),
+            position,
+            effort,
+            topic,
         )
 
-    @property
-    def _motion_chart(self) -> JointPositionList:
-        """
-        No-op Giskard task.
+        goal = ParallelGripperCommand.Goal()
+        goal.command.position = [position]
+        goal.command.effort = [effort]
 
-        The real gripper was already commanded in perform().
-        Giskard still expects a valid task object, so we provide the gripper's
-        nominal joint goal with weight=0.0 and a huge threshold.
-        """
+        if not client.wait_for_server(timeout_sec=3.0):
+            raise RuntimeError(f"Gripper action server not available: {topic}")
 
-        arm = ViewManager().get_end_effector_view(self.gripper, self.robot_view)
-        goal_state = arm.get_joint_state_by_type(self.motion)
+        goal_future = client.send_goal_async(goal)
+        rclpy.spin_until_future_complete(node, goal_future, timeout_sec=5.0)
 
-        return JointPositionList(
-            goal_state=goal_state,
-            name="RealParallelGripper_NoOp",
-            weight=0.0,
-            threshold=100.0,
-        )
+        goal_handle = goal_future.result()
+        if goal_handle is None or not goal_handle.accepted:
+            raise RuntimeError(f"Gripper goal rejected: {topic}")
+
+        result_future = goal_handle.get_result_async()
+        rclpy.spin_until_future_complete(node, result_future, timeout_sec=10.0)
+
+        if result_future.result() is None:
+            raise RuntimeError(f"Gripper result timeout: {topic}")
