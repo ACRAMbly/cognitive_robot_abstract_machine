@@ -15,6 +15,7 @@ Verified command-line shape:
       "{command: {position: [0.8], effort: [10.0]}}"
 """
 
+
 from __future__ import annotations
 
 import logging
