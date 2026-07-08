@@ -28,6 +28,10 @@ from coraplex.datastructures.enums import Arms, ApproachDirection, VerticalAlign
 from coraplex.datastructures.grasp import GraspDescription
 import coraplex.alternative_motion_mappings.tracy_motion_mapping
 
+
+#### IMPORTANT: RESTART THE GISKARD SCRIPT EACH TIME YOU RUN THIS SCRIPT
+#### OR MAYBE ADD BASH COMMAND UP TO YOU
+
 def spawn_box(spawn_world: World, name: str = "box", position: tuple = (0.0, 0.0, 1.5), scale: float = 0.1, r: float = 0.0, g: float = 0.0, b: float = 0.0) -> Body:
     spawn_body = URDFParser(f"""<?xml version="1.0"?>
         <robot name="{name}_box">
@@ -84,9 +88,20 @@ def setup_world(node):
     print("Synchronized.")
 
     print("Adding boxes to world.")
-    red = spawn_box(tracy_world, "red", (0.8, 0.5, 0.93), 0.1, 1.0, 0.0, 0.0)
-    green = spawn_box(tracy_world, "green", (0.8, -0.5, 0.93), 0.1, 0.0, 1.0, 0.0)
-    blue = spawn_box(tracy_world, "blue", (0.8, 0, 0.93), 0.1, 0.0, 0.0, 1.0)
+
+    ##### PERCEPTION CODE HERE PLS #####
+
+    red_box_pos = (0.8, 0.5, 0.93)
+    green_box_pos = (0.8, -0.5, 0.93)
+    blue_box_pos = (0.8, 0, 0.93)
+    SCALE = 0.1
+
+    #####     THANK YOU            #####
+
+    red = spawn_box(tracy_world, "red", red_box_pos, SCALE, 1.0, 0.0, 0.0)
+    green = spawn_box(tracy_world, "green", green_box_pos, SCALE, 0.0, 1.0, 0.0)
+    blue = spawn_box(tracy_world, "blue", blue_box_pos, SCALE, 0.0, 0.0, 1.0)
+
     return tracy_world, red, green, blue
 
 def build_plan_cubes(world: World, tracy: Tracy, context: Context, red_box: Body, green_box: Body, blue_box: Body) -> Plan | None:
