@@ -277,6 +277,7 @@ class SymbolicExpression(ABC):
 
             evaluation_context = create_default_evaluation_context()
             context_token = set_evaluation_context(evaluation_context)
+            evaluation_context.active_conditions_root.claim(self._conditions_root_)
         try:
             evaluation_context.on_evaluate_enter(expression=self, sources=sources)
             # Normalize sources: always work with an OperationResult
@@ -310,21 +311,27 @@ class SymbolicExpression(ABC):
 
         :param current_result: The current result of this expression.
         """
-        # Only evaluate the conclusions at the root condition expression (i.e. after all conditions have been evaluated)
-        # and when the result truth value is True.
-        if not (self._conditions_root_ is self) or current_result.is_false:
+        # Only evaluate the conclusions at the active conditions root of the current evaluation
+        # pass (i.e. after all conditions have been evaluated) and when the result truth value is
+        # True. "Active" is an evaluation-scoped fact, not a structural one: a node reused as the
+        # condition of more than one Filter has no single correct root, so this is resolved by
+        # which evaluation is currently running (see ActiveConditionsRoot), not by the node's
+        # construction history.
+        evaluation_context = get_evaluation_context()
+        if (
+            not evaluation_context.active_conditions_root.is_active_root(self)
+            or current_result.is_false
+        ):
             return current_result
         for conclusion in self._conclusions_:
             current_result.bindings = next(
                 conclusion._evaluate_(current_result)
             ).bindings
 
-        evaluation_context = get_evaluation_context()
-        if evaluation_context is not None:
-            evaluation_context.on_conclusions_processed(
-                expression=self,
-                result=current_result,
-            )
+        evaluation_context.on_conclusions_processed(
+            expression=self,
+            result=current_result,
+        )
         return current_result
 
     @abstractmethod
