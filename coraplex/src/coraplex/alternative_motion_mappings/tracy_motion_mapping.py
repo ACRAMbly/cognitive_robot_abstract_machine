@@ -30,8 +30,7 @@ from semantic_digital_twin.robots.tracy import Tracy
 from coraplex.datastructures.enums import Arms, ExecutionType
 from coraplex.robot_plans.motions.base import AlternativeMotion
 from coraplex.robot_plans.motions.gripper import MoveGripperMotion
-from coraplex.view_manager import ViewManager
-from giskardpy.motion_statechart.tasks.joint_tasks import JointPositionList
+from giskardpy.motion_statechart.graph_node import EndMotion
 
 logger = logging.getLogger(__name__)
 
@@ -66,19 +65,7 @@ class TracyRealMoveGripperMotion(MoveGripperMotion, AlternativeMotion[Tracy]):
 
     @property
     def _motion_chart(self):
-        # Return safe no-op / low-priority Giskard task here
-        arm = ViewManager().get_end_effector_view(self.gripper, self.robot)
-
-        return JointPositionList(
-            goal_state=arm.get_joint_state_by_type(self.motion),
-            name=(
-                "OpenRealTracyGripperNoOp"
-                if self.motion == GripperState.OPEN
-                else "CloseRealTracyGripperNoOp"
-            ),
-            weight=0.0,
-            threshold=100.0,
-        )
+        return EndMotion()
 
     _POSITION_MAP = {
         GripperState.OPEN: GRIPPER_OPEN_POSITION,
