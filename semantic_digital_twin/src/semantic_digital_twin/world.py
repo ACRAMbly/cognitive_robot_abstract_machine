@@ -59,6 +59,7 @@ from semantic_digital_twin.exceptions import (
     MismatchingWorld,
 )
 from semantic_digital_twin.mixin import HasSimulatorProperties
+from semantic_digital_twin.robots.robot_parts import AbstractRobot
 from semantic_digital_twin.spatial_computations.forward_kinematics import (
     ForwardKinematicsManager,
 )
@@ -610,7 +611,6 @@ class World(HasSimulatorProperties):
 
     @property
     def robot_bodies_with_collision(self) -> List[Body]:
-        from semantic_digital_twin.robots.robot_parts import AbstractRobot
         return [
             body
             for robot in self.get_semantic_annotations_by_type(AbstractRobot)
@@ -619,7 +619,6 @@ class World(HasSimulatorProperties):
 
     @property
     def robot_body_to_robot_mapping(self) -> dict[Body, 'AbstractRobot']:
-        from semantic_digital_twin.robots.robot_parts import AbstractRobot
         return {
             body: robot
             for robot in self.get_semantic_annotations_by_type(AbstractRobot)
