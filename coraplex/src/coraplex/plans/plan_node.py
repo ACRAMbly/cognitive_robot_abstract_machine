@@ -566,6 +566,8 @@ class ActionNode(DesignatorNode):
 
     def notify(self):
 
+        logger.info(f"Performing action {self.action.__class__.__name__}")
+
         self.create_execution_data_pre_perform()
 
         if not self.children:
@@ -636,8 +638,7 @@ class MotionNode(DesignatorNode):
 
         :return: The return value of the Motion Designator
         """
-        pass
-        # return self.motion.perform()
+        return self.motion.perform()
 
     @property
     def parent_action_node(self) -> Optional[ActionNode]:
