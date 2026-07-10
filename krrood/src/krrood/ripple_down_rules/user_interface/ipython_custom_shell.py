@@ -1,4 +1,3 @@
-import logging
 import os
 from typing_extensions import Optional, List
 
@@ -188,14 +187,8 @@ class IPythonShell:
         """
         Run the embedded shell.
         """
-        while True:
-            try:
-                self.shell()
-                self.update_user_input_from_code_lines()
-                break
-            except Exception as e:
-                logging.error(e)
-                print(f"{Fore.RED}ERROR:: {e}{Style.RESET_ALL}")
+        self.shell()
+        self.update_user_input_from_code_lines()
 
     def update_user_input_from_code_lines(self):
         """
