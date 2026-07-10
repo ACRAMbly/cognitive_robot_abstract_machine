@@ -19,10 +19,6 @@ from krrood.ripple_down_rules.utils import (
     fill_in_missing_kwargs,
 )
 
-try:
-    from .user_interface.gui import RDRCaseViewer
-except ImportError:
-    RDRCaseViewer = None
 from krrood.ripple_down_rules.utils import get_func_rdr_model_name, make_set, make_list
 from krrood.ripple_down_rules.helpers import (
     create_case_from_method,

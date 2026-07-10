@@ -35,10 +35,6 @@ from krrood.ripple_down_rules.utils import (
 )
 from krrood.utils import get_scope_from_imports
 
-try:
-    from krrood.ripple_down_rules.user_interface.gui import RDRCaseViewer
-except ImportError as e:
-    RDRCaseViewer = None
 from krrood.ripple_down_rules.user_interface.prompt import UserPrompt
 
 if TYPE_CHECKING:
@@ -351,9 +347,7 @@ class Human(Expert):
         self, case_query: CaseQuery, last_evaluated_rule: Optional[Rule] = None
     ) -> CallableExpression:
         data_to_show = None
-        if (
-            not self.use_loaded_answers or len(self.all_expert_answers) == 0
-        ) and self.user_prompt.viewer is None:
+        if not self.use_loaded_answers or len(self.all_expert_answers) == 0:
             data_to_show = show_current_and_corner_cases(
                 case_query.case,
                 {case_query.attribute_name: case_query.target_value},
@@ -462,9 +456,7 @@ class Human(Expert):
             except IndexError:
                 self.use_loaded_answers = False
         if not self.use_loaded_answers:
-            data_to_show = None
-            if self.user_prompt.viewer is None:
-                data_to_show = show_current_and_corner_cases(case_query.case)
+            data_to_show = show_current_and_corner_cases(case_query.case)
             expert_input, expression = self.user_prompt.prompt_user_for_expression(
                 case_query, PromptFor.Conclusion, prompt_str=data_to_show
             )
