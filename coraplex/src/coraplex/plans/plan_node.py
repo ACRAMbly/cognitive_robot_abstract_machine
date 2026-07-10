@@ -638,7 +638,8 @@ class MotionNode(DesignatorNode):
 
         :return: The return value of the Motion Designator
         """
-        return self.motion.perform()
+        pass
+        # return self.motion.perform()
 
     @property
     def parent_action_node(self) -> Optional[ActionNode]:
