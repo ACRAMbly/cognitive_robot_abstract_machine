@@ -64,18 +64,11 @@ from krrood.ripple_down_rules.rules import (
     MultiClassFilterRule,
 )
 
-try:
-    from .user_interface.gui import RDRCaseViewer
-except ImportError as e:
-    RDRCaseViewer = None
 from krrood.ripple_down_rules.utils import (
     draw_tree,
     make_set,
-    SubclassJSONSerializer,
     make_list,
-    get_type_from_string,
     is_value_conflicting,
-    get_full_class_name,
     is_iterable,
     str_to_snake_case,
     render_tree,
@@ -96,7 +89,7 @@ from krrood.utils import (
 )
 
 
-class RippleDownRules(SubclassJSONSerializer, ABC):
+class RippleDownRules(ABC):
     """
     The abstract base class for the ripple down rules classifiers.
     """
@@ -152,11 +145,6 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
         self.save_dir: Optional[str] = save_dir
         self.start_rule: Optional[Rule] = start_rule
         self.fig: Optional[Figure] = None
-        self.viewer: Optional[RDRCaseViewer] = (
-            RDRCaseViewer.instances[0]
-            if RDRCaseViewer and any(RDRCaseViewer.instances)
-            else None
-        )
         self.input_node: Optional[Rule] = None
         self.update_model()
 
@@ -289,9 +277,6 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
             self.model_name = self.generated_python_file_name
         model_dir = os.path.join(save_dir, self.model_name)
         os.makedirs(model_dir, exist_ok=True)
-        json_dir = os.path.join(model_dir, self.metadata_folder)
-        os.makedirs(json_dir, exist_ok=True)
-        self.to_json_file(os.path.join(json_dir, self.model_name))
         self._write_to_python(model_dir, package_name=package_name)
         return self.model_name
 
@@ -307,27 +292,15 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
         :param package_name: The name of the package that contains the RDR classifier function, this
         is required in case of relative imports in the generated python file.
         """
-        rdr: Optional[RippleDownRules] = None
         model_dir = os.path.join(load_dir, model_name)
-        json_file = os.path.join(model_dir, cls.metadata_folder, model_name)
-        if os.path.exists(json_file + ".json"):
-            rdr = cls.from_json_file(json_file)
         try:
-            if rdr is None:
-                rdr = cls.from_python(model_dir, parent_package_name=package_name)
-            else:
-                rdr.update_from_python(model_dir, parent_package_name=package_name)
-            rdr.to_json_file(json_file)
+            rdr = cls.from_python(model_dir, parent_package_name=package_name)
         except (FileNotFoundError, ValueError, SyntaxError, ModuleNotFoundError) as e:
             logger.warning(
                 f"Could not load the python file for the model {model_name} from {model_dir}. "
                 f"Make sure the file exists and is valid."
             )
-            if rdr is None:
-                raise RDRLoadError(model_name, model_dir)
-            rdr.save(
-                save_dir=load_dir, model_name=model_name, package_name=package_name
-            )
+            raise RDRLoadError(model_name, model_dir)
         rdr.save_dir = load_dir
         rdr.model_name = model_name
         return rdr
@@ -628,17 +601,6 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
     @property
     def type_(self):
         return self.__class__
-
-    @classmethod
-    def get_json_file_path(cls, model_path: str) -> str:
-        """
-        Get the path to the saved json file.
-
-        :param model_path : The path to the model directory.
-        :return: The path to the saved model.
-        """
-        model_name = cls.get_model_name_from_model_path(model_path)
-        return os.path.join(model_path, cls.metadata_folder, f"{model_name}.json")
 
     @classmethod
     def get_generated_defs_file_path(cls, model_path: str) -> str:
@@ -1305,36 +1267,6 @@ class RDRWithCodeWriter(RippleDownRules, ABC):
         :return: The name of the attribute that the classifier is classifying.
         """
         return self.start_rule.conclusion_name
-
-    def _to_json(self) -> Dict[str, Any]:
-        return {
-            "start_rule": self.start_rule.to_json(),
-            "generated_python_file_name": self.generated_python_file_name,
-            "name": self.name,
-            "case_type": (
-                get_full_class_name(self.case_type)
-                if self.case_type is not None
-                else None
-            ),
-            "case_name": self.case_name,
-        }
-
-    @classmethod
-    def _from_json(cls, data: Dict[str, Any]) -> Self:
-        """
-        Create an instance of the class from a json
-        """
-        start_rule = cls.start_rule_type().from_json(data["start_rule"])
-        new_rdr = cls(start_rule=start_rule)
-        if "generated_python_file_name" in data:
-            new_rdr.generated_python_file_name = data["generated_python_file_name"]
-        if "name" in data:
-            new_rdr.name = data["name"]
-        if "case_type" in data:
-            new_rdr.case_type = get_type_from_string(data["case_type"])
-        if "case_name" in data:
-            new_rdr.case_name = data["case_name"]
-        return new_rdr
 
     @staticmethod
     @abstractmethod
@@ -2012,40 +1944,6 @@ class GeneralRDR(RippleDownRules):
             if case_query.mutually_exclusive
             else MultiClassRDR()
         )
-
-    def _to_json(self) -> Dict[str, Any]:
-        return {
-            "start_rules": {
-                name: rdr.to_json() for name, rdr in self.start_rules_dict.items()
-            },
-            "generated_python_file_name": self.generated_python_file_name,
-            "name": self.name,
-            "case_type": (
-                get_full_class_name(self.case_type)
-                if self.case_type is not None
-                else None
-            ),
-            "case_name": self.case_name,
-        }
-
-    @classmethod
-    def _from_json(cls, data: Dict[str, Any]) -> GeneralRDR:
-        """
-        Create an instance of the class from a json
-        """
-        start_rules_dict = {}
-        for k, v in data["start_rules"].items():
-            start_rules_dict[k] = get_type_from_string(v["_type"]).from_json(v)
-        new_rdr = cls(category_rdr_map=start_rules_dict)
-        if "generated_python_file_name" in data:
-            new_rdr.generated_python_file_name = data["generated_python_file_name"]
-        if "name" in data:
-            new_rdr.name = data["name"]
-        if "case_type" in data:
-            new_rdr.case_type = get_type_from_string(data["case_type"])
-        if "case_name" in data:
-            new_rdr.case_name = data["case_name"]
-        return new_rdr
 
     def update_from_python(
         self,

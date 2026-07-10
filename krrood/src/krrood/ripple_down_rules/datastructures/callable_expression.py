@@ -23,10 +23,6 @@ from typing_extensions import (
 from krrood.code_generation.source_extraction_utils import extract_function_source
 from krrood.ripple_down_rules.datastructures.case import create_case, Case
 from krrood.ripple_down_rules.utils import (
-    SubclassJSONSerializer,
-    get_full_class_name,
-    get_type_from_string,
-    conclusion_to_json,
     is_iterable,
     build_user_input_from_conclusion,
     encapsulate_user_input,
@@ -116,7 +112,7 @@ def get_used_scope(code_str, scope):
     return used_scope
 
 
-class CallableExpression(SubclassJSONSerializer):
+class CallableExpression:
     """
     A callable that is constructed from a string statement written by an expert.
     """
@@ -341,46 +337,6 @@ class CallableExpression(SubclassJSONSerializer):
                 all_binary_ops.append(self.user_input[prev_e:e])
             prev_e = e
         return "\n".join(all_binary_ops) if len(all_binary_ops) > 0 else self.user_input
-
-    def _to_json(self) -> Dict[str, Any]:
-        return {
-            "user_input": self.user_input,
-            "conclusion_type": (
-                [get_full_class_name(t) for t in self.conclusion_type]
-                if self.conclusion_type is not None
-                else None
-            ),
-            "scope": {
-                k: get_full_class_name(v)
-                for k, v in self.scope.items()
-                if hasattr(v, "__module__")
-                and hasattr(v, "__name__")
-                and v.__module__ is not None
-                and v.__name__ is not None
-            },
-            "conclusion": conclusion_to_json(self.conclusion),
-            "mutually_exclusive": self.mutually_exclusive,
-        }
-
-    @classmethod
-    def _from_json(cls, data: Dict[str, Any]) -> CallableExpression:
-        scope = {}
-        for k, v in data["scope"].items():
-            try:
-                scope[k] = get_type_from_string(v)
-            except ModuleNotFoundError:
-                pass
-        return cls(
-            user_input=data["user_input"],
-            conclusion_type=(
-                tuple(get_type_from_string(t) for t in data["conclusion_type"])
-                if data["conclusion_type"]
-                else None
-            ),
-            scope=scope,
-            conclusion=SubclassJSONSerializer.from_json(data["conclusion"]),
-            mutually_exclusive=data["mutually_exclusive"],
-        )
 
 
 def compile_expression_to_code(expression_tree: AST) -> Any:

@@ -1,9 +1,8 @@
 import os
-import sys
 import unittest
 from unittest import TestCase
 
-from typing_extensions import List, Optional
+from typing_extensions import List
 
 from krrood.ripple_down_rules.datastructures.case import Case
 from krrood.ripple_down_rules.datastructures.dataclasses import CaseQuery
@@ -23,13 +22,6 @@ from .datasets import Habitat, Species
 from .datasets import load_zoo_dataset
 from .test_helpers.helpers import get_fit_scrdr, get_fit_mcrdr, get_fit_grdr
 
-try:
-    from PyQt6.QtWidgets import QApplication
-    from krrood.ripple_down_rules.user_interface.gui import RDRCaseViewer
-except ImportError as e:
-    RDRCaseViewer = None
-    QApplication = None
-
 TEST_RESULTS_DIR: str = os.path.join(os.path.dirname(__file__), "test_results")
 CACHE_FILE: str = os.path.join(TEST_RESULTS_DIR, "zoo_dataset.pkl")
 zoo_cases, _ = load_zoo_dataset(cache_file=CACHE_FILE)
@@ -48,9 +40,6 @@ class TestRDR(TestCase):
         os.path.dirname(__file__), "test_generated_rdrs"
     )
     cache_file: str = CACHE_FILE
-    app: Optional[QApplication] = None
-    viewer: Optional[RDRCaseViewer] = None
-    use_gui: bool = False
 
     @classmethod
     def setUpClass(cls):
@@ -73,9 +62,6 @@ class TestRDR(TestCase):
         ]:
             if not os.path.exists(test_dir):
                 os.makedirs(test_dir)
-        if RDRCaseViewer is not None and QApplication is not None and cls.use_gui:
-            cls.app = QApplication(sys.argv)
-            cls.viewer = RDRCaseViewer()
 
     def test_classify_scrdr(self):
         use_loaded_answers = True
@@ -88,9 +74,7 @@ class TestRDR(TestCase):
             expert.load_answers(filename)
 
         scrdr = SingleClassRDR()
-        cat = scrdr.fit_case(
-            self.case_queries[0], expert=expert
-        )
+        cat = scrdr.fit_case(self.case_queries[0], expert=expert)
         self.assertEqual(cat, self.targets[0])
 
         if save_answers:
@@ -426,9 +410,7 @@ class TestRDR(TestCase):
             self.assertEqual(cat, target)
 
     def test_write_scrdr_to_python_file(self):
-        scrdr, _ = get_fit_scrdr(
-            self.all_cases, self.targets
-        )
+        scrdr, _ = get_fit_scrdr(self.all_cases, self.targets)
         model_dir = os.path.join(self.generated_rdrs_dir, "scrdr")
         scrdr._write_to_python(model_dir)
         classify_species_scrdr = scrdr.get_rdr_classifier_from_python_file(model_dir)
@@ -437,9 +419,7 @@ class TestRDR(TestCase):
             self.assertEqual(cat, target)
 
     def test_write_mcrdr_to_python_file(self):
-        mcrdr = get_fit_mcrdr(
-            self.all_cases, self.targets
-        )
+        mcrdr = get_fit_mcrdr(self.all_cases, self.targets)
         model_dir = os.path.join(self.generated_rdrs_dir, "mcrdr")
         mcrdr._write_to_python(model_dir)
         classify_species_mcrdr = mcrdr.get_rdr_classifier_from_python_file(model_dir)
@@ -466,9 +446,7 @@ class TestRDR(TestCase):
             self.assertEqual(make_set(cat), make_set(target))
 
     def test_write_grdr_to_python_file(self):
-        grdr, all_targets = get_fit_grdr(
-            self.all_cases, self.targets
-        )
+        grdr, all_targets = get_fit_grdr(self.all_cases, self.targets)
         model_dir = os.path.join(self.generated_rdrs_dir, "grdr")
         grdr._write_to_python(model_dir)
         classify_animal_grdr = grdr.get_rdr_classifier_from_python_file(model_dir)
@@ -488,9 +466,7 @@ class TestRDR(TestCase):
             expert.load_answers(filename)
 
         mcrdr = MultiClassRDR()
-        cats = mcrdr.fit_case(
-            self.case_queries[0], expert=expert
-        )
+        cats = mcrdr.fit_case(self.case_queries[0], expert=expert)
 
         self.assertEqual(cats[0], self.targets[0])
 

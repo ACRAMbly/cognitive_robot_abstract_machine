@@ -18,16 +18,10 @@ from krrood.ripple_down_rules.datastructures.dataclasses import (
 )
 from krrood.ripple_down_rules.datastructures.enums import RDREdge, Stop
 from krrood.ripple_down_rules.helpers import get_an_updated_case_copy
-from krrood.ripple_down_rules.utils import (
-    SubclassJSONSerializer,
-    conclusion_to_json,
-    get_full_class_name,
-    get_type_from_string,
-)
 
 
 @dataclass
-class Rule(SubclassJSONSerializer, ABC):
+class Rule(ABC):
     conditions: Optional[CallableExpression] = field(default=None)
     """
     The conditions of the rule, which is a callable expression that takes a case and returns a boolean.
@@ -55,10 +49,6 @@ class Rule(SubclassJSONSerializer, ABC):
     uid: str = field(default_factory=lambda: str(uuid4().int))
     """
     A unique id for the rule using uuid4
-    """
-    json_serialization: Optional[Dict[str, Any]] = field(init=False, default=None)
-    """
-    The JSON serialization of the rule, which is used to serialize the rule to JSON.
     """
     _name: Optional[str] = field(init=False, default=None)
     """
@@ -352,30 +342,6 @@ class Rule(SubclassJSONSerializer, ABC):
     def _if_statement_source_code_clause(self) -> str:
         pass
 
-    def _to_json(self) -> Dict[str, Any]:
-        json_serialization = {
-            "_type": get_full_class_name(type(self)),
-            "conditions": self.conditions.to_json(),
-            "conclusion": conclusion_to_json(self.conclusion),
-            "parent": self.parent.json_serialization if self.parent else None,
-            "conclusion_name": self.conclusion_name,
-            "weight": self.weight.value,
-            "uid": self.uid,
-        }
-        return json_serialization
-
-    @classmethod
-    def _from_json(cls, data: Dict[str, Any]) -> Rule:
-        loaded_rule = cls(
-            conditions=CallableExpression.from_json(data["conditions"]),
-            conclusion=CallableExpression.from_json(data["conclusion"]),
-            _parent=cls.from_json(data["parent"]),
-            conclusion_name=data["conclusion_name"],
-            _weight=RDREdge.from_value(data["weight"]),
-            uid=data["uid"],
-        )
-        return loaded_rule
-
     @property
     def name(self):
         """
@@ -553,25 +519,6 @@ class SingleClassRule(Rule, HasAlternativeRule, HasRefinementRule):
         else:
             self.alternative = new_rule
 
-    def _to_json(self) -> Dict[str, Any]:
-        self.json_serialization = {
-            **super(SingleClassRule, self)._to_json(),
-            "refinement": (
-                self.refinement.to_json() if self.refinement is not None else None
-            ),
-            "alternative": (
-                self.alternative.to_json() if self.alternative is not None else None
-            ),
-        }
-        return self.json_serialization
-
-    @classmethod
-    def _from_json(cls, data: Dict[str, Any]) -> SingleClassRule:
-        loaded_rule = super(SingleClassRule, cls)._from_json(data)
-        loaded_rule.refinement = SingleClassRule.from_json(data["refinement"])
-        loaded_rule.alternative = SingleClassRule.from_json(data["alternative"])
-        return loaded_rule
-
     def _if_statement_source_code_clause(self) -> str:
         return "elif" if self.weight == RDREdge.Alternative else "if"
 
@@ -587,28 +534,6 @@ class MultiClassRefinementRule(Rule, HasAlternativeRule, ABC):
     The top rule of the rule, which is the nearest ancestor that fired and this rule is a refinement of.
     """
     mutually_exclusive: bool = field(init=False, default=False)
-
-    def _to_json(self) -> Dict[str, Any]:
-        self.json_serialization = {
-            **Rule._to_json(self),
-            "alternative": (
-                self.alternative.to_json() if self.alternative is not None else None
-            ),
-        }
-        return self.json_serialization
-
-    @classmethod
-    def _from_json(cls, data: Dict[str, Any]) -> MultiClassRefinementRule:
-        loaded_rule = super(MultiClassRefinementRule, cls)._from_json(data)
-        # The following is done to prevent re-initialization of the top rule,
-        # so the top rule that is already initialized is passed in the data instead of its json serialization.
-        loaded_rule.top_rule = data["top_rule"]
-        if data["alternative"] is not None:
-            data["alternative"]["top_rule"] = data["top_rule"]
-            loaded_rule.alternative = SubclassJSONSerializer.from_json(
-                data["alternative"]
-            )
-        return loaded_rule
 
     def _if_statement_source_code_clause(self) -> str:
         return "elif" if self.weight == RDREdge.Alternative else "if"
@@ -703,25 +628,6 @@ class MultiClassFilterRule(MultiClassRefinementRule, HasRefinementRule):
         else:
             return parent.parent
 
-    def _to_json(self) -> Dict[str, Any]:
-        self.json_serialization = super(MultiClassFilterRule, self)._to_json()
-        self.json_serialization["refinement"] = (
-            self.refinement.to_json() if self.refinement is not None else None
-        )
-        return self.json_serialization
-
-    @classmethod
-    def _from_json(cls, data: Dict[str, Any]) -> MultiClassFilterRule:
-        loaded_rule = super(MultiClassFilterRule, cls)._from_json(data)
-        if data["refinement"] is not None:
-            data["refinement"]["top_rule"] = data["top_rule"]
-        loaded_rule.refinement = (
-            cls.from_json(data["refinement"])
-            if data["refinement"] is not None
-            else None
-        )
-        return loaded_rule
-
 
 @dataclass(eq=False)
 class MultiClassTopRule(Rule, HasRefinementRule, HasAlternativeRule):
@@ -764,30 +670,6 @@ class MultiClassTopRule(Rule, HasRefinementRule, HasAlternativeRule):
             self.alternative = MultiClassTopRule.from_case_query(
                 case_query, parent=self
             )
-
-    def _to_json(self) -> Dict[str, Any]:
-        self.json_serialization = {
-            **super()._to_json(),
-            "refinement": (
-                self.refinement.to_json() if self.refinement is not None else None
-            ),
-            "alternative": (
-                self.alternative.to_json() if self.alternative is not None else None
-            ),
-        }
-        return self.json_serialization
-
-    @classmethod
-    def _from_json(cls, data: Dict[str, Any]) -> MultiClassTopRule:
-        loaded_rule = super(MultiClassTopRule, cls)._from_json(data)
-        # The following is done to prevent re-initialization of the top rule,
-        # so the top rule that is already initialized is passed in the data instead of its json serialization.
-        if data["refinement"] is not None:
-            data["refinement"]["top_rule"] = loaded_rule
-            data_type = get_type_from_string(data["refinement"]["_type"])
-            loaded_rule.refinement = data_type.from_json(data["refinement"])
-        loaded_rule.alternative = MultiClassTopRule.from_json(data["alternative"])
-        return loaded_rule
 
     def get_conclusion_as_source_code(
         self, conclusion: Any, parent_indent: str = ""

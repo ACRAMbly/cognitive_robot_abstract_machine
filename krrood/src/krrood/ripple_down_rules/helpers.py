@@ -211,18 +211,6 @@ def get_an_updated_case_copy(
     return case_cp
 
 
-def enable_gui():
-    """
-    Enable the GUI for Ripple Down Rules if available.
-    """
-    try:
-        from .user_interface.gui import RDRCaseViewer
-
-        viewer = RDRCaseViewer()
-    except ImportError:
-        pass
-
-
 def create_case_from_method(
     func: Callable, func_output: Dict[str, Any], *args, **kwargs
 ) -> Tuple[Case, Dict[str, Any]]:

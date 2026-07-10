@@ -25,12 +25,8 @@ from krrood.ripple_down_rules.utils import (
     row_to_dict,
     table_rows_as_str,
     get_value_type_from_type_hint,
-    SubclassJSONSerializer,
-    get_full_class_name,
-    get_type_from_string,
     make_list,
     is_iterable,
-    serialize_dataclass,
     dataclass_to_dict,
     copy_case,
 )
@@ -40,7 +36,7 @@ if TYPE_CHECKING:
     from .callable_expression import CallableExpression
 
 
-class Case(UserDict, SubclassJSONSerializer):
+class Case(UserDict):
     """
     A collection of attributes that represents a set of attributes of a case. This is a dictionary where the keys are
     the names of the attributes and the values are the attributes. All are stored in lower case, and can be accessed
@@ -112,39 +108,6 @@ class Case(UserDict, SubclassJSONSerializer):
     def __hash__(self):
         return self._id
 
-    def _to_json(self) -> Dict[str, Any]:
-        serializable = {k: v for k, v in self.items() if not k.startswith("_")}
-        serializable["_id"] = self._id
-        serializable["_obj_type"] = (
-            get_full_class_name(self._obj_type) if self._obj_type is not None else None
-        )
-        serializable["_name"] = self._name
-        for k, v in serializable.items():
-            if isinstance(v, set):
-                serializable[k] = {
-                    "_type": get_full_class_name(set),
-                    "value": serialize_dataclass(list(v)),
-                }
-            else:
-                serializable[k] = serialize_dataclass(v)
-        return {
-            k: v.to_json() if isinstance(v, SubclassJSONSerializer) else v
-            for k, v in serializable.items()
-        }
-
-    @classmethod
-    def _from_json(cls, data: Dict[str, Any]) -> Case:
-        id_ = data.pop("_id")
-        obj_type = (
-            get_type_from_string(data.pop("_obj_type"))
-            if data["_obj_type"] is not None
-            else None
-        )
-        name = data.pop("_name")
-        for k, v in data.items():
-            data[k] = SubclassJSONSerializer.from_json(v)
-        return cls(_obj_type=obj_type, _id=id_, _name=name, **data)
-
     def __deepcopy__(self, memo: Dict[Hashable, Any]) -> Case:
         """
         Create a deep copy of the case.
@@ -180,7 +143,7 @@ class Case(UserDict, SubclassJSONSerializer):
 
 
 @dataclass
-class CaseAttributeValue(SubclassJSONSerializer):
+class CaseAttributeValue:
     """
     Encapsulates a single value of a case attribute, it adds an id to the value.
     """
@@ -202,15 +165,8 @@ class CaseAttributeValue(SubclassJSONSerializer):
     def __hash__(self):
         return self.id
 
-    def _to_json(self) -> Dict[str, Any]:
-        return {"id": self.id, "value": self.value}
 
-    @classmethod
-    def _from_json(cls, data: Dict[str, Any]) -> CaseAttributeValue:
-        return cls(id=data["id"], value=data["value"])
-
-
-class CaseAttribute(list, SubclassJSONSerializer):
+class CaseAttribute(list):
     nullable: bool = True
     """
     A boolean indicating whether the case attribute can be None or not.
@@ -254,16 +210,6 @@ class CaseAttribute(list, SubclassJSONSerializer):
         if len(self) == 0:
             return "None"
         return str([v for v in self]) if len(self) > 1 else str(next(iter(self)))
-
-    def _to_json(self) -> Dict[str, Any]:
-        return {
-            str(i): v.to_json() if isinstance(v, SubclassJSONSerializer) else v
-            for i, v in enumerate(self)
-        }
-
-    @classmethod
-    def _from_json(cls, data: Dict[str, Any]) -> CaseAttribute:
-        return cls([SubclassJSONSerializer.from_json(v) for _, v in data.items()])
 
 
 def create_cases_from_dataframe(
