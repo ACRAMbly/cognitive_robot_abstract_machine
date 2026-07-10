@@ -21,7 +21,6 @@ from krrood.ripple_down_rules.datastructures.case import (
     create_cases_from_dataframe,
 )
 from krrood.ripple_down_rules.datastructures.enums import Category
-from krrood.ripple_down_rules.datastructures.tracked_object import TrackedObjectMixin
 from krrood.ripple_down_rules.rdr_decorators import RDRDecorator
 
 
@@ -273,7 +272,7 @@ class MappedAnimal(MappedAsDataclass, Base):
 
 
 @dataclass(unsafe_hash=True)
-class WorldEntity(TrackedObjectMixin):
+class WorldEntity:
     world: Optional[World] = field(default=None, kw_only=True, repr=False, hash=False)
 
 
