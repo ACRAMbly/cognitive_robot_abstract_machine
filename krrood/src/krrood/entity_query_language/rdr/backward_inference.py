@@ -79,6 +79,11 @@ class GuardCondition:
         :return: ``True`` if the guard is satisfied.
         """
         shared_variable._update_domain_([case])
+        # self.expression is always a leaf Comparator or a Not() wrapping one (per
+        # _leaf_guards). A Comparator's evaluate() yields its own bound boolean payload
+        # directly; Not() has no id-keyed payload of its own, so it falls back to yielding
+        # the full binding row, which bool() reads as truthy. The isinstance(OperationResult)
+        # branch is a defensive fallback for expression types this module does not produce.
         truth = any(
             result.is_true if isinstance(result, OperationResult) else bool(result)
             for result in self.expression.evaluate()
