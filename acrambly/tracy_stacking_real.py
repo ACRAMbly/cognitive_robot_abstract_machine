@@ -26,7 +26,7 @@ from coraplex.robot_plans.actions.composite.transporting import PickAndPlaceActi
 from coraplex.robot_plans.actions.core.robot_body import ParkArmsAction
 from coraplex.datastructures.enums import Arms, ApproachDirection, VerticalAlignment
 from coraplex.datastructures.grasp import GraspDescription
-import coraplex.alternative_motion_mappings.tracy_motion_mapping
+from coraplex.alternative_motion_mappings.tracy_motion_mapping import TracyRealMoveGripperMotion
 
 
 #### IMPORTANT: RESTART THE GISKARD SCRIPT EACH TIME YOU RUN THIS SCRIPT
@@ -183,8 +183,15 @@ def main(plan_name: Literal["park_arms", "cubes"]):
     print("Building Tracy semantic robot from giskard world...")
     tracy = world.get_semantic_annotations_by_type(AbstractRobot)[0]
 
-    context = Context(world=world, robot=tracy, ros_node=node)
-    context.evaluate_conditions = False
+    context = Context(
+        world=world,
+        robot=tracy,
+        ros_node=node,
+        alternative_motion_mappings=[
+            TracyRealMoveGripperMotion
+        ],
+        evaluate_conditions=False,
+    )
 
     if plan_name == "cubes":
         plan = build_plan_cubes(world, tracy, context, red_box, green_box, blue_box)

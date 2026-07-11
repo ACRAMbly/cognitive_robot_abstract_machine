@@ -1,3 +1,7 @@
+# workon cram-env
+# python acrambly/tracy_stacking_real_cheat.py cubes
+
+import os
 import threading
 import time
 import rclpy
@@ -23,10 +27,10 @@ from coraplex.plans.factories import sequential
 from coraplex.plans.plan import Plan
 
 from coraplex.robot_plans.actions.composite.transporting import PickAndPlaceAction
+from coraplex.robot_plans.actions.core.pick_up import ReachAction
 from coraplex.robot_plans.actions.core.robot_body import ParkArmsAction
 from coraplex.datastructures.enums import Arms, ApproachDirection, VerticalAlignment
 from coraplex.datastructures.grasp import GraspDescription
-import coraplex.alternative_motion_mappings.tracy_motion_mapping
 
 
 #### IMPORTANT: RESTART THE GISKARD SCRIPT EACH TIME YOU RUN THIS SCRIPT
@@ -91,9 +95,9 @@ def setup_world(node):
 
     ##### PERCEPTION CODE HERE PLS #####
 
-    red_box_pos = (0.8, 0.5, 0.93)
-    green_box_pos = (0.8, -0.5, 0.93)
-    blue_box_pos = (0.8, 0, 0.93)
+    red_box_pos = (0.8, 0.5, 0.955)
+    green_box_pos = (0.8, -0.5, 0.955)
+    blue_box_pos = (0.8, 0, 0.955)
     SCALE = 0.1
 
     #####     THANK YOU            #####
@@ -116,11 +120,11 @@ def build_plan_cubes(world: World, tracy: Tracy, context: Context, red_box: Body
                     0.93,
                     reference_frame=world.root
                 ),
-                Arms.RIGHT,
+                Arms.LEFT,
                 GraspDescription(
                     ApproachDirection.FRONT,
                     VerticalAlignment.TOP,
-                    Tracy.get_end_effectors(tracy)[1],
+                    Tracy.get_end_effectors(tracy)[0],
                 ),
             ),
             PickAndPlaceAction(
@@ -165,6 +169,44 @@ def build_park_arms_plan(context: Context) -> Plan | None:
         context=context,
     ).plan
 
+def test_stacking_cube(z, context, tracy, body, world, arm):
+    command = f"ros2 action send_goal /{arm}_gripper/robotiq_gripper_controller/gripper_cmd control_msgs/action/ParallelGripperCommand "
+    sequential([
+        ParkArmsAction(Arms.BOTH),
+        ReachAction(
+            target_pose=body.global_pose,
+            object_designator=body,
+            arm=Arms.LEFT if arm=="left" else Arms.RIGHT,
+            grasp_description=GraspDescription(
+                ApproachDirection.FRONT,
+                VerticalAlignment.TOP,
+                Tracy.get_end_effectors(tracy)[0 if arm=="left" else 1], ))], context=context).plan.perform()
+    os.system(
+        command + '"{command: {position: [0.35], effort: [10.0]}}"'
+    )
+    print(command + '"{command: {position: [0.35], effort: [10.0]}}"')
+
+    sequential([
+        ParkArmsAction(Arms.LEFT),
+        ReachAction(
+            target_pose=Pose.from_xyz_rpy(
+                1,
+                0,
+                z,
+                reference_frame=world.root
+            ),
+            object_designator=body,
+            arm=Arms.LEFT if arm=="left" else Arms.RIGHT,
+            grasp_description=GraspDescription(
+                ApproachDirection.FRONT,
+                VerticalAlignment.TOP,
+                Tracy.get_end_effectors(tracy)[0 if arm=="left" else 1], ))], context=context).plan.perform()
+    os.system(
+        command + '"{command: {position: [0], effort: [10.0]}}"'
+    )
+    sequential([
+        ParkArmsAction(Arms.BOTH)], context=context).plan.perform()
+
 def main(plan_name: Literal["park_arms", "cubes"]):
     rclpy.init()
 
@@ -196,7 +238,31 @@ def main(plan_name: Literal["park_arms", "cubes"]):
 
     try:
         with real_robot:
-            plan.perform()
+            test_stacking_cube(
+                z = 0.955,
+                context = context,
+                body=red_box,
+                tracy=tracy,
+                world=world,
+                arm="left"
+            )
+            test_stacking_cube(
+                z=1.005,
+                context=context,
+                body=blue_box,
+                tracy=tracy,
+                world=world,
+                arm="left"
+            )
+            test_stacking_cube(
+                z=1.055,
+                context=context,
+                body=green_box,
+                tracy=tracy,
+                world=world,
+                arm="left"
+            )
+            #plan.perform()
             print("Plan completed.")
     except Exception as e:
         print(f"Error during plan execution: {e}")
