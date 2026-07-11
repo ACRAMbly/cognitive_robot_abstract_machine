@@ -5,7 +5,7 @@ import rclpy
 from semantic_digital_twin.robots.robot_parts import AbstractRobot
 from coraplex.datastructures.dataclasses import Context
 from coraplex.datastructures.enums import Arms
-from coraplex.motion_executor import real_robot
+from coraplex.execution_environment import real_robot
 from coraplex.plans.factories import sequential
 from coraplex.robot_plans.actions.core.robot_body import ParkArmsAction
 

@@ -91,9 +91,9 @@ def setup_world(node):
 
     ##### PERCEPTION CODE HERE PLS #####
 
-    red_box_pos = (0.8, 0.5, 0.93)
-    green_box_pos = (0.8, -0.5, 0.93)
-    blue_box_pos = (0.8, 0, 0.93)
+    red_box_pos = (0.8, 0.5, 0.955)
+    green_box_pos = (0.8, -0.5, 0.955)
+    blue_box_pos = (0.8, 0, 0.955)
     SCALE = 0.1
 
     #####     THANK YOU            #####
@@ -105,15 +105,17 @@ def setup_world(node):
     return tracy_world, red, green, blue
 
 def build_plan_cubes(world: World, tracy: Tracy, context: Context, red_box: Body, green_box: Body, blue_box: Body) -> Plan | None:
+    stack_pos_x = 1
+    stack_pos_y = 0
     return sequential(
         [
             ParkArmsAction(Arms.BOTH),
             PickAndPlaceAction(
                 red_box,
                 Pose.from_xyz_rpy(
-                    0.6,
-                    0.0,
-                    0.93,
+                    stack_pos_x,
+                    stack_pos_y,
+                    0.955,
                     reference_frame=world.root
                 ),
                 Arms.RIGHT,
@@ -126,9 +128,9 @@ def build_plan_cubes(world: World, tracy: Tracy, context: Context, red_box: Body
             PickAndPlaceAction(
                 green_box,
                 Pose.from_xyz_rpy(
-                    0.6,
-                    0.0,
-                    1.03,
+                    stack_pos_x,
+                    stack_pos_y,
+                    1.005,
                     reference_frame=world.root
                 ),
                 Arms.LEFT,
@@ -141,9 +143,9 @@ def build_plan_cubes(world: World, tracy: Tracy, context: Context, red_box: Body
             PickAndPlaceAction(
                 blue_box,
                 Pose.from_xyz_rpy(
-                    0.6,
-                    0.0,
-                    1.13,
+                    stack_pos_x,
+                    stack_pos_y,
+                    1.055,
                     reference_frame=world.root
                 ),
                 Arms.RIGHT,
