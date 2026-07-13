@@ -1,3 +1,4 @@
+import subprocess
 import threading
 import time
 import rclpy
@@ -30,7 +31,13 @@ from coraplex.alternative_motion_mappings.tracy_motion_mapping import TracyRealM
 
 
 #### IMPORTANT: RESTART THE GISKARD SCRIPT EACH TIME YOU RUN THIS SCRIPT
-#### OR MAYBE ADD BASH COMMAND UP TO YOU
+
+# giskard_process = subprocess.Popen(
+#     ["ros2", "launch", "giskardpy_ros", "giskardpy_tracy_velocity.launch.py"],
+#     start_new_session=True,
+# )
+# print("Initializing GISKARD...")
+# time.sleep(10)
 
 def spawn_box(spawn_world: World, name: str = "box", position: tuple = (0.0, 0.0, 1.5), scale: float = 0.1, r: float = 0.0, g: float = 0.0, b: float = 0.0) -> Body:
     spawn_body = URDFParser(f"""<?xml version="1.0"?>
@@ -118,11 +125,11 @@ def build_plan_cubes(world: World, tracy: Tracy, context: Context, red_box: Body
                     0.955,
                     reference_frame=world.root
                 ),
-                Arms.RIGHT,
+                Arms.LEFT,
                 GraspDescription(
                     ApproachDirection.FRONT,
                     VerticalAlignment.TOP,
-                    Tracy.get_end_effectors(tracy)[1],
+                    Tracy.get_end_effectors(tracy)[0],
                 ),
             ),
             PickAndPlaceAction(
@@ -133,11 +140,11 @@ def build_plan_cubes(world: World, tracy: Tracy, context: Context, red_box: Body
                     1.005,
                     reference_frame=world.root
                 ),
-                Arms.LEFT,
+                Arms.RIGHT,
                 GraspDescription(
                     ApproachDirection.FRONT,
                     VerticalAlignment.TOP,
-                    Tracy.get_end_effectors(tracy)[0]
+                    Tracy.get_end_effectors(tracy)[1]
                 ),
             ),
             PickAndPlaceAction(
@@ -148,11 +155,11 @@ def build_plan_cubes(world: World, tracy: Tracy, context: Context, red_box: Body
                     1.055,
                     reference_frame=world.root
                 ),
-                Arms.RIGHT,
+                Arms.LEFT,
                 GraspDescription(
                     ApproachDirection.FRONT,
                     VerticalAlignment.TOP,
-                    Tracy.get_end_effectors(tracy)[1]
+                    Tracy.get_end_effectors(tracy)[0]
                 ),
             ),
         ],
@@ -200,7 +207,7 @@ def main(plan_name: Literal["park_arms", "cubes"]):
     else:
         plan = build_park_arms_plan(context)
 
-    print("Executing ParkArmsAction on REAL robot through Giskard...")
+    print("Executing Plan on REAL robot through Giskard...")
     print("Keep E-stop reachable.")
 
     try:
@@ -209,9 +216,6 @@ def main(plan_name: Literal["park_arms", "cubes"]):
             print("Plan completed.")
     except Exception as e:
         print(f"Error during plan execution: {e}")
-    finally:
-        node.destroy_node()
-        rclpy.shutdown()
 
 if __name__ == "__main__":
     typer.run(main)

@@ -23,6 +23,12 @@ class Sequence(Goal):
         last_node: Optional[MotionStatechartNode] = None
         for i, node in enumerate(self.nodes):
             self.add_node(node)
+
+            # JSON/deserialization can recreate custom nodes without lifecycle conditions.
+            # Normal nodes have these already. Custom ActionServerTask currently does not.
+            if getattr(node, "_end_condition", None) is None:
+                MotionStatechartNode.__post_init__(node)
+
             if last_node is not None:
                 node.start_condition = last_node.observation_variable
             node.end_condition = node.observation_variable
