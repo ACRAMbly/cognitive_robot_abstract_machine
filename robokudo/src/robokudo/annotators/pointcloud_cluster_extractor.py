@@ -159,7 +159,7 @@ class PointCloudClusterExtractor(ThreadedAnnotator):
                 self.min_cluster_count: int = 1000
                 """Minimum total points for valid cluster"""
 
-                self.max_cluster_count: int = 15000
+                #self.max_cluster_count: int = 15000
 
                 self.min_on_plane_point_count: int = 90
                 """Minimum points above plane, defaults to 90"""
