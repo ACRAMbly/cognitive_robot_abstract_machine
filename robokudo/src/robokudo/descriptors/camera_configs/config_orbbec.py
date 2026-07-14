@@ -23,8 +23,8 @@ class OrbbecCameraConfig(
 
     registry_name: ClassVar[str] = "orbbec"
 
-    interface_type = "Kinect"
-
+    interface_type: str = "Kinect"
+    
     topic_depth: str = "/camera/depth/image_raw"
 
     topic_color: str = "/camera/color/image_raw/compressed"
