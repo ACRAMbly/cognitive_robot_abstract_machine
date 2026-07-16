@@ -28,7 +28,7 @@ from semantic_digital_twin.world_description.world_entity import Body
 from coraplex.datastructures.dataclasses import Context
 from coraplex.plans.plan import Plan
 
-from sub_parts.cube_perception import query_colored_block_poses_from_robokudo, pose_to_position
+from sub_parts.cube_perception import query_colored_block_poses_from_robokudo
 from sub_parts.available_plans import build_plan_cubes
 
 
@@ -101,10 +101,11 @@ def setup_and_build_plan(world: World, tracy: Tracy, context: Context, node: Nod
     print("Adding boxes to world.")
 
     block_poses = query_colored_block_poses_from_robokudo(node)
+    print(block_poses)
 
-    red_box_pos = pose_to_position(block_poses["red"])
-    green_box_pos = pose_to_position(block_poses["yellow"])
-    blue_box_pos = pose_to_position(block_poses["blue"])
+    red_box_pos = block_poses["red"]
+    green_box_pos = block_poses["yellow"]
+    blue_box_pos = block_poses["blue"]
     SCALE = 0.1
 
     # ===== FILTERED POSITIONS LOG =====

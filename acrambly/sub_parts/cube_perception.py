@@ -1,119 +1,145 @@
-"""
-Cube perception (RoboKudo)
-Helper functions that talk to the RoboKudo perception service.
+"""Query RoboKudo repeatedly for stable colored-block positions."""
 
-Contents
---------
-- ``query_colored_block_poses_from_robokudo()`` – repeatedly query until all
-  target colors are found; returns a ``dict[color, PoseStamped]``
-- ``pose_to_position()`` – extract ``(x, y, z)`` from a ``PoseStamped``
-"""
+from __future__ import annotations
 
-import time
+from dataclasses import dataclass, field
+from threading import Event
 
-from geometry_msgs.msg import PoseStamped
+import rclpy
 from rclpy.action import ActionClient
 from rclpy.node import Node
+from rclpy.task import Future
+
 from robokudo_msgs.action import Query
 
 
-def query_colored_block_poses_from_robokudo(
-        node: Node, target_colors=None, max_attempts: int = 10
-) -> dict:
-    """
-    Query RoboKudo repeatedly until all TARGET_COLORS are found.
+def _wait_for_future(future: Future) -> None:
+    """Wait without attempting to spin the existing ROS executor."""
+    completed = Event()
+    future.add_done_callback(lambda _: completed.set())
+    completed.wait()
 
-    Detection varies frame to frame, so if a color is missing, we re-query and
-    accumulate found colors across attempts, keeping the first pose per color.
-    """
-    if target_colors is None:
-        target_colors = {"red", "yellow", "blue"}
 
-    poses_by_color = {}
+@dataclass(frozen=True)
+class ColoredBlockPoseParser:
+    """Extract transformed target-color positions from a query result."""
 
-    for attempt in range(1, max_attempts + 1):
-        missing = target_colors - set(poses_by_color)
-        if not missing:
-            break
+    target_colors: frozenset[str] = frozenset({'red', 'yellow', 'blue'})
+    """Block colors collected by the integration."""
 
-        print(f"\n[attempt {attempt}/{max_attempts}] querying; still missing: {sorted(missing)}")
+    blue_color_labels: frozenset[str] = frozenset({'blue', 'cyan'})
+    """RoboKudo labels accepted for the blue block."""
 
-        # Fresh action client each attempt (avoids reusing a client whose previous
-        # goal handle may not be fully released).
-        action_client = ActionClient(node, Query, "/robokudo/query")
-        if not action_client.wait_for_server(timeout_sec=5.0):
-            raise RuntimeError("RoboKudo query action server is not available.")
+    def parse(
+        self,
+        result: Query.Result,
+    ) -> dict[str, tuple[float, float, float]]:
+        """Return transformed target-color positions with detected poses."""
+        positions_by_color: dict[str, tuple[float, float, float]] = {}
 
-        goal = Query.Goal()
-        goal.obj.type = "block"
-
-        send_future = action_client.send_goal_async(goal)
-        # bounded wait so we never hang forever if the server wedges
-        waited = 0.0
-        while not send_future.done():
-            time.sleep(0.05)
-            waited += 0.05
-            if waited > 15.0:
-                raise RuntimeError(
-                    "Timed out waiting for RoboKudo to accept the goal "
-                    "(server may be wedged; restart the perception script)."
-                )
-
-        goal_handle = send_future.result()
-        if not goal_handle.accepted:
-            raise RuntimeError("RoboKudo rejected the block query.")
-
-        result_future = goal_handle.get_result_async()
-        waited = 0.0
-        while not result_future.done():
-            time.sleep(0.05)
-            waited += 0.05
-            if waited > 30.0:
-                raise RuntimeError(
-                    "Timed out waiting for RoboKudo result "
-                    "(server may be wedged; restart the perception script)."
-                )
-
-        result = result_future.result().result
-
-        # ===== RAW QUERY RESULT LOG (test only) =====
-        print(f"  raw: {len(result.res)} objects detected this attempt")
-        for i, od in enumerate(result.res):
-            colors = list(od.color)
-            if od.pose:
-                p = od.pose[0].pose.position
-                print(f"    [{i}] colors={colors}  pos=(x={p.x:.3f}, y={p.y:.3f}, z={p.z:.3f})  frame={od.pose[0].header.frame_id}")
-            else:
-                print(f"    [{i}] colors={colors}  pose=<none>")
-        # ============================================
-
-        # Accumulate any target colors we don't already have.
         for object_designator in result.res:
             if not object_designator.pose:
                 continue
+
             for color in object_designator.color:
-                if color in target_colors and color not in poses_by_color:
-                    poses_by_color[color] = object_designator.pose[0]
-                    print(f"  -> found '{color}'")
+                target_color = (
+                    'blue'
+                    if color in self.blue_color_labels
+                    else color
+                )
 
-        # Clean up this attempt's client before the next attempt.
-        action_client.destroy()
+                if target_color not in self.target_colors:
+                    continue
 
-        # Give the RoboKudo action server time to fully finish/close
-        missing_after = target_colors - set(poses_by_color)
-        if missing_after:
-            print(f"  still missing {sorted(missing_after)}; pausing before next attempt...")
-            time.sleep(3.0)
+                position = object_designator.pose[0].pose.position
+                positions_by_color[target_color] = (
+                    position.x,
+                    position.y,
+                    0.95,
+                )
 
-    missing = target_colors - set(poses_by_color)
-    if missing:
-        raise RuntimeError(
-            f"RoboKudo did not detect blocks with colors {sorted(missing)} "
-            f"after {max_attempts} attempts."
-        )
+        return positions_by_color
 
-    return poses_by_color
 
-def pose_to_position(pose_stamped: PoseStamped) -> tuple[float, float, float]:
-    p = pose_stamped.pose.position
-    return p.x, p.y, p.z
+@dataclass(frozen=True)
+class ColoredBlockPoseQuery:
+    """Collect target-colored block positions across fresh query attempts."""
+
+    node: Node
+    """ROS node used to complete action futures."""
+
+    action_client: ActionClient
+    """Client connected to the RoboKudo query action."""
+
+    maximum_attempts: int = 5
+    """Maximum fresh-frame queries issued for missing colors."""
+
+    parser: ColoredBlockPoseParser = field(
+        default_factory=ColoredBlockPoseParser
+    )
+    """Parser that selects and transforms target-color poses."""
+
+    def execute(self) -> dict[str, tuple[float, float, float]]:
+        """Query until all target colors are found or attempts run out."""
+        if not self.action_client.wait_for_server(timeout_sec=5.0):
+            raise RuntimeError(
+                'RoboKudo query action server is not available.'
+            )
+
+        positions_by_color: dict[str, tuple[float, float, float]] = {}
+
+        for attempt_number in range(self.maximum_attempts):
+            result = self._request_fresh_frame()
+            positions_by_color.update(self.parser.parse(result))
+
+            if self.parser.target_colors.issubset(positions_by_color):
+                break
+
+        return positions_by_color
+
+    def _request_fresh_frame(self) -> Query.Result:
+        """Send one block query and return its perception result."""
+        goal = Query.Goal()
+        goal.obj.type = 'block'
+
+        send_future = self.action_client.send_goal_async(goal)
+        _wait_for_future(send_future)
+
+        goal_handle = send_future.result()
+
+        if not goal_handle.accepted:
+            raise RuntimeError('RoboKudo rejected the block query.')
+
+        result_future = goal_handle.get_result_async()
+        _wait_for_future(result_future)
+
+        return result_future.result().result
+
+
+def query_colored_block_poses_from_robokudo(
+    node: Node,
+) -> dict[str, tuple[float, float, float]]:
+    """Query RoboKudo for detected block positions grouped by color.
+
+    :raises RuntimeError: If the server is unavailable or rejects the query.
+    :return: Transformed positions keyed by target block color.
+    """
+    action_client = ActionClient(node, Query, '/robokudo/query')
+    return ColoredBlockPoseQuery(node, action_client).execute()
+
+
+def main() -> None:
+    """Query RoboKudo and print the detected block poses."""
+    rclpy.init()
+    node = rclpy.create_node('robokudo_cram_integration')
+
+    try:
+        positions_by_color = query_colored_block_poses_from_robokudo(node)
+        print(positions_by_color)
+    finally:
+        node.destroy_node()
+        rclpy.shutdown()
+
+
+if __name__ == '__main__':
+    main()
