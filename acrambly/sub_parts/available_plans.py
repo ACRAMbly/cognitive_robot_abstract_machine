@@ -30,14 +30,36 @@ def build_plan_cubes(
     tracy: Tracy,
     context: Context,
     red_box: Body,
-    green_box: Body,
+    yellow_box: Body,
     blue_box: Body,
 ) -> Plan | None:
     stack_pos_x = 1
     stack_pos_y = 0
+
+    def select_arm(cube: Body):
+        cube_y = float(
+            cube.global_pose.position.to_np().reshape(-1)[1]
+        )
+
+        end_effectors = Tracy.get_end_effectors(tracy)
+
+        if cube_y > 0:
+            return Arms.LEFT, end_effectors[0]
+
+        elif cube_y < 0:
+            return Arms.RIGHT, end_effectors[1]
+
+        else:
+            return Arms.LEFT, end_effectors[0]
+
+    red_arm, red_end_effector = select_arm(red_box)
+    yellow_arm, yellow_end_effector = select_arm(yellow_box)
+    blue_arm, blue_end_effector = select_arm(blue_box)
+
     return sequential(
         [
             ParkArmsAction(Arms.BOTH),
+
             PickAndPlaceAction(
                 red_box,
                 Pose.from_xyz_rpy(
@@ -46,28 +68,30 @@ def build_plan_cubes(
                     0.955,
                     reference_frame=world.root,
                 ),
-                Arms.LEFT,
+                red_arm,
                 GraspDescription(
                     ApproachDirection.FRONT,
                     VerticalAlignment.TOP,
-                    Tracy.get_end_effectors(tracy)[0],
+                    red_end_effector,
                 ),
             ),
+
             PickAndPlaceAction(
-                green_box,
+                yellow_box,
                 Pose.from_xyz_rpy(
                     stack_pos_x,
                     stack_pos_y,
                     1.005,
                     reference_frame=world.root,
                 ),
-                Arms.RIGHT,
+                yellow_arm,
                 GraspDescription(
                     ApproachDirection.FRONT,
                     VerticalAlignment.TOP,
-                    Tracy.get_end_effectors(tracy)[1],
+                    yellow_end_effector,
                 ),
             ),
+
             PickAndPlaceAction(
                 blue_box,
                 Pose.from_xyz_rpy(
@@ -76,17 +100,16 @@ def build_plan_cubes(
                     1.055,
                     reference_frame=world.root,
                 ),
-                Arms.LEFT,
+                blue_arm,
                 GraspDescription(
                     ApproachDirection.FRONT,
                     VerticalAlignment.TOP,
-                    Tracy.get_end_effectors(tracy)[0],
+                    blue_end_effector,
                 ),
             ),
         ],
         context=context,
     ).plan
-
 
 def build_park_arms_plan(context: Context) -> Plan | None:
     return sequential(
