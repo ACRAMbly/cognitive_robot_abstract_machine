@@ -98,10 +98,9 @@ def setup_and_build_plan(world: World, tracy: Tracy, context: Context, node: Nod
     2. Spawns red/green/blue boxes at perceived positions
     3. Builds the stacking plan
     """
-    print("Adding boxes to world.")
 
+    print("[Perception] querying perceived positions...")
     block_poses = query_colored_block_poses_from_robokudo(node)
-    print(block_poses)
 
     red_box_pos = block_poses["red"]
     green_box_pos = block_poses["yellow"]
@@ -121,6 +120,7 @@ def setup_and_build_plan(world: World, tracy: Tracy, context: Context, node: Nod
     )
     print("=======================================\n")
 
+    print("[Perception] Adding cubes to world")
     red = spawn_box(world, "red", red_box_pos, SCALE, 1.0, 0.0, 0.0)
     green = spawn_box(world, "green", green_box_pos, SCALE, 0.0, 1.0, 0.0)
     blue = spawn_box(world, "blue", blue_box_pos, SCALE, 0.0, 0.0, 1.0)

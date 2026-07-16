@@ -45,12 +45,8 @@ def build_plan_cubes(
 
         if cube_y > 0:
             return Arms.LEFT, end_effectors[0]
-
-        elif cube_y < 0:
-            return Arms.RIGHT, end_effectors[1]
-
         else:
-            return Arms.LEFT, end_effectors[0]
+            return Arms.RIGHT, end_effectors[1]
 
     red_arm, red_end_effector = select_arm(red_box)
     yellow_arm, yellow_end_effector = select_arm(yellow_box)
