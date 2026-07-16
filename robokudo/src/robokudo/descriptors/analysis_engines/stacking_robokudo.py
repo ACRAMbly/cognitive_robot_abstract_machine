@@ -1,111 +1,51 @@
-"""Analysis engine for Tracy robot perception pipeline.
+"""Query-driven colored-cube perception for the Tracy robot."""
 
-This module provides an analysis engine that demonstrates perception capabilities
-using the Tracy robot's camera system. It implements a query-based pipeline for
-tabletop segmentation and object pose estimation.
-
-The pipeline implements the following functionality:
-
-* Query-based perception control
-* Tracy camera data processing
-* Point cloud analysis and segmentation
-* Object pose estimation using PCA
-* Query result generation and response
-
-.. note::
-    This engine is specifically designed for the Tracy robot platform and uses
-    its camera configuration. The pipeline can be extended with additional
-    perception capabilities as needed.
-"""
+from __future__ import annotations
 
 from robokudo.analysis_engine import AnalysisEngineInterface
-from robokudo.annotators.cluster_pose_pca import ClusterPosePCAAnnotator
+from robokudo.annotators.cluster_pose_bb import ClusterPoseBBAnnotator
 from robokudo.annotators.collection_reader import CollectionReaderAnnotator
+from robokudo.annotators.image_cluster_extractor import ImageClusterExtractor
 from robokudo.annotators.image_preprocessor import ImagePreprocessorAnnotator
-from robokudo.annotators.plane import PlaneAnnotator
-from robokudo.annotators.pointcloud_cluster_extractor import PointCloudClusterExtractor
-from robokudo.annotators.pointcloud_crop import PointcloudCropAnnotator
-from robokudo.annotators.query import QueryReply, GenerateQueryResult, QueryAnnotator
+from robokudo.annotators.query import GenerateQueryResult, QueryAnnotator
 from robokudo.descriptors import CrDescriptorFactory
-from robokudo.annotators.cluster_color import ClusterColorAnnotator
 from robokudo.idioms import pipeline_init
 from robokudo.pipeline import Pipeline
 
 
+def create_color_cluster_descriptor() -> ImageClusterExtractor.Descriptor:
+    """Configure single-contour segmentation for supported block colors."""
+    descriptor = ImageClusterExtractor.Descriptor()
+    descriptor.parameters.color_name_to_hsv_range["yellow"] = {
+        "hsv_min": (22, 130, 85),
+        "hsv_max": (65, 255, 255),
+    }
+    descriptor.parameters.num_of_objects = 1
+    return descriptor
+
+
 class AnalysisEngine(AnalysisEngineInterface):
-    """Analysis engine for Tracy robot perception.
-
-    This class implements a pipeline that processes camera data from the Tracy
-    robot to perform tabletop segmentation and object pose estimation. It uses
-    a query-based approach to control perception tasks.
-
-    The pipeline includes:
-
-    * Query handling for perception control
-    * Tracy camera data collection and preprocessing
-    * Point cloud analysis and segmentation
-    * Object pose estimation using PCA
-    * Query result generation and response
-
-    .. note::
-        The pipeline uses PCA-based pose estimation by default, but can be
-        configured to use bounding box-based estimation by uncommenting the
-        relevant annotator.
-    """
+    """Detect one queried colored cube and estimate its bounding-box pose."""
 
     def name(self) -> str:
-        """Get the name of the analysis engine.
-
-        :return: The name identifier of this analysis engine
-        """
+        """Return the analysis engine identifier."""
         return "demo"
 
     def implementation(self) -> Pipeline:
-        """Create a pipeline for Tracy robot perception.
+        """Create the query-driven color segmentation pipeline."""
+        camera_descriptor = CrDescriptorFactory.create_descriptor("orbbec")
+        color_cluster_descriptor = create_color_cluster_descriptor()
 
-        This method constructs a processing pipeline that handles perception
-        tasks for the Tracy robot. The pipeline processes camera data to
-        perform tabletop segmentation and object pose estimation.
-
-        Pipeline execution sequence:
-
-        1. Initialize pipeline
-        2. Wait for query
-        3. Read Tracy camera data
-        4. Preprocess image
-        5. Crop point cloud
-        6. Detect table plane
-        7. Extract object clusters
-        8. Estimate object poses (PCA)
-        9. Generate and send query response
-
-        :return: The configured pipeline for Tracy perception
-        """
-        tracy_config = CrDescriptorFactory.create_descriptor("orbbec")
-
-        # pc_crop_config = PointcloudCropAnnotator.Descriptor()
-        # pc_crop_config.parameters.
-
-        seq = Pipeline("ContPipeline")
-        seq.add_children(
+        pipeline = Pipeline("ColoredCubePipeline")
+        pipeline.add_children(
             [
                 pipeline_init(),
                 QueryAnnotator(),
-                CollectionReaderAnnotator(descriptor=tracy_config),
+                CollectionReaderAnnotator(descriptor=camera_descriptor),
                 ImagePreprocessorAnnotator("ImagePreprocessor"),
-                PointcloudCropAnnotator(),
-                PlaneAnnotator(),
-                PointCloudClusterExtractor(),
-                # ClusterPoseBBAnnotator(),
-                ClusterPosePCAAnnotator(),
-                ClusterColorAnnotator(),
+                ImageClusterExtractor(descriptor=color_cluster_descriptor),
+                ClusterPoseBBAnnotator(),
                 GenerateQueryResult(),
-                # QueryReply(),
             ]
         )
-        return seq
-
-#test cli command: ros2 action send_goal --feedback \
-#    /robokudo/query \
-#    robokudo_msgs/action/Query \
-#    "{obj: {type: 'block', color: ['blue']}}"
+        return pipeline
