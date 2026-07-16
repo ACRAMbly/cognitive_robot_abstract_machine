@@ -22,7 +22,7 @@ from semantic_digital_twin.adapters.ros.world_fetcher import fetch_world_from_se
 from semantic_digital_twin.adapters.ros.world_synchronizer import WorldSynchronizer
 
 from coraplex.datastructures.dataclasses import Context
-from coraplex.execution_environment import real_robot
+# from coraplex.execution_environment import real_robot
 from coraplex.plans.factories import sequential
 from coraplex.plans.plan import Plan
 
@@ -31,12 +31,9 @@ from coraplex.robot_plans.actions.core.pick_up import ReachAction
 from coraplex.robot_plans.actions.core.robot_body import ParkArmsAction
 from coraplex.datastructures.enums import Arms, ApproachDirection, VerticalAlignment
 from coraplex.datastructures.grasp import GraspDescription
-import coraplex.alternative_motion_mappings.tracy_motion_mapping
+from rclpy.node import Node
 
-from rclpy.action import ActionClient
-from robokudo_msgs.action import Query
-from geometry_msgs.msg import PoseStamped
-
+from sub_parts.cube_perception import query_colored_block_poses_from_robokudo, pose_to_position
 
 #### IMPORTANT: RESTART THE GISKARD SCRIPT EACH TIME YOU RUN THIS SCRIPT
 #### OR MAYBE ADD BASH COMMAND UP TO YOU
@@ -89,105 +86,8 @@ def spawn_box(spawn_world: World, name: str = "box", position: tuple = (0.0, 0.0
     box = spawn_world.get_kinematic_structure_entity_by_name(f"{name}_link")
     return box
 
-TARGET_COLORS = {"red", "yellow", "blue"}
 
-def query_colored_block_poses_from_robokudo(node, max_attempts: int = 10) -> dict:
-    """
-    Query RoboKudo repeatedly until all TARGET_COLORS are found.
-
-    Detection varies frame to frame, so if a color is missing we re-query and
-    accumulate found colors across attempts, keeping the first pose per color.
-    """
-    poses_by_color = {}
-
-    for attempt in range(1, max_attempts + 1):
-        missing = TARGET_COLORS - set(poses_by_color)
-        if not missing:
-            break
-
-        print(f"\n[attempt {attempt}/{max_attempts}] querying; still missing: {sorted(missing)}")
-
-        # Fresh action client each attempt (avoids reusing a client whose previous
-        # goal handle may not be fully released).
-        action_client = ActionClient(node, Query, "/robokudo/query")
-        if not action_client.wait_for_server(timeout_sec=5.0):
-            raise RuntimeError("RoboKudo query action server is not available.")
-
-        goal = Query.Goal()
-        goal.obj.type = "block"
-
-        send_future = action_client.send_goal_async(goal)
-        # bounded wait so we never hang forever if the server wedges
-        waited = 0.0
-        while not send_future.done():
-            time.sleep(0.05)
-            waited += 0.05
-            if waited > 15.0:
-                raise RuntimeError(
-                    "Timed out waiting for RoboKudo to accept the goal "
-                    "(server may be wedged; restart the perception script)."
-                )
-
-        goal_handle = send_future.result()
-        if not goal_handle.accepted:
-            raise RuntimeError("RoboKudo rejected the block query.")
-
-        result_future = goal_handle.get_result_async()
-        waited = 0.0
-        while not result_future.done():
-            time.sleep(0.05)
-            waited += 0.05
-            if waited > 30.0:
-                raise RuntimeError(
-                    "Timed out waiting for RoboKudo result "
-                    "(server may be wedged; restart the perception script)."
-                )
-
-        result = result_future.result().result
-
-        # ===== RAW QUERY RESULT LOG (test only) =====
-        print(f"  raw: {len(result.res)} objects detected this attempt")
-        for i, od in enumerate(result.res):
-            colors = list(od.color)
-            if od.pose:
-                p = od.pose[0].pose.position
-                print(f"    [{i}] colors={colors}  pos=(x={p.x:.3f}, y={p.y:.3f}, z={p.z:.3f})  frame={od.pose[0].header.frame_id}")
-            else:
-                print(f"    [{i}] colors={colors}  pose=<none>")
-        # ============================================
-
-        # Accumulate any target colors we don't already have.
-        for object_designator in result.res:
-            if not object_designator.pose:
-                continue
-            for color in object_designator.color:
-                if color in TARGET_COLORS and color not in poses_by_color:
-                    poses_by_color[color] = object_designator.pose[0]
-                    print(f"  -> found '{color}'")
-
-        # Clean up this attempt's client before the next attempt.
-        action_client.destroy()
-
-        # Give the RoboKudo action server time to fully finish/close
-        missing_after = TARGET_COLORS - set(poses_by_color)
-        if missing_after:
-            print(f"  still missing {sorted(missing_after)}; pausing before next attempt...")
-            time.sleep(3.0)
-
-    missing = TARGET_COLORS - set(poses_by_color)
-    if missing:
-        raise RuntimeError(
-            f"RoboKudo did not detect blocks with colors {sorted(missing)} "
-            f"after {max_attempts} attempts."
-        )
-
-    return poses_by_color
-
-def pose_to_position(pose_stamped) -> tuple:
-    p = pose_stamped.pose.position
-    return (p.x, p.y, p.z)
-
-def setup_world(node):
+def setup_world(node: Node):
     print("Getting live world from Giskard...")
     tracy_world = fetch_world_from_service(node, timeout_seconds=300)
     print(f"World received with {len(list(tracy_world.bodies))} bodies.")
@@ -323,7 +223,7 @@ def test_stacking_cube(z, context, tracy, body, world, arm):
 def main(plan_name: Literal["park_arms", "cubes"]):
     rclpy.init()
 
-    node = rclpy.create_node("coraplex_real_stacking")
+    node: Node = rclpy.create_node("coraplex_real_stacking")
 
     # Giskard action clients need the node to spin.
     spinner = threading.Thread(
