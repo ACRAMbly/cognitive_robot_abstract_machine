@@ -23,7 +23,8 @@ from coraplex.plans.factories import sequential
 from coraplex.plans.plan import Plan
 from coraplex.robot_plans.actions.composite.transporting import PickAndPlaceAction
 from coraplex.robot_plans.actions.core.robot_body import ParkArmsAction
-
+from coraplex.robot_plans.actions.core.pick_up import PickUpAction
+from coraplex.robot_plans.actions.core.placing import PlaceAction
 
 def build_plan_cubes(
     world: World,
@@ -55,8 +56,16 @@ def build_plan_cubes(
     return sequential(
         [
             ParkArmsAction(Arms.BOTH),
-
-            PickAndPlaceAction(
+            PickUpAction(
+                red_box,
+                red_arm,
+                GraspDescription(
+                    ApproachDirection.FRONT,
+                    VerticalAlignment.TOP,
+                    red_end_effector,
+                ),
+            ),
+            PlaceAction(
                 red_box,
                 Pose.from_xyz_rpy(
                     stack_pos_x,
@@ -65,14 +74,18 @@ def build_plan_cubes(
                     reference_frame=world.root,
                 ),
                 red_arm,
+            ),
+            ParkArmsAction(Arms.BOTH),
+            PickUpAction(
+                yellow_box,
+                yellow_arm,
                 GraspDescription(
                     ApproachDirection.FRONT,
                     VerticalAlignment.TOP,
-                    red_end_effector,
+                    yellow_end_effector,
                 ),
             ),
-
-            PickAndPlaceAction(
+            PlaceAction(
                 yellow_box,
                 Pose.from_xyz_rpy(
                     stack_pos_x,
@@ -81,14 +94,18 @@ def build_plan_cubes(
                     reference_frame=world.root,
                 ),
                 yellow_arm,
+            ),
+            ParkArmsAction(Arms.BOTH),
+            PickUpAction(
+                blue_box,
+                blue_arm,
                 GraspDescription(
                     ApproachDirection.FRONT,
                     VerticalAlignment.TOP,
-                    yellow_end_effector,
+                    blue_end_effector,
                 ),
             ),
-
-            PickAndPlaceAction(
+            PlaceAction(
                 blue_box,
                 Pose.from_xyz_rpy(
                     stack_pos_x,
@@ -97,12 +114,8 @@ def build_plan_cubes(
                     reference_frame=world.root,
                 ),
                 blue_arm,
-                GraspDescription(
-                    ApproachDirection.FRONT,
-                    VerticalAlignment.TOP,
-                    blue_end_effector,
-                ),
             ),
+            ParkArmsAction(Arms.BOTH),
         ],
         context=context,
     ).plan
