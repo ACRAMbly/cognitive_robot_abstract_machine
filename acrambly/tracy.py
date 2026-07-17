@@ -23,11 +23,15 @@ Usage
     python tracy.py --env real --task park_arms
 """
 
+import logging
 import threading
 from typing import Callable, Literal, Annotated
 
 import rclpy
 import typer
+
+# Enable runtime action logging (fires only during actual robot execution)
+logging.getLogger("coraplex.plans.executables").setLevel(logging.INFO)
 from coraplex.datastructures.dataclasses import Context
 from coraplex.execution_environment import real_robot, simulated_robot
 from coraplex.plans.plan import Plan
