@@ -54,8 +54,8 @@ from semantic_digital_twin.adapters.ros.world_fetcher import fetch_world_from_se
 from semantic_digital_twin.adapters.ros.world_synchronizer import WorldSynchronizer
 from semantic_digital_twin.robots.robot_parts import AbstractRobot
 from semantic_digital_twin.world import World
-from sub_parts.task_cubes import setup_and_build_plan as cubes_task
-from sub_parts.task_park_arms import setup_and_build_plan as park_arms_task
+from sub_parts.real.task_cubes import setup_and_build_plan as cubes_task
+from sub_parts.shared.task_park_arms import setup_and_build_plan as park_arms_task
 
 #### IMPORTANT: RESTART THE GISKARD SCRIPT EACH TIME YOU RUN THIS SCRIPT
 import subprocess
