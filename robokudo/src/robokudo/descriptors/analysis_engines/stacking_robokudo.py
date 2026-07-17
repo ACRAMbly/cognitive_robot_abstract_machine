@@ -16,9 +16,19 @@ from robokudo.pipeline import Pipeline
 def create_color_cluster_descriptor() -> ImageClusterExtractor.Descriptor:
     """Configure single-contour segmentation for supported block colors."""
     descriptor = ImageClusterExtractor.Descriptor()
-    descriptor.parameters.color_name_to_hsv_range["yellow"] = {
-        "hsv_min": (22, 130, 85),
-        "hsv_max": (65, 255, 255),
+    descriptor.parameters.color_name_to_hsv_range = {
+        'blue': {
+            'hsv_min': (135, 130, 85),
+            'hsv_max': (165, 255, 255),
+        },
+        'red': {
+            'hsv_min': (0, 150, 95),
+            'hsv_max': (15, 255, 255),
+        },
+        'yellow': {
+            'hsv_min': (22, 130, 85),
+            'hsv_max': (65, 255, 255),
+        },
     }
     descriptor.parameters.num_of_objects = 1
     return descriptor

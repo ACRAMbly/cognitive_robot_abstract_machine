@@ -260,9 +260,8 @@ class ActionServerPresentAndDone(Behaviour):
             return Status.RUNNING
 
         # If the Action Server is still processing the current goal, wait.
-        # It's the responsibility of the rest of the tree to send the goal or re-iterate without
-        # calling *this* Behavior again.
-        if action_server.is_active():
+        # A pending query must reach QueryAnnotator before it can be processed.
+        if action_server.is_active() and not action_server.has_pending_query():
             self.rk_logger.info("ActionServer needs to finish current goal.")
             return Status.RUNNING
 

@@ -439,6 +439,10 @@ class QueryActionServer(Node):
         """
         return self.query is not None
 
+    def has_pending_query(self) -> bool:
+        """Return whether the pipeline still needs to receive the query."""
+        return self.new_query is not None
+
     async def execute_cb(self, goal_handle: ServerGoalHandle) -> Optional[Query.Result]:
         """Action server execution callback.
 

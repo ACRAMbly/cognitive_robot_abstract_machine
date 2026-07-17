@@ -35,6 +35,30 @@ def _wait_for_future(future: Future) -> None:
 
 
 @dataclass(frozen=True)
+class FutureCompletion:
+    """Complete action futures in standalone and executor-owned contexts."""
+
+    node: Node
+    """ROS node associated with the action futures."""
+
+    spins_node: bool
+    """Whether this completion strategy owns executor progress."""
+
+    @classmethod
+    def for_node(cls, node: Node) -> FutureCompletion:
+        """Create a completion strategy from the node's initial ownership."""
+        return cls(node=node, spins_node=node.executor is None)
+
+    def wait(self, future: Future) -> None:
+        """Wait for a future using the executor context that owns the node."""
+        if self.spins_node:
+            rclpy.spin_until_future_complete(self.node, future)
+            return
+
+        _wait_for_future(future)
+
+
+@dataclass(frozen=True)
 class ColoredBlockPoseParser:
     """Extract a safely sized block position from a color query result."""
 
@@ -102,6 +126,9 @@ class ColoredBlockPoseQuery:
     )
     """Deterministic color query order."""
 
+    future_completion: FutureCompletion | None = None
+    """Optional executor-aware action future completion strategy."""
+
     def execute(self) -> dict[str, tuple[float, float, float]]:
         """Query until all target colors are found or attempts run out."""
         if not self.action_client.wait_for_server(timeout_sec=5.0):
@@ -132,7 +159,7 @@ class ColoredBlockPoseQuery:
         goal.obj.color.append(color.value)
 
         send_future = self.action_client.send_goal_async(goal)
-        _wait_for_future(send_future)
+        self._wait_for_action_future(send_future)
 
         goal_handle = send_future.result()
 
@@ -140,9 +167,17 @@ class ColoredBlockPoseQuery:
             raise RuntimeError("RoboKudo rejected the block query.")
 
         result_future = goal_handle.get_result_async()
-        _wait_for_future(result_future)
+        self._wait_for_action_future(result_future)
 
         return result_future.result().result
+
+    def _wait_for_action_future(self, future: Future) -> None:
+        """Complete an action future in the configured execution context."""
+        if self.future_completion is None:
+            _wait_for_future(future)
+            return
+
+        self.future_completion.wait(future)
 
 
 def query_colored_block_poses_from_robokudo(
@@ -154,7 +189,12 @@ def query_colored_block_poses_from_robokudo(
     :return: Transformed positions keyed by target block color.
     """
     action_client = ActionClient(node, Query, "/robokudo/query")
-    return ColoredBlockPoseQuery(node, action_client).execute()
+    future_completion = FutureCompletion.for_node(node)
+    return ColoredBlockPoseQuery(
+        node,
+        action_client,
+        future_completion=future_completion,
+    ).execute()
 
 
 def main() -> None:
