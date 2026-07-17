@@ -60,15 +60,15 @@ from sub_parts.task_park_arms import setup_and_build_plan as park_arms_task
 #### IMPORTANT: RESTART THE GISKARD SCRIPT EACH TIME YOU RUN THIS SCRIPT
 import subprocess
 import time
-giskard_process = subprocess.Popen(
-    [
-            "gnome-terminal", "--", "bash", "-c",
-            "workon cram-env && ",
-            "ros2 launch giskardpy_ros giskardpy_tracy_velocity.launch.py; exec bash"
-    ],
-)
-print("Initializing GISKARD...")
-time.sleep(10)
+# giskard_process = subprocess.Popen(
+#     [
+#             "gnome-terminal", "--", "bash", "-c",
+#             "workon cram-env && ",
+#             "ros2 launch giskardpy_ros giskardpy_tracy_velocity.launch.py; exec bash"
+#     ],
+# )
+# print("Initializing GISKARD...")
+# time.sleep(10)
 
 
 # ---------------------------------------------------------------------------
