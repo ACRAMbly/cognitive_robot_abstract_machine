@@ -25,39 +25,38 @@ Usage
 
 import logging
 import threading
-from typing import Callable, Literal, Annotated
+from typing import Annotated, Callable, Literal
 
 import rclpy
 import typer
-
-# Enable runtime action logging (fires only during actual robot execution)
-logging.getLogger("coraplex.plans.executables").setLevel(logging.INFO)
-from coraplex.datastructures.dataclasses import Context
-from coraplex.execution_environment import real_robot, simulated_robot
-from coraplex.plans.plan import Plan
-from rclpy.node import Node
-from semantic_digital_twin.adapters.urdf import URDFParser
-from semantic_digital_twin.robots.robot_parts import AbstractRobot
-from semantic_digital_twin.robots.tracy import Tracy
-from semantic_digital_twin.world import World
 
 # --- real-robot imports ---
 from coraplex.alternative_motion_mappings.tracy_motion_mapping import (
     TracyRealMoveGripperMotion,
 )
-from semantic_digital_twin.adapters.ros.world_fetcher import fetch_world_from_service
-from semantic_digital_twin.adapters.ros.world_synchronizer import WorldSynchronizer
+from coraplex.datastructures.dataclasses import Context  # noqa: E402
+from coraplex.execution_environment import real_robot, simulated_robot
+from coraplex.plans.plan import Plan
+from rclpy.node import Node
 
 # --- simulation imports ---
 from semantic_digital_twin.adapters.ros.visualization.viz_marker import (
     VizMarkerPublisher,
 )
+from semantic_digital_twin.adapters.ros.world_fetcher import fetch_world_from_service
+from semantic_digital_twin.adapters.ros.world_synchronizer import WorldSynchronizer
+from semantic_digital_twin.adapters.urdf import URDFParser
+from semantic_digital_twin.robots.robot_parts import AbstractRobot
+from semantic_digital_twin.robots.tracy import Tracy
+from semantic_digital_twin.world import World
 
 # --- task imports ---
 from sub_parts.real.task_cubes import setup_and_build_plan as cubes_real_task
-from sub_parts.sim.task_cubes import setup_and_build_plan as cubes_sim_task
 from sub_parts.shared.task_park_arms import setup_and_build_plan as park_arms_task
+from sub_parts.sim.task_cubes import setup_and_build_plan as cubes_sim_task
 
+# Enable runtime action logging (fires only during actual robot execution)
+logging.getLogger("coraplex.plans.executables").setLevel(logging.INFO)
 
 # ---------------------------------------------------------------------------
 # Task registry – maps (task_name, env) → factory
