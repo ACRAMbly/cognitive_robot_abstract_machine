@@ -259,6 +259,9 @@ class ActionServerPresentAndDone(Behaviour):
             self.rk_logger.info("ActionServer needs to deliver exception")
             return Status.RUNNING
 
+        if action_server.new_query is not None:
+            return Status.SUCCESS
+
         # If the Action Server is still processing the current goal, wait.
         # It's the responsibility of the rest of the tree to send the goal or re-iterate without
         # calling *this* Behavior again.
