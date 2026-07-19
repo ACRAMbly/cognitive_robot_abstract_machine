@@ -61,7 +61,7 @@ def setup_and_build_plan(
     print("[Setup] Spawning boxes in simulation world...")
 
     obj = spawn_free_box(
-        world, "box3", (0.8, 0, 0.93), color=Color(0.0, 0.0, 1.0, 1.0)
+        world, "box3", (0.8, 0.5, 0.93), color=Color(0.0, 0.0, 1.0, 1.0)
     )
 
     return build_handover_object_plan(world, tracy, context, obj)

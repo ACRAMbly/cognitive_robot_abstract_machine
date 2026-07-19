@@ -26,6 +26,7 @@ from coraplex.datastructures.grasp import GraspDescription
 import time
 from coraplex.view_manager import ViewManager
 from coraplex.plans.attachment_nodes import DetachNode
+from coraplex.plans.attachment_nodes import AttachNode
 
 def spawn_free_box(
     spawn_world: World,
@@ -67,7 +68,7 @@ def setup_world():
     tracy_world = URDFParser.from_file(Tracy.get_ros_file_path()).parse()
 
     box = spawn_free_box(
-        tracy_world, "box", (0.8, 0, 0.93), color=Color(0.0, 0.0, 1.0, 1.0)
+        tracy_world, "box", (0.8, 0.5, 0.93), color=Color(0.0, 0.0, 1.0, 1.0)
     )
     return tracy_world, box
 
@@ -105,7 +106,6 @@ with simulated_robot:
             ),
             ReachAction(
                 target_pose=meeting_pose,
-                object_designator=obj,
                 arm=Arms.LEFT,
                 grasp_description=GraspDescription(
                     ApproachDirection.RIGHT,
@@ -115,7 +115,6 @@ with simulated_robot:
             ),
             ReachAction(
                 target_pose=meeting_pose,
-                object_designator=obj,
                 arm=Arms.RIGHT,
                 grasp_description=GraspDescription(
                     ApproachDirection.BACK,
@@ -125,26 +124,18 @@ with simulated_robot:
             ),
             MoveGripperMotion(GripperState.CLOSE, Arms.RIGHT),
             MoveGripperMotion(GripperState.OPEN, Arms.LEFT),
-            DetachNode(body=obj, new_parent=world.root)
+            AttachNode(body=obj, new_parent=ViewManager.get_end_effector_view(Arms.RIGHT, tracy).tool_frame),
+            PlaceAction(
+                target_location=Pose.from_xyz_rpy(
+                    1,
+                    -0.5,
+                    0.93,
+                    reference_frame=world.root,
+                ),
+                arm=Arms.RIGHT,
+                object_designator=obj,
+            ),
+            ParkArmsAction(Arms.BOTH),
         ],
         context=context,
     ).plan.perform()
-
-    with world.modify_world():
-        world.move_branch_with_fixed_connection(obj, ViewManager.get_end_effector_view(Arms.RIGHT, tracy))
-
-    # sequential([
-    #     ReachAction(
-    #         target_pose=Pose.from_xyz_rpy(
-    #             1, 0, 0.9,
-    #             reference_frame=world.root,
-    #         ),
-    #         object_designator=obj,
-    #         arm=Arms.RIGHT,
-    #         grasp_description=GraspDescription(
-    #             ApproachDirection.FRONT,
-    #             VerticalAlignment.TOP,
-    #             Tracy.get_end_effectors(tracy)[1],
-    #         ),
-    #     )
-    # ], context=context).plan.perform()

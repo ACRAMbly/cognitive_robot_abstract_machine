@@ -27,6 +27,9 @@ from coraplex.robot_plans.actions.core.pick_up import PickUpAction, ReachAction
 from coraplex.robot_plans.actions.core.placing import PlaceAction
 from coraplex.robot_plans.motions.gripper import MoveGripperMotion
 from semantic_digital_twin.datastructures.definitions import GripperState
+from coraplex.view_manager import ViewManager
+from coraplex.plans.attachment_nodes import DetachNode
+from coraplex.plans.attachment_nodes import AttachNode
 
 def build_plan_cubes(
     world: World,
@@ -142,6 +145,16 @@ def build_handover_object_plan(
         -1.57, 0, 0,
         reference_frame=world.root,
     )
+    left_away_pose = Pose.from_xyz_rpy(
+        0.8, 0.3, 1.2,
+        -1.57, 0, 0,
+        reference_frame=world.root,
+    )
+    right_away_pose = Pose.from_xyz_rpy(
+        0.8, -0.3, 1.2,
+        -1.57, 0, 0,
+        reference_frame=world.root,
+    )
 
     return sequential(
         [
@@ -157,7 +170,15 @@ def build_handover_object_plan(
             ),
             ReachAction(
                 target_pose=meeting_pose,
-                object_designator=obj,
+                arm=Arms.RIGHT,
+                grasp_description=GraspDescription(
+                    ApproachDirection.BACK,
+                    VerticalAlignment.BOTTOM,
+                    Tracy.get_end_effectors(tracy)[1],
+                ),
+            ),
+            ReachAction(
+                target_pose=left_away_pose,
                 arm=Arms.LEFT,
                 grasp_description=GraspDescription(
                     ApproachDirection.RIGHT,
@@ -167,7 +188,23 @@ def build_handover_object_plan(
             ),
             ReachAction(
                 target_pose=meeting_pose,
-                object_designator=obj,
+                arm=Arms.LEFT,
+                grasp_description=GraspDescription(
+                    ApproachDirection.RIGHT,
+                    VerticalAlignment.TOP,
+                    Tracy.get_end_effectors(tracy)[0],
+                ),
+            ),
+            MoveGripperMotion(GripperState.CLOSE, Arms.RIGHT),
+            MoveGripperMotion(GripperState.OPEN, Arms.LEFT),
+            AttachNode(
+                body=obj,
+                new_parent=ViewManager.get_end_effector_view(
+                    Arms.RIGHT, tracy
+                ).tool_frame,
+            ),
+            ReachAction(
+                target_pose=right_away_pose,
                 arm=Arms.RIGHT,
                 grasp_description=GraspDescription(
                     ApproachDirection.BACK,
@@ -175,21 +212,17 @@ def build_handover_object_plan(
                     Tracy.get_end_effectors(tracy)[1],
                 ),
             ),
-            MoveGripperMotion(GripperState.CLOSE, Arms.RIGHT),
-            MoveGripperMotion(GripperState.OPEN, Arms.LEFT),
-            ReachAction(
-                target_pose=Pose.from_xyz_rpy(
-                    1, 0, 0.9,
+            PlaceAction(
+                target_location=Pose.from_xyz_rpy(
+                    1,
+                    -0.5,
+                    0.93,
                     reference_frame=world.root,
                 ),
-                object_designator=obj,
                 arm=Arms.RIGHT,
-                grasp_description=GraspDescription(
-                    ApproachDirection.FRONT,
-                    VerticalAlignment.TOP,
-                    Tracy.get_end_effectors(tracy)[1],
-                ),
-            )
+                object_designator=obj,
+            ),
+            ParkArmsAction(Arms.BOTH),
         ],
         context=context,
     ).plan

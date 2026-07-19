@@ -21,6 +21,7 @@ Usage
     python tracy.py --env sim  --task cubes       # RViz2 simulation
     python tracy.py --env real --task cubes       # Real robot through Giskard
     python tracy.py --env real --task park_arms
+    python tracy.py --env sim --task hand_over
 """
 
 import logging
