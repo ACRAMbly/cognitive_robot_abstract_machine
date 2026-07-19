@@ -26,6 +26,7 @@ from krrood.entity_query_language.verbalization.surface_verification import (
     placeholder_operands,
     SymbolicSurfaceSnapshot,
 )
+from krrood.entity_query_language.verbalization.vocabulary.english import Prepositions
 from krrood.entity_query_language.verbalization.vocabulary.parts_of_speech import (
     Adjective,
     clause,
@@ -45,9 +46,10 @@ class Igniter:
 @dataclass(eq=False)
 class Kindled(Predicate):
     """
-    A two-operand predicate used to exercise the first-order/value-using pairing; only
-    `fuel` appears in the fragment, so `catalyst` proves an override without affecting
-    wording.
+    A two-operand predicate used to exercise the first-order/value-using pairing and the
+    snapshot's operand-override mechanism -- both fields appear in the fragment, so an
+    override's effect (or the lack of one) is directly observable in the rendered
+    sentence rather than merely asserted.
     """
 
     fuel: Igniter
@@ -58,7 +60,13 @@ class Kindled(Predicate):
 
     @classmethod
     def _verbalization_fragment_(cls, fields):
-        return clause(Noun(fields["fuel"]), Copula(), Adjective("lit"))
+        return clause(
+            Noun(fields["fuel"]),
+            Copula(),
+            Adjective("lit"),
+            Prepositions.WITH,
+            Noun(fields["catalyst"]),
+        )
 
 
 class Fastener(ABC):
@@ -107,7 +115,7 @@ def test_placeholder_operands_uses_the_field_type_by_default():
 
 
 def test_first_order_form_verbalizes_from_declared_field_types():
-    assert first_order_form(Kindled) == "an Igniter is lit"
+    assert first_order_form(Kindled) == "an Igniter is lit with a catalyst"
 
 
 def test_first_order_form_expands_an_abstract_declared_field_type():
@@ -129,9 +137,11 @@ def test_first_order_form_and_value_using_form_agree_when_types_match():
 
     a placeholder built from the declared field type -- not in how it is named, since a
     bound instance's type is always concrete and resolves through the very same
-    `referring.operand_head_noun` call.
+    `referring.operand_head_noun` call. Both operands here are equivalent, still-unbound
+    variables (an `Igniter` and an untyped `object`), matching what `first_order_form`
+    itself builds, so the two renderings agree exactly.
     """
-    bound_instance = Kindled(variable(Igniter, []), object())
+    bound_instance = Kindled(variable(Igniter, []), variable(object, []))
     assert first_order_form(Kindled) == verbalize_expression(bound_instance)
 
 
@@ -150,14 +160,14 @@ def test_snapshot_placeholder_operands_lets_a_registered_override_overwrite_a_fi
 
 def test_snapshot_rendered_surface_respects_a_registered_override():
     """
-    An overridden field's concrete value participates in the sentence read only through
-    the fragment the class chose to build -- here `catalyst` never appears in the
-    wording, so the override changes nothing observable, matching the un-overridden
-    first-order form.
+    The overridden value appears in the rendered sentence in place of the un-overridden
+    default's field-name fallback ("a catalyst") -- the whole point of an override, made
+    directly observable rather than merely asserted.
     """
     snapshot = SymbolicSurfaceSnapshot(
         package=krrood,
         surfaces=(),
         operand_overrides={Kindled: [OverriddenOperand("catalyst", "ash")]},
     )
-    assert snapshot.rendered_surface(Kindled) == first_order_form(Kindled)
+    assert snapshot.rendered_surface(Kindled) == "an Igniter is lit with 'ash'"
+    assert snapshot.rendered_surface(Kindled) != first_order_form(Kindled)
