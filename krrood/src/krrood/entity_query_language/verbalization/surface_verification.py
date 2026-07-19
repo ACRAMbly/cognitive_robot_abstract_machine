@@ -1,5 +1,6 @@
 """
-Exhaustive verbalization-surface verification for any package.
+Exhaustive verbalization-surface verification for any package, and the first-order
+(value-agnostic) rendering it builds on.
 
 Point a :class:`SymbolicSurfaceSnapshot` at a package and a committed list of
 :class:`VerbalizationSurface` entries. Its three ``assert_*`` methods, used as the bodies of three
@@ -11,6 +12,13 @@ The same three-line test works for any package that defines
 :class:`~krrood.entity_query_language.predicate.SymbolicCallable` subclasses (krrood itself,
 ``semantic_digital_twin``, ``coraplex``, …): the discovery, placeholder operands, and rendering all
 live here.
+
+The snapshot's per-class rendering is itself a reusable capability, not a test-only trick:
+:func:`first_order_form` verbalizes a symbolic callable *value-agnostically* — from its declared
+field types alone, with no constructed instance or bound literal in hand — the sibling of the
+ordinary *value-using* form :func:`~…pipeline.verbalize_expression` already produces for a real,
+bound expression. :class:`SymbolicSurfaceSnapshot` calls it for every discovered class; a caller
+wanting the first-order form of one class (documentation, introspection) can call it directly.
 """
 
 from __future__ import annotations
@@ -32,24 +40,6 @@ from krrood.utils import module_and_class_name
 
 
 @dataclass(frozen=True)
-class VerbalizationSurface:
-    """
-    One symbolic callable and the sentence it verbalizes to — a committed snapshot
-    entry.
-    """
-
-    callable_class: Type[SymbolicCallable]
-    """
-    The symbolic function or predicate whose surface this records.
-    """
-
-    sentence: str
-    """
-    The approved sentence it renders with the snapshot's placeholder operands.
-    """
-
-
-@dataclass(frozen=True)
 class OverriddenOperand:
     """
     One dataclass field's concrete VALUE for a symbolic callable whose fragment reads
@@ -68,6 +58,78 @@ class OverriddenOperand:
     value: Any
     """
     The concrete value to pass for that field.
+    """
+
+
+def placeholder_operands(
+    cls: Type[SymbolicCallable],
+    operand_overrides: Sequence[OverriddenOperand] = (),
+) -> Dict[str, Any]:
+    """
+    One placeholder operand per init dataclass field.
+
+    A field gets its registered override, else a fresh variable of the field's type
+    endpoint as the class diagram resolves it (``object`` when the endpoint is not a
+    plain class), so the surface reads the operand as *"a <TypeName>"*.
+
+    :param cls: The symbolic callable to build operands for.
+    :param operand_overrides: Concrete values for fields whose fragment reads that field
+        directly rather than treating it as a symbolic operand.
+    :return: The operand to pass for each init field, keyed by field name.
+    """
+    overridden_operands = {
+        override.name: override.value for override in operand_overrides
+    }
+    wrapped_class = WrappedClass(clazz=cls)
+    operands: Dict[str, Any] = {}
+    for field_ in dataclass_fields(cls):
+        if not field_.init:
+            continue
+        if field_.name in overridden_operands:
+            operands[field_.name] = overridden_operands[field_.name]
+            continue
+        endpoint = WrappedField(wrapped_class, field_).type_endpoint
+        placeholder_type = (
+            endpoint if isinstance(endpoint, type) and endpoint is not Any else object
+        )
+        operands[field_.name] = variable(placeholder_type, [])
+    return operands
+
+
+def first_order_form(
+    cls: Type[SymbolicCallable],
+    operand_overrides: Sequence[OverriddenOperand] = (),
+) -> str:
+    """
+    Verbalize *cls* value-agnostically — the *first-order form*: every operand named
+    from its declared field type alone (:func:`placeholder_operands`), with no
+    constructed instance or bound literal in hand. The sibling of the ordinary *value-
+    using* form a real, bound expression already renders through
+    :func:`~…pipeline.verbalize_expression`.
+
+    :param cls: The symbolic callable to render.
+    :param operand_overrides: Concrete values for fields whose fragment reads that field
+        directly rather than treating it as a symbolic operand.
+    :return: The sentence *cls* renders with placeholder operands.
+    """
+    return verbalize_expression(cls(**placeholder_operands(cls, operand_overrides)))
+
+
+@dataclass(frozen=True)
+class VerbalizationSurface:
+    """
+    One symbolic callable and the sentence it verbalizes to — a committed snapshot
+    entry.
+    """
+
+    callable_class: Type[SymbolicCallable]
+    """
+    The symbolic function or predicate whose surface this records.
+    """
+
+    sentence: str
+    """
+    The approved sentence it renders with the snapshot's placeholder operands.
     """
 
 
@@ -123,42 +185,19 @@ class SymbolicSurfaceSnapshot:
 
     def placeholder_operands(self, cls: Type[SymbolicCallable]) -> Dict[str, Any]:
         """
-        One placeholder operand per init dataclass field.
-
-        A field gets its registered override, else a fresh variable of the field's type
-        endpoint as the class diagram resolves it (``object`` when the endpoint is not a
-        plain class), so the surface reads the operand as *"a <TypeName>"*.
-
         :param cls: The symbolic callable to build operands for.
-        :return: The operand to pass for each init field, keyed by field name.
+        :return: One placeholder operand per init dataclass field (:func:`placeholder_operands`),
+            using this snapshot's registered :attr:`operand_overrides` for *cls*.
         """
-        overridden_operands = {
-            override.name: override.value
-            for override in self.operand_overrides.get(cls, ())
-        }
-        wrapped_class = WrappedClass(clazz=cls)
-        operands: Dict[str, Any] = {}
-        for field_ in dataclass_fields(cls):
-            if not field_.init:
-                continue
-            if field_.name in overridden_operands:
-                operands[field_.name] = overridden_operands[field_.name]
-                continue
-            endpoint = WrappedField(wrapped_class, field_).type_endpoint
-            placeholder_type = (
-                endpoint
-                if isinstance(endpoint, type) and endpoint is not Any
-                else object
-            )
-            operands[field_.name] = variable(placeholder_type, [])
-        return operands
+        return placeholder_operands(cls, self.operand_overrides.get(cls, ()))
 
     def rendered_surface(self, cls: Type[SymbolicCallable]) -> str:
         """
         :param cls: The symbolic callable to render.
-        :return: the sentence *cls* renders with placeholder operands.
+        :return: *cls*'s first-order form (:func:`first_order_form`), using this snapshot's
+            registered :attr:`operand_overrides` for *cls*.
         """
-        return verbalize_expression(cls(**self.placeholder_operands(cls)))
+        return first_order_form(cls, self.operand_overrides.get(cls, ()))
 
     def assert_every_callable_has_a_fragment(self) -> None:
         """

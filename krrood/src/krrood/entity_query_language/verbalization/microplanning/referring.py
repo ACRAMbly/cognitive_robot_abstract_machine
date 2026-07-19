@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import inspect
 import operator
 import uuid
 from collections import defaultdict
 from dataclasses import dataclass, field
-from typing_extensions import Dict, List, Optional, Set, TYPE_CHECKING
+from typing_extensions import Dict, List, Optional, Set, Tuple, TYPE_CHECKING
 
 from krrood.entity_query_language.core.base_expressions import SymbolicExpression
 from krrood.entity_query_language.core.mapped_variable import Attribute
@@ -17,21 +18,29 @@ from krrood.entity_query_language.operators.comparator import Comparator
 from krrood.entity_query_language.query.query import Entity, Query
 from krrood.entity_query_language.verbalization.fragments.base import (
     NounPhrase,
+    oxford_comma,
     PhraseFragment,
     RoleFragment,
     VerbalizationFragment,
 )
 from krrood.entity_query_language.verbalization.fragments.features import Definiteness
+from krrood.entity_query_language.verbalization.microplanning.coordination import (
+    MAX_SET_MEMBERS,
+)
 from krrood.entity_query_language.verbalization.value_lexicon import type_noun
 from krrood.entity_query_language.verbalization.relational_attributes import (
     relational_verb,
 )
-from krrood.entity_query_language.verbalization.vocabulary.english import Keywords
+from krrood.entity_query_language.verbalization.vocabulary.english import (
+    Conjunctions,
+    Keywords,
+)
 from krrood.entity_query_language.query.aggregation_structure import (
     aggregation_source_root,
     selected_aggregator,
 )
 from krrood.patterns.field_metadata import GrammarMetadata
+from krrood.patterns.specificity_ranking import concrete_subclasses
 
 if TYPE_CHECKING:
     from krrood.entity_query_language.verbalization.grammar.conditions.placement import (
@@ -137,6 +146,54 @@ def _sole_predicate_field(edges: List[ParentEdge]) -> Optional[ParentEdge]:
     return edge
 
 
+def _concrete_type_alternatives(type_: type) -> Optional[Tuple[type, ...]]:
+    """:return: *type_*'s concrete subclasses, when *type_* is itself never a valid direct
+    referent (an abstract base with :func:`~krrood.patterns.specificity_ranking.concrete_subclasses`
+    of its own) and the family is small enough to spell out — the operand-naming case behind
+    *"a Body or a Region"* for a ``KinematicStructureEntity``-typed operand. ``None`` when *type_*
+    is concrete (nameable directly) or its family is empty or larger than :data:`MAX_SET_MEMBERS`
+    (naming every alternative would overwhelm the sentence, so the abstract type is named plainly
+    instead — the same bounded-listing trade-off :func:`~…microplanning.coordination.one_of` makes
+    for a value domain).
+
+    :param type_: An operand's declared type.
+    """
+    if not inspect.isabstract(type_):
+        return None
+    alternatives = tuple(concrete_subclasses(type_))
+    if not alternatives or len(alternatives) > MAX_SET_MEMBERS:
+        return None
+    return alternatives
+
+
+def operand_type_alternatives(node: Variable) -> Optional[Tuple[type, ...]]:
+    """:return: the concrete types that should name *node* in place of its own declared type,
+    when that type is an abstract base with a small, nameable family of concrete subclasses
+    (:func:`_concrete_type_alternatives`); ``None`` when *node*'s type should be named directly
+    (a concrete class, the uninformative ``object`` placeholder, or too large a family).
+
+    :param node: The referent variable.
+    """
+    type_ = node._type_
+    if not (isinstance(type_, type) and type_ is not object):
+        return None
+    return _concrete_type_alternatives(type_)
+
+
+def disjunctive_type_head(alternatives: Tuple[type, ...]) -> VerbalizationFragment:
+    """:return: the bare disjunctive noun naming *alternatives* (*"Body or Region"*), each linked
+    to its own class — consumed as a :class:`~…fragments.base.NounPhrase` head so the surrounding
+    determiner supplies one shared article (*"a Body or Region"* / *"the Body or Region"*) rather
+    than repeating it per alternative.
+
+    :param alternatives: The concrete types to name, from :func:`operand_type_alternatives`.
+    """
+    return oxford_comma(
+        [RoleFragment.for_type(alternative) for alternative in alternatives],
+        Conjunctions.OR.as_fragment(),
+    )
+
+
 def operand_head_noun(node: Variable, edges: List[ParentEdge]) -> str:
     """:return: the head noun naming *node*, resolved in order of decreasing specificity. *node* is
     an *operand* — a variable filling one argument of a predicate or function — and its *head noun*
@@ -147,7 +204,11 @@ def operand_head_noun(node: Variable, edges: List[ParentEdge]) -> str:
        ``object`` placeholder) — the type is the default identifier for a referring expression
        (Dale & Reiter's Incremental Algorithm includes the type attribute unconditionally) and
        *always* wins once known, so a genuinely typed operand (``HasType(a_body, Apple)`` →
-       *"a Body"*) is never overridden by a field's metadata;
+       *"a Body"*) is never overridden by a field's metadata. When the type is itself an abstract
+       base with a small, nameable family of concrete subclasses (:func:`_concrete_type_alternatives`),
+       the disjunction of those subclasses' nouns stands in for it (*"Body or Region"* for a
+       ``KinematicStructureEntity``-typed operand), since the abstract type itself is never a
+       valid direct referent;
     2. only once the type carries no information: the owning predicate field's declared
        :attr:`~krrood.patterns.field_metadata.GrammarMetadata.display_name` — explicit lexical
        metadata, checked only when *node* fills exactly that one field and appears nowhere else
@@ -194,6 +255,9 @@ def operand_head_noun(node: Variable, edges: List[ParentEdge]) -> str:
     """
     type_ = node._type_
     if isinstance(type_, type) and type_ is not object:
+        alternatives = _concrete_type_alternatives(type_)
+        if alternatives is not None:
+            return " or ".join(type_noun(alternative) for alternative in alternatives)
         return type_noun(type_)
     sole_field = _sole_predicate_field(edges)
     if sole_field is None:
@@ -314,13 +378,29 @@ class _HeadNounGrouping:
     _noun_of_canonical: Dict[uuid.UUID, str] = field(default_factory=dict)
     """The noun a canonical was first registered under (guards against re-listing it)."""
 
-    def add(self, referent_id: uuid.UUID, canonical: uuid.UUID, noun: str) -> None:
+    _type_alternatives_of_canonical: Dict[uuid.UUID, Tuple[type, ...]] = field(
+        default_factory=dict
+    )
+    """The concrete-subclass alternatives a canonical was first registered under, when its
+    declared type is an abstract base named by disjunction (:func:`operand_type_alternatives`);
+    absent for a canonical named directly."""
+
+    def add(
+        self,
+        referent_id: uuid.UUID,
+        canonical: uuid.UUID,
+        noun: str,
+        type_alternatives: Optional[Tuple[type, ...]] = None,
+    ) -> None:
         """Record *referent_id* as a member of *canonical*, registering *canonical* under *noun*
-        on first sight — an ``==``-unified canonical whose members would otherwise resolve
-        different nouns keeps the first-encountered one, a single deterministic rule."""
+        (and its *type_alternatives*, if any) on first sight — an ``==``-unified canonical whose
+        members would otherwise resolve different nouns keeps the first-encountered one, a single
+        deterministic rule."""
         if canonical not in self._noun_of_canonical:
             self._noun_of_canonical[canonical] = noun
             self.canonicals_by_noun[noun].append(canonical)
+            if type_alternatives is not None:
+                self._type_alternatives_of_canonical[canonical] = type_alternatives
         self.members_by_canonical[canonical].append(referent_id)
 
     def head_nouns(self) -> Dict[uuid.UUID, str]:
@@ -329,6 +409,16 @@ class _HeadNounGrouping:
             member: noun
             for noun, canonicals in self.canonicals_by_noun.items()
             for canonical in canonicals
+            for member in self.members_by_canonical[canonical]
+        }
+
+    def type_alternatives(self) -> Dict[uuid.UUID, Tuple[type, ...]]:
+        """:return: every member referent id mapped to its canonical's concrete-subclass
+        alternatives — only for canonicals named by disjunction, per :func:`operand_type_alternatives`.
+        """
+        return {
+            member: alternatives
+            for canonical, alternatives in self._type_alternatives_of_canonical.items()
             for member in self.members_by_canonical[canonical]
         }
 
@@ -367,6 +457,14 @@ class NounForm:
     The display label for the noun head.
     """
 
+    type_alternatives: Optional[Tuple[type, ...]] = None
+    """
+    When set, the noun head is a disjunction of these concrete types
+    (:func:`operand_type_alternatives`), rendered by :func:`disjunctive_type_head` instead of
+    :attr:`label` — *"a Body or Region"* (one shared article) rather than a single linked type
+    reference.
+    """
+
 
 @dataclass
 class ReferringExpressions:
@@ -399,6 +497,13 @@ class ReferringExpressions:
     (:func:`operand_head_noun`).
     """
 
+    type_alternatives: Dict[uuid.UUID, Tuple[type, ...]] = field(default_factory=dict)
+    """
+    Maps referent ``_id_`` → concrete-subclass alternatives, pre-computed alongside
+    :attr:`head_nouns` (:func:`operand_type_alternatives`) — present only for a referent whose
+    declared type is an abstract base named by disjunction.
+    """
+
     distinguishers: DistinguisherIndex = field(default_factory=DistinguisherIndex)
     """
     Same-noun-group disambiguation, assigned lazily in discourse order by the coreference pass.
@@ -418,6 +523,7 @@ class ReferringExpressions:
         grouping = cls._group_referents_by_noun(expression)
         return cls(
             head_nouns=grouping.head_nouns(),
+            type_alternatives=grouping.type_alternatives(),
             distinguishers=grouping.distinguisher_index(),
         )
 
@@ -441,7 +547,14 @@ class ReferringExpressions:
             if noun is None or node._id_ in suppressed or node._id_ in seen:
                 continue
             seen.add(node._id_)
-            grouping.add(node._id_, aliases.get(node._id_, node._id_), noun)
+            alternatives = (
+                operand_type_alternatives(node)
+                if isinstance(node, Variable) and not isinstance(node, Literal)
+                else None
+            )
+            grouping.add(
+                node._id_, aliases.get(node._id_, node._id_), noun, alternatives
+            )
         return grouping
 
     @staticmethod
@@ -558,6 +671,15 @@ class ReferringExpressions:
         """
         return self.head_nouns.get(variable._id_, self._variable_type_label(variable))
 
+    def type_alternatives_of(self, variable: Variable) -> Optional[Tuple[type, ...]]:
+        """:return: *variable*'s concrete-subclass alternatives, pre-computed in the pre-scan
+        (:func:`operand_type_alternatives`), or ``None`` when it was not scanned or is named
+        directly rather than by disjunction.
+
+        :param variable: The referent variable.
+        """
+        return self.type_alternatives.get(variable._id_)
+
     def noun_for_parts(self, variable: Variable) -> NounForm:
         """
         :param variable: A variable instance.
@@ -569,7 +691,11 @@ class ReferringExpressions:
         'Robot'
         """
         self.seen.add(variable._id_)
-        return NounForm(Definiteness.INDEFINITE, self.head_noun_of(variable))
+        return NounForm(
+            Definiteness.INDEFINITE,
+            self.head_noun_of(variable),
+            self.type_alternatives_of(variable),
+        )
 
 
 def _entity_referent_id(node: SymbolicExpression) -> Optional[uuid.UUID]:
