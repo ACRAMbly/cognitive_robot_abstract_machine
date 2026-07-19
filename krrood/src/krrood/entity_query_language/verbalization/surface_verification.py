@@ -17,8 +17,12 @@ The snapshot's per-class rendering is itself a reusable capability, not a test-o
 :func:`first_order_form` verbalizes a symbolic callable *value-agnostically* — from its declared
 field types alone, with no constructed instance or bound literal in hand — the sibling of the
 ordinary *value-using* form :func:`~…pipeline.verbalize_expression` already produces for a real,
-bound expression. :class:`SymbolicSurfaceSnapshot` calls it for every discovered class; a caller
-wanting the first-order form of one class (documentation, introspection) can call it directly.
+bound expression. It takes nothing but the class itself; a caller wanting the first-order form of
+one class (documentation, introspection) can call it directly. :class:`SymbolicSurfaceSnapshot`
+builds on the same :func:`placeholder_operands` but layers its own :attr:`~SymbolicSurfaceSnapshot.
+operand_overrides` on top — supplying a concrete value for a field whose fragment reads it
+directly rather than as a symbolic operand is a snapshot-testing concern, not a first-order-form
+one, so it stays out of the general functions' signatures.
 """
 
 from __future__ import annotations
@@ -61,32 +65,26 @@ class OverriddenOperand:
     """
 
 
-def placeholder_operands(
-    cls: Type[SymbolicCallable],
-    operand_overrides: Sequence[OverriddenOperand] = (),
-) -> Dict[str, Any]:
+def placeholder_operands(cls: Type[SymbolicCallable]) -> Dict[str, Any]:
     """
-    One placeholder operand per init dataclass field.
+    One placeholder operand per init dataclass field, from the field's declared type
+    endpoint alone — a fresh variable of that type (``object`` when the endpoint is not
+    a plain class), so the surface reads the operand as *"a <TypeName>"*.
 
-    A field gets its registered override, else a fresh variable of the field's type
-    endpoint as the class diagram resolves it (``object`` when the endpoint is not a
-    plain class), so the surface reads the operand as *"a <TypeName>"*.
+    This is genuinely value-agnostic: it needs nothing beyond *cls* itself. A field whose
+    fragment reads its raw VALUE rather than a symbolic operand (a ``Type`` field, say)
+    still gets a placeholder variable here; a caller that must supply a real value for
+    such a field instead (:class:`SymbolicSurfaceSnapshot` does, via its
+    :attr:`~SymbolicSurfaceSnapshot.operand_overrides`) overwrites that entry in the
+    returned dict rather than this function taking on that concern itself.
 
     :param cls: The symbolic callable to build operands for.
-    :param operand_overrides: Concrete values for fields whose fragment reads that field
-        directly rather than treating it as a symbolic operand.
     :return: The operand to pass for each init field, keyed by field name.
     """
-    overridden_operands = {
-        override.name: override.value for override in operand_overrides
-    }
     wrapped_class = WrappedClass(clazz=cls)
     operands: Dict[str, Any] = {}
     for field_ in dataclass_fields(cls):
         if not field_.init:
-            continue
-        if field_.name in overridden_operands:
-            operands[field_.name] = overridden_operands[field_.name]
             continue
         endpoint = WrappedField(wrapped_class, field_).type_endpoint
         placeholder_type = (
@@ -96,10 +94,7 @@ def placeholder_operands(
     return operands
 
 
-def first_order_form(
-    cls: Type[SymbolicCallable],
-    operand_overrides: Sequence[OverriddenOperand] = (),
-) -> str:
+def first_order_form(cls: Type[SymbolicCallable]) -> str:
     """
     Verbalize *cls* value-agnostically — the *first-order form*: every operand named
     from its declared field type alone (:func:`placeholder_operands`), with no
@@ -108,11 +103,9 @@ def first_order_form(
     :func:`~…pipeline.verbalize_expression`.
 
     :param cls: The symbolic callable to render.
-    :param operand_overrides: Concrete values for fields whose fragment reads that field
-        directly rather than treating it as a symbolic operand.
     :return: The sentence *cls* renders with placeholder operands.
     """
-    return verbalize_expression(cls(**placeholder_operands(cls, operand_overrides)))
+    return verbalize_expression(cls(**placeholder_operands(cls)))
 
 
 @dataclass(frozen=True)
@@ -186,18 +179,25 @@ class SymbolicSurfaceSnapshot:
     def placeholder_operands(self, cls: Type[SymbolicCallable]) -> Dict[str, Any]:
         """
         :param cls: The symbolic callable to build operands for.
-        :return: One placeholder operand per init dataclass field (:func:`placeholder_operands`),
-            using this snapshot's registered :attr:`operand_overrides` for *cls*.
+        :return: :func:`placeholder_operands` for *cls*, with this snapshot's registered
+            :attr:`operand_overrides` overwriting the fields they name — the snapshot's own
+            concern, so the general :func:`placeholder_operands` stays override-free.
         """
-        return placeholder_operands(cls, self.operand_overrides.get(cls, ()))
+        operands = placeholder_operands(cls)
+        operands.update(
+            {
+                override.name: override.value
+                for override in self.operand_overrides.get(cls, ())
+            }
+        )
+        return operands
 
     def rendered_surface(self, cls: Type[SymbolicCallable]) -> str:
         """
         :param cls: The symbolic callable to render.
-        :return: *cls*'s first-order form (:func:`first_order_form`), using this snapshot's
-            registered :attr:`operand_overrides` for *cls*.
+        :return: The sentence *cls* renders with this snapshot's (possibly overridden) operands.
         """
-        return first_order_form(cls, self.operand_overrides.get(cls, ()))
+        return verbalize_expression(cls(**self.placeholder_operands(cls)))
 
     def assert_every_callable_has_a_fragment(self) -> None:
         """

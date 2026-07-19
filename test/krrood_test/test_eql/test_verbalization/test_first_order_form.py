@@ -16,6 +16,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
+import krrood
 from krrood.entity_query_language.factories import variable
 from krrood.entity_query_language.predicate import Predicate
 from krrood.entity_query_language.verbalization.pipeline import verbalize_expression
@@ -23,6 +24,7 @@ from krrood.entity_query_language.verbalization.surface_verification import (
     first_order_form,
     OverriddenOperand,
     placeholder_operands,
+    SymbolicSurfaceSnapshot,
 )
 from krrood.entity_query_language.verbalization.vocabulary.parts_of_speech import (
     Adjective,
@@ -95,7 +97,7 @@ class Fastened(Predicate):
         return clause(Noun(fields["item"]), Copula(), Adjective("secure"))
 
 
-# %% placeholder_operands
+# %% placeholder_operands and first_order_form take nothing but the class itself
 
 
 def test_placeholder_operands_uses_the_field_type_by_default():
@@ -104,28 +106,8 @@ def test_placeholder_operands_uses_the_field_type_by_default():
     assert operands["catalyst"]._type_ is object
 
 
-def test_placeholder_operands_uses_a_registered_override():
-    operands = placeholder_operands(Kindled, [OverriddenOperand("catalyst", "ash")])
-    assert operands["catalyst"] == "ash"
-
-
-# %% first_order_form (the value-agnostic form)
-
-
 def test_first_order_form_verbalizes_from_declared_field_types():
     assert first_order_form(Kindled) == "an Igniter is lit"
-
-
-def test_first_order_form_respects_a_registered_override():
-    """
-    An overridden field's concrete value participates in the sentence read only through
-    the fragment the class chose to build -- here `catalyst` never appears in the
-    wording, so the override changes nothing observable, matching the un-overridden
-    rendering.
-    """
-    assert first_order_form(
-        Kindled, [OverriddenOperand("catalyst", "ash")]
-    ) == first_order_form(Kindled)
 
 
 def test_first_order_form_expands_an_abstract_declared_field_type():
@@ -151,3 +133,31 @@ def test_first_order_form_and_value_using_form_agree_when_types_match():
     """
     bound_instance = Kindled(variable(Igniter, []), object())
     assert first_order_form(Kindled) == verbalize_expression(bound_instance)
+
+
+# %% SymbolicSurfaceSnapshot layers operand_overrides on top -- a snapshot-testing concern,
+# %% not a first_order_form one, since a value-agnostic rendering needs nothing external
+
+
+def test_snapshot_placeholder_operands_lets_a_registered_override_overwrite_a_field():
+    snapshot = SymbolicSurfaceSnapshot(
+        package=krrood,
+        surfaces=(),
+        operand_overrides={Kindled: [OverriddenOperand("catalyst", "ash")]},
+    )
+    assert snapshot.placeholder_operands(Kindled)["catalyst"] == "ash"
+
+
+def test_snapshot_rendered_surface_respects_a_registered_override():
+    """
+    An overridden field's concrete value participates in the sentence read only through
+    the fragment the class chose to build -- here `catalyst` never appears in the
+    wording, so the override changes nothing observable, matching the un-overridden
+    first-order form.
+    """
+    snapshot = SymbolicSurfaceSnapshot(
+        package=krrood,
+        surfaces=(),
+        operand_overrides={Kindled: [OverriddenOperand("catalyst", "ash")]},
+    )
+    assert snapshot.rendered_surface(Kindled) == first_order_form(Kindled)
