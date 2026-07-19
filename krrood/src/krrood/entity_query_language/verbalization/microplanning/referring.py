@@ -17,6 +17,7 @@ from krrood.entity_query_language.core.variable import (
 from krrood.entity_query_language.operators.comparator import Comparator
 from krrood.entity_query_language.query.query import Entity, Query
 from krrood.entity_query_language.verbalization.fragments.base import (
+    flatten_fragment_to_plain_text,
     NounPhrase,
     oxford_comma,
     PhraseFragment,
@@ -257,7 +258,7 @@ def operand_head_noun(node: Variable, edges: List[ParentEdge]) -> str:
     if isinstance(type_, type) and type_ is not object:
         alternatives = _concrete_type_alternatives(type_)
         if alternatives is not None:
-            return " or ".join(type_noun(alternative) for alternative in alternatives)
+            return flatten_fragment_to_plain_text(disjunctive_type_head(alternatives))
         return type_noun(type_)
     sole_field = _sole_predicate_field(edges)
     if sole_field is None:

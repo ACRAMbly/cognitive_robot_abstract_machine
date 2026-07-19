@@ -225,6 +225,33 @@ class Square(Shape):
         return 0.0
 
 
+class Instrument(ABC):
+    """
+    A stand-in abstract operand type with a three-member family -- exercises the Oxford-
+    comma joining an over-two-item disjunction takes (*"Drum, Flute, or Harp"*), where a
+    naive ``" or "``-only join would silently disagree with the linked fragment's own
+    joining.
+    """
+
+    @abstractmethod
+    def play(self) -> None: ...
+
+
+class Drum(Instrument):
+    def play(self) -> None:
+        pass
+
+
+class Flute(Instrument):
+    def play(self) -> None:
+        pass
+
+
+class Harp(Instrument):
+    def play(self) -> None:
+        pass
+
+
 class Polygon(ABC):
     """
     A stand-in abstract operand type whose concrete family is too large to spell out --
@@ -300,6 +327,23 @@ class AbstractOperandRole(Predicate):
     """
 
     surface: Shape
+
+    def __call__(self) -> bool:
+        return True
+
+    @classmethod
+    def _verbalization_fragment_(cls, fields):
+        return clause(Noun(fields["surface"]), Copula(), Adjective("warm"))
+
+
+@dataclass(eq=False)
+class InstrumentRole(Predicate):
+    """
+    A single-operand predicate whose field is typed with a three-member abstract family
+    -- exercises the Oxford-comma-joined disjunctive head end-to-end.
+    """
+
+    surface: Instrument
 
     def __call__(self) -> bool:
         return True
@@ -515,6 +559,20 @@ def test_abstract_type_head_noun_is_the_disjunctive_label():
     assert operand_head_noun(variable(Shape, []), []) == "Circle or Square"
 
 
+def test_three_member_family_head_noun_matches_the_oxford_comma_joined_fragment():
+    """
+    The head-noun label reuses `disjunctive_type_head`'s own joining rather than a plain
+    `" or "` join, so a three-or-more-member family agrees with the Oxford-comma-joined
+    fragment `VariableRule.build` actually renders (`"Drum, Flute, or Harp"`, not the
+    comma-less `"Drum or Flute or Harp"` a naive join would produce).
+    """
+    alternatives = (Drum, Flute, Harp)
+    assert operand_head_noun(
+        variable(Instrument, []), []
+    ) == flatten_fragment_to_plain_text(disjunctive_type_head(alternatives))
+    assert operand_head_noun(variable(Instrument, []), []) == "Drum, Flute, or Harp"
+
+
 def test_abstract_type_beyond_the_cap_is_named_by_its_own_type():
     assert operand_head_noun(variable(Polygon, []), []) == "Polygon"
 
@@ -526,6 +584,12 @@ def test_concrete_base_with_subclasses_is_named_directly_by_head_noun():
 def test_abstract_operand_reads_as_a_disjunctive_noun_phrase():
     assert verbalize_expression(AbstractOperandRole(variable(Shape, []))) == (
         "a Circle or Square is warm"
+    )
+
+
+def test_three_member_family_reads_with_an_oxford_comma():
+    assert verbalize_expression(InstrumentRole(variable(Instrument, []))) == (
+        "a Drum, Flute, or Harp is warm"
     )
 
 
