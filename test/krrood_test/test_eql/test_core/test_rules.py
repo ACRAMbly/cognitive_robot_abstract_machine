@@ -16,6 +16,7 @@ from krrood.entity_query_language.core.variable import Literal
 from krrood.entity_query_language.core.base_expressions import OperationResult
 from krrood.entity_query_language.predicate import HasType
 from krrood.entity_query_language.rules.conclusion import Add
+from krrood.entity_query_language.rules.conclusion_selector import Refinement
 from ...dataset.eql_rule_tree_doc_example import (
     ExampleConnection,
     ExampleView,
@@ -141,6 +142,37 @@ def test_conditions_root_resolves_for_a_rule_condition_reused_as_another_querys_
         "condition reused outside its own rule tree"
     )
     assert refinement_condition._conditions_root_ is not None
+
+
+def test_conditions_root_resolves_after_insert_at_clones_an_already_parented_condition():
+    body = variable(Body, domain=[])
+    handle = variable(Handle, domain=[])
+    fixed_connection = variable(FixedConnection, domain=[])
+
+    views = deduced_variable(View)
+    query = an(entity(views).where(body == fixed_connection.parent))
+    with query:
+        Add(views, inference(Door)(handle=handle, body=body))
+    anchor = query._conditions_root_
+
+    other_views = deduced_variable(View)
+    other_query = an(entity(other_views).where(handle == fixed_connection.child))
+    with other_query:
+        Add(other_views, inference(Door)(handle=handle, body=body))
+    already_parented_condition = other_query._conditions_root_
+
+    # This is the live-growth API (the one insert_refinement/insert_alternative call) rather
+    # than the with-refinement(...) DSL, so it exercises _node_for_new_position_'s cloning
+    # branch directly: already_parented_condition already has a parent (other_query's Where),
+    # so insert_at must splice in a clone rather than reusing the node in place.
+    new_condition = Refinement.insert_at(anchor, already_parented_condition)
+
+    assert new_condition is not already_parented_condition
+    assert already_parented_condition._conditions_root_ is already_parented_condition, (
+        "the original condition must be unaffected by the splice and still resolve "
+        "within its own, untouched query"
+    )
+    assert new_condition._conditions_root_ is not None
 
 
 def test_generate_drawers_from_query(handles_and_containers_world):
