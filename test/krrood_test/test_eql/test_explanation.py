@@ -433,6 +433,47 @@ def test_satisfied_conditions_no_where():
         assert result.satisfied_condition_ids is None
 
 
+def test_satisfied_conditions_for_bare_condition_shared_with_an_unrelated_query():
+    """
+    A bare (non-Comparator/Predicate/LogicalOperator) condition value that was first
+    attached as a Comparator operand in one query, then reused as the direct where-
+    condition of a second, unrelated query, must still be recorded as satisfied by the
+    second query's own evaluation.
+
+    ``is_condition_participant`` must not rely on the shared node's structural, first-
+    attachment-wins ``_parent_``: that pointer keeps referencing the first (Comparator)
+    parent even after the node gains a second, unrelated parent, so a check based on it
+    answers a question about construction history instead of about the evaluation that
+    is currently running.
+    """
+    flag = variable_from([True])
+    sink = variable_from([1])
+
+    # Attaches `flag` as a Comparator operand first, so its structural primary parent is
+    # the Comparator, not a TruthValueOperator.
+    unrelated_query = entity(sink).where(flag == True)
+    unrelated_query.build()
+
+    # Reuses the same `flag` node as the direct where-condition of a second, independent
+    # query. Structurally `flag` now has two parents, but only the Comparator is primary.
+    target = variable_from([1])
+    query = entity(target).where(flag)
+    query.build()
+    assert (
+        len(flag._parents_) == 2
+    ), "flag must be a genuinely shared DAG node for this test to exercise the bug"
+
+    true_results = _get_true_results(query)
+    assert len(true_results) == 1
+    result = true_results[0]
+
+    assert result.satisfied_condition_ids is not None
+    assert flag._id_ in result.satisfied_condition_ids, (
+        "flag is this query's own where-condition and evaluated true, so it must be "
+        "recorded as satisfied regardless of which query attached it to the DAG first"
+    )
+
+
 # ============================================================
 # Tests for condition_graph via explain_inference pipeline
 # ============================================================

@@ -13,6 +13,7 @@ from typing_extensions import Any, Dict, Optional
 from krrood.entity_query_language._monitoring import monitored
 from krrood.entity_query_language.core.base_expressions import (
     OperationResult,
+    SymbolicExpression,
     TruthValueOperator,
 )
 from krrood.entity_query_language.core.variable import InstantiatedVariable
@@ -32,7 +33,7 @@ from krrood.entity_query_language.predicate import Predicate
 from krrood.entity_query_language.query.query import Query
 
 
-def is_condition_participant(expr: OperationResult) -> bool:
+def is_condition_participant(expr: SymbolicExpression) -> bool:
     """
     Check whether the expression participates in condition evaluation.
 
@@ -40,15 +41,26 @@ def is_condition_participant(expr: OperationResult) -> bool:
     :return: ``True`` if *expr* is a :class:`~krrood.entity_query_language.operators.comparator.Comparator`,
         :class:`~krrood.entity_query_language.predicate.Predicate`, or
         :class:`~krrood.entity_query_language.operators.core_logical_operators.LogicalOperator`,
-        or if its direct parent is a
+        or if it was evaluated as a direct child of a
         :class:`~krrood.entity_query_language.core.base_expressions.TruthValueOperator`.
+
+    ..note:: Within an active evaluation pass, "direct child of a ``TruthValueOperator``" is
+        answered from that pass's own record of which nodes were evaluated as such a child
+        (see :class:`~krrood.entity_query_language.evaluation_context.TruthValueOperatorChildren`),
+        not from *expr*'s structural, first-attachment-wins ``_parent_``: a node reused
+        elsewhere in the DAG keeps a direct parent per position, but only one of them is
+        primary, and it may belong to an unrelated position. Outside an active evaluation
+        (for example when coloring a
+        :class:`~krrood.entity_query_language.query_graph.QueryGraph` after the fact), the
+        structural ``_parent_`` is the only signal left.
     """
     if isinstance(expr, (Comparator, Predicate, LogicalOperator)):
         return True
+    evaluation_context = get_evaluation_context()
+    if evaluation_context is not None:
+        return expr._id_ in evaluation_context.truth_value_operator_children
     parent = expr._parent_
-    if parent is not None and isinstance(parent, TruthValueOperator):
-        return True
-    return False
+    return parent is not None and isinstance(parent, TruthValueOperator)
 
 
 class EvaluationTracker(EvaluationObserver):
