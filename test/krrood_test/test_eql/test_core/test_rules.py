@@ -88,6 +88,61 @@ def test_conditions_root_resolves_for_a_condition_shared_by_two_queries():
     assert shared_condition._conditions_root_ is shared_condition
 
 
+def test_conditions_root_resolves_for_a_subexpression_shared_by_two_compound_conditions():
+    body = variable(Body, domain=[])
+    handle = variable(Handle, domain=[])
+    fixed_connection = variable(FixedConnection, domain=[])
+    shared_subexpression = handle == fixed_connection.child
+
+    first_drawers = deduced_variable(Drawer)
+    first_query = an(
+        entity(first_drawers).where(
+            and_(body == fixed_connection.parent, shared_subexpression)
+        )
+    )
+    first_query.build()
+
+    second_drawers = deduced_variable(Drawer)
+    second_query = an(
+        entity(second_drawers).where(and_(body.size > 1, shared_subexpression))
+    )
+    second_query.build()
+
+    assert len(shared_subexpression._parents_) == 2, (
+        "the subexpression must be a direct child of both queries' AND compounds for "
+        "this to exercise conditions-root resolution on a node shared two hops below "
+        "its owning filters"
+    )
+    assert shared_subexpression._conditions_root_ is not None
+
+
+def test_conditions_root_resolves_for_a_rule_condition_reused_as_another_querys_filter():
+    body = variable(Body, domain=[])
+    handle = variable(Handle, domain=[])
+    fixed_connection = variable(FixedConnection, domain=[])
+    views = deduced_variable(View)
+    query = an(entity(views).where(body == fixed_connection.parent))
+
+    with query:
+        Add(views, inference(Door)(handle=handle, body=body))
+        refinement_condition = body.size > 1
+        with refinement(refinement_condition):
+            Add(views, inference(Door)(handle=handle, body=body))
+
+    assert len(refinement_condition._parents_) == 1
+
+    other_views = deduced_variable(View)
+    other_query = an(entity(other_views).where(refinement_condition))
+    other_query.build()
+
+    assert len(refinement_condition._parents_) == 2, (
+        "the refinement's condition must also be a direct child of the second query's "
+        "Where filter for this to exercise conditions-root resolution on a rule "
+        "condition reused outside its own rule tree"
+    )
+    assert refinement_condition._conditions_root_ is not None
+
+
 def test_generate_drawers_from_query(handles_and_containers_world):
     world = handles_and_containers_world
     container = variable(Container, domain=world.bodies)
