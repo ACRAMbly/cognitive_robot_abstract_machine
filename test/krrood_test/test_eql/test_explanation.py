@@ -667,6 +667,45 @@ def test_condition_graph_pipeline_non_symbol():
 # ============================================================
 
 
+def test_query_graph_marks_a_shared_bare_condition_satisfied_from_its_own_query():
+    """
+    A bare condition value reused across two unrelated queries must be classified as a
+    condition participant by whichever query's own ``QueryGraph`` is being built, not by
+    whichever query happened to attach it to the DAG first.
+
+    Mirrors ``test_satisfied_conditions_for_bare_condition_shared_with_an_unrelated_query``
+    for the post-hoc ``QueryGraph`` visualization path: ``construct_graph`` already knows
+    the edge it is visiting (it recurses via each expression's own ``_children_``), so it
+    must not re-derive a possibly-unrelated parent from the shared node's structural
+    ``_parent_``.
+    """
+    flag = variable_from([True])
+    sink = variable_from([1])
+
+    unrelated_query = entity(sink).where(flag == True)
+    unrelated_query.build()
+
+    target = variable_from([1])
+    query = entity(target).where(flag)
+    query.build()
+    assert (
+        len(flag._parents_) == 2
+    ), "flag must be a genuinely shared DAG node for this test to exercise the bug"
+
+    true_results = _get_true_results(query)
+    result = true_results[0]
+
+    query_graph = QueryGraph(
+        query, satisfied_condition_ids=result.satisfied_condition_ids
+    )
+    flag_node = query_graph.expression_node_map[flag]
+    assert flag_node.is_satisfied, (
+        "flag is this query's own where-condition and evaluated true, so its QueryNode "
+        "must be marked satisfied regardless of which query attached it to the DAG first"
+    )
+    assert not flag_node.faded
+
+
 def test_query_graph_satisfaction_colors():
     """
     Unsatisfied nodes get red borders; satisfied nodes keep full color and no border.

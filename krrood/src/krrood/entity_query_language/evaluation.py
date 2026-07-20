@@ -32,30 +32,46 @@ from krrood.entity_query_language.operators.core_logical_operators import (
 from krrood.entity_query_language.predicate import Predicate
 from krrood.entity_query_language.query.query import Query
 
+_PARENT_NOT_SUPPLIED = object()
+"""
+Sentinel distinguishing "the caller does not know *expr*'s relevant parent" from "the
+caller knows *expr* has no relevant parent" (``None``) in
+:func:`is_condition_participant`.
+"""
 
-def is_condition_participant(expr: SymbolicExpression) -> bool:
+
+def is_condition_participant(
+    expr: SymbolicExpression,
+    parent: Optional[SymbolicExpression] = _PARENT_NOT_SUPPLIED,
+) -> bool:
     """
     Check whether the expression participates in condition evaluation.
 
     :param expr: The symbolic expression to test.
+    :param parent: The parent relevant to the caller's own traversal, when the caller
+        already knows it (for example a graph walk that reached *expr* through one of its
+        own children edges). Takes precedence over both of the fallbacks below.
     :return: ``True`` if *expr* is a :class:`~krrood.entity_query_language.operators.comparator.Comparator`,
         :class:`~krrood.entity_query_language.predicate.Predicate`, or
         :class:`~krrood.entity_query_language.operators.core_logical_operators.LogicalOperator`,
-        or if it was evaluated as a direct child of a
+        or if it was evaluated (or, per *parent*, reached) as a direct child of a
         :class:`~krrood.entity_query_language.core.base_expressions.TruthValueOperator`.
 
-    ..note:: Within an active evaluation pass, "direct child of a ``TruthValueOperator``" is
-        answered from that pass's own record of which nodes were evaluated as such a child
-        (see :class:`~krrood.entity_query_language.evaluation_context.TruthValueOperatorChildren`),
-        not from *expr*'s structural, first-attachment-wins ``_parent_``: a node reused
-        elsewhere in the DAG keeps a direct parent per position, but only one of them is
-        primary, and it may belong to an unrelated position. Outside an active evaluation
-        (for example when coloring a
-        :class:`~krrood.entity_query_language.query_graph.QueryGraph` after the fact), the
-        structural ``_parent_`` is the only signal left.
+    ..note:: A node reused elsewhere in the DAG keeps a direct parent per position, but
+        only one of them is its structural, first-attachment-wins ``_parent_`` — which may
+        belong to an unrelated position. When *parent* is not supplied, this is resolved
+        from context instead of reading that structural pointer: within an active
+        evaluation pass, from the pass's own record of which nodes were evaluated as a
+        ``TruthValueOperator`` child (see
+        :class:`~krrood.entity_query_language.evaluation_context.TruthValueOperatorChildren`).
+        Outside an active evaluation and without an explicit *parent* (for example when
+        coloring a :class:`~krrood.entity_query_language.query_graph.QueryGraph` from an
+        already-finished evaluation), the structural ``_parent_`` is the only signal left.
     """
     if isinstance(expr, (Comparator, Predicate, LogicalOperator)):
         return True
+    if parent is not _PARENT_NOT_SUPPLIED:
+        return parent is not None and isinstance(parent, TruthValueOperator)
     evaluation_context = get_evaluation_context()
     if evaluation_context is not None:
         return expr._id_ in evaluation_context.truth_value_operator_children

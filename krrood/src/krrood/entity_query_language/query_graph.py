@@ -56,7 +56,8 @@ def _is_faded_gate(node, satisfied_condition_ids: OrderedSet[UUID]) -> bool:
     expr = node.data
     if expr is None:
         return False
-    if not is_condition_participant(expr):
+    parent_expr = node.parent.data if node.parent is not None else None
+    if not is_condition_participant(expr, parent=parent_expr):
         return False
     return expr._id_ not in satisfied_condition_ids
 
@@ -219,10 +220,19 @@ class QueryGraph:
     def construct_graph(
         self,
         expression: Optional[SymbolicExpression] = None,
+        parent: Optional[SymbolicExpression] = None,
     ) -> QueryNode:
         """
         Construct the graph representation of the query, used for visualization and
         introspection.
+
+        :param expression: The expression to add, defaulting to the query's root.
+        :param parent: The parent *expression* was reached through, when known (that is,
+            whenever this is a recursive call from :meth:`_add_children_to_graph` rather
+            than the initial call). Passed on to :func:`is_condition_participant`
+            instead of letting it fall back to *expression*'s structural, first-
+            attachment-wins ``_parent_``, which may belong to an unrelated position if
+            *expression* is a node shared elsewhere in the DAG.
         """
         expression = expression if expression is not None else self.query._root_
 
@@ -231,7 +241,7 @@ class QueryGraph:
 
         is_satisfied = (
             self.satisfied_condition_ids is not None
-            and is_condition_participant(expression)
+            and is_condition_participant(expression, parent=parent)
             and expression._id_ in self.satisfied_condition_ids
         )
         node = QueryNode(
@@ -266,7 +276,7 @@ class QueryGraph:
             else []
         )
         for child in parent_expression._children_:
-            child_node = self.construct_graph(child)
+            child_node = self.construct_graph(child, parent=parent_expression)
             if child._id_ in selected_var_ids:
                 child_node.enclosed = True
             child_node.parent = parent_node
