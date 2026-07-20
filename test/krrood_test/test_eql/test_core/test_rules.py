@@ -68,6 +68,26 @@ def test_generate_drawers_from_direct_condition(handles_and_containers_world):
     assert all_solutions[1][drawers].container.name == "Container1"
 
 
+def test_conditions_root_resolves_for_a_condition_shared_by_two_queries():
+    container = variable(Container, domain=[])
+    fixed_connection = variable(FixedConnection, domain=[])
+    shared_condition = container == fixed_connection.parent
+
+    first_drawers = deduced_variable(Drawer)
+    first_query = an(entity(first_drawers).where(shared_condition))
+    first_query.build()
+
+    second_drawers = deduced_variable(Drawer)
+    second_query = an(entity(second_drawers).where(shared_condition))
+    second_query.build()
+
+    assert len(shared_condition._parents_) == 2, (
+        "the condition must be a direct child of both queries' Where filters for this "
+        "to exercise conditions-root resolution on a genuinely shared node"
+    )
+    assert shared_condition._conditions_root_ is shared_condition
+
+
 def test_generate_drawers_from_query(handles_and_containers_world):
     world = handles_and_containers_world
     container = variable(Container, domain=world.bodies)

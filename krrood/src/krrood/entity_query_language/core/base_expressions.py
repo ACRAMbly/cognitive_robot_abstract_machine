@@ -272,29 +272,6 @@ class SymbolicExpression(ABC):
         if parent is self._parent__:
             self._parent__ = self._parents_[-1] if self._parents_ else None
 
-    def _last_parent_of_type_(
-        self, *types: Type[SymbolicExpression]
-    ) -> Optional[SymbolicExpression]:
-        """
-        :return: The most recently attached direct parent that is an instance of any of *types*,
-            or ``None``.
-
-        A node reused in more than one query/subquery keeps a direct parent per position, but only
-        one of them is ``_parent_`` (the first one attached — see the ``_parent_`` setter). Walking
-        the ``_parent_`` chain from such a node therefore reaches whichever context it was first
-        embedded in, not necessarily the one currently asking. This checks *this node's own*
-        `_parents_` directly (no multi-hop walk) for one matching *types*, so callers that need "the
-        Filter/ConclusionSelector directly owning me" find it regardless of which parent is primary.
-        """
-        return next(
-            (
-                parent
-                for parent in reversed(self._parents_)
-                if isinstance(parent, types)
-            ),
-            None,
-        )
-
     def _update_children_(
         self, *children: SymbolicExpression
     ) -> Tuple[SymbolicExpression, ...]:
@@ -510,28 +487,15 @@ class SymbolicExpression(ABC):
     def _conditions_root_(self) -> Optional[SymbolicExpression]:
         """
         :return: The root of the symbolic expression graph that contains conditions, or None if no conditions found.
-
-        ..note:: A node reused across separate queries or subqueries (for example a shared
-            sub-expression wrapped in a second ``Filter`` by a derived/introspection query) has a
-            direct ``Filter`` parent that may not be reachable by walking up from ``self._root_``,
-            since that walk follows only the primary ``_parent_`` — whichever context first attached
-            it. :meth:`_last_parent_of_type_` recovers the owning ``Filter`` directly from this
-            node's own parents when the graph walk misses it.
         """
-        root_via_graph = next(
+        return next(
             (
                 expr.condition
                 for expr in self._all_expressions_
                 if isinstance(expr, Filter)
             ),
-            None,
+            self._root_,
         )
-        if root_via_graph is not None:
-            return root_via_graph
-        filter_parent = self._last_parent_of_type_(Filter)
-        if filter_parent is not None:
-            return filter_parent.condition
-        return self._root_
 
     @property
     def _root_(self) -> SymbolicExpression:
