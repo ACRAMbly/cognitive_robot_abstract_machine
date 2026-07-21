@@ -237,19 +237,24 @@ class QueryGraph:
         expression = expression if expression is not None else self.query._root_
 
         if expression in self.expression_node_map:
-            return self.expression_node_map[expression]
+            node = self.expression_node_map[expression]
+            # A node reached via more than one parent within this same query's own tree
+            # (for example used both as a bare TruthValueOperator condition and as a
+            # Comparator operand) is only classified here, not re-added; folding each
+            # extra visit's own satisfaction into the already-memoized node with `or`
+            # keeps the node satisfied once *any* of its positions qualifies, regardless
+            # of which position construct_graph happened to visit first.
+            node.is_satisfied = node.is_satisfied or self._is_satisfied(
+                expression, parent
+            )
+            return node
 
-        is_satisfied = (
-            self.satisfied_condition_ids is not None
-            and is_condition_participant(expression, parent=parent)
-            and expression._id_ in self.satisfied_condition_ids
-        )
         node = QueryNode(
             self.get_expression_name(expression),
             self.graph,
             color=ColorLegend.from_expression(expression, self.satisfied_condition_ids),
             data=expression,
-            is_satisfied=is_satisfied,
+            is_satisfied=self._is_satisfied(expression, parent),
         )
         self.expression_node_map[expression] = node
 
@@ -259,6 +264,24 @@ class QueryGraph:
         self._add_children_to_graph(node)
 
         return node
+
+    def _is_satisfied(
+        self,
+        expression: SymbolicExpression,
+        parent: Optional[SymbolicExpression],
+    ) -> bool:
+        """
+        :param expression: The expression to classify.
+        :param parent: The parent *expression* was reached through at this visit, or
+            ``None``.
+        :return: Whether *expression*, reached through *parent*, is a satisfied
+            condition participant.
+        """
+        return (
+            self.satisfied_condition_ids is not None
+            and is_condition_participant(expression, parent=parent)
+            and expression._id_ in self.satisfied_condition_ids
+        )
 
     def _add_children_to_graph(
         self,

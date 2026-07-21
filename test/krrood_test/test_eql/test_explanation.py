@@ -743,6 +743,49 @@ def test_query_graph_marks_a_shared_bare_condition_satisfied_from_its_own_query(
     assert not flag_node.faded
 
 
+def test_query_graph_marks_a_bare_condition_satisfied_when_also_reused_as_a_comparator_operand_in_the_same_query():
+    """
+    A node reused at two different positions within one query's own tree -- once as a
+    bare ``TruthValueOperator`` child, once as a ``Comparator`` operand -- must be
+    classified correctly at the position ``construct_graph`` visits it as its own direct
+    condition, regardless of which of the two positions is visited first.
+
+    ``construct_graph`` memoizes exactly one ``QueryNode`` per expression
+    (``expression_node_map``), so the first-visited position's
+    ``is_condition_participant`` classification is computed and cached; a later visit
+    through a different parent returns the cached node unchanged instead of re-
+    classifying it for that position. ``and_(flag == True, flag)`` visits the
+    ``Comparator`` operand position first (``flag`` is not a condition participant
+    there, since ``Comparator`` is not a ``TruthValueOperator``), caching
+    ``is_satisfied=False`` before the bare ``AND`` child position -- where ``flag``
+    truly is a condition participant and was evaluated true -- is ever visited.
+    """
+    flag = variable_from([True])
+    sink = variable_from([1])
+
+    query = entity(sink).where(and_(flag == True, flag))
+    assert (
+        len(flag._parents_) == 2
+    ), "flag must be a genuinely shared DAG node for this to exercise the bug"
+
+    true_results = _get_true_results(query)
+    result = true_results[0]
+    assert flag._id_ in result.satisfied_condition_ids, (
+        "flag is directly evaluated as a bare AND condition and is true, so it must be "
+        "recorded as satisfied"
+    )
+
+    query_graph = QueryGraph(
+        query, satisfied_condition_ids=result.satisfied_condition_ids
+    )
+    flag_node = query_graph.expression_node_map[flag]
+    assert flag_node.is_satisfied, (
+        "flag's own bare-condition position under AND must be classified as satisfied, "
+        "regardless of whichever position (Comparator operand or bare AND child) "
+        "construct_graph happened to visit first"
+    )
+
+
 def test_query_graph_satisfaction_colors():
     """
     Unsatisfied nodes get red borders; satisfied nodes keep full color and no border.
