@@ -196,32 +196,27 @@ def disjunctive_type_head(alternatives: Tuple[type, ...]) -> VerbalizationFragme
 
 
 def operand_head_noun(node: Variable, edges: List[ParentEdge]) -> str:
-    """:return: the head noun naming *node*, resolved in order of decreasing specificity. *node* is
-    an *operand* — a variable filling one argument of a predicate or function — and its *head noun*
-    is the noun that names it in the rendered sentence (*"Robot"* in *"a Robot is reachable"*).
-    Resolution order:
+    """:return: the head noun naming *node* — an *operand*, a variable filling one argument of a
+    predicate or function. Resolved in order of decreasing specificity:
 
-    1. *node*'s own type noun, when its type is informative (a concrete class other than the bare
-       ``object`` placeholder) — the type is the default identifier for a referring expression
-       (Dale & Reiter's Incremental Algorithm includes the type attribute unconditionally) and
-       *always* wins once known, so a genuinely typed operand (``HasType(a_body, Apple)`` →
-       *"a Body"*) is never overridden by a field's metadata. When the type is itself an abstract
-       base with a small, nameable family of concrete subclasses (:func:`_concrete_type_alternatives`),
-       the disjunction of those subclasses' nouns stands in for it (*"Body or Region"* for a
-       ``KinematicStructureEntity``-typed operand), since the abstract type itself is never a
-       valid direct referent;
+    1. *node*'s own type noun, when informative (a concrete class other than the bare ``object``
+       placeholder) — the type is the default identifier for a referring expression
+       (:cite:t:`dale1995gricean`'s Incremental Algorithm) and always wins, so a genuinely typed
+       operand (``HasType(a_body, Apple)`` → *"a Body"*) is never overridden by a field's name.
+       When the type is itself an abstract base with a small, nameable family of concrete
+       subclasses (:func:`_concrete_type_alternatives`), the disjunction of those subclasses'
+       nouns stands in for it (*"Body or Region"* for a ``KinematicStructureEntity``-typed
+       operand), since the abstract type itself is never a valid direct referent;
     2. only once the type carries no information: the owning predicate field's declared
-       :attr:`~krrood.patterns.field_metadata.GrammarMetadata.display_name` — explicit lexical
-       metadata, checked only when *node* fills exactly that one field and appears nowhere else
-       (:func:`_sole_predicate_field`);
+       :attr:`~krrood.patterns.field_metadata.GrammarMetadata.display_name`, checked only when
+       *node* fills exactly that one field and appears nowhere else (:func:`_sole_predicate_field`);
     3. the sole owning field's name itself (verbatim, underscores read as spaces), when no
-       metadata is declared either;
+       metadata is declared;
     4. ``"object"`` as the last resort (no sole field at all).
 
     A variable referenced anywhere besides that one field (a query subject, an
-    ``==``-constrained pair) never reaches steps 2 or 3 — it always keeps its type-named identity,
-    because a tracked entity is identified by its category, not by the role it happens to fill
-    here.
+    ``==``-constrained pair) never reaches steps 2-3 — it keeps its type-named identity, since a
+    tracked entity is identified by its category, not by the role it happens to fill here.
 
     :param node: The referent variable.
     :param edges: *node*'s parent edges, from :func:`_child_edges_by_id`.
@@ -229,17 +224,15 @@ def operand_head_noun(node: Variable, edges: List[ParentEdge]) -> str:
     >>> operand_head_noun(variable(Robot, []), [])
     'Robot'
 
-    A sole predicate field only ever supplies a noun once the type gives none — a typed operand
-    keeps its type noun even filling a field of ``IsReachable`` (whose ``location`` field is
-    declared ``object``, an uninformative type on its own):
+    A typed operand keeps its type noun even filling a field of ``IsReachable`` (whose
+    ``location`` field is declared ``object``, an uninformative type on its own):
 
     >>> reachable = IsReachable(variable(Robot, []), variable(Robot, []))
     >>> operand_head_noun(variable(Robot, []), [ParentEdge(reachable, "location")])
     'Robot'
 
-    An untyped (``object``) operand falls through: to the field's declared
-    :attr:`~krrood.patterns.field_metadata.GrammarMetadata.display_name` when one is set, else to
-    the field name itself, else to ``"object"`` once there is no sole field to name it by:
+    An untyped operand falls through to the field name, else to ``"object"`` once there is no
+    sole field to name it by:
 
     >>> operand_head_noun(variable(object, []), [ParentEdge(reachable, "location")])
     'location'
