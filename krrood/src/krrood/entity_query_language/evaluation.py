@@ -117,13 +117,21 @@ class SatisfiedConditionTracker(EvaluationObserver):
     def on_conclusions_processed(self, expression, result):
         # The caller (_evaluate_conclusions_and_update_bindings_) already established that
         # `expression` is the active conditions root for this evaluation pass before invoking
-        # this hook, so no re-check is needed here.
+        # this hook, so no re-check on `expression` itself is needed here — only whether this
+        # pass was actually gated by a Filter at all (as opposed to the Filter-less fallback,
+        # where conclusions fire unconditionally and there is nothing to track). That fact was
+        # already decided once, unambiguously, when ActiveConditionsRoot.claim() ran on the
+        # evaluation's own starting expression. Recomputing it here via `expression`'s own
+        # _conditions_root_ is not reliable: `expression` can be a node reused elsewhere (for
+        # example first attached as a plain selected variable of a Filter-less query), in which
+        # case its structural root does not reach the Filter it is actually the condition of
+        # for this pass.
         if result.is_false:
             return
-        if expression._conditions_root_ is expression._root_:
+        evaluation_context = get_evaluation_context()
+        if not evaluation_context.active_conditions_root.has_condition():
             return
 
-        evaluation_context = get_evaluation_context()
         evaluated = evaluation_context.evaluated_expression_ids
 
         # Build a truth map from the OperationResult chain: operand_id -> is_false.

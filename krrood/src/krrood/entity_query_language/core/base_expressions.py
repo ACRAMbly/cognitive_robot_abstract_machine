@@ -357,7 +357,9 @@ class SymbolicExpression(ABC):
 
             evaluation_context = create_default_evaluation_context()
             context_token = set_evaluation_context(evaluation_context)
-            evaluation_context.active_conditions_root.claim(self._conditions_root_)
+            evaluation_context.active_conditions_root.claim(
+                self._conditions_root_, self
+            )
         try:
             evaluation_context.on_evaluate_enter(expression=self, sources=sources)
             # Normalize sources: always work with an OperationResult

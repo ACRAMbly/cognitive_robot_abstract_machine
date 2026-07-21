@@ -107,20 +107,41 @@ class ActiveConditionsRoot:
     pass.
     """
 
-    def claim(self, root: SymbolicExpression) -> None:
+    _has_condition: bool = field(default=False, init=False)
+    """
+    Whether the claimed root came from a genuine ``Filter``, rather than the Filter-less
+    fallback to the evaluation's own starting expression.
+    """
+
+    def claim(
+        self, root: SymbolicExpression, originating_expression: SymbolicExpression
+    ) -> None:
         """
         Claim *root* as the active conditions root for this pass, if none is claimed
         yet.
 
-        :param root: The node to claim, normally ``self._conditions_root_`` of whichever
-            expression is starting a fresh (context-less) evaluation.
+        :param root: The node to claim, normally ``originating_expression._conditions_root_``.
+        :param originating_expression: The expression starting this (context-less)
+            evaluation. Used only to detect whether *root* is the Filter-less fallback
+            (``root is originating_expression._root_`` — not necessarily
+            ``originating_expression`` itself, since a
+            :class:`~krrood.entity_query_language.query.query.Query` wrapper's
+            ``_conditions_root_``/``_root_`` both delegate to its compiled product, a
+            different object from the wrapper), so :meth:`has_condition` can answer "was
+            this pass actually gated by a ``Filter``" without recomputing it later in the
+            pass from a node that may itself be shared and structurally ambiguous.
         """
         if self._root_id is None:
             self._root_id = root._id_
+            self._has_condition = root is not originating_expression._root_
 
     def is_active_root(self, node: SymbolicExpression) -> bool:
         """:return: ``True`` if *node* is the active conditions root for this pass."""
         return self._root_id == node._id_
+
+    def has_condition(self) -> bool:
+        """:return: ``True`` if this pass's active root came from a genuine ``Filter``."""
+        return self._has_condition
 
 
 @dataclass
