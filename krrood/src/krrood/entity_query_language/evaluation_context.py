@@ -221,18 +221,25 @@ class OutermostQueryClaim:
     node has.
     """
 
-    def is_nested(self, query_id: uuid.UUID) -> bool:
-        """
-        Claim *query_id* as the outermost query if none is claimed yet, then report
-        whether *query_id* is nested inside some other, already-claimed outermost query.
+    node: Optional[SymbolicExpression] = field(default=None, init=False)
+    """
+    The compiled query node that claimed the outermost role, or ``None`` before any node
+    has.
+    """
 
-        :param query_id: The compiled query node's identifier.
-        :return: Whether *query_id* is a nested subquery (``True``) or the outermost
-            query (``False``).
+    def is_nested(self, query: SymbolicExpression) -> bool:
+        """
+        Claim *query* as the outermost query if none is claimed yet, then report whether
+        *query* is nested inside some other, already-claimed outermost query.
+
+        :param query: The compiled query node.
+        :return: Whether *query* is a nested subquery (``True``) or the outermost query
+            (``False``).
         """
         if self._query_id is None:
-            self._query_id = query_id
-        return self._query_id != query_id
+            self._query_id = query._id_
+            self.node = query
+        return self._query_id != query._id_
 
 
 @dataclass
