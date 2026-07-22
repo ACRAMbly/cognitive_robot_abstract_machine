@@ -15,7 +15,7 @@ live here.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from dataclasses import fields as dataclass_fields
 from types import ModuleType
 
@@ -50,33 +50,6 @@ class VerbalizationSurface:
 
 
 @dataclass(frozen=True)
-class OverriddenOperand:
-    """
-    One dataclass field's concrete VALUE for a symbolic callable whose fragment reads
-    that field directly rather than treating it as a symbolic operand.
-
-    A ``Type`` field, for example, cannot be resolved by annotation alone — it may be a
-    symbolic operand in one class and a named value in another — so its value is stated
-    here per class.
-    """
-
-    name: str
-    """
-    The dataclass field name being overridden.
-    """
-
-    value: Any
-    """
-    The concrete value to pass for that field.
-    """
-
-OperandOverridesDict = Dict[Type[SymbolicCallable], Sequence[OverriddenOperand]]
-"""
-A mapping from the symbolic callable class to its operand overrides
-"""
-
-
-@dataclass(frozen=True)
 class SymbolicSurfaceSnapshot:
     """
     Exhaustive verbalization-surface check for the symbolic callables a package defines.
@@ -96,12 +69,6 @@ class SymbolicSurfaceSnapshot:
     The committed expected surfaces, one per covered class.
     """
 
-    operand_overrides: OperandOverridesDict = field(default_factory=dict)
-    """
-    Concrete field overrides for classes whose fragment reads a field's raw VALUE rather
-    than treating it as a symbolic operand, keyed by the class.
-    """
-
     def discovered_callables(self) -> Tuple[Type[SymbolicCallable], ...]:
         """:return: every concrete symbolic callable the package defines (abstract only in its
         verbalization fragment, if at all), sorted by qualified name."""
@@ -109,8 +76,8 @@ class SymbolicSurfaceSnapshot:
             cls
             for cls in classes_of_package(self.package, recursive=True)
             if isinstance(cls, type)
-               and issubclass(cls, SymbolicCallable)
-               and set(cls.__abstractmethods__) <= {"_verbalization_fragment_"}
+            and issubclass(cls, SymbolicCallable)
+            and set(cls.__abstractmethods__) <= {"_verbalization_fragment_"}
         }
         return tuple(sorted(discovered, key=module_and_class_name))
 
@@ -128,16 +95,18 @@ class SymbolicSurfaceSnapshot:
         """
         One placeholder operand per init dataclass field.
 
-        A field gets its registered override, else a fresh variable of the field's type
-        endpoint as the class diagram resolves it (``object`` when the endpoint is not a
-        plain class), so the surface reads the operand as *"a <TypeName>"*.
+        A field gets the value *cls* declares via
+        :meth:`~krrood.entity_query_language.predicate.SymbolicCallable._placeholder_operand_overrides_`,
+        else a fresh variable of the field's type endpoint as the class diagram resolves it
+        (``object`` when the endpoint is not a plain class), so the surface reads the operand as
+        *"a <TypeName>"*.
 
         :param cls: The symbolic callable to build operands for.
         :return: The operand to pass for each init field, keyed by field name.
         """
         overridden_operands = {
             override.name: override.value
-            for override in self.operand_overrides.get(cls, ())
+            for override in cls._placeholder_operand_overrides_()
         }
         wrapped_class = WrappedClass(clazz=cls)
         operands: Dict[str, Any] = {}
@@ -194,7 +163,7 @@ class SymbolicSurfaceSnapshot:
             )
             for surface in self.surfaces
             if self.has_fragment(surface.callable_class)
-               and self.rendered_surface(surface.callable_class) != surface.sentence
+            and self.rendered_surface(surface.callable_class) != surface.sentence
         }
         assert not mismatches, (
             "Verbalization surfaces changed. Update the sentence for each of these in the snapshot "

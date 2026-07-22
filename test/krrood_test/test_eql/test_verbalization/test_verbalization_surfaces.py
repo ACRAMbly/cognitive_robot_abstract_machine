@@ -21,14 +21,9 @@ from krrood.entity_query_language.testing.surface_verification import (
     SymbolicSurfaceSnapshot,
 )
 
-from .snapshot_config import KRROOD_OPERAND_OVERRIDES
 from .verbalization_surfaces import SURFACES
 
-SNAPSHOT = SymbolicSurfaceSnapshot(
-    package=krrood,
-    surfaces=SURFACES,
-    operand_overrides=KRROOD_OPERAND_OVERRIDES,
-)
+SNAPSHOT = SymbolicSurfaceSnapshot(package=krrood, surfaces=SURFACES)
 
 
 def test_covered_symbolic_callables_match_the_declared_surfaces():

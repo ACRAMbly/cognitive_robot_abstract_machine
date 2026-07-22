@@ -15,89 +15,75 @@ from krrood.entity_query_language.testing.surface_verification import (
 from krrood.entity_query_language.verbalization import _example_domain
 
 from . import verbalization_surfaces as committed_verbalization_surfaces_module
-from .snapshot_config import KRROOD_OPERAND_OVERRIDES
 
 # %% generation against a small, controlled domain
 
 
-class TestGeneratedModuleCoversTheSameCallablesAsTheSnapshot:
+def _generated_surfaces(generator: VerbalizationSurfaceGenerator):
+    namespace = {}
+    exec(compile(generator.generate(), "<generated>", "exec"), namespace)
+    return namespace["SURFACES"]
+
+
+def test_generated_module_covers_the_same_callables_as_the_snapshot():
     """
     The generated ``SURFACES`` tuple covers exactly the fragment-implementing callables
     the snapshot discovers, nothing more and nothing less.
     """
+    snapshot = SymbolicSurfaceSnapshot(package=_example_domain, surfaces=())
+    generator = VerbalizationSurfaceGenerator(snapshot=snapshot)
 
-    def test_covered_callables_match_generated_entries(self):
-        snapshot = SymbolicSurfaceSnapshot(package=_example_domain, surfaces=())
-        generator = VerbalizationSurfaceGenerator(snapshot=snapshot)
-
-        namespace = {}
-        exec(compile(generator.generate(), "<generated>", "exec"), namespace)
-
-        generated_classes = {
-            surface.callable_class for surface in namespace["SURFACES"]
-        }
-        assert generated_classes == set(generator.covered_callables())
+    generated_classes = {
+        surface.callable_class for surface in _generated_surfaces(generator)
+    }
+    assert generated_classes == set(generator.covered_callables())
 
 
-class TestGeneratedModuleRendersExactlyWhatEachClassRenders:
+def test_generated_module_renders_exactly_what_each_class_renders():
     """
     Every generated entry's sentence is exactly what its class renders with the
     snapshot's placeholder operands -- the generator states no opinion of its own.
     """
+    snapshot = SymbolicSurfaceSnapshot(package=_example_domain, surfaces=())
+    generator = VerbalizationSurfaceGenerator(snapshot=snapshot)
 
-    def test_generated_sentences_match_rendered_surfaces(self):
-        snapshot = SymbolicSurfaceSnapshot(package=_example_domain, surfaces=())
-        generator = VerbalizationSurfaceGenerator(snapshot=snapshot)
-
-        namespace = {}
-        exec(compile(generator.generate(), "<generated>", "exec"), namespace)
-
-        rendered_by_class = {
-            surface.callable_class: surface.sentence
-            for surface in namespace["SURFACES"]
-        }
-        for cls in generator.covered_callables():
-            assert rendered_by_class[cls] == snapshot.rendered_surface(cls)
+    rendered_by_class = {
+        surface.callable_class: surface.sentence
+        for surface in _generated_surfaces(generator)
+    }
+    for cls in generator.covered_callables():
+        assert rendered_by_class[cls] == snapshot.rendered_surface(cls)
 
 
-class TestGeneratedModulePassesItsOwnSnapshotVerification:
+def test_generated_module_passes_its_own_snapshot_verification():
     """
     Feeding the generated ``SURFACES`` back into a fresh snapshot passes both
     verification assertions -- the round trip a hand-written entry has to pass too.
     """
+    snapshot = SymbolicSurfaceSnapshot(package=_example_domain, surfaces=())
+    generator = VerbalizationSurfaceGenerator(snapshot=snapshot)
 
-    def test_generated_surfaces_pass_coverage_and_wording_assertions(self):
-        snapshot = SymbolicSurfaceSnapshot(package=_example_domain, surfaces=())
-        generator = VerbalizationSurfaceGenerator(snapshot=snapshot)
-
-        namespace = {}
-        exec(compile(generator.generate(), "<generated>", "exec"), namespace)
-
-        round_trip_snapshot = SymbolicSurfaceSnapshot(
-            package=_example_domain, surfaces=namespace["SURFACES"]
-        )
-        round_trip_snapshot.assert_surfaces_cover_every_callable()
-        round_trip_snapshot.assert_declared_surfaces_render_as_stated()
+    round_trip_snapshot = SymbolicSurfaceSnapshot(
+        package=_example_domain, surfaces=_generated_surfaces(generator)
+    )
+    round_trip_snapshot.assert_surfaces_cover_every_callable()
+    round_trip_snapshot.assert_declared_surfaces_render_as_stated()
 
 
 # %% generation against the real krrood snapshot
 
 
-class TestGeneratedKrroodModuleMatchesTheCommittedFile:
+def test_generated_krrood_module_matches_the_committed_file():
     """
     The committed ``verbalization_surfaces.py`` is exactly what the generator produces
     for krrood's own snapshot -- it is a generated file, not hand-authored.
     """
+    snapshot = SymbolicSurfaceSnapshot(package=krrood, surfaces=())
+    generator = VerbalizationSurfaceGenerator(snapshot=snapshot)
 
-    def test_generated_source_matches_committed_file(self):
-        snapshot = SymbolicSurfaceSnapshot(
-            package=krrood, surfaces=(), operand_overrides=KRROOD_OPERAND_OVERRIDES
-        )
-        generator = VerbalizationSurfaceGenerator(snapshot=snapshot)
+    generated_source = black.format_str(generator.generate(), mode=black.Mode())
 
-        generated_source = black.format_str(generator.generate(), mode=black.Mode())
+    with open(committed_verbalization_surfaces_module.__file__) as committed_file:
+        committed_source = committed_file.read()
 
-        with open(committed_verbalization_surfaces_module.__file__) as committed_file:
-            committed_source = committed_file.read()
-
-        assert generated_source == committed_source
+    assert generated_source == committed_source
