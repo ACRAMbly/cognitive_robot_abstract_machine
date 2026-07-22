@@ -17,26 +17,18 @@ from __future__ import annotations
 
 import krrood
 
-from krrood.entity_query_language.predicate import HasType, HasTypes
 from krrood.entity_query_language.testing.surface_verification import (
-    OverriddenOperand,
     SymbolicSurfaceSnapshot,
 )
 
+from .snapshot_config import KRROOD_OPERAND_OVERRIDES
 from .verbalization_surfaces import SURFACES
 
 SNAPSHOT = SymbolicSurfaceSnapshot(
     package=krrood,
     surfaces=SURFACES,
-    operand_overrides={
-        HasType: [OverriddenOperand("types_", int)],
-        HasTypes: [OverriddenOperand("types_", (int, str))],
-    },
+    operand_overrides=KRROOD_OPERAND_OVERRIDES,
 )
-"""
-``HasType`` / ``HasTypes`` read the type(s) by name, so they get a concrete type rather than a
-symbolic operand; every other field defaults to a placeholder variable of its annotated type.
-"""
 
 
 def test_covered_symbolic_callables_match_the_declared_surfaces():
