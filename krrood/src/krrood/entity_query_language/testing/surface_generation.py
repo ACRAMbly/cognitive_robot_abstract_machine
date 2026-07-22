@@ -56,18 +56,33 @@ class VerbalizationSurfaceGenerator:
             if self.snapshot.has_fragment(cls)
         )
 
-    def _entry(self, cls: Type[SymbolicCallable]) -> Dict[str, Any]:
+    def covered_surfaces(self) -> Tuple[VerbalizationSurface, ...]:
+        """:return: one :class:`VerbalizationSurface` per covered callable, built directly
+        from the snapshot's own rendering -- the data the generated module declares."""
+        return tuple(
+            VerbalizationSurface(cls, self.snapshot.rendered_surface(cls))
+            for cls in self.covered_callables()
+        )
+
+    @staticmethod
+    def _entry(surface: VerbalizationSurface) -> Dict[str, Any]:
         return {
-            "class_name": cls.__qualname__,
-            "sentence": value_to_source(self.snapshot.rendered_surface(cls)),
+            "class_name": surface.callable_class.__qualname__,
+            "sentence": value_to_source(surface.sentence),
         }
 
     def generate(self) -> str:
         """:return: the Python source of a module declaring ``SURFACES``, one
         :class:`VerbalizationSurface` per covered callable."""
-        covered = self.covered_callables()
-        imports = get_imports_from_types([VerbalizationSurface, Tuple, *covered])
-        entries = [self._entry(cls) for cls in covered]
+        surfaces = self.covered_surfaces()
+        imports = get_imports_from_types(
+            [
+                VerbalizationSurface,
+                Tuple,
+                *(surface.callable_class for surface in surfaces),
+            ]
+        )
+        entries = [self._entry(surface) for surface in surfaces]
         return self.code_generator.render(
             "verbalization_surfaces.py.jinja", imports=imports, entries=entries
         )
