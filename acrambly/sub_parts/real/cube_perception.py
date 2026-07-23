@@ -85,7 +85,8 @@ class ColoredBlockPoseParser:
                 continue
 
             position = object_designator.pose[0].pose.position
-            return {requested_color.value: (position.x, position.y, self.output_height)}
+
+            return {requested_color.value: (position.x, position.y +0.02000, self.output_height)}
 
         return {}
 

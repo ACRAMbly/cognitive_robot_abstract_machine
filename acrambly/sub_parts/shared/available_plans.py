@@ -75,7 +75,7 @@ def build_plan_cubes(
                 Pose.from_xyz_rpy(
                     stack_pos_x,
                     stack_pos_y,
-                    0.955,
+                    0.953,
                     reference_frame=world.root,
                 ),
                 red_arm,
@@ -95,7 +95,7 @@ def build_plan_cubes(
                 Pose.from_xyz_rpy(
                     stack_pos_x,
                     stack_pos_y,
-                    1.005,
+                    1.003,
                     reference_frame=world.root,
                 ),
                 yellow_arm,
@@ -115,7 +115,7 @@ def build_plan_cubes(
                 Pose.from_xyz_rpy(
                     stack_pos_x,
                     stack_pos_y,
-                    1.055,
+                    1.053,
                     reference_frame=world.root,
                 ),
                 blue_arm,

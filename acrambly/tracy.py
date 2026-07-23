@@ -71,6 +71,7 @@ TASKS: dict[tuple[str, str], TaskFactory] = {
     ("park_arms", "real"): park_arms_task,
     ("park_arms", "sim"): park_arms_task,
     ("hand_over", "sim"): hand_over_task,
+    ("hand_over", "real"): hand_over_task,
 }
 
 
