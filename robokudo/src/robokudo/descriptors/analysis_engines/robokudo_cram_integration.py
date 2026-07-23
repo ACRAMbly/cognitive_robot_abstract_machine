@@ -1,4 +1,4 @@
-"""Query RoboKudo for safely sized colored-block positions."""
+"""Query RoboKudo for safely sized colored-block poses."""
 
 from __future__ import annotations
 
@@ -17,6 +17,10 @@ if TYPE_CHECKING:
     from rclpy.node import Node
     from rclpy.task import Future
     from robokudo_msgs.msg import ShapeSize
+
+
+BlockPose = tuple[float, float, float, float, float, float, float]
+"""Position ``(x, y, z)`` and quaternion ``(x, y, z, w)`` components."""
 
 
 class BlockColor(str, Enum):
@@ -60,7 +64,7 @@ class FutureCompletion:
 
 @dataclass(frozen=True)
 class ColoredBlockPoseParser:
-    """Extract a safely sized block position from a color query result."""
+    """Extract a safely sized block pose from a color query result."""
 
     minimum_side_length: float = 0.03
     """Inclusive minimum accepted bounding-box side length in metres."""
@@ -75,8 +79,8 @@ class ColoredBlockPoseParser:
         self,
         result: Query.Result,
         requested_color: BlockColor,
-    ) -> dict[str, tuple[float, float, float]]:
-        """Return a safely sized position keyed by the requested color."""
+    ) -> dict[str, BlockPose]:
+        """Return a safely sized pose keyed by the requested color."""
         for object_designator in result.res:
             if not object_designator.pose or not object_designator.shape_size:
                 continue
@@ -84,9 +88,19 @@ class ColoredBlockPoseParser:
             if not self._has_safe_dimensions(object_designator.shape_size):
                 continue
 
-            position = object_designator.pose[0].pose.position
-            position.y=position.y + 0.02
-            return {requested_color.value: (position.x, position.y, self.output_height)}
+            detected_pose = object_designator.pose[0].pose
+            position = detected_pose.position
+            orientation = detected_pose.orientation
+            pose = (
+                position.x,
+                position.y + 0.0200000,
+                self.output_height,
+                orientation.x,
+                orientation.y,
+                orientation.z,
+                orientation.w,
+            )
+            return {requested_color.value: pose}
 
         return {}
 
@@ -106,7 +120,7 @@ class ColoredBlockPoseParser:
 
 @dataclass(frozen=True)
 class ColoredBlockPoseQuery:
-    """Collect target-colored block positions across fresh query attempts."""
+    """Collect target-colored block poses across fresh query attempts."""
 
     node: Node
     """ROS node used to complete action futures."""
@@ -130,28 +144,28 @@ class ColoredBlockPoseQuery:
     future_completion: FutureCompletion | None = None
     """Optional executor-aware action future completion strategy."""
 
-    def execute(self) -> dict[str, tuple[float, float, float]]:
+    def execute(self) -> dict[str, BlockPose]:
         """Query until all target colors are found or attempts run out."""
         if not self.action_client.wait_for_server(timeout_sec=5.0):
             raise RuntimeError("RoboKudo query action server is not available.")
 
-        positions_by_color: dict[str, tuple[float, float, float]] = {}
+        poses_by_color: dict[str, BlockPose] = {}
         attempts_remaining = self.maximum_attempts
 
         while attempts_remaining > 0:
             for color in self.colors:
-                if color.value in positions_by_color:
+                if color.value in poses_by_color:
                     continue
 
                 result = self._request_fresh_frame(color)
-                positions_by_color.update(self.parser.parse(result, color))
+                poses_by_color.update(self.parser.parse(result, color))
 
-            if len(positions_by_color) == len(self.colors):
-                return positions_by_color
+            if len(poses_by_color) == len(self.colors):
+                return poses_by_color
 
             attempts_remaining -= 1
 
-        return positions_by_color
+        return poses_by_color
 
     def _request_fresh_frame(self, color: BlockColor) -> Query.Result:
         """Send one single-color block query and return its result."""
@@ -183,11 +197,11 @@ class ColoredBlockPoseQuery:
 
 def query_colored_block_poses_from_robokudo(
     node: Node,
-) -> dict[str, tuple[float, float, float]]:
-    """Query RoboKudo for detected block positions grouped by color.
+) -> dict[str, BlockPose]:
+    """Query RoboKudo for detected block poses grouped by color.
 
     :raises RuntimeError: If the server is unavailable or rejects the query.
-    :return: Transformed positions keyed by target block color.
+    :return: Transformed positions and detected orientations keyed by color.
     """
     action_client = ActionClient(node, Query, "/robokudo/query")
     future_completion = FutureCompletion.for_node(node)
@@ -204,8 +218,8 @@ def main() -> None:
     node = rclpy.create_node("robokudo_cram_integration")
 
     try:
-        positions_by_color = query_colored_block_poses_from_robokudo(node)
-        print(positions_by_color)
+        poses_by_color = query_colored_block_poses_from_robokudo(node)
+        print(poses_by_color)
     finally:
         node.destroy_node()
         rclpy.shutdown()
