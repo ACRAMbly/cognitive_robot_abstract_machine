@@ -25,44 +25,7 @@ from coraplex.datastructures.dataclasses import Context
 from coraplex.plans.plan import Plan
 
 from sub_parts.shared.available_plans import build_plan_cubes
-
-
-def spawn_free_box(
-    spawn_world: World,
-    name: str = "box",
-    position: tuple = (0.0, 0.0, 1.5),
-    scale: Scale = Scale(0.05, 0.05, 0.05),
-    color: Color = Color(1.0, 1.0, 0.0, 1.0),
-) -> Body:
-    """Spawn a free-floating box body via the Semantic Digital Twin API."""
-    spawn_body = Body(name=PrefixedName(name))
-
-    box = Box(
-        origin=HomogeneousTransformationMatrix.from_xyz_rpy(
-            reference_frame=spawn_body,
-        ),
-        scale=scale,
-        color=color,
-    )
-    spawn_body.collision = ShapeCollection([box], reference_frame=spawn_body)
-
-    with spawn_world.modify_world():
-        connection = Connection6DoF.create_with_dofs(
-            parent=spawn_world.root,
-            child=spawn_body,
-            world=spawn_world,
-        )
-        spawn_world.add_connection(connection)
-
-        connection.origin = HomogeneousTransformationMatrix.from_xyz_rpy(
-            x=position[0],
-            y=position[1],
-            z=position[2],
-            reference_frame=spawn_body,
-        )
-
-    return spawn_body
-
+from sub_parts.shared.utils import spawn_cube
 
 def setup_and_build_plan(
     world: World, tracy: Tracy, context: Context, node: Node
@@ -75,14 +38,14 @@ def setup_and_build_plan(
 
     print("[Setup] Spawning boxes in simulation world...")
 
-    red = spawn_free_box(
-        world, "box1", (0.8, 0.5, 0.93), color=Color(1.0, 0.0, 0.0, 1.0)
+    red = spawn_cube(
+        world, "box1", (0.8, 0.5, 0.93), 0, color=Color(1.0, 0.0, 0.0, 1.0)
     )
-    green = spawn_free_box(
-        world, "box2", (0.8, -0.5, 0.93), color=Color(0.0, 1.0, 0.0, 1.0)
+    green = spawn_cube(
+        world, "box2", (0.8, -0.5, 0.93), 0, color=Color(0.0, 1.0, 0.0, 1.0)
     )
-    blue = spawn_free_box(
-        world, "box3", (0.8, 0, 0.93), color=Color(0.0, 0.0, 1.0, 1.0)
+    blue = spawn_cube(
+        world, "box3", (0.8, 0, 0.93), 0, color=Color(0.0, 0.0, 1.0, 1.0)
     )
 
     return build_plan_cubes(world, tracy, context, red, green, blue)
