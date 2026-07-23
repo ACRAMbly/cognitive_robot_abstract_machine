@@ -18,15 +18,15 @@ def create_color_cluster_descriptor() -> ImageClusterExtractor.Descriptor:
     descriptor = ImageClusterExtractor.Descriptor()
     descriptor.parameters.color_name_to_hsv_range = {
         'blue': {
-            'hsv_min': (135, 130, 85),
+            'hsv_min': (135, 130, 70),
             'hsv_max': (165, 255, 255),
         },
         'red': {
-            'hsv_min': (0, 150, 95),
+            'hsv_min': (0, 130, 70),
             'hsv_max': (15, 255, 255),
         },
         'yellow': {
-            'hsv_min': (22, 130, 85),
+            'hsv_min': (22, 130, 70),
             'hsv_max': (65, 255, 255),
         },
     }

@@ -85,6 +85,7 @@ class ColoredBlockPoseParser:
                 continue
 
             position = object_designator.pose[0].pose.position
+            position.y=position.y + 0.02
             return {requested_color.value: (position.x, position.y, self.output_height)}
 
         return {}
@@ -113,7 +114,7 @@ class ColoredBlockPoseQuery:
     action_client: ActionClient
     """Client connected to the RoboKudo query action."""
 
-    maximum_attempts: int = 5
+    maximum_attempts: int = 10
     """Maximum fresh-frame queries issued for each missing color."""
 
     parser: ColoredBlockPoseParser = field(default_factory=ColoredBlockPoseParser)
