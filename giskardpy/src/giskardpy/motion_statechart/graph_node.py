@@ -25,7 +25,9 @@ from krrood.adapters.json_serializer import (
     SubclassJSONSerializer,
     JSON_TYPE_NAME,
     to_json,
+    from_json,
 )
+from krrood.patterns.field_metadata import JSONMetadata
 from krrood.symbolic_math.symbolic_math import FloatVariable, Scalar, trinary_logic_not
 from krrood.exceptions import DataclassException
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
@@ -377,7 +379,7 @@ class NodeArtifacts:
 
 
 @dataclass(repr=False, eq=False)
-class MotionStatechartNode(SubclassJSONSerializer):
+class MotionStatechartNode:
     name: str = field(default=None, kw_only=True)
     """
     A name for the node within a motion statechart.
@@ -401,7 +403,9 @@ class MotionStatechartNode(SubclassJSONSerializer):
     reference nodes by :attr:`unique_name`, which is reproduced deterministically on load.
     """
 
-    parent_node_index: Optional[int] = field(default=None, init=False)
+    parent_node_index: Optional[int] = field(
+        default=None, init=False, metadata=JSONMetadata(serialize=True).as_dict()
+    )
     """
     The index of the parent node in the motion statechart, if None, it is on the top layer of a motion statechart.
     """
@@ -850,48 +854,20 @@ class MotionStatechartNode(SubclassJSONSerializer):
             raise NotInMotionStatechartError(self.name)
         self._reset_condition.update_expression(expression, self)
 
-    def _json_excluded_fields(self) -> set[str]:
-        """
-        Names of init fields that the generic serializer must not write, so subclasses can
-        serialize them in a custom way.
-        """
-        return set()
-
     def to_json(self) -> Dict[str, Any]:
-        json_data = super().to_json()
-        excluded_fields = self._json_excluded_fields()
-        for field_ in fields(self):
-            if field_.name in excluded_fields:
-                continue
-            if not field_.name.startswith("_") and field_.init:
-                value = getattr(self, field_.name)
-                json_data[field_.name] = to_json(value)
-        if self.parent_node_index is not None:
-            json_data["parent_node_index"] = self.parent_node_index
-        return json_data
+        """
+        :return: JSON representation of this node.
+        """
+        return to_json(self)
 
     @classmethod
-    def _from_json(cls, data: Dict[str, Any], **kwargs) -> Self:
-        node_kwargs = {}
-        for field_name, field_data in data.items():
-            if field_name == JSON_TYPE_NAME:
-                continue
-            if isinstance(field_data, dict) and JSON_TYPE_NAME in field_data:
-                field_data = SubclassJSONSerializer.from_json(field_data, **kwargs)
-            if isinstance(field_data, list):
-                field_data = [
-                    SubclassJSONSerializer.from_json(element_data, **kwargs)
-                    for element_data in field_data
-                ]
-            if isinstance(field_data, dict):
-                raise NotImplementedError(
-                    "dict parameters of MotionStatechartNode are not supported yet. Use a list instead."
-                )
-            node_kwargs[field_name] = field_data
-        parent_node_index = node_kwargs.pop("parent_node_index", None)
-        result = cls(**node_kwargs)
-        result.parent_node_index = parent_node_index
-        return result
+    def from_json(cls, data: Dict[str, Any], **kwargs) -> Self:
+        """
+        :param data: JSON representation of a node.
+        :param kwargs: Additional keyword arguments.
+        :return: A new instance of this node.
+        """
+        return from_json(data, **kwargs)
 
     def formatted_name(self, quoted: bool = False) -> str:
         formatted_name = string_shortener(
@@ -1118,15 +1094,6 @@ class CancelMotion(MotionStatechartNode):
 
     def on_tick(self, context: MotionStatechartContext) -> Optional[float]:
         raise self.exception
-
-    def _json_excluded_fields(self) -> set[str]:
-        return {"exception"}
-
-    def to_json(self) -> Dict[str, Any]:
-        json_data = super().to_json()
-        # cast to general exception, because it can be json serialized
-        json_data["exception"] = to_json(Exception(str(self.exception)))
-        return json_data
 
     @classmethod
     def when_true(

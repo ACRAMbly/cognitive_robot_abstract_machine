@@ -61,6 +61,12 @@ class FieldMetadata:
         return field_metadata.get_metadata_by_type(cls)
 
 
+@dataclass
+class JSONMetadata(FieldMetadata):
+    serialize: bool = True
+    """Whether the field should be serialized to JSON."""
+
+
 MetadataType = TypeVar("MetadataType", bound=FieldMetadata)
 """
 A type that is a subclass of :class:`FieldMetadata`.

@@ -14,6 +14,8 @@ from typing_extensions import (
 if TYPE_CHECKING:
     from krrood.ontomatic.property_descriptor import PropertyDescriptor
 
+from krrood.patterns.field_metadata import FieldMetadata, JSONMetadata
+
 
 @dataclass
 class DiscoveredAttribute:
@@ -78,4 +80,13 @@ class DataclassOnlyIntrospector(AttributeIntrospector):
             return []
 
     def skip_field(self, field_: Field) -> bool:
+        field_metadata = field_.metadata.get(FieldMetadata.METADATA_KEY)
+        if isinstance(field_metadata, FieldMetadata):
+            json_metadata = (
+                field_metadata
+                if isinstance(field_metadata, JSONMetadata)
+                else field_metadata.get_metadata_by_type(JSONMetadata)
+            )
+            if json_metadata is not None:
+                return not json_metadata.serialize
         return field_.name.startswith("_") or not field_.init
