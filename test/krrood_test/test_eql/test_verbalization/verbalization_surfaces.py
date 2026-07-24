@@ -2,7 +2,7 @@
 Committed verbalization surfaces: the sentence each covered symbolic callable renders.
 
 This is the snapshot for :mod:`test_verbalization_surfaces` -- one
-:class:`~krrood.entity_query_language.verbalization.surface_verification.VerbalizationSurface` per
+:class:`~krrood.entity_query_language.testing.surface_verification.VerbalizationSurface` per
 covered symbolic callable, referencing the class itself (so a rename or removal breaks this import)
 and its approved sentence. Update an entry when an intentional wording change makes the surface-match
 test print a new sentence.
@@ -28,7 +28,7 @@ from krrood.entity_query_language.verbalization._example_domain import (
     IsReachable,
     WorksIn,
 )
-from krrood.entity_query_language.verbalization.surface_verification import (
+from krrood.entity_query_language.testing.surface_verification import (
     VerbalizationSurface,
 )
 from krrood.inheritance_path_length import InheritancePathLength

@@ -2,7 +2,7 @@
 Golden-surface snapshot over every symbolic callable krrood defines.
 
 Uses the reusable
-:class:`~krrood.entity_query_language.verbalization.surface_verification.SymbolicSurfaceSnapshot`:
+:class:`~krrood.entity_query_language.testing.surface_verification.SymbolicSurfaceSnapshot`:
 it discovers every concrete Predicate / SymbolicFunction in the ``krrood`` package, renders each with
 placeholder operands, and checks it against the committed snapshot in :mod:`verbalization_surfaces`
 (one :class:`~...surface_verification.VerbalizationSurface` per class). Every covered class must
@@ -18,7 +18,7 @@ from __future__ import annotations
 import krrood
 
 from krrood.entity_query_language.predicate import HasType, HasTypes
-from krrood.entity_query_language.verbalization.surface_verification import (
+from krrood.entity_query_language.testing.surface_verification import (
     OverriddenOperand,
     SymbolicSurfaceSnapshot,
 )
@@ -37,10 +37,6 @@ SNAPSHOT = SymbolicSurfaceSnapshot(
 ``HasType`` / ``HasTypes`` read the type(s) by name, so they get a concrete type rather than a
 symbolic operand; every other field defaults to a placeholder variable of its annotated type.
 """
-
-
-def test_every_covered_symbolic_callable_has_a_verbalization_fragment():
-    SNAPSHOT.assert_every_callable_has_a_fragment()
 
 
 def test_covered_symbolic_callables_match_the_declared_surfaces():

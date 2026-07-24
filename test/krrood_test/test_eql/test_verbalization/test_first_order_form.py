@@ -19,13 +19,13 @@ from dataclasses import dataclass
 import krrood
 from krrood.entity_query_language.factories import variable
 from krrood.entity_query_language.predicate import Predicate
-from krrood.entity_query_language.verbalization.pipeline import verbalize_expression
-from krrood.entity_query_language.verbalization.surface_verification import (
+from krrood.entity_query_language.testing.surface_verification import (
     first_order_form,
     OverriddenOperand,
     placeholder_operands,
     SymbolicSurfaceSnapshot,
 )
+from krrood.entity_query_language.verbalization.pipeline import verbalize_expression
 from krrood.entity_query_language.verbalization.vocabulary.english import Prepositions
 from krrood.entity_query_language.verbalization.vocabulary.parts_of_speech import (
     Adjective,
