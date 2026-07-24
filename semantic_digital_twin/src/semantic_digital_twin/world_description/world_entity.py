@@ -1031,7 +1031,6 @@ class Connection(WorldEntity, HasSimulatorProperties, SubclassJSONSerializer, AB
             HomogeneousTransformationMatrix
         ] = None,
         connection_T_child_expression: Optional[HomogeneousTransformationMatrix] = None,
-        **kwargs,
     ) -> Self:
         """
         Generates the degrees of freedom for this connection into the given world and

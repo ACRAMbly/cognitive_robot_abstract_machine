@@ -6,6 +6,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+from krrood.utils import recursive_subclasses
 from semantic_digital_twin.api.specifications import (
     BodySpecification,
     RegionSpecification,
@@ -570,14 +571,23 @@ def test_parameterized_fixed_ignores_active_parameters():
     assert spec._create_with_dofs_kwargs() == {}
 
 
-def test_active_1dof_spec_kwargs_match_create_with_dofs_signature():
+def _connection_specification_types() -> list[type[ConnectionSpecification]]:
+    # Specifications that still carry an unbound type parameter have not committed to a
+    # connection type yet, so they have no signature to be checked against.
+    return [
+        specification_type
+        for specification_type in recursive_subclasses(ConnectionSpecification)
+        if not specification_type.__parameters__
+    ]
+
+
+@pytest.mark.parametrize("specification_type", _connection_specification_types())
+def test_spec_kwargs_match_create_with_dofs_signature(specification_type):
     # The forwarded kwargs must be keyword arguments that create_with_dofs accepts,
     # otherwise the specification cannot materialize its connection.
-    spec = PrismaticConnectionSpecification(
-        axis=Vector3.Z(), multiplier=2.0, offset=0.5
-    )
+    spec = specification_type()
     accepted_parameters = inspect.signature(
-        PrismaticConnection.create_with_dofs
+        spec.connection_type.create_with_dofs
     ).parameters
     assert set(spec._create_with_dofs_kwargs()).issubset(accepted_parameters)
 

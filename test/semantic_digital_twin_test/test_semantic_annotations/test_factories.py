@@ -1105,10 +1105,10 @@ class TestFactories(unittest.TestCase):
             world.add_body(root)
         with world.modify_world():
             microwave = Microwave.create_with_new_body_in_world(
-                name=PrefixedName("microwave"), world=world
+                name="microwave", world=world
             )
             door = Door.create_with_new_body_in_world(
-                name=PrefixedName("microwave_door"),
+                name="microwave_door",
                 scale=Scale(0.03, 0.3, 0.3),
                 world=world,
             )
@@ -1126,14 +1126,10 @@ class TestFactories(unittest.TestCase):
         with world.modify_world():
             world.add_body(root)
         with world.modify_world():
-            hood = Hood.create_with_new_body_in_world(
-                name=PrefixedName("hood"), world=world
-            )
-            toaster = Toaster.create_with_new_body_in_world(
-                name=PrefixedName("toaster"), world=world
-            )
+            hood = Hood.create_with_new_body_in_world(name="hood", world=world)
+            toaster = Toaster.create_with_new_body_in_world(name="toaster", world=world)
             coffee_machine = CoffeeMachine.create_with_new_body_in_world(
-                name=PrefixedName("coffee_machine"), world=world
+                name="coffee_machine", world=world
             )
 
         self.assertEqual(len(world.get_semantic_annotations_by_type(Hood)), 1)

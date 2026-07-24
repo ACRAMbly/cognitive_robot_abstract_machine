@@ -57,7 +57,7 @@ with world.modify_world():
         name="drawer_handle",
         world_root_T_self=HomogeneousTransformationMatrix.from_xyz_rpy(x=-0.1),
         world=world,
-        scale=Scale(0.05, 0.1, 0.02)
+        scale=Scale(0.05, 0.02, 0.1)
     )
     drawer.add(handle)
 

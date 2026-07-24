@@ -99,7 +99,7 @@ class Handle(HasRootBody):
         scale: Optional[Scale] = None,
         thickness: float = 0.005,
     ) -> Self:
-        scale = scale or Scale(0.1, 0.02, 0.02)
+        scale = scale or Scale(0.05, 0.02, 0.1)
         return cls.get_default_annotation_specification(
             name, scale=scale, thickness=thickness
         ).spawn(world, parent_T_self=world_root_T_self)
@@ -627,6 +627,7 @@ class Room(SemanticAnnotation):
     The room's floor.
     """
 
+
 @dataclass(eq=False)
 class Kitchen(Room): ...
 
@@ -650,6 +651,7 @@ class Wall(HasApertures):
 
     Doors are a computed property.
     """
+
     @classmethod
     def create_with_new_body_in_world(
         cls,
@@ -724,6 +726,8 @@ class Bottle(HasRootBody):
     """
     Abstract class for bottles.
     """
+
+
 @dataclass(eq=False)
 class Statue(HasRootBody): ...
 
@@ -733,16 +737,22 @@ class SoapBottle(Bottle):
     """
     A soap bottle.
     """
+
+
 @dataclass(eq=False)
 class WineBottle(Bottle):
     """
     A wine bottle.
     """
+
+
 @dataclass(eq=False)
 class MustardBottle(Bottle):
     """
     A mustard bottle.
     """
+
+
 @dataclass(eq=False)
 class DrinkingContainer(HasRootBody): ...
 
@@ -752,11 +762,15 @@ class Cup(DrinkingContainer, IsPerceivable):
     """
     A cup.
     """
+
+
 @dataclass(eq=False)
 class Mug(DrinkingContainer):
     """
     A mug.
     """
+
+
 @dataclass(eq=False)
 class CookingContainer(HasRootBody): ...
 
@@ -770,47 +784,64 @@ class Pan(CookingContainer):
     """
     A pan.
     """
+
+
 @dataclass(eq=False)
 class PanLid(Lid):
     """
     A pan lid.
     """
+
+
 @dataclass(eq=False)
 class Pot(CookingContainer):
     """
     A pot.
     """
+
+
 @dataclass(eq=False)
 class PotLid(Lid):
     """
     A pot lid.
     """
+
+
 @dataclass(eq=False)
 class Plate(HasSupportingSurface):
     """
     A plate.
     """
+
+
 @dataclass(eq=False)
 class Bowl(HasSupportingSurface, IsPerceivable):
     """
     A bowl.
     """
+
+
 # Food Items
 @dataclass(eq=False)
 class Food(HasRootBody):
     """
     A Group class for Food.
     """
+
+
 @dataclass(eq=False)
 class TunaCan(Food):
     """
     A tuna can.
     """
+
+
 @dataclass(eq=False)
 class Bread(Food):
     """
     Bread.
     """
+
     _synonyms = {
         "bumpybread",
         "whitebread",
@@ -825,26 +856,35 @@ class CheezeIt(Food):
     """
     Some type of cracker.
     """
+
+
 @dataclass(eq=False)
 class Pringles(Food):
     """
     Pringles chips.
     """
+
+
 @dataclass(eq=False)
 class GelatinBox(Food):
     """
     Gelatin box.
     """
+
+
 @dataclass(eq=False)
 class TomatoSoup(Food):
     """
     Tomato soup.
     """
+
+
 @dataclass(eq=False)
 class Candy(Food, IsPerceivable):
     """
     A candy.
     """
+
     ...
 
 
@@ -853,6 +893,7 @@ class Noodles(Food, IsPerceivable):
     """
     A container of noodles.
     """
+
     ...
 
 
@@ -861,6 +902,7 @@ class Cereal(Food, IsPerceivable):
     """
     A container of cereal.
     """
+
     ...
 
 
@@ -869,17 +911,22 @@ class Milk(Food, IsPerceivable):
     """
     A container of milk.
     """
+
+
 @dataclass(eq=False)
 class SaltContainer(HasRootBody, IsPerceivable):
     """
     A container of salt.
     """
+
+
 @dataclass(eq=False)
 class Produce(Food):
     """
     In American English, produce generally refers to fresh fruits and vegetables
     intended to be eaten by humans.
     """
+
     pass
 
 
@@ -888,106 +935,151 @@ class Fruit(Produce):
     """
     Fruit.
     """
+
+
 @dataclass(eq=False)
 class Vegetable(Produce):
     """
     Vegetable.
     """
+
+
 @dataclass(eq=False)
 class Tomato(Fruit):
     """
     A tomato.
     """
+
+
 @dataclass(eq=False)
 class Lettuce(Vegetable):
     """
     Lettuce.
     """
+
+
 @dataclass(eq=False)
 class Carrot(Vegetable):
     """
     A carrot.
     """
+
+
 @dataclass(eq=False)
 class Apple(Fruit):
     """
     An apple.
     """
+
+
 @dataclass(eq=False)
 class Banana(Fruit):
     """
     A banana.
     """
+
+
 @dataclass(eq=False)
 class Orange(Fruit):
     """
     An orange.
     """
+
+
 @dataclass(eq=False)
 class Salt(Food):
     """
     A pack or container of salt (e.g., salt shaker or salt can).
     """
+
+
 @dataclass(eq=False)
 class CoffeeTable(Table):
     """
     A coffee table.
     """
+
+
 @dataclass(eq=False)
 class DiningTable(Table, HasLegs):
     """
     A dining table.
     """
+
+
 @dataclass(eq=False)
 class SideTable(Table):
     """
     A side table.
     """
+
+
 @dataclass(eq=False)
 class Desk(Table, HasLegs):
     """
     A desk.
     """
+
+
 @dataclass(eq=False)
 class Chair(Furniture):
     """
     Abstract class for chairs.
     """
+
+
 @dataclass(eq=False)
 class OfficeChair(Chair):
     """
     An office chair.
     """
+
+
 @dataclass(eq=False)
 class Armchair(Chair):
     """
     An armchair.
     """
+
+
 @dataclass(eq=False)
-class TrashCan(HasRootBody, Furniture):
+class TrashCan(HasCaseAsRootBody, Furniture):
     """
     Abstract class for Trash Can.
     """
+
+    def hole_direction(self) -> Vector3:
+        return Vector3.Z()
+
+
 @dataclass(eq=False)
 class ShelvingUnit(Furniture):
     """
     A shelving unit.
     """
+
+
 @dataclass(eq=False)
 class Bed(Furniture):
     """
     A bed.
     """
+
+
 @dataclass(eq=False)
 class Sofa(Furniture, HasSupportingSurface):
     """
     A sofa.
     """
+
+
 @dataclass(eq=False)
 class Sink(HasRootBody):
     """
     A sink.
     """
+
+
 @dataclass(eq=False)
 class Kettle(CookingContainer): ...
 
@@ -1001,6 +1093,8 @@ class WallDecor(Decor):
     """
     Wall decorations.
     """
+
+
 @dataclass(eq=False)
 class Cloth(HasRootBody): ...
 
@@ -1010,11 +1104,15 @@ class Poster(WallDecor):
     """
     A poster.
     """
+
+
 @dataclass(eq=False)
 class WallPanel(HasRootBody):
     """
     A wall panel.
     """
+
+
 @dataclass(eq=False)
 class Potato(Vegetable): ...
 
@@ -1024,6 +1122,8 @@ class GarbageBin(HasRootBody):
     """
     A garbage bin.
     """
+
+
 @dataclass(eq=False)
 class Drone(HasRootBody): ...
 
@@ -1037,21 +1137,28 @@ class Houseplant(HasRootBody):
     """
     A houseplant.
     """
+
+
 @dataclass(eq=False)
 class SprayBottle(HasRootBody):
     """
     A spray bottle.
     """
+
+
 @dataclass(eq=False)
 class Vase(HasRootBody):
     """
     A vase.
     """
+
+
 @dataclass(eq=False)
 class Book(HasRootBody):
     """
     A book.
     """
+
     book_front: Optional[BookFront] = None
 
 
@@ -1064,6 +1171,8 @@ class SaltPepperShaker(HasRootBody):
     """
     A salt and pepper shaker.
     """
+
+
 @dataclass(eq=False)
 class Cuttlery(HasRootBody): ...
 
@@ -1073,11 +1182,15 @@ class Fork(Cuttlery):
     """
     A fork.
     """
+
+
 @dataclass(eq=False)
 class Knife(Cuttlery):
     """
     A butter knife.
     """
+
+
 @dataclass(eq=False)
 class Spoon(Cuttlery, IsPerceivable): ...
 
@@ -1087,21 +1200,29 @@ class Pencil(HasRootBody):
     """
     A pencil.
     """
+
+
 @dataclass(eq=False)
 class Pen(HasRootBody):
     """
     A pen.
     """
+
+
 @dataclass(eq=False)
 class Baseball(HasRootBody):
     """
     A baseball.
     """
+
+
 @dataclass(eq=False)
 class LiquidCap(HasRootBody):
     """
     A liquid cap.
     """
+
+
 @dataclass(eq=False)
 class Agent(HasRootBody):
     """
@@ -1111,6 +1232,8 @@ class Agent(HasRootBody):
     be controlled by external or internal logic. Examples include robots, humans, or
     other autonomous actors.
     """
+
+
 @dataclass(eq=False)
 class Human(Agent):
     """
@@ -1122,16 +1245,21 @@ class Human(Agent):
     This class exists primarily for semantic distinction, so that algorithms can treat
     human agents differently from robots if needed.
     """
+
+
 @dataclass(eq=False)
 class SemanticEnvironmentAnnotation(HasRootBody):
     """
     Represents a semantic annotation of the environment.
     """
+
+
 @dataclass(eq=False)
 class RoomWithWallsAndDoors(Room):
     """
     A room with a type description (e.g., Ktichen) and walls and doors.
     """
+
     room_type: Optional[str] = field(kw_only=True, default=None)
     """
     Description of the type of the room in natural language.
@@ -1144,6 +1272,8 @@ class RoomWithWallsAndDoors(Room):
     """
     The doors of the room.
     """
+
+
 @dataclass(eq=False)
 class DoorWithType(Door):
     """
@@ -1158,11 +1288,15 @@ class Leg(HasRootBody):
     """
     A leg that supports a piece of furniture.
     """
+
+
 @dataclass(eq=False)
 class Cooktop(HasRootBody):
     """
     A cooktop surface for cooking.
     """
+
+
 @dataclass(eq=False)
 class Tool(HasRootBody, ABC):
     """
@@ -1207,6 +1341,8 @@ class Tool(HasRootBody, ABC):
         :return: The normal pairs that must stay aligned while the tool acts on the
             target.
         """
+
+
 @dataclass(eq=False)
 class ToolWithHandle(Tool, HasHandle, ABC):
     """
@@ -1337,16 +1473,22 @@ class Microwave(IsStorageSpace, HasDoors):
     A microwave oven, a kitchen appliance with a door that heats food placed inside it
     using microwave radiation.
     """
+
+
 @dataclass(eq=False)
 class Hood(HasRootBody):
     """
     A range hood mounted above a cooktop that vents cooking fumes.
     """
+
+
 @dataclass(eq=False)
 class Toaster(HasRootBody):
     """
     A countertop appliance for toasting slices of bread.
     """
+
+
 @dataclass(eq=False)
 class CoffeeMachine(HasRootBody):
     """
