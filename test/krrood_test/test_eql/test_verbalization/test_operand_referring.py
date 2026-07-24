@@ -23,6 +23,7 @@ from krrood.entity_query_language.predicate import Predicate, SymbolicFunction
 from krrood.entity_query_language.verbalization.fragments.base import (
     flatten_fragment_to_plain_text,
 )
+from krrood.entity_query_language.verbalization.grammar_metadata import GrammarMetadata
 from krrood.entity_query_language.verbalization.microplanning.referring import (
     disjunctive_type_head,
     operand_head_noun,
@@ -40,7 +41,7 @@ from krrood.entity_query_language.verbalization.vocabulary.parts_of_speech impor
     Noun,
     Verb,
 )
-from krrood.patterns.field_metadata import FieldMetadata, GrammarMetadata
+from krrood.patterns.field_metadata import FieldMetadata
 
 # %% mimic domain
 

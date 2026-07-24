@@ -40,7 +40,7 @@ from krrood.entity_query_language.query.aggregation_structure import (
     aggregation_source_root,
     selected_aggregator,
 )
-from krrood.patterns.field_metadata import GrammarMetadata
+from krrood.entity_query_language.verbalization.grammar_metadata import GrammarMetadata
 from krrood.patterns.specificity_ranking import concrete_subclasses
 
 if TYPE_CHECKING:
