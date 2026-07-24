@@ -20,13 +20,13 @@ def setup_and_build_plan(
     print("[Perception] querying perceived positions...")
     block_poses = query_colored_block_poses_from_robokudo(node)
 
-    red_box_pos = block_poses["red"]
+    red_box_pos = block_poses["yellow"]
     print(f"  red    (from 'red')   : x={red_box_pos[0]:.3f}  y={red_box_pos[1]:.3f}  z={red_box_pos[2]:.3f}")
 
     print("[Setup] Spawning boxes in simulation world...")
 
     obj = spawn_cube(
-        world, "box3", red_box_pos, 1.0, color=Color(0.0, 0.0, 1.0, 1.0)
+        world, "box3", red_box_pos, 0.0, color=Color(0.0, 0.0, 1.0, 1.0)
     )
 
     return build_handover_object_plan(world, tracy, context, obj)

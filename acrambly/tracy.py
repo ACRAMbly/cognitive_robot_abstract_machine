@@ -166,6 +166,12 @@ def main(
         with execution_env:
             plan.perform()
             print("Plan completed.")
+
+            # TODO: make it work
+            for i in world.bodies:
+                if "None" in str(i.name):
+                    i.remove_from_world()
+
     except Exception as e:
         print(f"Error during plan execution: {e}")
 
