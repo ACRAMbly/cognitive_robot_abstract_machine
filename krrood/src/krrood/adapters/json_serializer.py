@@ -528,11 +528,11 @@ class DataclassJSONSerializer(ExternalClassJSONSerializer[None]):
         init_args = {}
         post_init_args = {}
 
-        for k, f in discovered_attributes.items():
-            if k not in data.keys():
+        for field_name, field_ in discovered_attributes.items():
+            if field_name not in data.keys():
                 continue
 
-            current_data = data[k]
+            current_data = data[field_name]
 
             if isinstance(current_data, list):
                 current_result = [from_json(item, **kwargs) for item in current_data]
@@ -547,14 +547,14 @@ class DataclassJSONSerializer(ExternalClassJSONSerializer[None]):
             else:
                 current_result = from_json(current_data, **kwargs)
 
-            if f.init:
-                init_args[k] = current_result
+            if field_.init:
+                init_args[field_name] = current_result
             else:
-                post_init_args[k] = current_result
+                post_init_args[field_name] = current_result
 
         instance = clazz(**init_args)
-        for k, v in post_init_args.items():
-            setattr(instance, k, v)
+        for field_name, field_value in post_init_args.items():
+            setattr(instance, field_name, field_value)
         return instance
 
 
