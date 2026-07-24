@@ -6,7 +6,7 @@ import numpy as np
 import trimesh
 
 from krrood.adapters.json_serializer import from_json, to_json
-from semantic_digital_twin.spatial_types import Point3
+from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix, Point3
 from semantic_digital_twin.world_description.geometry import Box, Mesh, Scale, Texture
 
 
@@ -32,6 +32,27 @@ def test_recenter_origin_centers_bounding_box():
     mesh.recenter_origin()
 
     np.testing.assert_allclose(mesh.origin.to_position().to_np()[:3], -expected_center)
+
+
+def test_recenter_origin_preserves_existing_rotation():
+    # Recentering only moves the origin's translation; a pre-existing rotation must
+    # survive so the shape is not silently re-oriented.
+    mesh = Mesh.from_3d_points(
+        points_3d=[
+            Point3(0, 0, 0),
+            Point3(2, 0, 0),
+            Point3(0, 4, 0),
+            Point3(0, 0, 6),
+        ]
+    )
+    mesh.origin = HomogeneousTransformationMatrix.from_xyz_rpy(0, 0, 0, 0, 0, np.pi / 2)
+    expected_rotation = mesh.origin.to_rotation_matrix().to_np()
+
+    mesh.recenter_origin()
+
+    np.testing.assert_allclose(
+        mesh.origin.to_rotation_matrix().to_np(), expected_rotation, atol=1e-12
+    )
 
 
 def test_shape():

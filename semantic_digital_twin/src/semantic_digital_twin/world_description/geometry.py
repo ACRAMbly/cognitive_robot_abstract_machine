@@ -444,20 +444,17 @@ class Shape(ABC, SubclassJSONSerializer, HasSimulatorProperties):
         """
         Moves the origin so the shape's local-frame bounding box is centered on it.
 
-        The translation is set to the negated bounding-box center, leaving the shape's
-        geometry symmetric about its origin.
+        The translation is set to the negated bounding-box center while the origin's
+        existing rotation is preserved, leaving the shape's geometry symmetric about its
+        origin without re-orienting it.
         """
         bounding_box = self.local_frame_bounding_box
         center_x = (bounding_box.min_x + bounding_box.max_x) / 2
         center_y = (bounding_box.min_y + bounding_box.max_y) / 2
         center_z = (bounding_box.min_z + bounding_box.max_z) / 2
-        self.origin = HomogeneousTransformationMatrix.from_xyz_rpy(
-            -center_x,
-            -center_y,
-            -center_z,
-            0,
-            0,
-            0,
+        self.origin = HomogeneousTransformationMatrix.from_point_rotation_matrix(
+            point=Point3(-center_x, -center_y, -center_z),
+            rotation_matrix=self.origin.to_rotation_matrix(),
             reference_frame=self.origin.reference_frame,
         )
 

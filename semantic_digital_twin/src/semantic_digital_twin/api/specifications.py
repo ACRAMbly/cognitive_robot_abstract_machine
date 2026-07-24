@@ -41,7 +41,6 @@ from semantic_digital_twin.world import World
 from semantic_digital_twin.world_description.connections import (
     WheeledDrive,
     FixedConnection,
-    ActiveConnection,
     Connection6DoF,
     PrismaticConnection,
     RevoluteConnection,
@@ -108,15 +107,12 @@ class NamedSpecification(ABC):
         Normalize the spawn-time name override, or the spec's own name, into a
         :class:`PrefixedName`.
 
-        An already-prefixed name is returned unchanged; a bare string is wrapped.
-        ``None`` is preserved so materialization can fall back to default name
-        generation.
+        A bare string is wrapped into a :class:`PrefixedName`. ``None`` is preserved so
+        materialization can fall back to default name generation.
         """
         used_name = name if name is not None else self.name
         if used_name is None:
             return None
-        if isinstance(used_name, PrefixedName):
-            return used_name
         return PrefixedName(name=used_name)
 
 
@@ -1024,13 +1020,6 @@ class WorldSpecification:
     If None, no robot is added.
     """
 
-    drive_connection_type: Type[WheeledDrive] | None = None
-    """
-    The connection type attaching the robot to ``odom``.
-
-    Defaults to a free-floating connection.
-    """
-
     world_T_odom: HomogeneousTransformationMatrix | None = None
     """
     The localization pose of ``odom`` in the ``world.root`` frame.
@@ -1045,7 +1034,7 @@ class WorldSpecification:
     If None, identity is used.
     """
 
-    starting_objects: list[SpawnSpecification] = field(default_factory=list)
+    objects: list[SpawnSpecification] = field(default_factory=list)
     """
     Specifications spawned relative to the world root once the robot (if any) is in
     place.
@@ -1059,10 +1048,9 @@ class WorldSpecification:
         prefix: Optional[str] = None,
         path_resolver: Optional[PathResolver] = None,
         robot_semantic_annotation: Optional[Type[AbstractRobot]] = None,
-        drive_connection_type: Optional[Type[WheeledDrive]] = None,
         world_T_odom: Optional[HomogeneousTransformationMatrix] = None,
         odom_T_robot_start: Optional[HomogeneousTransformationMatrix] = None,
-        starting_objects: Optional[list[SpawnSpecification]] = None,
+        objects: Optional[list[SpawnSpecification]] = None,
     ) -> Self:
         """
         Build a specification whose environment is parsed from a URDF file.
@@ -1079,10 +1067,9 @@ class WorldSpecification:
         return cls(
             world=world,
             robot_semantic_annotation=robot_semantic_annotation,
-            drive_connection_type=drive_connection_type,
             world_T_odom=world_T_odom,
             odom_T_robot_start=odom_T_robot_start,
-            starting_objects=starting_objects or [],
+            objects=objects or [],
         )
 
     @classmethod
@@ -1093,10 +1080,9 @@ class WorldSpecification:
         prefix: Optional[str] = None,
         mimic_joints: Optional[dict[str, str]] = None,
         robot_semantic_annotation: Optional[Type[AbstractRobot]] = None,
-        drive_connection_type: Optional[Type[WheeledDrive]] = None,
         world_T_odom: Optional[HomogeneousTransformationMatrix] = None,
         odom_T_robot_start: Optional[HomogeneousTransformationMatrix] = None,
-        starting_objects: Optional[list[SpawnSpecification]] = None,
+        objects: Optional[list[SpawnSpecification]] = None,
     ) -> Self:
         """
         Build a specification whose environment is parsed from an MJCF (MuJoCo XML)
@@ -1116,10 +1102,9 @@ class WorldSpecification:
         return cls(
             world=world,
             robot_semantic_annotation=robot_semantic_annotation,
-            drive_connection_type=drive_connection_type,
             world_T_odom=world_T_odom,
             odom_T_robot_start=odom_T_robot_start,
-            starting_objects=starting_objects or [],
+            objects=objects or [],
         )
 
     def to_domain_object(self) -> World:
@@ -1129,23 +1114,42 @@ class WorldSpecification:
         A deep copy of :attr:`world` is augmented and returned, so the specification's
         stored world is never mutated and the method can be applied repeatedly. When
         ``robot_semantic_annotation`` is set, the robot is parsed from its own
-        description and merged as ``world.root -> odom -> drive -> robot``, with the
-        localization and start poses applied. Finally all ``starting_objects`` are
-        spawned relative to the world root.
+        description and merged into the world, with the localization and start poses
+        applied. Finally all ``objects`` are spawned relative to the world root.
         """
         world = deepcopy(self.world)
         if self.robot_semantic_annotation is not None:
             self._setup_robot(world)
 
-        for starting_object in self.starting_objects:
-            starting_object.spawn(world)
+        for object_specification in self.objects:
+            object_specification.spawn(world)
 
         return world
 
     def _setup_robot(self, world: World) -> None:
         """
-        Set up the robot in ``world``, inserting ``odom`` between the world root and the
-        robot root.
+        Set up the robot in ``world``.
+
+        A robot whose mobile base declares a drive connection is attached through an
+        ``odom`` frame as ``world.root -> odom -> drive -> robot``. A robot without a
+        mobile base has no drive and is attached rigidly as ``world.root -> robot``.
+        """
+        drive_connection_type = (
+            self.robot_semantic_annotation.get_drive_connection_type()
+        )
+        if drive_connection_type is None:
+            self._setup_fixed_robot(world)
+            return
+        self._setup_driven_robot(world, drive_connection_type)
+
+    def _setup_driven_robot(
+        self, world: World, drive_connection_type: Type[WheeledDrive]
+    ) -> None:
+        """
+        Attach a mobile robot as ``world.root -> odom -> drive -> robot``.
+
+        The drive connection is marked as controlled and the localization and start
+        poses are applied.
         """
         with world.modify_world():
             odom_body = Body(name=PrefixedName("odom"))
@@ -1159,13 +1163,11 @@ class WorldSpecification:
             ).parse()
             robot_root_id = robot_world.root.id
 
-            drive_connection_type = self.drive_connection_type or Connection6DoF
             odom_C_robot = drive_connection_type.create_with_dofs(
                 world=world, parent=odom_body, child=cast(Body, robot_world.root)
             )
             world.merge_world(robot_world, root_connection=odom_C_robot)
-            if issubclass(drive_connection_type, ActiveConnection):
-                odom_C_robot.has_hardware_interface = True
+            odom_C_robot.has_hardware_interface = True
 
         self.robot_semantic_annotation.from_branch_in_world(
             cast(Body, world.get_world_entity_with_id_by_id(robot_root_id))
@@ -1176,3 +1178,28 @@ class WorldSpecification:
             root_C_odom.origin = self.world_T_odom
         if self.odom_T_robot_start is not None:
             odom_C_robot.origin = self.odom_T_robot_start
+
+    def _setup_fixed_robot(self, world: World) -> None:
+        """
+        Attach a robot without a mobile base rigidly as ``world.root -> robot``.
+
+        ``world_T_odom`` is used as the fixed placement of the robot in the world root
+        frame; ``odom_T_robot_start`` does not apply because there is no ``odom`` frame.
+        """
+        with world.modify_world():
+            robot_world = URDFParser.from_file(
+                self.robot_semantic_annotation.get_ros_file_path()
+            ).parse()
+            robot_root_id = robot_world.root.id
+
+            root_C_robot = FixedConnection.create_with_dofs(
+                world=world,
+                parent=cast(Body, world.root),
+                child=cast(Body, robot_world.root),
+                parent_T_connection_expression=self.world_T_odom,
+            )
+            world.merge_world(robot_world, root_connection=root_C_robot)
+
+        self.robot_semantic_annotation.from_branch_in_world(
+            cast(Body, world.get_world_entity_with_id_by_id(robot_root_id))
+        )

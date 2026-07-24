@@ -14,22 +14,24 @@ from typing import (
     Set,
     List,
     DefaultDict,
+    Type,
     Union,
     Any,
+    cast,
 )
 from uuid import UUID
 
-from typing_extensions import get_origin, get_args, Unpack
+from typing_extensions import get_origin, get_args, Generic, TypeVar, Unpack
 
 from krrood.adapters.json_serializer import list_like_classes
 from krrood.class_diagrams.attribute_introspector import (
     DataclassOnlyIntrospector,
 )
 from krrood.entity_query_language.factories import variable, contains, a, entity
+from krrood.utils import get_generic_type_parameters
 from semantic_digital_twin.datastructures.definitions import JointStateType
 from semantic_digital_twin.datastructures.field_of_view import FieldOfView
 from semantic_digital_twin.datastructures.joint_state import JointState
-from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 from semantic_digital_twin.exceptions import (
     NoJointStateWithType,
     UselessConceptError,
@@ -38,6 +40,7 @@ from semantic_digital_twin.exceptions import (
 )
 from semantic_digital_twin.robots.robot_part_mixins import (
     HasEndEffector,
+    HasMobileBase,
     HasSensors,
     TGenericEndEffector,
     HasLeftRightArm,
@@ -502,10 +505,16 @@ class Neck(
     """
 
 
+TGenericDrive = TypeVar("TGenericDrive", bound=WheeledDrive)
+
+
 @dataclass(eq=False)
-class MobileBase(AbstractRobotPart, ABC):
+class MobileBase(AbstractRobotPart, Generic[TGenericDrive], ABC):
     """
-    The base of a robot
+    The base of a robot.
+
+    The drive connection attaching the base to its ``odom`` frame is bound as the generic
+    parameter (e.g. ``MobileBase[OmniDrive]``) by each concrete mobile base.
     """
 
     forward_axis: Vector3 = field(default_factory=Vector3.X)
@@ -515,9 +524,18 @@ class MobileBase(AbstractRobotPart, ABC):
 
     full_body_controlled: bool = field(default=False, kw_only=True)
     """
-    If True, the robot can move its entire body during a motion. 
+    If True, the robot can move its entire body during a motion.
     If False, only the robot will always stand still when moving an arm.
     """
+
+    @classmethod
+    def get_drive_connection_type(cls) -> Type[TGenericDrive]:
+        """
+        The connection type attaching this mobile base to its ``odom`` frame.
+
+        Resolved from the generic drive parameter bound by the concrete mobile base.
+        """
+        return get_generic_type_parameters(cls, MobileBase)[0]
 
     @property
     def bounding_box(self) -> BoundingBox:
@@ -607,6 +625,21 @@ class AbstractRobot(Agent, HasRobotParts, ABC):
         Returns the name of the root body of the robot in the world, which serves as the entry point for traversing the
         robot's kinematic structure.
         """
+
+    @classmethod
+    def get_drive_connection_type(cls) -> Optional[Type[WheeledDrive]]:
+        """
+        The drive connection type of this robot's mobile base.
+
+        :return: The mobile base's drive connection type, or ``None`` when the robot has
+            no mobile base and therefore no drive.
+        """
+        if not issubclass(cls, HasMobileBase):
+            return None
+        mobile_base_type = cast(
+            MobileBase, get_generic_type_parameters(cls, HasMobileBase)[0]
+        )
+        return mobile_base_type.get_drive_connection_type()
 
     def setup_robot_part_semantic_annotations(self):
         """

@@ -389,7 +389,6 @@ def cylinder_bot_diff_world():
 
 def world_with_urdf_factory(
     robot_semantic_annotation: Type[AbstractRobot],
-    drive_connection_type: Type[OmniDrive | DifferentialDrive],
     robot_starting_pose: HomogeneousTransformationMatrix | None = None,
     urdf_path_resolver: PathResolver | None = None,
     robot_localization_pose: HomogeneousTransformationMatrix | None = None,
@@ -398,6 +397,7 @@ def world_with_urdf_factory(
     Builds this tree:
     map -> odom_combined -> "urdf tree"
     """
+    drive_connection_type = robot_semantic_annotation.get_drive_connection_type()
     urdf_parser = URDFParser.from_file(
         file_path=robot_semantic_annotation.get_ros_file_path(),
         path_resolver=urdf_path_resolver,
@@ -434,7 +434,7 @@ def world_with_urdf_factory(
 
 @pytest.fixture(scope="session")
 def _pr2_world_setup():
-    return world_with_urdf_factory(PR2, OmniDrive)
+    return world_with_urdf_factory(PR2)
 
 
 @pytest.fixture(scope="function")
@@ -445,7 +445,7 @@ def pr2_world_copy(_pr2_world_setup):
 
 @pytest.fixture(scope="session")
 def _hsr_world_setup():
-    return world_with_urdf_factory(HSRB, OmniDrive)
+    return world_with_urdf_factory(HSRB)
 
 
 @pytest.fixture(scope="function")
@@ -459,9 +459,8 @@ def hsr_world_copy(_hsr_world_setup):
 def _garmi_world_setup():
     if Garmi is None:
         pytest.skip("GARMI semantic annotation not installed")
-    urdf_dir = "package://garmi_description/urdf/garmi.urdf"
     try:
-        return world_with_urdf_factory(urdf_dir, Garmi, OmniDrive)
+        return world_with_urdf_factory(Garmi)
     except ParsingError as error:
         pytest.skip(f"GARMI URDF not available: {error}")
 
@@ -478,12 +477,12 @@ def tracy_world():
 
 @pytest.fixture(scope="session")
 def _stretch_world_setup():
-    return world_with_urdf_factory(Stretch, DifferentialDrive)
+    return world_with_urdf_factory(Stretch)
 
 
 @pytest.fixture(scope="session")
 def _tiago_world_setup():
-    return world_with_urdf_factory(Tiago, DifferentialDrive)
+    return world_with_urdf_factory(Tiago)
 
 
 @pytest.fixture(scope="session")

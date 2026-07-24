@@ -8372,6 +8372,37 @@ class ReferenceFrameMismatchErrorDAO(
     }
 
 
+class SpecificationNameMustBeStringErrorDAO(
+    UsageErrorDAO,
+    DataAccessObject[
+        semantic_digital_twin.exceptions.SpecificationNameMustBeStringError
+    ],
+):
+    __tablename__ = "SpecificationNameMustBeStringErrorDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(UsageErrorDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
+    )
+
+    name_id: Mapped[int] = mapped_column(
+        ForeignKey("PrefixedNameDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
+    )
+
+    name: Mapped[PrefixedNameDAO] = relationship(
+        "PrefixedNameDAO", uselist=False, foreign_keys=[name_id], post_update=True
+    )
+
+    __mapper_args__ = {
+        "polymorphic_identity": "SpecificationNameMustBeStringErrorDAO",
+        "inherit_condition": database_id == UsageErrorDAO.database_id,
+        "polymorphic_load": "selectin",
+    }
+
+
 class StateUpdateContainsUnknownDegreesOfFreedomErrorDAO(
     UsageErrorDAO,
     DataAccessObject[

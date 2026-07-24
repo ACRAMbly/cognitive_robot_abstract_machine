@@ -242,7 +242,7 @@ RESOURCE_DIR = os.path.join(
 def test_world_specification_robotless(empty_world):
     world = WorldSpecification(
         world=empty_world,
-        starting_objects=[BodySpecification.box("obj", Scale(1, 1, 1))],
+        objects=[BodySpecification.box("obj", Scale(1, 1, 1))],
     ).to_domain_object()
     assert not world.is_empty()
     assert world.get_body_by_name("obj") is not None
@@ -251,7 +251,7 @@ def test_world_specification_robotless(empty_world):
 def test_to_domain_object_does_not_mutate_stored_world(empty_world):
     spec = WorldSpecification(
         world=empty_world,
-        starting_objects=[BodySpecification.box("obj", Scale(1, 1, 1))],
+        objects=[BodySpecification.box("obj", Scale(1, 1, 1))],
     )
     first = spec.to_domain_object()
     second = spec.to_domain_object()
@@ -339,21 +339,14 @@ def test_body_specification_from_3d_points_matches_direct_construction():
     ``from_3d_points`` mirrors :meth:`Body.from_3d_points`.
     """
     points = [Point3(0, 0, 0), Point3(1, 0, 0), Point3(0, 1, 0), Point3(1, 1, 1)]
-    name = PrefixedName("polytope")
+    name = "polytope"
 
     materialized = BodySpecification.from_3d_points(name, points).to_domain_object(name)
-    directly_built = Body.from_3d_points(name=name, points_3d=points)
+    directly_built = Body.from_3d_points(name=PrefixedName(name), points_3d=points)
 
     assert (
         len(materialized.collision.shapes) == len(directly_built.collision.shapes) == 1
     )
-
-
-def test_prefixed_name_is_not_double_wrapped():
-    """A :class:`PrefixedName` reaching a spec name must be kept as-is, not re-wrapped."""
-    body = BodySpecification.box(PrefixedName("box"), Scale(1, 1, 1)).to_domain_object()
-    assert body.name == PrefixedName("box")
-    assert isinstance(body.name.name, str)
 
 
 def test_has_root_body_default_specification_without_scale_is_geometryless(empty_world):
@@ -468,7 +461,6 @@ def test_world_specification_with_robot(empty_world):
         world = WorldSpecification(
             world=empty_world,
             robot_semantic_annotation=PR2,
-            drive_connection_type=OmniDrive,
             world_T_odom=HomogeneousTransformationMatrix.from_xyz_rpy(x=1.0),
             odom_T_robot_start=HomogeneousTransformationMatrix.from_xyz_rpy(y=2.0),
         ).to_domain_object()
@@ -492,7 +484,6 @@ def test_world_specification_from_urdf_with_robot():
         world = WorldSpecification.from_urdf(
             os.path.join(RESOURCE_DIR, "urdf", "table.urdf"),
             robot_semantic_annotation=PR2,
-            drive_connection_type=OmniDrive,
         ).to_domain_object()
     except ParsingError as error:
         pytest.skip(f"PR2 URDF not available: {error}")
@@ -507,7 +498,7 @@ def test_world_specification_from_urdf_with_robot():
 def test_world_specification_annotation_starting_object(empty_world):
     world = WorldSpecification(
         world=empty_world,
-        starting_objects=[
+        objects=[
             SemanticAnnotationWithRootSpecification(
                 name="milk",
                 semantic_annotation_type=Milk,
@@ -593,7 +584,7 @@ def test_active_1dof_spec_kwargs_match_create_with_dofs_signature():
 
 def test_connection_specification_is_not_a_spawn_specification():
     # A connection joins two existing entities; it must not be substitutable for a spawn spec,
-    # so it cannot be placed in a child_specification / starting_objects list.
+    # so it cannot be placed in a child_specification / objects list.
     assert not issubclass(ConnectionSpecification, SpawnSpecification)
 
 

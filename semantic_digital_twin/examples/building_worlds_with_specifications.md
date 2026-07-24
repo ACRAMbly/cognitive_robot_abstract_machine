@@ -413,7 +413,7 @@ table_urdf = os.path.join(
 
 specification = WorldSpecification.from_urdf(
     table_urdf,
-    starting_objects=[
+    objects=[
         SemanticAnnotationWithRootSpecification(
             name="milk",
             semantic_annotation_type=Milk,
@@ -438,19 +438,18 @@ print("Materialized two independent worlds, each with one milk and one cup")
 
 A world specification can also merge a robot into the environment. Supply the robot's
 [semantic annotation class](adding-robots) through `robot_semantic_annotation`; the robot is
-parsed from its own description and inserted as `world.root -> odom -> drive -> robot`.
-The `drive_connection_type` controls how the robot attaches to its localization frame
-(`odom`), `world_T_odom` sets the localization pose, and `odom_T_robot_start` the
-robot's start pose.
+parsed from its own description and inserted into the world. A robot with a mobile base is
+attached as `world.root -> odom -> drive -> robot`, where the drive connection is
+determined by the robot's mobile base; a robot without a mobile base is attached rigidly as
+`world.root -> robot`. `world_T_odom` sets the localization pose, and `odom_T_robot_start`
+the robot's start pose.
 
 ```{code-cell} ipython3
 from semantic_digital_twin.robots.pr2 import PR2
-from semantic_digital_twin.world_description.connections import OmniDrive
 
 world = WorldSpecification.from_urdf(
     file_path=table_urdf,
     robot_semantic_annotation=PR2,
-    drive_connection_type=OmniDrive,
     world_T_odom=HomogeneousTransformationMatrix.from_xyz_rpy(x=1.0),
     odom_T_robot_start=HomogeneousTransformationMatrix.from_xyz_rpy(y=2.0),
 ).to_domain_object()
@@ -465,7 +464,7 @@ result. The milk's pose is baked into its root body specification through `paren
 ```{code-cell} ipython3
 world = WorldSpecification.from_urdf(
     file_path=table_urdf,
-    starting_objects=[
+    objects=[
         Drawer.get_default_annotation_specification(
             "drawer",
             Scale(0.4, 0.5, 0.3),
