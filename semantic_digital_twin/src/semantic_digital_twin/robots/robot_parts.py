@@ -58,6 +58,7 @@ from semantic_digital_twin.spatial_types import (
 from semantic_digital_twin.spatial_types.derivatives import DerivativeMap
 from semantic_digital_twin.world_description.connections import (
     ActiveConnection,
+    FixedConnection,
     WheeledDrive,
     ActiveConnection1DOF,
     PrismaticConnection,
@@ -627,15 +628,15 @@ class AbstractRobot(Agent, HasRobotParts, ABC):
         """
 
     @classmethod
-    def get_drive_connection_type(cls) -> Optional[Type[WheeledDrive]]:
+    def get_drive_connection_type(cls) -> Type[Connection]:
         """
-        The drive connection type of this robot's mobile base.
+        The connection type attaching this robot to its ``odom`` frame.
 
-        :return: The mobile base's drive connection type, or ``None`` when the robot has
-            no mobile base and therefore no drive.
+        :return: The mobile base's drive connection type, or :class:`FixedConnection`
+            when the robot has no mobile base and is therefore rigidly attached.
         """
         if not issubclass(cls, HasMobileBase):
-            return None
+            return FixedConnection
         mobile_base_type = cast(
             MobileBase, get_generic_type_parameters(cls, HasMobileBase)[0]
         )

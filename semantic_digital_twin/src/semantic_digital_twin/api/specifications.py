@@ -39,7 +39,7 @@ from semantic_digital_twin.spatial_types import (
 )
 from semantic_digital_twin.world import World
 from semantic_digital_twin.world_description.connections import (
-    WheeledDrive,
+    ActiveConnection,
     FixedConnection,
     Connection6DoF,
     PrismaticConnection,
@@ -1128,29 +1128,16 @@ class WorldSpecification:
 
     def _setup_robot(self, world: World) -> None:
         """
-        Set up the robot in ``world``.
+        Set up the robot in ``world`` as ``world.root -> odom -> connection -> robot``.
 
-        A robot whose mobile base declares a drive connection is attached through an
-        ``odom`` frame as ``world.root -> odom -> drive -> robot``. A robot without a
-        mobile base has no drive and is attached rigidly as ``world.root -> robot``.
+        The connection attaching the robot to ``odom`` is the drive declared by the
+        robot's mobile base, or a fixed connection when the robot has no mobile base. An
+        active drive is marked as controlled; the localization and start poses are
+        applied afterwards.
         """
-        drive_connection_type = (
-            self.robot_semantic_annotation.get_drive_connection_type()
-        )
-        if drive_connection_type is None:
-            self._setup_fixed_robot(world)
-            return
-        self._setup_driven_robot(world, drive_connection_type)
+        connection_type = self.robot_semantic_annotation.get_drive_connection_type()
+        is_active = issubclass(connection_type, ActiveConnection)
 
-    def _setup_driven_robot(
-        self, world: World, drive_connection_type: Type[WheeledDrive]
-    ) -> None:
-        """
-        Attach a mobile robot as ``world.root -> odom -> drive -> robot``.
-
-        The drive connection is marked as controlled and the localization and start
-        poses are applied.
-        """
         with world.modify_world():
             odom_body = Body(name=PrefixedName("odom"))
             root_C_odom = Connection6DoF.create_with_dofs(
@@ -1163,11 +1150,19 @@ class WorldSpecification:
             ).parse()
             robot_root_id = robot_world.root.id
 
-            odom_C_robot = drive_connection_type.create_with_dofs(
-                world=world, parent=odom_body, child=cast(Body, robot_world.root)
+            # A fixed connection has no DoFs, so its start pose must be set at creation;
+            # an active drive carries it as DoF state applied after the block.
+            odom_C_robot = connection_type.create_with_dofs(
+                world=world,
+                parent=odom_body,
+                child=cast(Body, robot_world.root),
+                parent_T_connection_expression=(
+                    None if is_active else self.odom_T_robot_start
+                ),
             )
             world.merge_world(robot_world, root_connection=odom_C_robot)
-            odom_C_robot.has_hardware_interface = True
+            if is_active:
+                odom_C_robot.has_hardware_interface = True
 
         self.robot_semantic_annotation.from_branch_in_world(
             cast(Body, world.get_world_entity_with_id_by_id(robot_root_id))
@@ -1176,30 +1171,5 @@ class WorldSpecification:
         # Poses touch DoF state, so they are set after the modification block.
         if self.world_T_odom is not None:
             root_C_odom.origin = self.world_T_odom
-        if self.odom_T_robot_start is not None:
+        if is_active and self.odom_T_robot_start is not None:
             odom_C_robot.origin = self.odom_T_robot_start
-
-    def _setup_fixed_robot(self, world: World) -> None:
-        """
-        Attach a robot without a mobile base rigidly as ``world.root -> robot``.
-
-        ``world_T_odom`` is used as the fixed placement of the robot in the world root
-        frame; ``odom_T_robot_start`` does not apply because there is no ``odom`` frame.
-        """
-        with world.modify_world():
-            robot_world = URDFParser.from_file(
-                self.robot_semantic_annotation.get_ros_file_path()
-            ).parse()
-            robot_root_id = robot_world.root.id
-
-            root_C_robot = FixedConnection.create_with_dofs(
-                world=world,
-                parent=cast(Body, world.root),
-                child=cast(Body, robot_world.root),
-                parent_T_connection_expression=self.world_T_odom,
-            )
-            world.merge_world(robot_world, root_connection=root_C_robot)
-
-        self.robot_semantic_annotation.from_branch_in_world(
-            cast(Body, world.get_world_entity_with_id_by_id(robot_root_id))
-        )

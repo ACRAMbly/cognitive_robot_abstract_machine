@@ -438,11 +438,10 @@ print("Materialized two independent worlds, each with one milk and one cup")
 
 A world specification can also merge a robot into the environment. Supply the robot's
 [semantic annotation class](adding-robots) through `robot_semantic_annotation`; the robot is
-parsed from its own description and inserted into the world. A robot with a mobile base is
-attached as `world.root -> odom -> drive -> robot`, where the drive connection is
-determined by the robot's mobile base; a robot without a mobile base is attached rigidly as
-`world.root -> robot`. `world_T_odom` sets the localization pose, and `odom_T_robot_start`
-the robot's start pose.
+parsed from its own description and inserted as `world.root -> odom -> connection -> robot`.
+The connection attaching the robot to `odom` is the drive determined by the robot's mobile
+base, or a fixed connection when the robot has no mobile base. `world_T_odom` sets the
+localization pose, and `odom_T_robot_start` the robot's start pose.
 
 ```{code-cell} ipython3
 from semantic_digital_twin.robots.pr2 import PR2
