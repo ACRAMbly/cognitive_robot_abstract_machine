@@ -407,7 +407,7 @@ class KinematicStructureEntity(WorldEntityWithSimulatorProperties, ABC):
         name: PrefixedName,
         points_3d: List[Point3],
         minimum_thickness: float = 0.005,
-        sv_ratio_tol: float = 1e-7,
+        singular_value_ratio_tolerance: float = 1e-7,
     ) -> Self:
         """
         Constructs a Region from a list of 3D points by creating a convex hull around
@@ -418,14 +418,14 @@ class KinematicStructureEntity(WorldEntityWithSimulatorProperties, ABC):
         :param name: Prefixed name for the region.
         :param points_3d: List of 3D points.
         :param minimum_thickness: Minimum thickness to add if points are near-planar.
-        :param sv_ratio_tol: Tolerance for determining planarity based on singular value
-            ratio.
+        :param singular_value_ratio_tolerance: Tolerance for determining planarity based
+            on singular value ratio.
         :return: Region object.
         """
         area_mesh = Mesh.from_3d_points(
             points_3d,
             minimum_thickness=minimum_thickness,
-            sv_ratio_tol=sv_ratio_tol,
+            singular_value_ratio_tolerance=singular_value_ratio_tolerance,
         )
         return cls.from_shape_collection(name, ShapeCollection([area_mesh]))
 
@@ -478,7 +478,7 @@ class Body(KinematicStructureEntity):
         name: PrefixedName,
         shape_collection: ShapeCollection,
         *,
-        visuals_shape_collection: ShapeCollection = None,
+        visuals_shape_collection: ShapeCollection | None = None,
     ) -> Self:
         if visuals_shape_collection is None:
             visuals_shape_collection = shape_collection

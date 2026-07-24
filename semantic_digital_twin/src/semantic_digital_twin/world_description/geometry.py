@@ -452,7 +452,13 @@ class Shape(ABC, SubclassJSONSerializer, HasSimulatorProperties):
         center_y = (bounding_box.min_y + bounding_box.max_y) / 2
         center_z = (bounding_box.min_z + bounding_box.max_z) / 2
         self.origin = HomogeneousTransformationMatrix.from_xyz_rpy(
-            -center_x, -center_y, -center_z, 0, 0, 0
+            -center_x,
+            -center_y,
+            -center_z,
+            0,
+            0,
+            0,
+            reference_frame=self.origin.reference_frame,
         )
 
 
@@ -756,7 +762,7 @@ class Mesh(Shape):
         points_3d: List[Point3],
         reference_frame: Optional[KinematicStructureEntity] = None,
         minimum_thickness: float = 0.005,
-        sv_ratio_tol: float = 1e-7,
+        singular_value_ratio_tolerance: float = 1e-7,
     ) -> Self:
         """
         Constructs a Region from a list of 3D points by creating a convex hull around
@@ -768,8 +774,8 @@ class Mesh(Shape):
         :param points_3d: List of 3D points.
         :param reference_frame: Optional reference frame.
         :param minimum_thickness: Minimum thickness to add if points are near-planar.
-        :param sv_ratio_tol: Tolerance for determining planarity based on singular value
-            ratio.
+        :param singular_value_ratio_tolerance: Tolerance for determining planarity based
+            on singular value ratio.
         :return: Region object.
         """
         points = np.asarray([point.to_np()[:3] for point in points_3d], dtype=float)
@@ -796,7 +802,10 @@ class Mesh(Shape):
         # We compute the thickness, peak-to-peak (max - min), along the normal direction, to get the thickness of
         # the region.
         thickness_in_normal_direction = np.ptp(centered_points @ unit_vector_normal)
-        is_near_planar = variance[0] > 0 and variance[-1] / variance[0] < sv_ratio_tol
+        is_near_planar = (
+            variance[0] > 0
+            and variance[-1] / variance[0] < singular_value_ratio_tolerance
+        )
         thickness_padding = (
             minimum_thickness / 2
             if thickness_in_normal_direction < minimum_thickness or is_near_planar

@@ -371,7 +371,7 @@ class MissingConnectionParentError(UsageError):
 
     connection_name: Optional[str]
     """
-    The name of the connection specification that was spawned without a child.
+    The name of the connection specification that was spawned without a parent.
     """
 
     def error_message(self) -> str:

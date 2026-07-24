@@ -144,7 +144,7 @@ def test_body_and_connection_active(empty_world):
 
 def test_child_specification_recursion(empty_world):
     parent_spec = BodySpecification.box("parent", Scale(1, 1, 1))
-    parent_spec.child_specification.append(
+    parent_spec.child_specifications.append(
         BodySpecification.box("child", Scale(1, 1, 1))
     )
     parent_body = parent_spec.spawn(empty_world)
@@ -313,14 +313,18 @@ def test_from_event_constructor_spawns(empty_world):
             "shape", str(RESOURCES / "milk.stl"), parent_T_self=pose
         ),
         lambda pose: BodySpecification.from_event(
-            "shape", Scale(1, 1, 1).to_simple_event().as_composite_set(), parent_T_self=pose
+            "shape",
+            Scale(1, 1, 1).to_simple_event().as_composite_set(),
+            parent_T_self=pose,
         ),
         lambda pose: BodySpecification.from_3d_points(
             "shape",
             [Point3(0, 0, 0), Point3(1, 0, 0), Point3(0, 1, 0), Point3(1, 1, 1)],
             parent_T_self=pose,
         ),
-        lambda pose: RegionSpecification.box("shape", Scale(1, 1, 1), parent_T_self=pose),
+        lambda pose: RegionSpecification.box(
+            "shape", Scale(1, 1, 1), parent_T_self=pose
+        ),
     ],
 )
 def test_shape_constructors_apply_parent_T_self(empty_world, make_spec):
@@ -331,7 +335,9 @@ def test_shape_constructors_apply_parent_T_self(empty_world, make_spec):
 
 
 def test_body_specification_from_3d_points_matches_direct_construction():
-    """``from_3d_points`` mirrors :meth:`Body.from_3d_points`."""
+    """
+    ``from_3d_points`` mirrors :meth:`Body.from_3d_points`.
+    """
     points = [Point3(0, 0, 0), Point3(1, 0, 0), Point3(0, 1, 0), Point3(1, 1, 1)]
     name = PrefixedName("polytope")
 
@@ -351,7 +357,9 @@ def test_prefixed_name_is_not_double_wrapped():
 
 
 def test_has_root_body_default_specification_without_scale_is_geometryless(empty_world):
-    """A scale-less body factory yields a bare body, mirrored by an empty body spec."""
+    """
+    A scale-less body factory yields a bare body, mirrored by an empty body spec.
+    """
     spec = HasRootBody.get_default_body_specification("bare_body")
     assert isinstance(spec, BodySpecification)
 
@@ -363,7 +371,9 @@ def test_has_root_body_default_specification_without_scale_is_geometryless(empty
 def test_has_root_region_default_specification_without_scale_is_geometryless(
     empty_world,
 ):
-    """The base region factory creates a bare region, mirrored by an empty region spec."""
+    """
+    The base region factory creates a bare region, mirrored by an empty region spec.
+    """
     spec = HasRootRegion.get_default_region_specification("bare_region")
     assert isinstance(spec, RegionSpecification)
 
@@ -411,7 +421,8 @@ def test_to_domain_object_is_reusable():
 def test_spawn_does_not_alias_or_mutate_stored_pose(empty_world):
     """
     A specification is reusable: spawning it must neither bind nor mutate its stored
-    pose, and each materialized connection must own a distinct pose bound to its own child.
+    pose, and each materialized connection must own a distinct pose bound to its own
+    child.
     """
     spec = BodySpecification.box("box", Scale(1, 1, 1))
     first = spec.spawn(empty_world, name="first")
@@ -464,7 +475,7 @@ def test_world_specification_with_robot(empty_world):
     except ParsingError as error:
         pytest.skip(f"PR2 URDF not available: {error}")
 
-    odom_body = world.get_body_by_name("odom_combined")
+    odom_body = world.get_body_by_name("odom")
     assert odom_body is not None
     assert isinstance(odom_body.parent_connection, Connection6DoF)
     assert odom_body.parent_connection.parent is world.root
@@ -486,7 +497,7 @@ def test_world_specification_from_urdf_with_robot():
     except ParsingError as error:
         pytest.skip(f"PR2 URDF not available: {error}")
 
-    odom_body = world.get_body_by_name("odom_combined")
+    odom_body = world.get_body_by_name("odom")
     assert odom_body is not None
     assert odom_body.parent_connection.parent is world.root
     drive = world.get_body_by_name("base_footprint").parent_connection
@@ -902,7 +913,10 @@ def test_annotation_spec_robot_part_raises():
 
 
 def _spawn_with_parts(world, whole_type, whole_scale, parts):
-    """Spawn ``whole_type`` from its default annotation spec, with ``parts`` as nested annotations."""
+    """
+    Spawn ``whole_type`` from its default annotation spec, with ``parts`` as nested
+    annotations.
+    """
     return whole_type.get_default_annotation_specification(
         "whole", whole_scale, part_specifications=parts
     ).spawn(world)

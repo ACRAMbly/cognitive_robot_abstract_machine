@@ -57,8 +57,7 @@ attaching it to any world) — useful when you want a free-standing `Body` to pa
 
 Throughout this guide we need a world with a root to materialize into.
 `World.create_with_root_body()` gives us exactly that: a fresh world whose single root body is
-named `map`. The cells below verify their own results with `assert`, so running this guide as a
-notebook doubles as a test of its content.
+named `map`.
 
 ```{code-cell} ipython3
 import logging
@@ -98,7 +97,9 @@ from semantic_digital_twin.world_description.geometry import Scale, Color
 world = World.create_with_root_body()
 
 table_top = BodySpecification.box(
-    "table_top", Scale(1.2, 0.8, 0.05), color=Color(0.6, 0.4, 0.2, 1.0)
+    name="table_top", 
+    scale=Scale(1.2, 0.8, 0.05), 
+    color=Color(0.6, 0.4, 0.2, 1.0)
 ).spawn(world)
 
 assert table_top.name.name == "table_top"
@@ -118,8 +119,8 @@ from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix
 
 # Bake a default pose straight into the specification.
 leg = BodySpecification.box(
-    "leg_0",
-    Scale(0.05, 0.05, 0.7),
+    name="leg_0",
+    scale=Scale(0.05, 0.05, 0.7),
     parent_T_self=HomogeneousTransformationMatrix.from_xyz_rpy(x=0.55, y=0.35, z=-0.35),
 ).spawn(world, parent=table_top)
 
@@ -148,16 +149,16 @@ independent bodies. The specification was neither consumed nor mutated.
 ### Nesting with child specifications
 
 Re-attaching children by hand, as above, is fine for ad-hoc placement. When the parent/child
-structure is fixed, encode it directly in the specification through `child_specification`.
+structure is fixed, encode it directly in the specification through `child_specifications`.
 Spawning the parent then materializes the whole subtree.
 
 ```{code-cell} ipython3
 world = World.create_with_root_body()
 
 shelf = BodySpecification.box(
-    "shelf",
-    Scale(0.8, 0.3, 0.02),
-    child_specification=[
+    name="shelf",
+    scale=Scale(0.8, 0.3, 0.02),
+    child_specifications=[
         BodySpecification.box("book", Scale(0.15, 0.2, 0.25)),
         BodySpecification.sphere("ball", 0.06),
     ],
@@ -215,7 +216,10 @@ from semantic_digital_twin.api.specifications import RegionSpecification
 
 world = World.create_with_root_body()
 
-placement_area = RegionSpecification.box("placement_area", Scale(0.4, 0.4, 0.01)).spawn(world)
+placement_area = RegionSpecification.box(
+    name="placement_area", 
+    scale=Scale(0.4, 0.4, 0.01)
+).spawn(world)
 assert len(placement_area.area.shapes) == 1
 print("Spawned region:", placement_area.name)
 ```
@@ -246,8 +250,8 @@ from semantic_digital_twin.spatial_types import Vector3
 world = World.create_with_root_body()
 
 drawer = BodySpecification.box(
-    "drawer",
-    Scale(0.4, 0.5, 0.2),
+    name="drawer",
+    sclae=Scale(0.4, 0.5, 0.2),
     connection_specification=PrismaticConnectionSpecification(axis=Vector3.Z()),
 ).spawn(world)
 
@@ -314,7 +318,11 @@ world = World.create_with_root_body()
 milk = SemanticAnnotationWithRootSpecification(
     name="milk",
     semantic_annotation_type=Milk,
-    root_specification=BodySpecification.box("milk", Scale(0.1, 0.1, 0.2)),
+    root_specification=BodySpecification.box(
+         name="milk", 
+         scale=Scale(0.1, 0.1, 0.2),
+         parent_T_self=HomogeneousTransformationMatrix.from_xyz_rpy(x=0.3, z=0.8)
+    ),
 ).spawn(world)
 
 assert isinstance(milk, Milk)
@@ -367,8 +375,8 @@ from semantic_digital_twin.semantic_annotations.semantic_annotations import Draw
 world = World.create_with_root_body()
 
 drawer = Drawer.get_default_annotation_specification(
-    "drawer",
-    Scale(0.4, 0.5, 0.6),
+    name="drawer",
+    scale=Scale(0.4, 0.5, 0.6),
     part_specifications={
         "handle": Handle.get_default_annotation_specification("handle", Scale(0.1, 0.05, 0.05)),
     },
@@ -430,9 +438,9 @@ print("Materialized two independent worlds, each with one milk and one cup")
 
 A world specification can also merge a robot into the environment. Supply the robot's
 [semantic annotation class](adding-robots) through `robot_semantic_annotation`; the robot is
-parsed from its own description and inserted as `world.root -> odom_combined -> drive -> robot`.
+parsed from its own description and inserted as `world.root -> odom -> drive -> robot`.
 The `drive_connection_type` controls how the robot attaches to its localization frame
-(`odom_combined`), `world_T_odom` sets the localization pose, and `odom_T_robot_start` the
+(`odom`), `world_T_odom` sets the localization pose, and `odom_T_robot_start` the
 robot's start pose.
 
 ```{code-cell} ipython3
@@ -440,7 +448,7 @@ from semantic_digital_twin.robots.pr2 import PR2
 from semantic_digital_twin.world_description.connections import OmniDrive
 
 world = WorldSpecification.from_urdf(
-    table_urdf,
+    file_path=table_urdf,
     robot_semantic_annotation=PR2,
     drive_connection_type=OmniDrive,
     world_T_odom=HomogeneousTransformationMatrix.from_xyz_rpy(x=1.0),
@@ -456,7 +464,7 @@ result. The milk's pose is baked into its root body specification through `paren
 
 ```{code-cell} ipython3
 world = WorldSpecification.from_urdf(
-    table_urdf,
+    file_path=table_urdf,
     starting_objects=[
         Drawer.get_default_annotation_specification(
             "drawer",

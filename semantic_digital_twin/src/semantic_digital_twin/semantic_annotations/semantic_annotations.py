@@ -98,7 +98,7 @@ class Handle(HasRootBody):
         scale: Optional[Scale] = None,
         thickness: float = 0.005,
     ) -> Self:
-        scale = scale if scale is not None else Scale(0.1, 0.02, 0.02)
+        scale = scale or Scale(0.1, 0.02, 0.02)
         return cls.get_default_annotation_specification(
             name, scale=scale, thickness=thickness
         ).spawn(world, parent_T_self=world_root_T_self)
@@ -146,7 +146,7 @@ class Handle(HasRootBody):
         :param thickness: The thickness of the handle walls.
         :return: A body specification with the handle geometry.
         """
-        scale = scale if scale is not None else Scale(0.1, 0.02, 0.02)
+        scale = scale or Scale(0.1, 0.02, 0.02)
         handle_event = cls._create_handle_geometry(scale=scale).as_composite_set()
         inner_box = cls._create_handle_geometry(
             scale=scale, thickness=thickness
@@ -190,7 +190,7 @@ class Aperture(HasRootRegion):
         """
         Create a new semantic annotation with a new region in the given world.
         """
-        scale = scale if scale is not None else Scale()
+        scale = scale or Scale()
         return cls.get_default_annotation_specification(name, scale=scale).spawn(
             world, parent_T_self=world_root_T_self
         )
@@ -255,7 +255,7 @@ class Aperture(HasRootRegion):
         :param scale: The scale used to generate the region area geometry. Defaults to ``Scale()``.
         :return: A region specification with a single box area derived from ``scale``.
         """
-        scale = scale if scale is not None else Scale()
+        scale = scale or Scale()
         return RegionSpecification.from_event(
             name, scale.to_simple_event().as_composite_set()
         )
@@ -352,7 +352,7 @@ class Door(HasHandle, HasMechanicalJoint):
         *,
         scale: Optional[Scale] = None,
     ) -> Self:
-        scale = scale if scale is not None else Scale(0.03, 1, 2)
+        scale = scale or Scale(0.03, 1, 2)
         door = cls.get_default_annotation_specification(name, scale=scale).spawn(
             world, parent_T_self=world_root_T_self
         )
@@ -390,7 +390,7 @@ class Door(HasHandle, HasMechanicalJoint):
         :param scale: The scale of the door. ``scale.x`` must be the smallest dimension. Defaults to ``Scale(0.03, 1, 2)``.
         :return: A body specification with the door box geometry.
         """
-        scale = scale if scale is not None else Scale(0.03, 1, 2)
+        scale = scale or Scale(0.03, 1, 2)
         if not (scale.x < scale.y and scale.x < scale.z):
             raise InvalidPlaneDimensions(scale, clazz=Door)
         return super().get_default_body_specification(name, scale)
@@ -554,7 +554,7 @@ class Floor(HasSupportingSurface):
         :param name: The name of the floor body.
         :param scale: The scale defining the floor polytope. Defaults to a unit :class:`Scale`.
         """
-        scale = scale if scale is not None else Scale()
+        scale = scale or Scale()
         polytope = scale.to_bounding_box().get_points()
         return cls.create_with_new_body_from_polytope_in_world(
             name=name,
@@ -598,7 +598,7 @@ class Floor(HasSupportingSurface):
         :param scale: The scale defining the floor polytope. Defaults to ``Scale()``.
         :return: A body specification with the floor polytope mesh.
         """
-        scale = scale if scale is not None else Scale()
+        scale = scale or Scale()
         return BodySpecification.from_3d_points(
             name, scale.to_bounding_box().get_points()
         )
@@ -651,7 +651,7 @@ class Wall(HasApertures):
         *,
         scale: Optional[Scale] = None,
     ) -> Self:
-        scale = scale if scale is not None else Scale()
+        scale = scale or Scale()
         return cls.get_default_annotation_specification(name, scale=scale).spawn(
             world, parent_T_self=world_root_T_self
         )
@@ -697,7 +697,7 @@ class Wall(HasApertures):
         :param scale: The scale of the wall. Defaults to ``Scale()``.
         :return: A body specification with the wall box geometry.
         """
-        scale = scale if scale is not None else Scale()
+        scale = scale or Scale()
         if not (scale.x < scale.y and scale.x < scale.z):
             raise InvalidPlaneDimensions(scale, clazz=Wall)
         return BodySpecification.from_event(
