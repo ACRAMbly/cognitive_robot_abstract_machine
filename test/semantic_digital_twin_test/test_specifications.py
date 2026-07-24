@@ -380,7 +380,7 @@ def test_constructor_child_specification_param(empty_world):
     parent = BodySpecification.box(
         "parent",
         Scale(1, 1, 1),
-        child_specification=[BodySpecification.box("child", Scale(1, 1, 1))],
+        child_specifications=[BodySpecification.box("child", Scale(1, 1, 1))],
     )
     parent_body = parent.spawn(empty_world)
     child = empty_world.get_body_by_name("child")

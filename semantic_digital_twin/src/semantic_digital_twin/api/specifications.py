@@ -109,6 +109,10 @@ class NamedSpecification(ABC):
 
         A bare string is wrapped into a :class:`PrefixedName`. ``None`` is preserved so
         materialization can fall back to default name generation.
+
+        :param name: Overrides the specification's own name. If None, the spec's name is
+            used.
+        :return: The normalized name, or None when neither name is set.
         """
         used_name = name if name is not None else self.name
         if used_name is None:
@@ -136,11 +140,13 @@ class SpawnSpecification(NamedSpecification, Generic[TWorldEntity], ABC):
         """
         Instantiate the World Entity and add it to the given world.
 
+        :param world: The world the entity and its parent connection are added to.
+        :param name: Overrides the specification's own name. If None, the spec's name is
+            used.
         :param parent: The entity to attach to. If None, ``world.root`` is used.
         :param parent_T_self: Overrides the specification's stored default pose. If
             None, the stored default is used.
-        :param name: Overrides the specification's own name. If None, the spec's name is
-            used.
+        :return: The materialized world entity.
         """
 
     def _spawn_children(
@@ -151,6 +157,10 @@ class SpawnSpecification(NamedSpecification, Generic[TWorldEntity], ABC):
     ) -> None:
         """
         Spawn each child specification as a kinematic child of ``parent``.
+
+        :param world: The world the children are added to.
+        :param parent: The entity the children are attached to.
+        :param children: The specifications to materialize.
         """
         for child in children:
             child.spawn(world, parent=parent)
@@ -194,6 +204,9 @@ class ConnectionSpecification(
         """
         Forward every public dataclass field except the connection ``name`` to
         ``create_with_dofs``.
+
+        :return: The connection parameters, keyed by ``create_with_dofs`` parameter
+            name.
         """
         discovered_attributes = DataclassOnlyIntrospector().discover(type(self))
         instance_values = vars(self)
@@ -215,6 +228,12 @@ class ConnectionSpecification(
 
         Parameters that the family does not use are ignored, so a caller holding a bare
         specification type can parameterize any family uniformly.
+
+        :param name: Optional connection name. If None, the name is auto-generated at
+            materialization time.
+        :param connection_parameters: Connection parameters of other families, ignored
+            here.
+        :return: The created specification.
         """
         return cls(name=name)
 
@@ -234,11 +253,19 @@ class ConnectionSpecification(
         supplied explicitly via ``child``. If ``parent`` is omitted, ``world.root`` is
         used.
 
+        :param world: The world the connection is added to.
+        :param parent: The kinematic structure entity that becomes the connection's
+            parent. If None, ``world.root`` is used.
         :param child: The kinematic structure entity that becomes the connection's
             child.
         :param parent_T_connection: Placement of the connection in the parent frame.
             Identity if None.
+        :param name: Overrides the specification's own name. If None, the spec's name is
+            used.
+        :return: The materialized connection.
         :raises MissingConnectionChildError: If ``child`` is not provided.
+        :raises MissingConnectionParentError: If no parent is given and the world has no
+            root.
         """
         if child is None:
             raise MissingConnectionChildError(connection_name=self.name)
@@ -338,6 +365,14 @@ class ActiveConnection1DOFSpecification(ConnectionSpecification[TConnection], AB
 
         Parameters this connection family does not use are ignored, so a caller holding
         a bare specification type can parameterize any family uniformly.
+
+        :param name: Optional connection name. If None, the name is auto-generated at
+            materialization time.
+        :param axis: Movement axis of the connection.
+        :param multiplier: Scaling factor applied to the degree of freedom's motion.
+        :param offset: Constant offset applied to the degree of freedom's motion.
+        :param dof_limits: Limits for the generated degree of freedom.
+        :return: The created specification.
         """
         return cls(
             name=name,
@@ -381,8 +416,9 @@ class KinematicStructureEntitySpecification(
 ):
     """
     World-independent, reusable description of a kinematic structure entity.
-    A specification is reusable: every materialization copies the prototype shapes and the
-    pose, so the specification never becomes bound to an entity or world.
+
+    A specification is reusable: every materialization copies the prototype shapes and
+    the pose, so the specification never becomes bound to an entity or world.
 
     The concrete domain-object type (e.g. ``Body``/``Region``) is bound as the generic
     parameter by each subclass and resolved at runtime in :meth:`to_domain_object`.
@@ -427,6 +463,7 @@ class KinematicStructureEntitySpecification(
         parameter.
 
         :param name: Optional name override. If None, the spec's own name is used.
+        :return: The created kinematic structure entity.
         """
         [domain_object_type] = get_generic_type_parameters(
             self, KinematicStructureEntitySpecification
@@ -447,6 +484,15 @@ class KinematicStructureEntitySpecification(
         """
         Materialize this entity, attach it to ``parent`` via
         ``connection_specification``, and spawn its geometry children.
+
+        :param world: The world the entity and its parent connection are added to.
+        :param connection_specification: How the entity attaches to its parent.
+        :param name: Overrides the specification's own name. If None, the spec's name is
+            used.
+        :param parent: The entity to attach to. If None, ``world.root`` is used.
+        :param parent_T_self: Overrides the specification's stored default pose. If
+            None, the stored default is used.
+        :return: The materialized kinematic structure entity.
         """
         entity = self.to_domain_object(name)
         with world.modify_world():
@@ -472,11 +518,13 @@ class KinematicStructureEntitySpecification(
         :attr:`connection_specification`, defaulting to a fixed connection when none is
         set.
 
+        :param world: The world the entity and its parent connection are added to.
+        :param name: Overrides the specification's own name. If None, the spec's name is
+            used.
         :param parent: The entity to attach to. If None, ``world.root`` is used.
         :param parent_T_self: Overrides the specification's stored default pose. If
             None, the stored default is used.
-        :param name: Overrides the specification's own name. If None, the spec's name is
-            used.
+        :return: The materialized kinematic structure entity.
         """
         connection_specification = (
             self.connection_specification or FixedConnectionSpecification()
@@ -493,7 +541,7 @@ class KinematicStructureEntitySpecification(
         color: Optional[Color] = None,
         origin: Optional[HomogeneousTransformationMatrix] = None,
         parent_T_self: Optional[HomogeneousTransformationMatrix] = None,
-        child_specification: list[KinematicStructureEntitySpecification] | None = None,
+        child_specifications: list[KinematicStructureEntitySpecification] | None = None,
         connection_specification: Optional[ConnectionSpecification] = None,
     ) -> Self:
         """
@@ -505,6 +553,8 @@ class KinematicStructureEntitySpecification(
         :param origin: The origin of the box in the body frame. Defaults to identity.
         :param parent_T_self: The default placement of the entity in its parent frame.
             Defaults to identity.
+        :param child_specifications: Specifications spawned as kinematic children of the
+            entity. Defaults to none.
         :param connection_specification: How the entity attaches to its parent. Defaults
             to a fixed connection.
         :return: The created specification.
@@ -516,7 +566,7 @@ class KinematicStructureEntitySpecification(
                 origin=origin or HomogeneousTransformationMatrix(),
                 color=color or Color(),
             ).as_shape_collection(),
-            child_specifications=child_specification or [],
+            child_specifications=child_specifications or [],
             parent_T_self=parent_T_self or HomogeneousTransformationMatrix(),
             connection_specification=connection_specification,
         )
@@ -529,7 +579,7 @@ class KinematicStructureEntitySpecification(
         color: Optional[Color] = None,
         origin: Optional[HomogeneousTransformationMatrix] = None,
         parent_T_self: Optional[HomogeneousTransformationMatrix] = None,
-        child_specification: list[KinematicStructureEntitySpecification] | None = None,
+        child_specifications: list[KinematicStructureEntitySpecification] | None = None,
         connection_specification: Optional[ConnectionSpecification] = None,
     ) -> Self:
         """
@@ -542,6 +592,8 @@ class KinematicStructureEntitySpecification(
             Defaults to identity.
         :param parent_T_self: The default placement of the entity in its parent frame.
             Defaults to identity.
+        :param child_specifications: Specifications spawned as kinematic children of the
+            entity. Defaults to none.
         :param connection_specification: How the entity attaches to its parent. Defaults
             to a fixed connection.
         :return: The created specification.
@@ -553,7 +605,7 @@ class KinematicStructureEntitySpecification(
                 origin=origin or HomogeneousTransformationMatrix(),
                 color=color or Color(),
             ).as_shape_collection(),
-            child_specifications=child_specification or [],
+            child_specifications=child_specifications or [],
             parent_T_self=parent_T_self or HomogeneousTransformationMatrix(),
             connection_specification=connection_specification,
         )
@@ -567,7 +619,7 @@ class KinematicStructureEntitySpecification(
         color: Optional[Color] = None,
         origin: Optional[HomogeneousTransformationMatrix] = None,
         parent_T_self: Optional[HomogeneousTransformationMatrix] = None,
-        child_specification: list[KinematicStructureEntitySpecification] | None = None,
+        child_specifications: list[KinematicStructureEntitySpecification] | None = None,
         connection_specification: Optional[ConnectionSpecification] = None,
     ) -> Self:
         """
@@ -581,6 +633,8 @@ class KinematicStructureEntitySpecification(
             frame. Defaults to identity.
         :param parent_T_self: The default placement of the entity in its parent frame.
             Defaults to identity.
+        :param child_specifications: Specifications spawned as kinematic children of the
+            entity. Defaults to none.
         :param connection_specification: How the entity attaches to its parent. Defaults
             to a fixed connection.
         :return: The created specification.
@@ -593,7 +647,7 @@ class KinematicStructureEntitySpecification(
                 origin=origin or HomogeneousTransformationMatrix(),
                 color=color or Color(),
             ).as_shape_collection(),
-            child_specifications=child_specification or [],
+            child_specifications=child_specifications or [],
             parent_T_self=parent_T_self or HomogeneousTransformationMatrix(),
             connection_specification=connection_specification,
         )
@@ -607,7 +661,7 @@ class KinematicStructureEntitySpecification(
         color: Optional[Color] = None,
         origin: Optional[HomogeneousTransformationMatrix] = None,
         parent_T_self: Optional[HomogeneousTransformationMatrix] = None,
-        child_specification: list[KinematicStructureEntitySpecification] | None = None,
+        child_specifications: list[KinematicStructureEntitySpecification] | None = None,
         connection_specification: Optional[ConnectionSpecification] = None,
     ) -> Self:
         """
@@ -622,6 +676,8 @@ class KinematicStructureEntitySpecification(
             Defaults to identity.
         :param parent_T_self: The default placement of the entity in its parent frame.
             Defaults to identity.
+        :param child_specifications: Specifications spawned as kinematic children of the
+            entity. Defaults to none.
         :param connection_specification: How the entity attaches to its parent. Defaults
             to a fixed connection.
         :return: The created specification.
@@ -634,7 +690,7 @@ class KinematicStructureEntitySpecification(
                 scale=scale or Scale(),
                 color=color or Color(),
             ).as_shape_collection(),
-            child_specifications=child_specification or [],
+            child_specifications=child_specifications or [],
             parent_T_self=parent_T_self or HomogeneousTransformationMatrix(),
             connection_specification=connection_specification,
         )
@@ -645,7 +701,7 @@ class KinematicStructureEntitySpecification(
         name: str,
         event: Event,
         parent_T_self: Optional[HomogeneousTransformationMatrix] = None,
-        child_specification: list[KinematicStructureEntitySpecification] | None = None,
+        child_specifications: list[KinematicStructureEntitySpecification] | None = None,
         connection_specification: Optional[ConnectionSpecification] = None,
     ) -> Self:
         """
@@ -653,10 +709,13 @@ class KinematicStructureEntitySpecification(
 
         This is the construction used by semantic annotations with composite geometry
         (hollow handles, container cases, walls minus apertures, ...).
+
         :param name: The name of the entity.
         :param event: The event describing the geometry, in the entity frame.
         :param parent_T_self: The default placement of the entity in its parent frame.
             Defaults to identity.
+        :param child_specifications: Specifications spawned as kinematic children of the
+            entity. Defaults to none.
         :param connection_specification: How the entity attaches to its parent. Defaults
             to a fixed connection.
         :return: The created specification.
@@ -669,7 +728,7 @@ class KinematicStructureEntitySpecification(
             shapes=BoundingBoxCollection.from_event(anchor, event)
             .as_shapes()
             .copy_without_reference_frame(),
-            child_specifications=child_specification or [],
+            child_specifications=child_specifications or [],
             parent_T_self=parent_T_self or HomogeneousTransformationMatrix(),
             connection_specification=connection_specification,
         )
@@ -682,7 +741,7 @@ class KinematicStructureEntitySpecification(
         minimum_thickness: float = 0.005,
         singular_value_ratio_tolerance: float = 1e-7,
         parent_T_self: Optional[HomogeneousTransformationMatrix] = None,
-        child_specification: list[KinematicStructureEntitySpecification] | None = None,
+        child_specifications: list[KinematicStructureEntitySpecification] | None = None,
         connection_specification: Optional[ConnectionSpecification] = None,
     ) -> Self:
         """
@@ -695,6 +754,8 @@ class KinematicStructureEntitySpecification(
             planarity test.
         :param parent_T_self: The default placement of the entity in its parent frame.
             Defaults to identity.
+        :param child_specifications: Specifications spawned as kinematic children of the
+            entity. Defaults to none.
         :param connection_specification: How the entity attaches to its parent. Defaults
             to a fixed connection.
         :return: The created specification.
@@ -710,7 +771,7 @@ class KinematicStructureEntitySpecification(
                     )
                 ]
             ).copy_without_reference_frame(),
-            child_specifications=child_specification or [],
+            child_specifications=child_specifications or [],
             parent_T_self=parent_T_self or HomogeneousTransformationMatrix(),
             connection_specification=connection_specification,
         )
@@ -840,8 +901,8 @@ class SemanticAnnotationWithRootSpecification(
     Nested annotation parts keyed by the target part-whole relationship field name.
 
     Each part is spawned during :meth:`spawn` and mounted via the annotation's
-    :meth:`~...mixins.PartWholeRelationship.add`. A list value mounts several parts onto
-    a to-many field; a single value mounts onto a singular field.
+    :meth:`PartWholeRelationship.add`. A list value mounts several parts onto a to-many
+    field; a single value mounts onto a singular field.
     """
 
     def __post_init__(self):
@@ -868,11 +929,13 @@ class SemanticAnnotationWithRootSpecification(
         :attr:`connection_specification` when set; otherwise it is derived from the
         annotation type's parent connection.
 
+        :param world: The world the annotation, its root and its parts are added to.
+        :param name: Overrides the specification's own name. If None, the spec's name is
+            used.
         :param parent: The entity to attach the root to. If None, ``world.root`` is
             used.
         :param parent_T_self: Overrides the root specification's stored default pose.
-        :param name: Overrides the specification's own name. If None, the spec's name is
-            used.
+        :return: The materialized semantic annotation.
         """
         root_entity = self.root_specification.to_domain_object(name or self.name)
 
@@ -938,6 +1001,8 @@ class SemanticAnnotationWithRootSpecification(
         relationship field of the annotation and that list values target only to-many
         fields.
 
+        :param instance: The annotation type whose part-whole fields are validated
+            against.
         :raises UnknownPartWholeRelationshipField: If a key is not a part-whole
             relationship field.
         :raises PartWholeCardinalityError: If a list is given for a singular field.
@@ -963,6 +1028,8 @@ class SemanticAnnotationWithRootSpecification(
     def _part_whole_fields_by_name(self) -> dict[str, Any]:
         """
         The annotation type's part-whole relationship fields, keyed by field name.
+
+        :return: The wrapped part-whole relationship fields, keyed by field name.
         """
         from semantic_digital_twin.semantic_annotations.mixins import (
             _wrapped_part_whole_relationship_fields,
@@ -983,9 +1050,13 @@ class SemanticAnnotationWithRootSpecification(
     ) -> None:
         """
         Spawn each nested part and mount it onto ``instance`` via the part-whole
-        :meth:`~...mixins.PartWholeRelationship.add`, keyed by the target field name.
+        :meth:`PartWholeRelationship.add`, keyed by the target field name.
 
         .. note:: Assumes :meth:`_validate_part_specifications` has already run.
+
+        :param world: The world the parts are added to.
+        :param instance: The annotation the spawned parts are mounted onto.
+        :param root_entity: The annotation's root, which the parts are attached to.
         """
         for field_name, value in self.part_specifications.items():
             part_specs = value if isinstance(value, list) else [value]
@@ -1001,9 +1072,10 @@ class WorldSpecification:
     objects around them.
 
     The environment is supplied as a concrete :class:`World` (build one from a model
-    file with :meth:`from_urdf` or :meth:`from_mjcf`). Applying it (:meth:`to_world`)
-    optionally parses and merges a robot as ``world.root -> odom -> drive -> robot``,
-    then spawns all starting objects, and returns the augmented environment world.
+    file with :meth:`from_urdf` or :meth:`from_mjcf`). Applying it
+    (:meth:`to_domain_object`) optionally parses and merges a robot as ``world.root ->
+    odom -> drive -> robot``, then spawns all starting objects, and returns the
+    augmented environment world.
     """
 
     world: World
@@ -1060,6 +1132,14 @@ class WorldSpecification:
             ``robot_semantic_annotation``.
         :param prefix: Optional name prefix for the parsed environment.
         :param path_resolver: Resolver for mesh/package paths referenced by the URDF.
+        :param robot_semantic_annotation: The robot to merge into the environment. If
+            None, no robot is added.
+        :param world_T_odom: The localization pose of ``odom`` in the ``world.root``
+            frame. Identity if None.
+        :param odom_T_robot_start: The start pose of the robot in the ``odom`` frame.
+            Identity if None.
+        :param objects: Specifications spawned once the robot is in place.
+        :return: The created specification.
         """
         world = URDFParser.from_file(
             file_path, prefix=prefix, path_resolver=path_resolver
@@ -1093,6 +1173,14 @@ class WorldSpecification:
             ``robot_semantic_annotation``.
         :param prefix: Optional name prefix for the parsed environment.
         :param mimic_joints: Mapping of joint names to the joints they mimic.
+        :param robot_semantic_annotation: The robot to merge into the environment. If
+            None, no robot is added.
+        :param world_T_odom: The localization pose of ``odom`` in the ``world.root``
+            frame. Identity if None.
+        :param odom_T_robot_start: The start pose of the robot in the ``odom`` frame.
+            Identity if None.
+        :param objects: Specifications spawned once the robot is in place.
+        :return: The created specification.
         """
         from semantic_digital_twin.adapters.mjcf import MJCFParser
 
@@ -1116,6 +1204,8 @@ class WorldSpecification:
         ``robot_semantic_annotation`` is set, the robot is parsed from its own
         description and merged into the world, with the localization and start poses
         applied. Finally all ``objects`` are spawned relative to the world root.
+
+        :return: The augmented environment world.
         """
         world = deepcopy(self.world)
         if self.robot_semantic_annotation is not None:
@@ -1134,6 +1224,8 @@ class WorldSpecification:
         robot's mobile base, or a fixed connection when the robot has no mobile base. An
         active drive is marked as controlled; the localization and start poses are
         applied afterwards.
+
+        :param world: The world the robot is merged into.
         """
         connection_type = self.robot_semantic_annotation.get_drive_connection_type()
         is_active = issubclass(connection_type, ActiveConnection)
