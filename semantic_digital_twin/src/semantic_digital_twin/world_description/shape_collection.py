@@ -55,6 +55,7 @@ class ShapeCollection(SubclassJSONSerializer):
     def dye_shapes(self, color: Color):
         """
         Dye all shapes in this collection with the given color.
+
         :param color: The color to dye the shapes with.
         """
         for shape in self.shapes:
@@ -73,8 +74,9 @@ class ShapeCollection(SubclassJSONSerializer):
         """
         Transform ``shape``'s origin into this collection's reference frame in-place.
 
-        A shape without a reference frame adopts the collection's frame. Cross-frame transforms are
-        logged; transforming across worlds raises :class:`MismatchingWorld`.
+        A shape without a reference frame adopts the collection's frame. Cross-frame
+        transforms are logged; transforming across worlds raises
+        :class:`MismatchingWorld`.
         """
         origin_reference_frame = shape.origin.reference_frame
         if origin_reference_frame is None:
@@ -131,6 +133,7 @@ class ShapeCollection(SubclassJSONSerializer):
     def combined_mesh(self) -> Trimesh:
         """
         Combines all shapes into a single mesh, applying the respective transformations.
+
         :return: A single Trimesh representing the combined collision geometry.
         """
         transformed_meshes = []
@@ -145,7 +148,9 @@ class ShapeCollection(SubclassJSONSerializer):
         self, origin: HomogeneousTransformationMatrix
     ) -> BoundingBoxCollection:
         """
-        Provides the bounding box collection for this entity given a transformation matrix as origin.
+        Provides the bounding box collection for this entity given a transformation
+        matrix as origin.
+
         :param origin: The origin to express the bounding boxes from.
         :returns: A collection of bounding boxes in world-space coordinates.
         """
@@ -167,7 +172,9 @@ class ShapeCollection(SubclassJSONSerializer):
         self, reference_frame: KinematicStructureEntity
     ) -> BoundingBoxCollection:
         """
-        Provides the bounding box collection for this entity in the given reference frame.
+        Provides the bounding box collection for this entity in the given reference
+        frame.
+
         :param reference_frame: The reference frame to express the bounding boxes in.
         :returns: A collection of bounding boxes in world-space coordinates.
         """
@@ -274,12 +281,12 @@ class BoundingBoxCollection(ShapeCollection):
         self, x_amount: float = 0.0, y_amount: float = 0, z_amount: float = 0
     ) -> BoundingBoxCollection:
         """
-        Enlarges all bounding boxes in the collection by a given amount in all dimensions.
+        Enlarges all bounding boxes in the collection by a given amount in all
+        dimensions.
 
         :param x_amount: The amount to adjust the x-coordinates
         :param y_amount: The amount to adjust the y-coordinates
         :param z_amount: The amount to adjust the z-coordinates
-
         :return: The enlarged bounding box collection
         """
         return BoundingBoxCollection(
@@ -383,7 +390,8 @@ class BoundingBoxCollection(ShapeCollection):
 
     def bounding_box(self) -> BoundingBox:
         """
-        Get the 8 corners of a bounding box that contains all bounding boxes in the collection.
+        Get the 8 corners of a bounding box that contains all bounding boxes in the
+        collection.
 
         :return: A list of Point3 objects representing the corners of the bounding box.
         """

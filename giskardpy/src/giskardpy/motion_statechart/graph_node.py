@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import ast
-import re
+import logging
 import threading
+import uuid
 from abc import ABC
 from dataclasses import field, dataclass, fields
 from functools import cached_property
@@ -34,6 +35,7 @@ from semantic_digital_twin.spatial_types import (
     Quaternion,
     RotationMatrix,
     HomogeneousTransformationMatrix,
+    Pose,
 )
 from semantic_digital_twin.world_description.geometry import Color
 from giskardpy.motion_statechart.context import MotionStatechartContext
@@ -61,6 +63,8 @@ if TYPE_CHECKING:
         MotionStatechart,
     )
 
+logger = logging.getLogger(__name__)
+
 
 @dataclass(eq=False, repr=False)
 class TrinaryCondition(SubclassJSONSerializer):
@@ -77,7 +81,7 @@ class TrinaryCondition(SubclassJSONSerializer):
     """
     The type of transition associated with this condition.
     """
-    expression: Scalar = field(default=lambda: Scalar.const_trinary_unknown())
+    expression: Scalar = field(default_factory=Scalar.const_trinary_unknown)
     """
     The logical trinary condition to be evaluated.
     """
@@ -144,7 +148,6 @@ class TrinaryCondition(SubclassJSONSerializer):
     def _check_owner_not_in_start_condition(self, new_expression: Scalar):
         if (
             self.kind == TransitionKind.START
-            and self.owner.belongs_to_motion_statechart()
             and self.owner.observation_variable in new_expression.free_variables()
         ):
             raise SelfInStartConditionError(
@@ -164,16 +167,19 @@ class TrinaryCondition(SubclassJSONSerializer):
 
     def __str__(self):
         """
-        Replaces the state symbols with motion statechart node names and formats it nicely.
+        Renders the condition, replacing each observation variable with its node's
+        :attr:`~MotionStatechartNode.unique_name` so the result is readable and reproducible
+        across processes (the variable's own name uses a process-local id).
         """
         free_symbols = self.expression.free_variables()
         if not free_symbols:
-            str_representation = str(self.expression.is_const_true())
-        else:
-            str_representation = sm.trinary_logic_to_str(self.expression)
-        str_representation = re.sub(
-            r'"([^"]*?)/observation"', r'"\1"', str_representation
-        )
+            return str(self.expression.is_const_true())
+        str_representation = sm.trinary_logic_to_str(self.expression)
+        for variable in free_symbols:
+            if isinstance(variable, ObservationVariable):
+                str_representation = str_representation.replace(
+                    variable.name, variable.motion_statechart_node.unique_name
+                )
         return str_representation
 
     def __repr__(self):
@@ -213,10 +219,9 @@ class TrinaryCondition(SubclassJSONSerializer):
             case ast.UnaryOp():
                 return TrinaryCondition._parse_ast_not(node, observation_variables)
             case ast.Constant(value=str(val)):
-                variable_name = str(PrefixedName("observation", val))
-                for v in observation_variables:
-                    if variable_name == v.name:
-                        return v
+                for observation_variable in observation_variables:
+                    if val == observation_variable.motion_statechart_node.unique_name:
+                        return observation_variable
                 raise KeyError(f"unknown observation variable: {val!r}")
             case ast.Constant(value=True):
                 return Scalar.const_true()
@@ -321,7 +326,9 @@ class DebugExpression:
         | Quaternion
         | RotationMatrix
         | HomogeneousTransformationMatrix
+        | Pose
     )
+    """The tracked expression; spatial types are additionally rendered as RViz markers."""
 
     color: Color = field(default_factory=lambda: Color(1, 0, 0, 1))
     """
@@ -386,6 +393,14 @@ class MotionStatechartNode(SubclassJSONSerializer):
     The index of this node in the motion statechart.
     """
 
+    _node_id: str = field(init=False, default=None)
+    """
+    Process-unique identifier assigned at construction and used to name this node's state
+    variables. Unlike :attr:`index` it exists before the node is added to a motion statechart,
+    so variable names are unique from construction time. It is not serialized: conditions
+    reference nodes by :attr:`unique_name`, which is reproduced deterministically on load.
+    """
+
     parent_node_index: Optional[int] = field(default=None, init=False)
     """
     The index of the parent node in the motion statechart, if None, it is on the top layer of a motion statechart.
@@ -431,6 +446,8 @@ class MotionStatechartNode(SubclassJSONSerializer):
     def __post_init__(self):
         if self.name is None:
             self.name = self.__class__.__name__
+        self._node_id = str(uuid.uuid4())
+        self._create_state_variables()
         self._start_condition = TrinaryCondition.create_true(
             kind=TransitionKind.START, owner=self
         )
@@ -444,17 +461,18 @@ class MotionStatechartNode(SubclassJSONSerializer):
             kind=TransitionKind.RESET, owner=self
         )
 
-    def _post_add_to_motion_statechart(self):
+    def _create_state_variables(self):
         """
-        Called after this node is added to a motion statechart.
-        Finalizes the initialization parts that require the motion statechart to be set.
+        Creates the observation and life cycle variables for this node, named from
+        :attr:`_node_id` so they are available before the node is added to a motion statechart.
         """
+        name = f"{self.name}#{self._node_id}"
         self._observation_variable = ObservationVariable(
-            name=str(PrefixedName("observation", self.unique_name)),
+            name=str(PrefixedName("observation", name)),
             motion_statechart_node=self,
         )
         self._life_cycle_variable = LifeCycleVariable(
-            name=str(PrefixedName("life_cycle", self.unique_name)),
+            name=str(PrefixedName("life_cycle", name)),
             motion_statechart_node=self,
         )
 
@@ -466,6 +484,13 @@ class MotionStatechartNode(SubclassJSONSerializer):
         if self.parent_node_index is None:
             return None
         return self._motion_statechart.get_node_by_index(self.parent_node_index)
+
+    @property
+    def debug_expressions(self) -> List[DebugExpression]:
+        """
+        :return: The debug expressions registered by this node during build.
+        """
+        return self._debug_expressions
 
     @property
     def depth(self) -> int:
@@ -688,10 +713,7 @@ class MotionStatechartNode(SubclassJSONSerializer):
     def life_cycle_variable(self) -> LifeCycleVariable:
         """
         The variable representing the life cycle state of this node.
-        :return:
         """
-        if self._life_cycle_variable is None:
-            raise NotInMotionStatechartError(self.name)
         return self._life_cycle_variable
 
     def belongs_to_motion_statechart(self) -> bool:
@@ -699,8 +721,9 @@ class MotionStatechartNode(SubclassJSONSerializer):
 
     @property
     def observation_variable(self) -> ObservationVariable:
-        if not self.belongs_to_motion_statechart():
-            raise NotInMotionStatechartError(self.name)
+        """
+        The variable representing the observation state of this node.
+        """
         return self._observation_variable
 
     @property
@@ -827,9 +850,19 @@ class MotionStatechartNode(SubclassJSONSerializer):
             raise NotInMotionStatechartError(self.name)
         self._reset_condition.update_expression(expression, self)
 
+    def _json_excluded_fields(self) -> set[str]:
+        """
+        Names of init fields that the generic serializer must not write, so subclasses can
+        serialize them in a custom way.
+        """
+        return set()
+
     def to_json(self) -> Dict[str, Any]:
         json_data = super().to_json()
+        excluded_fields = self._json_excluded_fields()
         for field_ in fields(self):
+            if field_.name in excluded_fields:
+                continue
             if not field_.name.startswith("_") and field_.init:
                 value = getattr(self, field_.name)
                 json_data[field_.name] = to_json(value)
@@ -898,7 +931,9 @@ class Task(MotionStatechartNode):
     Tasks are MotionStatechartNodes that add motion constraints.
     """
 
-    weight: float = field(default=DefaultWeights.WEIGHT_BELOW_CA.value, kw_only=True)
+    weight: float = field(
+        default=DefaultWeights.WEIGHT_BELOW_COLLISION_AVOIDANCE.value, kw_only=True
+    )
     """Task priority relative to other tasks."""
 
     plot_specs: NodePlotSpec = field(
@@ -990,6 +1025,13 @@ class ThreadPayloadMonitor(MotionStatechartNode, ABC):
         # Return the last known result (initialized to Unknown until first success)
         return self._last_result
 
+    def cleanup(self, context: MotionStatechartContext):
+        """
+        Stops the background worker thread.
+        """
+        self._stop_event.set()
+        self._thread.join(timeout=1.0)
+
     def _worker_loop(self):
         while not self._stop_event.is_set():
             # Wait until a request is made (wake periodically to check for stop)
@@ -1000,12 +1042,13 @@ class ThreadPayloadMonitor(MotionStatechartNode, ABC):
             self._request_event.clear()
             try:
                 result = self._compute_observation()
-                # Accept only valid trinary values (floats expected)
                 self._last_result = result
                 self._has_result = True
             except Exception:
-                # On failure, keep previous result and mark as having no new value
-                pass
+                # Keep the previous result, but surface the failure instead of hiding it.
+                logger.exception(
+                    "%s failed to compute its observation.", self.__class__.__name__
+                )
 
 
 @dataclass(eq=False, repr=False)
@@ -1076,10 +1119,10 @@ class CancelMotion(MotionStatechartNode):
     def on_tick(self, context: MotionStatechartContext) -> Optional[float]:
         raise self.exception
 
+    def _json_excluded_fields(self) -> set[str]:
+        return {"exception"}
+
     def to_json(self) -> Dict[str, Any]:
-        exception_field = next(f for f in fields(self) if f.name == "exception")
-        # set init to False to prevent superclass from calling to_json on it
-        exception_field.init = False
         json_data = super().to_json()
         # cast to general exception, because it can be json serialized
         json_data["exception"] = to_json(Exception(str(self.exception)))

@@ -38,7 +38,9 @@ if TYPE_CHECKING:
 
 class HasUpdateState(ABC):
     """
-    Mixin class for connections that need state updated which are not trivial integrations.
+    Mixin class for connections that need state updated which are not trivial
+    integrations.
+
     Typically needed for connections that use active and passive degrees of freedom.
     Look at OmniDrive for an example usage.
     """
@@ -47,8 +49,10 @@ class HasUpdateState(ABC):
     def update_state(self, dt: float) -> None:
         """
         Allows the connection to update the state of its dofs.
-        An integration update for active dofs will have happened before this method is called.
-        Write directly into self._world.state, but don't touch dofs that don't belong to this connection.
+
+        An integration update for active dofs will have happened before this method is
+        called. Write directly into self._world.state, but don't touch dofs that don't
+        belong to this connection.
         :param dt: Time passed since last update.
         """
         pass
@@ -86,17 +90,20 @@ class FixedConnection(Connection):
 @dataclass(eq=False)
 class ActiveConnection(Connection, ABC):
     """
-    Has one or more degrees of freedom that can be actively controlled, e.g., robot joints.
+    Has one or more degrees of freedom that can be actively controlled, e.g., robot
+    joints.
     """
 
     @property
     def has_hardware_interface(self) -> bool:
         """
-        Whether this connection is linked to a controller and can therefore respond to control commands.
+        Whether this connection is linked to a controller and can therefore respond to
+        control commands.
 
-        E.g. the caster wheels of a PR2 are active, because they have a DOF, but they are not directly controlled.
-        Instead a the omni drive connection is directly controlled and a low level controller translates these commands
-        to commands for the caster wheels.
+        E.g. the caster wheels of a PR2 are active, because they have a DOF, but they
+        are not directly controlled. Instead a the omni drive connection is directly
+        controlled and a low level controller translates these commands to commands for
+        the caster wheels.
 
         A door hinge is also active but cannot be controlled.
         """
@@ -121,23 +128,31 @@ class ActiveConnection1DOF(ActiveConnection, ABC):
     axis: Vector3 = field(kw_only=True)
     """
     Connection moves along this axis, should be a unit vector.
-    The axis is defined relative to the local reference frame of the parent KinematicStructureEntity.
+
+    The axis is defined relative to the local reference frame of the parent
+    KinematicStructureEntity.
     """
 
     multiplier: float = 1.0
     """
-    Movement along the axis is multiplied by this value. Useful if Connections share DoFs.
+    Movement along the axis is multiplied by this value.
+
+    Useful if Connections share DoFs.
     """
 
     offset: float = 0.0
     """
-    Movement along the axis is offset by this value. Useful if Connections share DoFs.
+    Movement along the axis is offset by this value.
+
+    Useful if Connections share DoFs.
     """
 
     raw_dof: DegreeOfFreedom = field(kw_only=True)
     """
     The degree of freedom whose raw, unscaled state this connection drives.
-    Use the :attr:`dof` property to obtain it with ``multiplier`` and ``offset`` applied.
+
+    Use the :attr:`dof` property to obtain it with ``multiplier`` and ``offset``
+    applied.
     """
 
     dynamics: JointDynamics = field(default_factory=JointDynamics)
@@ -194,22 +209,27 @@ class ActiveConnection1DOF(ActiveConnection, ABC):
         **kwargs,
     ) -> Self:
         """
-        Creates and returns an instance of the class with its single degree of freedom, initializing a
-        kinematic relationship between a parent and a child entity along ``axis``.
+        Creates and returns an instance of the class with its single degree of freedom,
+        initializing a kinematic relationship between a parent and a child entity along
+        ``axis``.
 
         :param world: The motion world in which to add the degree of freedom.
         :param parent: The parent kinematic structure entity.
         :param child: The child kinematic structure entity.
         :param name: Optional specific name for the connection. If not provided, a
-                     default name is generated based on the parent and child.
-        :param parent_T_connection_expression: Constant pose of the connection relative to its parent.
-        :param connection_T_child_expression: Constant pose of the connection relative to its child.
-        :param multiplier: A scaling factor applied to the DOF's motion. Defaults to 1.0.
-        :param offset: A constant offset value applied to the DOF's motion. Defaults to 0.0.
+            default name is generated based on the parent and child.
+        :param parent_T_connection_expression: Constant pose of the connection relative
+            to its parent.
+        :param connection_T_child_expression: Constant pose of the connection relative
+            to its child.
+        :param multiplier: A scaling factor applied to the DOF's motion. Defaults to
+            1.0.
+        :param offset: A constant offset value applied to the DOF's motion. Defaults to
+            0.0.
         :param dof_limits: Optional limits for the generated degree of freedom.
         :param axis: The axis vector defining the joint relation.
-        :return: An instance of the class representing the defined relationship with
-                 its DOF added to the world.
+        :return: An instance of the class representing the defined relationship with its
+            DOF added to the world.
         """
         if axis is None:
             raise MissingConnectionAxisError(connection_type_name=cls.__name__)
@@ -233,6 +253,7 @@ class ActiveConnection1DOF(ActiveConnection, ABC):
     def dof(self) -> DegreeOfFreedom:
         """
         A reference to the Degree of Freedom associated with this connection.
+
         .. warning:: WITH multiplier and offset applied.
         """
         result = deepcopy(self.raw_dof)
@@ -374,20 +395,26 @@ class RevoluteConnection(ActiveConnection1DOF):
 class Connection6DoF(Connection):
     """
     Has full 6 degrees of freedom, that cannot be actively controlled.
+
     Useful for synchronizing with transformations from external providers.
     """
 
     x: DegreeOfFreedom = field(kw_only=True)
     """
-    Displacement of child KinematicStructureEntity with respect to parent KinematicStructureEntity along the x-axis.
+    Displacement of child KinematicStructureEntity with respect to parent
+    KinematicStructureEntity along the x-axis.
     """
+
     y: DegreeOfFreedom = field(kw_only=True)
     """
-    Displacement of child KinematicStructureEntity with respect to parent KinematicStructureEntity along the y-axis.
+    Displacement of child KinematicStructureEntity with respect to parent
+    KinematicStructureEntity along the y-axis.
     """
+
     z: DegreeOfFreedom = field(kw_only=True)
     """
-    Displacement of child KinematicStructureEntity with respect to parent KinematicStructureEntity along the z-axis.
+    Displacement of child KinematicStructureEntity with respect to parent
+    KinematicStructureEntity along the z-axis.
     """
 
     qx: DegreeOfFreedom = field(kw_only=True)
@@ -395,7 +422,8 @@ class Connection6DoF(Connection):
     qz: DegreeOfFreedom = field(kw_only=True)
     qw: DegreeOfFreedom = field(kw_only=True)
     """
-    Rotation of child KinematicStructureEntity with respect to parent KinematicStructureEntity represented as a quaternion.
+    Rotation of child KinematicStructureEntity with respect to parent
+    KinematicStructureEntity represented as a quaternion.
     """
 
     def to_json(self) -> Dict[str, Any]:
@@ -467,8 +495,9 @@ class Connection6DoF(Connection):
         **kwargs,
     ) -> Self:
         """
-        Creates an instance of the class with automatically generated degrees of freedom (DoFs)
-        for the provided parent and child kinematic entities within the specified world.
+        Creates an instance of the class with automatically generated degrees of freedom
+        (DoFs) for the provided parent and child kinematic entities within the specified
+        world.
 
         The additional kwargs parameters are accepted for interface consistency with other connections and ignored here.
 
@@ -551,7 +580,9 @@ class Connection6DoF(Connection):
 
     def copy_for_world(self, world: World) -> Connection6DoF:
         """
-        Copies this 6DoF connection for another world. Returns a new connection with references to the given world.
+        Copies this 6DoF connection for another world.
+
+        Returns a new connection with references to the given world.
         :param world: The world to copy this connection for.
         :return: A copy of this connection for the given world.
         """
@@ -581,7 +612,8 @@ class Connection6DoF(Connection):
 @dataclass(eq=False)
 class WheeledDrive(ActiveConnection, HasUpdateState, ABC):
     """
-    Superclass for connections that describe a drive, e.g., an omnidirectional drive or a differential drive.
+    Superclass for connections that describe a drive, e.g., an omnidirectional drive or
+    a differential drive.
     """
 
 
@@ -589,6 +621,7 @@ class WheeledDrive(ActiveConnection, HasUpdateState, ABC):
 class OmniDrive(WheeledDrive):
     """
     A connection describing an omnidirectional drive.
+
     It can rotate about its z-axis and drive on the x-y plane simultaneously.
     - x/y: Passive dofs describing the measured odometry with respect to parent frame.
         We assume that the robot can't fly, and we can't measure its z-axis position, so z=0.
@@ -694,21 +727,25 @@ class OmniDrive(WheeledDrive):
         (DOFs) for translation on the x and y axes, rotation along roll, pitch, and yaw
         axes, and velocity limits for translation and rotation.
 
-        The additional kwargs parameters are accepted for interface consistency with other connections and ignored here.
+        The additional kwargs parameters are accepted for interface consistency with
+        other connections and ignored here.
 
         This method modifies the provided world to add all required degrees of freedom
         and their limits, based on the provided settings. Names for the degrees of
-        freedom are auto-generated using the stringified version of the provided name
-        or its default setting.
+        freedom are auto-generated using the stringified version of the provided name or
+        its default setting.
 
-        :param world: The world where the configuration is being applied, and degrees of freedom are added.
+        :param world: The world where the configuration is being applied, and degrees of
+            freedom are added.
         :param parent: The parent kinematic structure entity.
         :param child: The child kinematic structure entity.
         :param name: Name of the connection. If None, it will be auto-generated.
         :param parent_T_connection_expression: Transformation matrix representing the
-            relative position/orientation of the child to the parent. Default is Identity.
+            relative position/orientation of the child to the parent. Default is
+            Identity.
         :param connection_T_child_expression: Transformation matrix representing the
-            relative position/orientation of the child to the connection. Default is Identity.
+            relative position/orientation of the child to the connection. Default is
+            Identity.
         :param translation_velocity_limits: The velocity limit applied to the
             translation degrees of freedom (default is 0.6).
         :param rotation_velocity_limits: The velocity limit applied to the rotation
@@ -806,6 +843,7 @@ class OmniDrive(WheeledDrive):
     ) -> None:
         """
         Overwrites the origin of the connection.
+
         .. warning:: Ignores z position, pitch, and yaw values.
         :param parent_T_child:
         """
@@ -823,8 +861,10 @@ class OmniDrive(WheeledDrive):
 
     def copy_for_world(self, world: World) -> OmniDrive:
         """
-        Copies this OmniDriveConnection for the provided world. This finds the references for the parent and child in
-        the new world and returns a new connection with references to the new parent and child.
+        Copies this OmniDriveConnection for the provided world.
+
+        This finds the references for the parent and child in the new world and returns
+        a new connection with references to the new parent and child.
         :param world: The world where the connection is copied.
         :return: The connection with references to the new parent and child.
         """
@@ -855,32 +895,41 @@ class OmniDrive(WheeledDrive):
 class DifferentialDrive(WheeledDrive):
     """
     A connection describing a differential drive.
-    It can rotate around its z-axis and drive in x-direction. It allows movement in the x-y plane.
+
+    It can rotate around its z-axis and drive in x-direction. It allows movement in the
+    x-y plane.
     """
 
     x: DegreeOfFreedom = field(kw_only=True)
     """
     Passive DoFs describing the measured odometry in x with respect to parent frame.
     """
+
     y: DegreeOfFreedom = field(kw_only=True)
     """
     Passive DoFs describing the measured odometry in y with respect to parent frame.
     """
+
     roll: DegreeOfFreedom = field(kw_only=True)
     """
     Passive DoF describing the measured odometry in roll using the IMU sensor.
     """
+
     pitch: DegreeOfFreedom = field(kw_only=True)
     """
     Passive DoF describing the measured odometry in pitch using the IMU sensor.
     """
+
     yaw: DegreeOfFreedom = field(kw_only=True)
     """
     Active DoF describing rotation around the robot's z-axis.
     """
+
     x_velocity: DegreeOfFreedom = field(kw_only=True)
     """
-    Actibe DoF describing the measured and commanded velocity in x. Represented with respect to the child frame.
+    Actibe DoF describing the measured and commanded velocity in x.
+
+    Represented with respect to the child frame.
     """
 
     def to_json(self) -> Dict[str, Any]:
@@ -956,19 +1005,24 @@ class DifferentialDrive(WheeledDrive):
         **kwargs,
     ) -> Self:
         """
-        Creates an instance of the class with automatically generated DoFs for translation on the x-axis,
-        rotation along roll, pitch, and yaw axes, and velocity limits for translation and rotation.
+        Creates an instance of the class with automatically generated DoFs for
+        translation on the x-axis, rotation along roll, pitch, and yaw axes, and
+        velocity limits for translation and rotation.
 
-        The additional kwargs parameters are accepted for interface consistency with other connections and ignored here.
+        The additional kwargs parameters are accepted for interface consistency with
+        other connections and ignored here.
 
-        :param world: The world where the configuration is being applied, and degrees of freedom are added.
+        :param world: The world where the configuration is being applied, and degrees of
+            freedom are added.
         :param parent: The parent kinematic structure entity.
         :param child: The child kinematic structure entity.
         :param name: Name of the connection. If None, it will be auto-generated.
         :param parent_T_connection_expression: Transformation matrix representing the
-            relative position/orientation of the child to the parent. Default is Identity.
+            relative position/orientation of the child to the parent. Default is
+            Identity.
         :param connection_T_child_expression: Transformation matrix representing the
-            relative position/orientation of the child to the connection. Default is Identity.
+            relative position/orientation of the child to the connection. Default is
+            Identity.
         :param translation_velocity_limits: The velocity limit applied to the
             translation degrees of freedom (default is 0.6).
         :param rotation_velocity_limits: The velocity limit applied to the rotation
@@ -1055,6 +1109,7 @@ class DifferentialDrive(WheeledDrive):
     ) -> None:
         """
         Overwrites the origin of the connection.
+
         .. warning:: Ignores z position, pitch, and yaw values.
         :param parent_T_child:
         """
@@ -1072,8 +1127,10 @@ class DifferentialDrive(WheeledDrive):
 
     def copy_for_world(self, world: World) -> DifferentialDrive:
         """
-        Copies this DiffDriveConnection for the provided world. This finds the references for the parent and child in
-        the new world and returns a new connection with references to the new parent and child.
+        Copies this DiffDriveConnection for the provided world.
+
+        This finds the references for the parent and child in the new world and returns
+        a new connection with references to the new parent and child.
         :param world: The world where the connection is copied.
         :return: The connection with references to the new parent and child.
         """

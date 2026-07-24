@@ -1,5 +1,5 @@
 import unittest
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional
 
 import numpy as np
@@ -25,11 +25,12 @@ from semantic_digital_twin.orm.ormatic_interface import *
 from semantic_digital_twin.semantic_annotations.mixins import (
     PartWholeRelationship,
     HasRootBody,
-    part_whole_relationship_field,
 )
 from semantic_digital_twin.semantic_annotations.mixins import (
     HasCaseAsRootBody,
+    IsPartWholeRelationship,
 )
+from krrood.patterns.field_metadata import FieldMetadata
 from semantic_digital_twin.semantic_annotations.semantic_annotations import (
     DoubleDoor,
     Floor,
@@ -49,6 +50,10 @@ from semantic_digital_twin.semantic_annotations.semantic_annotations import (
     Table,
     Milk,
     Cereal,
+    Microwave,
+    Hood,
+    Toaster,
+    CoffeeMachine,
 )
 from semantic_digital_twin.spatial_types import (
     HomogeneousTransformationMatrix,
@@ -296,9 +301,7 @@ class TestFactories(unittest.TestCase):
                 world=world,
                 scale=Scale(1, 1, 2.0),
             )
-            drawer = Drawer.create_with_new_body_in_world(
-                name="drawer", world=world
-            )
+            drawer = Drawer.create_with_new_body_in_world(name="drawer", world=world)
             fridge.add(drawer)
 
         semantic_drawer_annotations = world.get_semantic_annotations_by_type(Drawer)
@@ -536,9 +539,7 @@ class TestFactories(unittest.TestCase):
         with world.modify_world():
             world.add_body(root)
         with world.modify_world():
-            table = Table.create_with_new_body_in_world(
-                name="table", world=world
-            )
+            table = Table.create_with_new_body_in_world(name="table", world=world)
         table_scale = Scale(1.0, 1.0, 0.1)
         table.root.collision = BoundingBoxCollection.from_event(
             table.root, table_scale.to_simple_event().as_composite_set()
@@ -883,9 +884,7 @@ class TestFactories(unittest.TestCase):
         with world.modify_world():
             world.add_body(root)
         with world.modify_world():
-            cup = Cup.create_with_new_body_in_world(
-                name="cup", world=world
-            )
+            cup = Cup.create_with_new_body_in_world(name="cup", world=world)
         cup.class_label = "plastic_cup"
         self.assertEqual(cup.class_label, "plastic_cup")
 
@@ -898,9 +897,7 @@ class TestFactories(unittest.TestCase):
             cabinet = Cabinet.create_with_new_body_in_world(
                 name="cabinet", world=world, scale=Scale(0.5, 0.5, 1.0)
             )
-            cup = Cup.create_with_new_body_in_world(
-                name="cup", world=world
-            )
+            cup = Cup.create_with_new_body_in_world(name="cup", world=world)
 
             cabinet.add_object(cup)
 
@@ -921,9 +918,7 @@ class TestFactories(unittest.TestCase):
         with world2.modify_world():
             world2.add_body(root2)
         with world2.modify_world():
-            cup = Cup.create_with_new_body_in_world(
-                name="cup", world=world2
-            )
+            cup = Cup.create_with_new_body_in_world(name="cup", world=world2)
 
         with self.assertRaises(MismatchingWorld):
             cabinet.add_object(cup)
@@ -1103,18 +1098,71 @@ class TestFactories(unittest.TestCase):
             [[-0.05, -0.5, -1.0], [0.05, 0.5, 1.0]],
         )
 
+    def test_microwave_factory(self):
+        world = World()
+        root = Body(name=PrefixedName("root"))
+        with world.modify_world():
+            world.add_body(root)
+        with world.modify_world():
+            microwave = Microwave.create_with_new_body_in_world(
+                name=PrefixedName("microwave"), world=world
+            )
+            door = Door.create_with_new_body_in_world(
+                name=PrefixedName("microwave_door"),
+                scale=Scale(0.03, 0.3, 0.3),
+                world=world,
+            )
+            microwave.add(door)
+
+        semantic_microwave_annotations = world.get_semantic_annotations_by_type(
+            Microwave
+        )
+        self.assertEqual(len(semantic_microwave_annotations), 1)
+        self.assertEqual(microwave.doors[0], door)
+
+    def test_hood_toaster_coffee_machine_factories(self):
+        world = World()
+        root = Body(name=PrefixedName("root"))
+        with world.modify_world():
+            world.add_body(root)
+        with world.modify_world():
+            hood = Hood.create_with_new_body_in_world(
+                name=PrefixedName("hood"), world=world
+            )
+            toaster = Toaster.create_with_new_body_in_world(
+                name=PrefixedName("toaster"), world=world
+            )
+            coffee_machine = CoffeeMachine.create_with_new_body_in_world(
+                name=PrefixedName("coffee_machine"), world=world
+            )
+
+        self.assertEqual(len(world.get_semantic_annotations_by_type(Hood)), 1)
+        self.assertEqual(len(world.get_semantic_annotations_by_type(Toaster)), 1)
+        self.assertEqual(len(world.get_semantic_annotations_by_type(CoffeeMachine)), 1)
+        self.assertEqual(world.root, hood.root.parent_kinematic_structure_entity)
+        self.assertEqual(world.root, toaster.root.parent_kinematic_structure_entity)
+        self.assertEqual(
+            world.root, coffee_machine.root.parent_kinematic_structure_entity
+        )
+
 
 @dataclass(eq=False)
 class _AnnotationWithOverlappingPartWholeRelationshipFields(
     HasRootBody, PartWholeRelationship
 ):
     """
-    Throwaway whole whose two part-whole relationship fields have overlapping element types
-    (``Hinge`` is a subclass of ``MechanicalJoint``), so a ``Hinge`` matches both.
+    Throwaway whole whose two part-whole relationship fields have overlapping element
+    types (``Hinge`` is a subclass of ``MechanicalJoint``), so a ``Hinge`` matches both.
     """
 
-    joint: Optional[MechanicalJoint] = part_whole_relationship_field(default=None)
-    specific_joint: Optional[Hinge] = part_whole_relationship_field(default=None)
+    joint: Optional[MechanicalJoint] = field(
+        default=None,
+        metadata=FieldMetadata(other_metadata=[IsPartWholeRelationship()]).as_dict(),
+    )
+    specific_joint: Optional[Hinge] = field(
+        default=None,
+        metadata=FieldMetadata(other_metadata=[IsPartWholeRelationship()]).as_dict(),
+    )
 
 
 def _world_with_root() -> World:
@@ -1126,15 +1174,15 @@ def _world_with_root() -> World:
 
 
 def test_add_routes_handle_as_child():
-    """add(handle) mounts the handle as a child of the door (default strategy)."""
+    """
+    Add(handle) mounts the handle as a child of the door (default strategy).
+    """
     world = _world_with_root()
     with world.modify_world():
         door = Door.create_with_new_body_in_world(
             name="door", scale=Scale(0.03, 1, 2), world=world
         )
-        handle = Handle.create_with_new_body_in_world(
-            name="handle", world=world
-        )
+        handle = Handle.create_with_new_body_in_world(name="handle", world=world)
         door.add(handle)
 
     assert door.handle == handle
@@ -1142,7 +1190,9 @@ def test_add_routes_handle_as_child():
 
 
 def test_add_routes_hinge_by_reparenting_self():
-    """add(hinge) re-parents the door under the hinge (Hinge._mount_strategy)."""
+    """
+    Add(hinge) re-parents the door under the hinge (Hinge._mount_strategy).
+    """
     world = _world_with_root()
     with world.modify_world():
         door = Door.create_with_new_body_in_world(
@@ -1159,7 +1209,9 @@ def test_add_routes_hinge_by_reparenting_self():
 
 
 def test_add_routes_slider_by_reparenting_self():
-    """add(slider) re-parents the drawer under the slider (Slider._mount_strategy)."""
+    """
+    Add(slider) re-parents the drawer under the slider (Slider._mount_strategy).
+    """
     world = _world_with_root()
     with world.modify_world():
         drawer = Drawer.create_with_new_body_in_world(
@@ -1176,15 +1228,16 @@ def test_add_routes_slider_by_reparenting_self():
 
 
 def test_add_routes_plural_drawer_and_door():
-    """add() appends to the right list when the matching part-whole relationship field is plural."""
+    """
+    Add() appends to the right list when the matching part-whole relationship field is
+    plural.
+    """
     world = _world_with_root()
     with world.modify_world():
         fridge = Fridge.create_with_new_body_in_world(
             name="fridge", world=world, scale=Scale(1, 1, 2.0)
         )
-        drawer = Drawer.create_with_new_body_in_world(
-            name="drawer", world=world
-        )
+        drawer = Drawer.create_with_new_body_in_world(name="drawer", world=world)
         door = Door.create_with_new_body_in_world(
             name="door", scale=Scale(0.03, 1, 2), world=world
         )
@@ -1198,7 +1251,10 @@ def test_add_routes_plural_drawer_and_door():
 
 
 def test_add_routes_aperture_with_cut():
-    """add(aperture) cuts the wall geometry and mounts the aperture (Aperture._mount_strategy)."""
+    """
+    Add(aperture) cuts the wall geometry and mounts the aperture
+    (Aperture._mount_strategy).
+    """
     world = _world_with_root()
     with world.modify_world():
         wall = Wall.create_with_new_body_in_world(
@@ -1217,7 +1273,9 @@ def test_add_routes_aperture_with_cut():
 
 
 def test_add_object_stores_occupants():
-    """Containment occupants are stored via add_object (occupancy, not parthood)."""
+    """
+    Containment occupants are stored via add_object (occupancy, not parthood).
+    """
     world = _world_with_root()
     with world.modify_world():
         table = Table.create_with_new_body_in_world(
@@ -1238,7 +1296,10 @@ def test_add_object_stores_occupants():
 
 
 def test_add_does_not_route_occupants():
-    """An occupant matches no part-whole relationship field, so add() rejects it (it must use place)."""
+    """
+    An occupant matches no part-whole relationship field, so add() rejects it (it must
+    use place).
+    """
     world = _world_with_root()
     with world.modify_world():
         fridge = Fridge.create_with_new_body_in_world(
@@ -1255,22 +1316,26 @@ def test_add_does_not_route_occupants():
 
 
 def test_add_rejects_unsupported_part_type():
-    """add() of a part type the annotation has no part-whole relationship field for raises CannotBeAPartOf."""
+    """
+    Add() of a part type the annotation has no part-whole relationship field for raises
+    CannotBeAPartOf.
+    """
     world = _world_with_root()
     with world.modify_world():
         door = Door.create_with_new_body_in_world(
             name="door", scale=Scale(0.03, 1, 2), world=world
         )
-        drawer = Drawer.create_with_new_body_in_world(
-            name="drawer", world=world
-        )
+        drawer = Drawer.create_with_new_body_in_world(name="drawer", world=world)
         # A Door has handle/hinge part-whole relationship fields but no drawer field.
         with pytest.raises(CannotBeAPartOf):
             door.add(drawer)
 
 
 def test_add_raises_on_ambiguous_part():
-    """add() of a part matching more than one part-whole relationship field raises AmbiguousPart."""
+    """
+    Add() of a part matching more than one part-whole relationship field raises
+    AmbiguousPart.
+    """
     world = _world_with_root()
     with world.modify_world():
         whole = _AnnotationWithOverlappingPartWholeRelationshipFields.create_with_new_body_in_world(
@@ -1285,7 +1350,10 @@ def test_add_raises_on_ambiguous_part():
 
 
 def test_add_field_name_resolves_ambiguity_to_base_field():
-    """add(part, field_name=...) routes to the named field even when the type matches several."""
+    """
+    Add(part, field_name=...) routes to the named field even when the type matches
+    several.
+    """
     world = _world_with_root()
     with world.modify_world():
         whole = _AnnotationWithOverlappingPartWholeRelationshipFields.create_with_new_body_in_world(
@@ -1300,7 +1368,9 @@ def test_add_field_name_resolves_ambiguity_to_base_field():
 
 
 def test_add_field_name_resolves_ambiguity_to_specific_field():
-    """add(part, field_name=...) can route the same part to the other matching field."""
+    """
+    Add(part, field_name=...) can route the same part to the other matching field.
+    """
     world = _world_with_root()
     with world.modify_world():
         whole = _AnnotationWithOverlappingPartWholeRelationshipFields.create_with_new_body_in_world(
@@ -1315,7 +1385,9 @@ def test_add_field_name_resolves_ambiguity_to_specific_field():
 
 
 def test_add_unknown_field_name_raises():
-    """add(part, field_name=...) with a name that is not a part-whole field raises."""
+    """
+    Add(part, field_name=...) with a name that is not a part-whole field raises.
+    """
     world = _world_with_root()
     with world.modify_world():
         whole = _AnnotationWithOverlappingPartWholeRelationshipFields.create_with_new_body_in_world(
@@ -1329,31 +1401,35 @@ def test_add_unknown_field_name_raises():
 
 
 def test_add_field_name_with_mismatching_type_raises():
-    """add(part, field_name=...) still type-checks: a part the named field rejects raises."""
+    """
+    Add(part, field_name=...) still type-checks: a part the named field rejects raises.
+    """
     world = _world_with_root()
     with world.modify_world():
         door = Door.create_with_new_body_in_world(
             name="door", scale=Scale(0.03, 1, 2), world=world
         )
-        handle = Handle.create_with_new_body_in_world(
-            name="handle", world=world
-        )
+        handle = Handle.create_with_new_body_in_world(name="handle", world=world)
         # 'mechanical_joint' is a real part-whole field of Door, but a Handle is not a MechanicalJoint.
         with pytest.raises(CannotBeAPartOf):
             door.add(handle, field_name="mechanical_joint")
 
 
 def test_containment_only_annotation_has_no_add():
-    """A pure-containment annotation (Table) exposes add_object but not the part-whole add()."""
+    """
+    A pure-containment annotation (Table) exposes add_object but not the part-whole
+    add().
+    """
     assert not hasattr(Table, "add")
     assert hasattr(Table, "add_object")
 
 
 def test_mechanical_joint_mount_splices_under_whole_parent():
     """
-    When the whole already sits under a non-root parent, mounting a mechanical joint splices the joint
-    between the whole and that parent (parent -> joint -> whole): the whole's ancestry is preserved and
-    the joint keeps its active (revolute) connection, now anchored at the whole's parent.
+    When the whole already sits under a non-root parent, mounting a mechanical joint
+    splices the joint between the whole and that parent (parent -> joint -> whole): the
+    whole's ancestry is preserved and the joint keeps its active (revolute) connection,
+    now anchored at the whole's parent.
     """
     world = _world_with_root()
     with world.modify_world():
@@ -1388,7 +1464,10 @@ def test_mechanical_joint_mount_splices_under_whole_parent():
 
 
 def test_mechanical_joint_mount_onto_same_whole_is_idempotent():
-    """Mounting the same joint onto the whole it already connects is a no-op (no self-loop, no error)."""
+    """
+    Mounting the same joint onto the whole it already connects is a no-op (no self-loop,
+    no error).
+    """
     world = _world_with_root()
     with world.modify_world():
         door = Door.create_with_new_body_in_world(
@@ -1405,7 +1484,9 @@ def test_mechanical_joint_mount_onto_same_whole_is_idempotent():
 
 
 def test_mechanical_joint_cannot_be_mounted_onto_a_second_whole():
-    """A joint already connecting one whole rejects being mounted onto a different whole."""
+    """
+    A joint already connecting one whole rejects being mounted onto a different whole.
+    """
     world = _world_with_root()
     with world.modify_world():
         door1 = Door.create_with_new_body_in_world(
