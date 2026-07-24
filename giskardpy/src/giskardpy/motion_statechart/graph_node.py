@@ -886,6 +886,47 @@ GenericMotionStatechartNode = TypeVar(
 )
 
 
+def velocity_convergence_expression(
+    context: MotionStatechartContext,
+    joint_convergence_threshold: float,
+    minimum_threshold: float,
+    maximum_threshold: float,
+) -> Scalar:
+    """
+    Builds a trinary expression that is true once every active degree of freedom's
+    velocity has dropped below a threshold derived from its own maximum velocity, and
+    at least one simulated second of trajectory time has elapsed.
+
+    :param context: Supplies the world's active degrees of freedom and control cycle
+        timing.
+    :param joint_convergence_threshold: Fraction of a degree of freedom's maximum
+        velocity below which it is considered settled.
+    :param minimum_threshold: Lower bound for the per-degree-of-freedom velocity
+        threshold.
+    :param maximum_threshold: Upper bound for the per-degree-of-freedom velocity
+        threshold.
+    :return: A trinary :class:`~krrood.symbolic_math.symbolic_math.Scalar` expression,
+        true once the world has settled.
+    """
+    ref = []
+    symbols = []
+    for dof in context.world.active_degrees_of_freedom:
+        velocity_limit = dof.limits.upper.velocity * joint_convergence_threshold
+        velocity_limit = min(max(minimum_threshold, velocity_limit), maximum_threshold)
+        ref.append(velocity_limit)
+        symbols.append(dof.variables.velocity)
+
+    dt = (
+        context.qp_controller_config.control_dt
+        or context.qp_controller_config.model_predictive_control_time_step
+    )
+    trajectory_longer_than_one_second = context.control_cycle_variable * dt > 1
+    return sm.trinary_logic_and(
+        trajectory_longer_than_one_second,
+        sm.logic_all(sm.abs(sm.Vector(symbols)) < sm.Vector(ref)),
+    )
+
+
 @dataclass(eq=False, repr=False)
 class Task(MotionStatechartNode):
     """
@@ -1019,8 +1060,39 @@ class EndMotion(MotionStatechartNode):
         default_factory=NodePlotSpec.create_end_style, kw_only=True, init=False
     )
 
+    joint_convergence_threshold: float = field(default=0.01, kw_only=True)
+    """
+    Fraction of a degree of freedom's maximum velocity below which it is considered
+    settled. Only used while at least one active degree of freedom exists; see
+    :meth:`build`.
+    """
+
+    minimum_threshold: float = field(default=0.01, kw_only=True)
+    """
+    Lower bound for the per-degree-of-freedom velocity threshold.
+    """
+
+    maximum_threshold: float = field(default=0.06, kw_only=True)
+    """
+    Upper bound for the per-degree-of-freedom velocity threshold.
+    """
+
     def build(self, context: MotionStatechartContext) -> NodeArtifacts:
-        return NodeArtifacts(observation=Scalar.const_true())
+        """
+        Reports "done" only once the world has actually settled, so the motion isn't
+        cut short while the controller is still commanding nonzero velocity.
+        .. note:: If the world has no active degrees of freedom, there is nothing to
+            converge, so this reports done immediately once running, same as before.
+        """
+        if not context.world.active_degrees_of_freedom:
+            return NodeArtifacts(observation=Scalar.const_true())
+        observation = velocity_convergence_expression(
+            context=context,
+            joint_convergence_threshold=self.joint_convergence_threshold,
+            minimum_threshold=self.minimum_threshold,
+            maximum_threshold=self.maximum_threshold,
+        )
+        return NodeArtifacts(observation=observation)
 
     @classmethod
     def when_true(cls, node: MotionStatechartNode) -> Self:
