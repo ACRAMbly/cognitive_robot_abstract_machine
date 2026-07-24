@@ -22107,7 +22107,7 @@ class CuttingKnifeDAO(
 
 
 class TrashCanDAO(
-    HasRootBodyDAO,
+    HasCaseAsRootBodyDAO,
     DataAccessObject[
         semantic_digital_twin.semantic_annotations.semantic_annotations.TrashCan
     ],
@@ -22115,14 +22115,14 @@ class TrashCanDAO(
     __tablename__ = "TrashCanDAO"
 
     database_id: Mapped[builtins.int] = mapped_column(
-        ForeignKey(HasRootBodyDAO.database_id),
+        ForeignKey(HasCaseAsRootBodyDAO.database_id),
         primary_key=True,
         use_existing_column=True,
     )
 
     __mapper_args__ = {
         "polymorphic_identity": "TrashCanDAO",
-        "inherit_condition": database_id == HasRootBodyDAO.database_id,
+        "inherit_condition": database_id == HasCaseAsRootBodyDAO.database_id,
         "polymorphic_load": "selectin",
     }
 

@@ -389,7 +389,7 @@ class TestFactories(unittest.TestCase):
                 world=world,
             )
             aperture = Aperture.create_with_new_region_in_world_from_body(
-                name=PrefixedName("wall"),
+                name="wall",
                 world=world,
                 body=door.root,
             )
@@ -415,7 +415,7 @@ class TestFactories(unittest.TestCase):
                 world=world,
             )
             aperture = Aperture.create_with_new_region_in_world_from_body(
-                name=PrefixedName("wall"),
+                name="wall",
                 world=world,
                 body=door.root,
             )
@@ -1260,7 +1260,7 @@ def test_add_routes_aperture_with_cut():
             name="door", scale=Scale(0.03, 1, 2), world=world
         )
         aperture = Aperture.create_with_new_region_in_world_from_body(
-            name=PrefixedName("aperture"), world=world, body=door.root
+            name="aperture", world=world, body=door.root
         )
         wall.add(aperture)
 

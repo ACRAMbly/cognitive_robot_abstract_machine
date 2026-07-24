@@ -1048,6 +1048,7 @@ class TrashCan(HasCaseAsRootBody, Furniture):
     Abstract class for Trash Can.
     """
 
+    @classproperty
     def hole_direction(self) -> Vector3:
         return Vector3.Z()
 

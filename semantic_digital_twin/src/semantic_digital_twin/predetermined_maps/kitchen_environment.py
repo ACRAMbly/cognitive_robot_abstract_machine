@@ -102,14 +102,14 @@ class KitchenEnvironment:
         with world.modify_world():
             south_wall1 = Wall.create_with_new_body_in_world(
                 world=world,
-                name=PrefixedName("south_wall1"),
+                name="south_wall1",
                 world_root_T_self=HomogeneousTransformationMatrix.from_xyz_rpy(y=-2.01),
                 scale=Scale(x=0.05, y=1.00, z=3.00),
             )
 
             south_wall2 = Wall.create_with_new_body_in_world(
                 world=world,
-                name=PrefixedName("south_wall2"),
+                name="south_wall2",
                 world_root_T_self=HomogeneousTransformationMatrix.from_xyz_rpy(
                     x=-0.145, y=-1.45, yaw=np.pi / 2
                 ),
@@ -118,7 +118,7 @@ class KitchenEnvironment:
 
             south_wall3 = Wall.create_with_new_body_in_world(
                 world=world,
-                name=PrefixedName("south_wall3"),
+                name="south_wall3",
                 world_root_T_self=HomogeneousTransformationMatrix.from_xyz_rpy(
                     x=-0.29, y=-0.9925
                 ),
@@ -127,7 +127,7 @@ class KitchenEnvironment:
 
             south_wall4 = Wall.create_with_new_body_in_world(
                 world=world,
-                name=PrefixedName("south_wall4"),
+                name="south_wall4",
                 world_root_T_self=HomogeneousTransformationMatrix.from_xyz_rpy(
                     x=-0.145, y=-0.45, yaw=np.pi / 2
                 ),
@@ -136,7 +136,7 @@ class KitchenEnvironment:
 
             south_wall5 = Wall.create_with_new_body_in_world(
                 world=world,
-                name=PrefixedName("south_wall5"),
+                name="south_wall5",
                 world_root_T_self=HomogeneousTransformationMatrix.from_xyz_rpy(
                     x=-0.145, y=0.45, yaw=np.pi / 2
                 ),
@@ -145,7 +145,7 @@ class KitchenEnvironment:
 
             south_wall6 = Wall.create_with_new_body_in_world(
                 world=world,
-                name=PrefixedName("south_wall6"),
+                name="south_wall6",
                 world_root_T_self=HomogeneousTransformationMatrix.from_xyz_rpy(
                     x=-0.29025, y=1.80
                 ),
@@ -154,7 +154,7 @@ class KitchenEnvironment:
 
             south_wall7 = Wall.create_with_new_body_in_world(
                 world=world,
-                name=PrefixedName("south_wall7"),
+                name="south_wall7",
                 world_root_T_self=HomogeneousTransformationMatrix.from_xyz_rpy(
                     x=-0.29025, y=5.16
                 ),
@@ -163,7 +163,7 @@ class KitchenEnvironment:
 
             east_wall = Wall.create_with_new_body_in_world(
                 world=world,
-                name=PrefixedName("east_wall"),
+                name="east_wall",
                 world_root_T_self=HomogeneousTransformationMatrix.from_xyz_rpy(
                     x=2.462, y=-2.535, yaw=np.pi / 2
                 ),
@@ -172,7 +172,7 @@ class KitchenEnvironment:
 
             middle_wall = Wall.create_with_new_body_in_world(
                 world=world,
-                name=PrefixedName("middle_wall"),
+                name="middle_wall",
                 world_root_T_self=HomogeneousTransformationMatrix.from_xyz_rpy(
                     x=2.20975, y=5.00
                 ),
@@ -181,7 +181,7 @@ class KitchenEnvironment:
 
             west_wall = Wall.create_with_new_body_in_world(
                 world=world,
-                name=PrefixedName("west_wall"),
+                name="west_wall",
                 world_root_T_self=HomogeneousTransformationMatrix.from_xyz_rpy(
                     x=1.9345, y=6.32, yaw=np.pi / 2
                 ),
@@ -190,7 +190,7 @@ class KitchenEnvironment:
 
             north_wall = Wall.create_with_new_body_in_world(
                 world=world,
-                name=PrefixedName("north_wall"),
+                name="north_wall",
                 world_root_T_self=HomogeneousTransformationMatrix.from_xyz_rpy(
                     x=4.949, y=1.51
                 ),
@@ -208,7 +208,7 @@ class KitchenEnvironment:
             # --- TRASH CAN ---
             trash_can = TrashCan.create_with_new_body_in_world(
                 world=world,
-                name=PrefixedName("trash_can"),
+                name="trash_can",
                 world_root_T_self=HomogeneousTransformationMatrix.from_xyz_rpy(
                     x=0.416, y=5.5, z=0.2
                 ),
@@ -225,7 +225,7 @@ class KitchenEnvironment:
             )
 
             refrigerator = Fridge.create_with_new_body_in_world(
-                name=PrefixedName("refrigerator"),
+                name="refrigerator",
                 world=world,
                 world_root_T_self=fridge_pose,
                 scale=Scale(x=fridge_length, y=fridge_width, z=fridge_height),
@@ -243,7 +243,7 @@ class KitchenEnvironment:
             hinge_world_pose = fridge_pose @ hinge_local_pose
             fridge_door_hinge = Hinge.create_with_new_body_in_world(
                 world=world,
-                name=PrefixedName("fridge_door_hinge"),
+                name="fridge_door_hinge",
                 world_root_T_self=hinge_world_pose,
                 active_axis=Vector3.Z(),
                 connection_limits=DegreeOfFreedomLimits(
@@ -254,7 +254,7 @@ class KitchenEnvironment:
 
             fridge_door = Door.create_with_new_body_in_world(
                 world=world,
-                name=PrefixedName("fridge_door"),
+                name="fridge_door",
                 world_root_T_self=hinge_world_pose
                 @ HomogeneousTransformationMatrix.from_xyz_rpy(y=fridge_width / 2),
                 scale=Scale(x=0.02, y=fridge_width, z=door_height),
@@ -274,14 +274,14 @@ class KitchenEnvironment:
             )
             fridge_drawer = Drawer.create_with_new_body_in_world(
                 world=world,
-                name=PrefixedName("fridge_drawer"),
+                name="fridge_drawer",
                 world_root_T_self=drawer_world_pose,
                 scale=Scale(x=0.5, y=fridge_width - 0.04, z=drawer_height - 0.01),
             )
 
             fridge_slider = Slider.create_with_new_body_in_world(
                 world=world,
-                name=PrefixedName("fridge_drawer_slider"),
+                name="fridge_drawer_slider",
                 world_root_T_self=drawer_world_pose,
                 active_axis=Vector3.NEGATIVE_X(),
                 connection_limits=DegreeOfFreedomLimits(
@@ -305,7 +305,7 @@ class KitchenEnvironment:
             )
             fridge_door_handle = Handle.create_with_new_body_in_world(
                 world=world,
-                name=PrefixedName("fridge_door_handle"),
+                name="fridge_door_handle",
                 world_root_T_self=door_handle_world_pose,
                 scale=Scale(x=handle_depth, y=0.5, z=handle_thickness),
                 thickness=handle_thickness,
@@ -322,7 +322,7 @@ class KitchenEnvironment:
             )
             fridge_drawer_handle = Handle.create_with_new_body_in_world(
                 world=world,
-                name=PrefixedName("fridge_drawer_handle"),
+                name="fridge_drawer_handle",
                 world_root_T_self=drawer_handle_world_pose,
                 scale=Scale(x=0.04, y=0.5, z=0.02),
                 thickness=0.02,
@@ -343,7 +343,7 @@ class KitchenEnvironment:
 
             counter_top = CounterTop.create_with_new_body_in_world(
                 world=world,
-                name=PrefixedName("counter_top"),
+                name="counter_top",
                 world_root_T_self=counter_top_pose
                 @ HomogeneousTransformationMatrix.from_xyz_rpy(
                     z=counter_top_height / 2 + 0.02
@@ -355,7 +355,7 @@ class KitchenEnvironment:
 
             sink = Sink.create_with_new_body_in_world(
                 world=world,
-                name=PrefixedName("sink"),
+                name="sink",
                 world_root_T_self=counter_top_pose
                 @ HomogeneousTransformationMatrix.from_xyz_rpy(
                     y=-0.7, z=counter_top_height / 2 + 0.045
@@ -378,7 +378,7 @@ class KitchenEnvironment:
             )
             module_1_cabinet = Cabinet.create_with_new_body_in_world(
                 world=world,
-                name=PrefixedName("module_1_cabinet"),
+                name="module_1_cabinet",
                 world_root_T_self=module_1_pose,
                 scale=Scale(
                     x=counter_top_depth, y=module_1_width, z=counter_top_height
@@ -396,7 +396,7 @@ class KitchenEnvironment:
             )
             module_1_hinge = Hinge.create_with_new_body_in_world(
                 world=world,
-                name=PrefixedName("module_1_hinge"),
+                name="module_1_hinge",
                 world_root_T_self=module_1_hinge_world_pose,
                 active_axis=Vector3.Z(),
                 connection_limits=DegreeOfFreedomLimits(
@@ -406,7 +406,7 @@ class KitchenEnvironment:
             )
             module_1_door = Door.create_with_new_body_in_world(
                 world=world,
-                name=PrefixedName("module_1_door"),
+                name="module_1_door",
                 world_root_T_self=module_1_hinge_world_pose
                 @ HomogeneousTransformationMatrix.from_xyz_rpy(y=module_1_width / 2),
                 scale=Scale(x=0.02, y=module_1_width, z=counter_top_height),
@@ -418,7 +418,7 @@ class KitchenEnvironment:
 
             module_1_handle = Handle.create_with_new_body_in_world(
                 world=world,
-                name=PrefixedName("module_1_handle"),
+                name="module_1_handle",
                 world_root_T_self=module_1_hinge_world_pose
                 @ HomogeneousTransformationMatrix.from_xyz_rpy(
                     x=-0.02, y=module_1_width - 0.05, z=counter_top_height / 2 - 0.05
@@ -439,7 +439,7 @@ class KitchenEnvironment:
             )
             dishwasher = Dishwasher.create_with_new_body_in_world(
                 world=world,
-                name=PrefixedName("dishwasher"),
+                name="dishwasher",
                 world_root_T_self=module_2_pose,
                 scale=Scale(
                     x=counter_top_depth, y=module_2_width, z=counter_top_height
@@ -457,7 +457,7 @@ class KitchenEnvironment:
             )
             module_2_hinge = Hinge.create_with_new_body_in_world(
                 world=world,
-                name=PrefixedName("dishwasher_hinge"),
+                name="dishwasher_hinge",
                 world_root_T_self=module_2_hinge_world_pose,
                 active_axis=Vector3.NEGATIVE_Y(),
                 connection_limits=DegreeOfFreedomLimits(
@@ -467,7 +467,7 @@ class KitchenEnvironment:
             )
             module_2_door = Door.create_with_new_body_in_world(
                 world=world,
-                name=PrefixedName("dishwasher_door"),
+                name="dishwasher_door",
                 world_root_T_self=module_2_hinge_world_pose
                 @ HomogeneousTransformationMatrix.from_xyz_rpy(
                     z=counter_top_height / 2
@@ -481,7 +481,7 @@ class KitchenEnvironment:
 
             module_2_handle = Handle.create_with_new_body_in_world(
                 world=world,
-                name=PrefixedName("dishwasher_handle"),
+                name="dishwasher_handle",
                 world_root_T_self=module_2_hinge_world_pose
                 @ HomogeneousTransformationMatrix.from_xyz_rpy(
                     x=-0.02, z=counter_top_height - 0.03, y=module_2_width / 2
@@ -502,7 +502,7 @@ class KitchenEnvironment:
             )
             module_3_cabinet = Cabinet.create_with_new_body_in_world(
                 world=world,
-                name=PrefixedName("module_3_cabinet"),
+                name="module_3_cabinet",
                 world_root_T_self=module_3_pose,
                 scale=Scale(
                     x=counter_top_depth, y=module_3_width, z=counter_top_height
@@ -530,14 +530,14 @@ class KitchenEnvironment:
                 )
                 drawer = Drawer.create_with_new_body_in_world(
                     world=world,
-                    name=PrefixedName(f"counter_drawer_{i}"),
+                    name=f"counter_drawer_{i}",
                     world_root_T_self=drawer_pose,
                     scale=Scale(x=0.3, y=module_3_width - 0.04, z=height - 0.01),
                 )
 
                 slider = Slider.create_with_new_body_in_world(
                     world=world,
-                    name=PrefixedName(f"counter_drawer_{i}_slider"),
+                    name=f"counter_drawer_{i}_slider",
                     world_root_T_self=drawer_pose,
                     active_axis=Vector3.NEGATIVE_X(),
                     connection_limits=DegreeOfFreedomLimits(
@@ -559,7 +559,7 @@ class KitchenEnvironment:
                 )
                 handle = Handle.create_with_new_body_in_world(
                     world=world,
-                    name=PrefixedName(f"counter_drawer_{i}_handle"),
+                    name=f"counter_drawer_{i}_handle",
                     world_root_T_self=handle_pose,
                     scale=Scale(x=0.04, y=module_3_width - 0.06, z=0.02),
                     thickness=0.02,
@@ -575,7 +575,7 @@ class KitchenEnvironment:
             )
             tower = Cupboard.create_with_new_body_in_world(
                 world=world,
-                name=PrefixedName("oven_tower"),
+                name="oven_tower",
                 world_root_T_self=tower_pose,
                 scale=Scale(x=oven_depth, y=oven_width, z=oven_height),
                 wall_thickness=0.02,
@@ -595,14 +595,14 @@ class KitchenEnvironment:
                 )
                 drawer = Drawer.create_with_new_body_in_world(
                     world=world,
-                    name=PrefixedName(f"oven_side_drawer_{side_name}"),
+                    name=f"oven_side_drawer_{side_name}",
                     world_root_T_self=drawer_pose,
                     scale=Scale(x=oven_depth, y=side_width, z=oven_height),
                 )
 
                 slider = Slider.create_with_new_body_in_world(
                     world=world,
-                    name=PrefixedName(f"oven_side_drawer_{side_name}_slider"),
+                    name=f"oven_side_drawer_{side_name}_slider",
                     world_root_T_self=drawer_pose,
                     active_axis=Vector3.NEGATIVE_X(),
                 )
@@ -620,7 +620,7 @@ class KitchenEnvironment:
                 )
                 handle = Handle.create_with_new_body_in_world(
                     world=world,
-                    name=PrefixedName(f"oven_side_handle_{side_name}"),
+                    name=f"oven_side_handle_{side_name}",
                     world_root_T_self=handle_pose,
                     scale=Scale(x=0.04, y=oven_height - 0.08, z=0.02),
                     thickness=0.02,
@@ -641,7 +641,7 @@ class KitchenEnvironment:
             )
             oven_cabinet_hinge = Hinge.create_with_new_body_in_world(
                 world=world,
-                name=PrefixedName("oven_cabinet_hinge"),
+                name="oven_cabinet_hinge",
                 world_root_T_self=oven_cabinet_hinge_world_pose,
                 active_axis=Vector3.Z(),
                 connection_limits=DegreeOfFreedomLimits(
@@ -651,7 +651,7 @@ class KitchenEnvironment:
             )
             oven_cabinet_door = Door.create_with_new_body_in_world(
                 world=world,
-                name=PrefixedName("oven_cabinet_door"),
+                name="oven_cabinet_door",
                 world_root_T_self=oven_cabinet_hinge_world_pose
                 @ HomogeneousTransformationMatrix.from_xyz_rpy(y=-center_width / 2),
                 scale=Scale(x=0.02, y=center_width, z=cabinet_height),
@@ -663,7 +663,7 @@ class KitchenEnvironment:
 
             oven_cabinet_handle = Handle.create_with_new_body_in_world(
                 world=world,
-                name=PrefixedName("oven_cabinet_handle"),
+                name="oven_cabinet_handle",
                 world_root_T_self=oven_cabinet_hinge_world_pose
                 @ HomogeneousTransformationMatrix.from_xyz_rpy(
                     x=-0.02, y=-center_width + 0.05, z=cabinet_height / 2 - 0.05
@@ -682,14 +682,14 @@ class KitchenEnvironment:
             )
             drawer = Drawer.create_with_new_body_in_world(
                 world=world,
-                name=PrefixedName("oven_center_drawer"),
+                name="oven_center_drawer",
                 world_root_T_self=drawer_pose,
                 scale=Scale(x=0.3, y=center_width - 0.04, z=drawer_height - 0.01),
             )
 
             slider = Slider.create_with_new_body_in_world(
                 world=world,
-                name=PrefixedName("oven_center_drawer_slider"),
+                name="oven_center_drawer_slider",
                 world_root_T_self=drawer_pose,
                 active_axis=Vector3.NEGATIVE_X(),
                 connection_limits=DegreeOfFreedomLimits(
@@ -709,7 +709,7 @@ class KitchenEnvironment:
             )
             oven = Oven.create_with_new_body_in_world(
                 world=world,
-                name=PrefixedName("oven"),
+                name="oven",
                 world_root_T_self=oven_pose,
                 scale=Scale(x=oven_depth, y=center_width, z=oven_height_center),
             )
@@ -725,7 +725,7 @@ class KitchenEnvironment:
             )
             oven_hinge = Hinge.create_with_new_body_in_world(
                 world=world,
-                name=PrefixedName("oven_hinge"),
+                name="oven_hinge",
                 world_root_T_self=oven_hinge_world_pose,
                 active_axis=Vector3.NEGATIVE_Y(),
                 connection_limits=DegreeOfFreedomLimits(
@@ -735,7 +735,7 @@ class KitchenEnvironment:
             )
             oven_door = Door.create_with_new_body_in_world(
                 world=world,
-                name=PrefixedName("oven_door"),
+                name="oven_door",
                 world_root_T_self=oven_hinge_world_pose
                 @ HomogeneousTransformationMatrix.from_xyz_rpy(
                     z=oven_height_center / 2
@@ -750,7 +750,7 @@ class KitchenEnvironment:
 
             oven_handle = Handle.create_with_new_body_in_world(
                 world=world,
-                name=PrefixedName("oven_handle"),
+                name="oven_handle",
                 world_root_T_self=oven_hinge_world_pose
                 @ HomogeneousTransformationMatrix.from_xyz_rpy(
                     x=-0.02, y=center_width / 2, z=oven_height_center - 0.05
@@ -771,7 +771,7 @@ class KitchenEnvironment:
 
             sideboard = Table.create_with_new_body_in_world(
                 world=world,
-                name=PrefixedName("sideboard"),
+                name="sideboard",
                 world_root_T_self=sideboard_pose
                 @ HomogeneousTransformationMatrix.from_xyz_rpy(
                     z=sideboard_height / 2 - sideboard_thickness / 2
@@ -783,7 +783,7 @@ class KitchenEnvironment:
 
             sideboard_cabinet = Cabinet.create_with_new_body_in_world(
                 world=world,
-                name=PrefixedName("sideboard_cabinet"),
+                name="sideboard_cabinet",
                 world_root_T_self=sideboard_pose,
                 scale=Scale(sideboard_width, sideboard_length, sideboard_height),
                 wall_thickness=0.02,
@@ -793,7 +793,7 @@ class KitchenEnvironment:
 
             sideboard_cooktop = Cooktop.create_with_new_body_in_world(
                 world=world,
-                name=PrefixedName("sideboard_cooktop"),
+                name="sideboard_cooktop",
                 world_root_T_self=sideboard_pose
                 @ HomogeneousTransformationMatrix.from_xyz_rpy(
                     y=-0.7, z=sideboard_height / 2 + 0.005
@@ -833,14 +833,14 @@ class KitchenEnvironment:
 
                     drawer = Drawer.create_with_new_body_in_world(
                         world=world,
-                        name=PrefixedName(drawer_id),
+                        name=drawer_id,
                         world_root_T_self=drawer_pose,
                         scale=Scale(0.4, width - 0.01, sideboard_drawer_height - 0.01),
                     )
 
                     slider = Slider.create_with_new_body_in_world(
                         world=world,
-                        name=PrefixedName(f"{drawer_id}_slider"),
+                        name=f"{drawer_id}_slider",
                         world_root_T_self=drawer_pose,
                         active_axis=Vector3.NEGATIVE_X(),
                         connection_limits=DegreeOfFreedomLimits(
@@ -862,7 +862,7 @@ class KitchenEnvironment:
                     )
                     handle = Handle.create_with_new_body_in_world(
                         world=world,
-                        name=PrefixedName(f"{drawer_id}_handle"),
+                        name=f"{drawer_id}_handle",
                         world_root_T_self=handle_pose,
                         scale=Scale(0.04, width - 0.1, 0.02),
                         thickness=0.02,
@@ -874,7 +874,7 @@ class KitchenEnvironment:
             # --- SOFA ---
             sofa = Sofa.create_with_new_body_in_world(
                 world=world,
-                name=PrefixedName("sofa"),
+                name="sofa",
                 world_root_T_self=HomogeneousTransformationMatrix.from_xyz_rpy(
                     x=3.60, y=1.20, z=0.34, yaw=4.7124
                 ),
@@ -892,7 +892,7 @@ class KitchenEnvironment:
                 x=4.55, y=4.72, z=1.01
             )
             cupboard = Cupboard.create_with_new_body_in_world(
-                name=PrefixedName("cupboard"),
+                name="cupboard",
                 world=world,
                 world_root_T_self=cupboard_pose,
                 scale=cupboard_scale,
@@ -903,7 +903,7 @@ class KitchenEnvironment:
             for i, z in enumerate([-0.5, 0.5]):
                 shelf = ShelfLayer.create_with_new_body_in_world(
                     world=world,
-                    name=PrefixedName(f"cupboard_shelf_{i}"),
+                    name=f"cupboard_shelf_{i}",
                     world_root_T_self=cupboard_pose
                     @ HomogeneousTransformationMatrix.from_xyz_rpy(z=z),
                     scale=shelf_scale,
@@ -930,7 +930,7 @@ class KitchenEnvironment:
                 )
                 hinge = Hinge.create_with_new_body_in_world(
                     world=world,
-                    name=PrefixedName(f"cupboard_hinge_{side}"),
+                    name=f"cupboard_hinge_{side}",
                     active_axis=Vector3.Z(),
                     world_root_T_self=handle_pose,
                     connection_limits=DegreeOfFreedomLimits(
@@ -940,7 +940,7 @@ class KitchenEnvironment:
                 )
                 door = Door.create_with_new_body_in_world(
                     world=world,
-                    name=PrefixedName(f"cupboard_door_{side}"),
+                    name=f"cupboard_door_{side}",
                     world_root_T_self=handle_pose
                     @ HomogeneousTransformationMatrix.from_xyz_rpy(
                         y=0.2 if side == "left" else -0.2
@@ -954,7 +954,7 @@ class KitchenEnvironment:
 
                 handle = Handle.create_with_new_body_in_world(
                     world=world,
-                    name=PrefixedName(f"cupboard_handle_{side}"),
+                    name=f"cupboard_handle_{side}",
                     world_root_T_self=handle_pose
                     @ HomogeneousTransformationMatrix.from_xyz_rpy(
                         x=-0.03, y=0.15 if side == "left" else -0.15
@@ -975,7 +975,7 @@ class KitchenEnvironment:
             )
             desk = Desk.create_with_new_body_in_world(
                 world=world,
-                name=PrefixedName("desk"),
+                name="desk",
                 world_root_T_self=desk_pose,
                 scale=Scale(desk_length, desk_width, desk_plate_thickness),
             )
@@ -991,7 +991,7 @@ class KitchenEnvironment:
             for i, (sx, sy) in enumerate([(1, 1), (1, -1), (-1, 1), (-1, -1)]):
                 leg = Leg.create_with_new_body_in_world(
                     world=world,
-                    name=PrefixedName(f"desk_leg_{i}"),
+                    name=f"desk_leg_{i}",
                     world_root_T_self=desk_pose
                     @ HomogeneousTransformationMatrix.from_xyz_rpy(
                         x=sx * x_offset, y=sy * y_offset, z=z_position
@@ -1014,7 +1014,7 @@ class KitchenEnvironment:
             )
             cooking_table = Table.create_with_new_body_in_world(
                 world=world,
-                name=PrefixedName("cooking_table"),
+                name="cooking_table",
                 world_root_T_self=cooking_table_pose,
                 scale=Scale(
                     cooking_table_length, cooking_table_depth, cooking_table_thickness
@@ -1025,7 +1025,7 @@ class KitchenEnvironment:
 
             cooking_table_cooktop = Cooktop.create_with_new_body_in_world(
                 world=world,
-                name=PrefixedName("cooktop"),
+                name="cooktop",
                 world_root_T_self=cooking_table_pose
                 @ HomogeneousTransformationMatrix.from_xyz_rpy(
                     z=cooking_table_thickness / 2 + 0.005
@@ -1038,7 +1038,7 @@ class KitchenEnvironment:
 
             cooking_table_bottom = ShelfLayer.create_with_new_body_in_world(
                 world=world,
-                name=PrefixedName("cooking_table_bottom"),
+                name="cooking_table_bottom",
                 world_root_T_self=cooking_table_pose
                 @ HomogeneousTransformationMatrix.from_xyz_rpy(
                     z=-cooking_table_height + cooking_table_thickness
@@ -1063,7 +1063,7 @@ class KitchenEnvironment:
                     )
                 )
                 mod = Cupboard.create_with_new_body_in_world(
-                    name=PrefixedName(f"cooking_mod_{side_name}"),
+                    name=f"cooking_mod_{side_name}",
                     world=world,
                     world_root_T_self=module_pose,
                     scale=Scale(
@@ -1081,14 +1081,14 @@ class KitchenEnvironment:
                 )
                 drawer = Drawer.create_with_new_body_in_world(
                     world=world,
-                    name=PrefixedName(f"cooking_drawer_{side_name}"),
+                    name=f"cooking_drawer_{side_name}",
                     world_root_T_self=drawer_pose,
                     scale=Scale(module_width - 0.04, cooking_table_depth - 0.02, 0.18),
                 )
 
                 slider = Slider.create_with_new_body_in_world(
                     world=world,
-                    name=PrefixedName(f"cooking_drawer_{side_name}_slider"),
+                    name=f"cooking_drawer_{side_name}_slider",
                     world_root_T_self=drawer_pose,
                     active_axis=Vector3.NEGATIVE_X(),
                     connection_limits=DegreeOfFreedomLimits(
@@ -1110,7 +1110,7 @@ class KitchenEnvironment:
                 )
                 handle = Handle.create_with_new_body_in_world(
                     world=world,
-                    name=PrefixedName(f"cooking_drawer_handle_{side_name}"),
+                    name=f"cooking_drawer_handle_{side_name}",
                     world_root_T_self=handle_pose,
                     scale=Scale(0.04, module_width / 3, 0.04),
                     thickness=0.02,
@@ -1131,7 +1131,7 @@ class KitchenEnvironment:
             )
             dining_table = DiningTable.create_with_new_body_in_world(
                 world=world,
-                name=PrefixedName("dining_table"),
+                name="dining_table",
                 world_root_T_self=dining_table_pose,
                 scale=Scale(
                     dining_table_length,
@@ -1153,7 +1153,7 @@ class KitchenEnvironment:
             for i, (sx, sy) in enumerate([(1, 1), (1, -1), (-1, 1), (-1, -1)]):
                 leg = Leg.create_with_new_body_in_world(
                     world=world,
-                    name=PrefixedName(f"dining_table_leg_{i}"),
+                    name=f"dining_table_leg_{i}",
                     world_root_T_self=dining_table_pose
                     @ HomogeneousTransformationMatrix.from_xyz_rpy(
                         x=sx * x_offset, y=sy * y_offset, z=z_position
@@ -1182,7 +1182,7 @@ class KitchenEnvironment:
 
         table = Table.create_with_new_body_in_world(
             world=world,
-            name=PrefixedName("coffee_table"),
+            name="coffee_table",
             world_root_T_self=pose,
             scale=Scale(length, width, thick),
         )
@@ -1191,7 +1191,7 @@ class KitchenEnvironment:
 
         shelf = ShelfLayer.create_with_new_body_in_world(
             world=world,
-            name=PrefixedName("coffee_table_shelf"),
+            name="coffee_table_shelf",
             world_root_T_self=pose
             @ HomogeneousTransformationMatrix.from_xyz_rpy(z=-height / 2),
             scale=Scale(length, width, 0.01),
@@ -1202,7 +1202,7 @@ class KitchenEnvironment:
 
         floor = ShelfLayer.create_with_new_body_in_world(
             world=world,
-            name=PrefixedName("coffee_table_floor"),
+            name="coffee_table_floor",
             world_root_T_self=pose
             @ HomogeneousTransformationMatrix.from_xyz_rpy(z=-height + thick / 2),
             scale=Scale(length, width, thick),
@@ -1298,7 +1298,7 @@ class KitchenEnvironment:
             ]
 
             kitchen_floor = Floor.create_with_new_body_from_polytope_in_world(
-                name=PrefixedName("kitchen_floor"),
+                name="kitchen_floor",
                 world=world,
                 floor_polytope=kitchen_floor_polytope,
                 world_root_T_self=HomogeneousTransformationMatrix.from_xyz_rpy(
@@ -1309,7 +1309,7 @@ class KitchenEnvironment:
             room_annotations.append(kitchen)
 
             living_room_floor = Floor.create_with_new_body_from_polytope_in_world(
-                name=PrefixedName("living_room_floor"),
+                name="living_room_floor",
                 world=world,
                 floor_polytope=living_room_floor_polytope,
                 world_root_T_self=HomogeneousTransformationMatrix.from_xyz_rpy(
@@ -1322,7 +1322,7 @@ class KitchenEnvironment:
             room_annotations.append(living_room)
 
             bed_room_floor = Floor.create_with_new_body_from_polytope_in_world(
-                name=PrefixedName("bed_room_floor"),
+                name="bed_room_floor",
                 world=world,
                 floor_polytope=bed_room_floor_polytope,
                 world_root_T_self=HomogeneousTransformationMatrix.from_xyz_rpy(
@@ -1333,7 +1333,7 @@ class KitchenEnvironment:
             room_annotations.append(bed_room)
 
             office_floor = Floor.create_with_new_body_from_polytope_in_world(
-                name=PrefixedName("office_floor"),
+                name="office_floor",
                 world=world,
                 floor_polytope=office_floor_polytope,
                 world_root_T_self=HomogeneousTransformationMatrix.from_xyz_rpy(
