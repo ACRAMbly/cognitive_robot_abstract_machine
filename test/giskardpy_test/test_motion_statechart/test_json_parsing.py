@@ -32,6 +32,7 @@ from giskardpy.motion_statechart.nodes_for_testing.nodes_for_testing import (
     TestNestedGoal,
 )
 from giskardpy.qp.qp_controller_config import QPControllerConfig
+from krrood.adapters.json_serializer import to_json, from_json
 from krrood.symbolic_math.symbolic_math import (
     trinary_logic_and,
     trinary_logic_not,
@@ -57,10 +58,10 @@ from semantic_digital_twin.world_description.world_entity import Body
 
 def test_TrueMonitor():
     node = ConstTrueNode()
-    json_data = node.to_json()
+    json_data = to_json(node)
     json_str = json.dumps(json_data)
     new_json_data = json.loads(json_str)
-    node_copy = ConstTrueNode.from_json(new_json_data)
+    node_copy = from_json(new_json_data)
     assert node_copy.name == node.name
 
 
@@ -95,11 +96,11 @@ def test_to_json_joint_position_list(mini_world):
         goal_state=JointState.from_mapping({connection: 0.5}),
         threshold=0.5,
     )
-    json_data = node.to_json()
+    json_data = to_json(node)
     json_str = json.dumps(json_data)
     new_json_data = json.loads(json_str)
     tracker = WorldEntityWithIDKwargsTracker.from_world(mini_world)
-    node_copy = JointPositionList.from_json(new_json_data, **tracker.create_kwargs())
+    node_copy = from_json(new_json_data, **tracker.create_kwargs())
     assert node_copy.name == node.name
     assert node_copy.threshold == node.threshold
     assert node_copy.goal_state == node.goal_state
@@ -354,7 +355,7 @@ def test_cancel_motion_to_json_does_not_mutate_dataclass_field():
     assert exception_field.init is True
 
     cancel = CancelMotion(exception=Exception("boom"))
-    cancel.to_json()
+    to_json(cancel)
 
     assert exception_field.init is True
     # The class must still be constructible with the exception keyword.

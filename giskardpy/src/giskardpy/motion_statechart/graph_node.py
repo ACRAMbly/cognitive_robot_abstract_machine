@@ -854,21 +854,6 @@ class MotionStatechartNode:
             raise NotInMotionStatechartError(self.name)
         self._reset_condition.update_expression(expression, self)
 
-    def to_json(self) -> Dict[str, Any]:
-        """
-        :return: JSON representation of this node.
-        """
-        return to_json(self)
-
-    @classmethod
-    def from_json(cls, data: Dict[str, Any], **kwargs) -> Self:
-        """
-        :param data: JSON representation of a node.
-        :param kwargs: Additional keyword arguments.
-        :return: A new instance of this node.
-        """
-        return from_json(data, **kwargs)
-
     def formatted_name(self, quoted: bool = False) -> str:
         formatted_name = string_shortener(
             original_str=str(self.name), max_lines=4, max_line_length=25
