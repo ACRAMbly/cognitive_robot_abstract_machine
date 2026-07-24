@@ -8960,10 +8960,6 @@ class NodeInitializationErrorDAO(
         use_existing_column=True,
     )
 
-    reason: Mapped[builtins.str] = mapped_column(
-        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
-    )
-
     node_id: Mapped[int] = mapped_column(
         ForeignKey("MotionStatechartNodeDAO.database_id", use_alter=True),
         nullable=True,
@@ -8984,6 +8980,25 @@ class NodeInitializationErrorDAO(
     }
 
 
+class EmptyGoalStateErrorDAO(
+    NodeInitializationErrorDAO,
+    DataAccessObject[giskardpy.motion_statechart.exceptions.EmptyGoalStateError],
+):
+    __tablename__ = "EmptyGoalStateErrorDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(NodeInitializationErrorDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
+    )
+
+    __mapper_args__ = {
+        "polymorphic_identity": "EmptyGoalStateErrorDAO",
+        "inherit_condition": database_id == NodeInitializationErrorDAO.database_id,
+        "polymorphic_load": "selectin",
+    }
+
+
 class EndMotionInGoalErrorDAO(
     NodeInitializationErrorDAO,
     DataAccessObject[giskardpy.motion_statechart.exceptions.EndMotionInGoalError],
@@ -8998,6 +9013,51 @@ class EndMotionInGoalErrorDAO(
 
     __mapper_args__ = {
         "polymorphic_identity": "EndMotionInGoalErrorDAO",
+        "inherit_condition": database_id == NodeInitializationErrorDAO.database_id,
+        "polymorphic_load": "selectin",
+    }
+
+
+class GoalPointsReferenceFrameMismatchErrorDAO(
+    NodeInitializationErrorDAO,
+    DataAccessObject[
+        giskardpy.motion_statechart.exceptions.GoalPointsReferenceFrameMismatchError
+    ],
+):
+    __tablename__ = "GoalPointsReferenceFrameMismatchErrorDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(NodeInitializationErrorDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
+    )
+
+    reference_frame_a_id: Mapped[int] = mapped_column(
+        ForeignKey("KinematicStructureEntityDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
+    )
+    reference_frame_b_id: Mapped[int] = mapped_column(
+        ForeignKey("KinematicStructureEntityDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
+    )
+
+    reference_frame_a: Mapped[KinematicStructureEntityDAO] = relationship(
+        "KinematicStructureEntityDAO",
+        uselist=False,
+        foreign_keys=[reference_frame_a_id],
+        post_update=True,
+    )
+    reference_frame_b: Mapped[KinematicStructureEntityDAO] = relationship(
+        "KinematicStructureEntityDAO",
+        uselist=False,
+        foreign_keys=[reference_frame_b_id],
+        post_update=True,
+    )
+
+    __mapper_args__ = {
+        "polymorphic_identity": "GoalPointsReferenceFrameMismatchErrorDAO",
         "inherit_condition": database_id == NodeInitializationErrorDAO.database_id,
         "polymorphic_load": "selectin",
     }
@@ -9146,6 +9206,32 @@ class SelfInStartConditionErrorDAO(
     }
 
 
+class UnexpectedWorldEntityCountErrorDAO(
+    NodeInitializationErrorDAO,
+    DataAccessObject[
+        giskardpy.motion_statechart.exceptions.UnexpectedWorldEntityCountError
+    ],
+):
+    __tablename__ = "UnexpectedWorldEntityCountErrorDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(NodeInitializationErrorDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
+    )
+
+    actual_count: Mapped[builtins.int] = mapped_column(use_existing_column=True)
+    entity_type: Mapped[builtins.str] = mapped_column(
+        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
+    )
+
+    __mapper_args__ = {
+        "polymorphic_identity": "UnexpectedWorldEntityCountErrorDAO",
+        "inherit_condition": database_id == NodeInitializationErrorDAO.database_id,
+        "polymorphic_load": "selectin",
+    }
+
+
 class DebugExpressionDAO(
     Base, DataAccessObject[giskardpy.motion_statechart.graph_node.DebugExpression]
 ):
@@ -9208,6 +9294,9 @@ class MotionStatechartNodeDAO(
 
     name: Mapped[builtins.str] = mapped_column(
         sqlalchemy.sql.sqltypes.Text, use_existing_column=True
+    )
+    parent_node_index: Mapped[typing.Optional[builtins.int]] = mapped_column(
+        use_existing_column=True
     )
 
     polymorphic_type: Mapped[str] = mapped_column(
