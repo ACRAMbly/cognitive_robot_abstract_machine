@@ -20,7 +20,6 @@ from krrood.entity_query_language.query.query import Entity, Query
 from krrood.entity_query_language.verbalization.fragments.base import (
     flatten_fragment_to_plain_text,
     NounPhrase,
-    oxford_comma,
     PhraseFragment,
     RoleFragment,
     VerbalizationFragment,
@@ -33,9 +32,9 @@ from krrood.entity_query_language.verbalization.value_lexicon import type_noun
 from krrood.entity_query_language.verbalization.relational_attributes import (
     relational_verb,
 )
-from krrood.entity_query_language.verbalization.vocabulary.english import (
-    Conjunctions,
-    Keywords,
+from krrood.entity_query_language.verbalization.vocabulary.english import Keywords
+from krrood.entity_query_language.verbalization.vocabulary.parts_of_speech import (
+    DisjunctivePhrase,
 )
 from krrood.entity_query_language.query.aggregation_structure import (
     aggregation_source_root,
@@ -148,11 +147,11 @@ def _sole_predicate_field(edges: List[ParentEdge]) -> Optional[ParentEdge]:
     return edge
 
 
-def _concrete_type_alternatives(type_: type) -> Optional[Tuple[type, ...]]:
+def _concrete_type_alternatives(type_: type) -> Tuple[type, ...]:
     """:return: *type_*'s concrete subclasses, when *type_* is itself never a valid direct
     referent (an abstract base with :func:`~krrood.patterns.specificity_ranking.concrete_subclasses`
     of its own) and the family is small enough to spell out — the operand-naming case behind
-    *"a Body or a Region"* for a ``KinematicStructureEntity``-typed operand. ``None`` when *type_*
+    *"a Body or a Region"* for a ``KinematicStructureEntity``-typed operand. Empty when *type_*
     is concrete (nameable directly) or its family is empty or larger than :data:`MAX_SET_MEMBERS`
     (naming every alternative would overwhelm the sentence, so the abstract type is named plainly
     instead — the same bounded-listing trade-off :func:`~…microplanning.coordination.one_of` makes
@@ -161,39 +160,39 @@ def _concrete_type_alternatives(type_: type) -> Optional[Tuple[type, ...]]:
     :param type_: An operand's declared type.
     """
     if not inspect.isabstract(type_):
-        return None
+        return ()
     alternatives = tuple(concrete_subclasses(type_))
-    if not alternatives or len(alternatives) > MAX_SET_MEMBERS:
-        return None
+    if len(alternatives) > MAX_SET_MEMBERS:
+        return ()
     return alternatives
 
 
-def operand_type_alternatives(node: Variable) -> Optional[Tuple[type, ...]]:
+def operand_type_alternatives(node: Variable) -> Tuple[type, ...]:
     """:return: the concrete types that should name *node* in place of its own declared type,
     when that type is an abstract base with a small, nameable family of concrete subclasses
-    (:func:`_concrete_type_alternatives`); ``None`` when *node*'s type should be named directly
+    (:func:`_concrete_type_alternatives`); empty when *node*'s type should be named directly
     (a concrete class, the uninformative ``object`` placeholder, or too large a family).
 
     :param node: The referent variable.
     """
     type_ = node._type_
     if not (isinstance(type_, type) and type_ is not object):
-        return None
+        return ()
     return _concrete_type_alternatives(type_)
 
 
 def disjunctive_type_head(alternatives: Tuple[type, ...]) -> VerbalizationFragment:
     """:return: the bare disjunctive noun naming *alternatives* (*"Body or Region"*), each linked
-    to its own class — consumed as a :class:`~…fragments.base.NounPhrase` head so the surrounding
-    determiner supplies one shared article (*"a Body or Region"* / *"the Body or Region"*) rather
-    than repeating it per alternative.
+    to its own class. This is the flat text used as :func:`operand_head_noun`'s same-noun
+    grouping key, not the final rendered noun phrase — :class:`~…grammar.terms.rules.VariableRule`
+    builds that directly, from :attr:`~…referring.NounForm.type_alternatives`, as a
+    :class:`~…fragments.base.NounPhrase` with one :attr:`~…fragments.base.NounPhrase.
+    additional_heads` entry per further alternative, so each gets its own repeated article
+    (*"a Body or a Region"*) instead of the one shared article this bare join would read as.
 
     :param alternatives: The concrete types to name, from :func:`operand_type_alternatives`.
     """
-    return oxford_comma(
-        [RoleFragment.for_type(alternative) for alternative in alternatives],
-        Conjunctions.OR.as_fragment(),
-    )
+    return DisjunctivePhrase(alternatives).as_fragment()
 
 
 def operand_head_noun(node: Variable, edges: List[ParentEdge]) -> str:
@@ -252,7 +251,7 @@ def operand_head_noun(node: Variable, edges: List[ParentEdge]) -> str:
     type_ = node._type_
     if isinstance(type_, type) and type_ is not object:
         alternatives = _concrete_type_alternatives(type_)
-        if alternatives is not None:
+        if alternatives:
             return flatten_fragment_to_plain_text(disjunctive_type_head(alternatives))
         return type_noun(type_)
     sole_field = _sole_predicate_field(edges)
@@ -303,8 +302,8 @@ class DistinguisherIndex:
     pass encounters them, in discourse (document) order.
 
     The pre-scan (:meth:`ReferringExpressions._group_referents_by_noun`) only knows which
-    canonical referents share a noun and how many there are — it walks the expression graph, not
-    the rendered text, so it cannot know which referent will be *said* first (folding,
+    representative referents share a noun and how many there are — it walks the expression graph,
+    not the rendered text, so it cannot know which referent will be *said* first (folding,
     coordination, and shared-subject reduction all rewrite the mention order). Deciding "who is
     plain and who is another" is therefore deferred to the coreference pass, which walks the
     realised tree in the order it will actually be read.
@@ -318,40 +317,40 @@ class DistinguisherIndex:
       one) that :attr:`Distinguisher.alternative` realises.
     """
 
-    canonical_of: Dict[uuid.UUID, uuid.UUID] = field(default_factory=dict)
-    """Every referent id's canonical id — an ``==``-unified group collapses to one (see
-    :func:`referent_aliases`); a referent in no identity is its own canonical."""
+    representative_of: Dict[uuid.UUID, uuid.UUID] = field(default_factory=dict)
+    """Every referent id's representative id — an ``==``-unified group collapses to one (see
+    :func:`referent_aliases`); a referent in no identity is its own representative."""
 
-    noun_of_canonical: Dict[uuid.UUID, str] = field(default_factory=dict)
-    """Each canonical's resolved head noun."""
+    noun_of_representative: Dict[uuid.UUID, str] = field(default_factory=dict)
+    """Each representative's resolved head noun."""
 
     group_size: Dict[str, int] = field(default_factory=dict)
-    """How many distinct canonicals share each noun."""
+    """How many distinct representatives share each noun."""
 
     _assigned_position: Dict[uuid.UUID, int] = field(default_factory=dict, repr=False)
-    """Each canonical's position within its noun group, counting the first member as position 0,
-    filled lazily on first encounter."""
+    """Each representative's position within its noun group, counting the first member as position
+    0, filled lazily on first encounter."""
 
     _next_position: Dict[str, int] = field(default_factory=dict, repr=False)
     """The next unassigned position for each noun group."""
 
     def distinguisher_for(self, referent_id: uuid.UUID) -> Optional[Distinguisher]:
         """:return: the distinguishing feature for *referent_id*, or ``None`` when it is alone in
-        its noun group (or shares no group at all). The first call for a given canonical assigns
-        its position, in call order; every later call for the same canonical (a repeat mention)
-        returns the same feature — it keeps the distinguisher that was assigned to its first
-        mention.
+        its noun group (or shares no group at all). The first call for a given representative
+        assigns its position, in call order; every later call for the same representative (a
+        repeat mention) returns the same feature — it keeps the distinguisher that was assigned to
+        its first mention.
 
-        :param referent_id: A referent's own id (before canonicalisation).
+        :param referent_id: A referent's own id (before resolving it to its representative).
         """
-        canonical_id = self.canonical_of.get(referent_id, referent_id)
-        noun = self.noun_of_canonical.get(canonical_id)
+        representative_id = self.representative_of.get(referent_id, referent_id)
+        noun = self.noun_of_representative.get(representative_id)
         if noun is None or self.group_size.get(noun, 1) < 2:
             return None
-        position = self._assigned_position.get(canonical_id)
+        position = self._assigned_position.get(representative_id)
         if position is None:
             position = self._next_position.get(noun, 0)
-            self._assigned_position[canonical_id] = position
+            self._assigned_position[representative_id] = position
             self._next_position[noun] = position + 1
         if position == 0:
             return None
@@ -363,85 +362,88 @@ class DistinguisherIndex:
 @dataclass
 class _HeadNounGrouping:
     """
-    Numberable referents grouped under their canonical entity (``==``-unified referents collapse
-    to one) and then by resolved head noun, recording each noun's canonicals in first-encounter
-    (pre-scan) order — feeding both the first-mention noun text
+    Numberable referents grouped under their representative entity (``==``-unified referents
+    collapse to one) and then by resolved head noun, recording each noun's representatives in
+    first-encounter (pre-scan) order — feeding both the first-mention noun text
     (:meth:`ReferringExpressions.head_noun_of`) and the group structure that the coreference pass
     later disambiguates by determiner (:class:`DistinguisherIndex`).
     """
 
-    canonicals_by_noun: Dict[str, List[uuid.UUID]] = field(
+    representatives_by_noun: Dict[str, List[uuid.UUID]] = field(
         default_factory=lambda: defaultdict(list)
     )
-    """Each noun's canonical entities, in first-encounter order — a noun with two or more is
+    """Each noun's representative entities, in first-encounter order — a noun with two or more is
     disambiguated."""
 
-    members_by_canonical: Dict[uuid.UUID, List[uuid.UUID]] = field(
+    members_by_representative: Dict[uuid.UUID, List[uuid.UUID]] = field(
         default_factory=lambda: defaultdict(list)
     )
-    """Every original referent id that maps to a given canonical entity."""
+    """Every original referent id that maps to a given representative entity."""
 
-    _noun_of_canonical: Dict[uuid.UUID, str] = field(default_factory=dict)
-    """The noun a canonical was first registered under (guards against re-listing it)."""
+    _noun_of_representative: Dict[uuid.UUID, str] = field(default_factory=dict)
+    """The noun a representative was first registered under (guards against re-listing it)."""
 
-    _type_alternatives_of_canonical: Dict[uuid.UUID, Tuple[type, ...]] = field(
+    _type_alternatives_of_representative: Dict[uuid.UUID, Tuple[type, ...]] = field(
         default_factory=dict
     )
-    """The concrete-subclass alternatives a canonical was first registered under, when its
+    """The concrete-subclass alternatives a representative was first registered under, when its
     declared type is an abstract base named by disjunction (:func:`operand_type_alternatives`);
-    absent for a canonical named directly."""
+    absent for a representative named directly."""
 
     def add(
         self,
         referent_id: uuid.UUID,
-        canonical: uuid.UUID,
+        representative: uuid.UUID,
         noun: str,
-        type_alternatives: Optional[Tuple[type, ...]] = None,
+        type_alternatives: Tuple[type, ...] = (),
     ) -> None:
-        """Record *referent_id* as a member of *canonical*, registering *canonical* under *noun*
-        (and its *type_alternatives*, if any) on first sight — an ``==``-unified canonical whose
-        members would otherwise resolve different nouns keeps the first-encountered one, a single
-        deterministic rule."""
-        if canonical not in self._noun_of_canonical:
-            self._noun_of_canonical[canonical] = noun
-            self.canonicals_by_noun[noun].append(canonical)
-            if type_alternatives is not None:
-                self._type_alternatives_of_canonical[canonical] = type_alternatives
-        self.members_by_canonical[canonical].append(referent_id)
+        """Record *referent_id* as a member of *representative*, registering *representative*
+        under *noun* (and its *type_alternatives*, if any) on first sight — an ``==``-unified
+        representative whose members would otherwise resolve different nouns keeps the
+        first-encountered one, a single deterministic rule."""
+        if representative not in self._noun_of_representative:
+            self._noun_of_representative[representative] = noun
+            self.representatives_by_noun[noun].append(representative)
+            if type_alternatives:
+                self._type_alternatives_of_representative[representative] = (
+                    type_alternatives
+                )
+        self.members_by_representative[representative].append(referent_id)
 
     def head_nouns(self) -> Dict[uuid.UUID, str]:
-        """:return: every member referent id mapped to its canonical's resolved head noun."""
+        """:return: every member referent id mapped to its representative's resolved head noun."""
         return {
             member: noun
-            for noun, canonicals in self.canonicals_by_noun.items()
-            for canonical in canonicals
-            for member in self.members_by_canonical[canonical]
+            for noun, representatives in self.representatives_by_noun.items()
+            for representative in representatives
+            for member in self.members_by_representative[representative]
         }
 
     def type_alternatives(self) -> Dict[uuid.UUID, Tuple[type, ...]]:
-        """:return: every member referent id mapped to its canonical's concrete-subclass
-        alternatives — only for canonicals named by disjunction, per :func:`operand_type_alternatives`.
+        """:return: every member referent id mapped to its representative's concrete-subclass
+        alternatives — only for representatives named by disjunction, per
+        :func:`operand_type_alternatives`.
         """
         return {
             member: alternatives
-            for canonical, alternatives in self._type_alternatives_of_canonical.items()
-            for member in self.members_by_canonical[canonical]
+            for representative, alternatives in self._type_alternatives_of_representative.items()
+            for member in self.members_by_representative[representative]
         }
 
     def distinguisher_index(self) -> DistinguisherIndex:
         """:return: the :class:`DistinguisherIndex` for these groups, with no positions assigned
         yet — the coreference pass assigns those lazily, in discourse order."""
-        canonical_of = {
-            member: canonical
-            for canonical, members in self.members_by_canonical.items()
+        representative_of = {
+            member: representative
+            for representative, members in self.members_by_representative.items()
             for member in members
         }
         return DistinguisherIndex(
-            canonical_of=canonical_of,
-            noun_of_canonical=dict(self._noun_of_canonical),
+            representative_of=representative_of,
+            noun_of_representative=dict(self._noun_of_representative),
             group_size={
-                noun: len(canonicals)
-                for noun, canonicals in self.canonicals_by_noun.items()
+                noun: len(representatives)
+                for noun, representatives in self.representatives_by_noun.items()
             },
         )
 
@@ -463,12 +465,14 @@ class NounForm:
     The display label for the noun head.
     """
 
-    type_alternatives: Optional[Tuple[type, ...]] = None
+    type_alternatives: Tuple[type, ...] = ()
     """
-    When set, the noun head is a disjunction of these concrete types
-    (:func:`operand_type_alternatives`), rendered by :func:`disjunctive_type_head` instead of
-    :attr:`label` — *"a Body or Region"* (one shared article) rather than a single linked type
-    reference.
+    When non-empty, the noun head is a disjunction of these concrete types
+    (:func:`operand_type_alternatives`), rendered as a
+    :class:`~…fragments.base.NounPhrase` with one alternative per
+    :attr:`~…fragments.base.NounPhrase.additional_heads` entry instead of :attr:`label` — each
+    alternative gets its own repeated article (*"a Body or a Region"*) rather than a single
+    linked type reference.
     """
 
 
@@ -537,9 +541,10 @@ class ReferringExpressions:
     def _group_referents_by_noun(
         cls, expression: SymbolicExpression
     ) -> _HeadNounGrouping:
-        """:return: Every numberable referent grouped under its canonical entity, then its
+        """:return: Every numberable referent grouped under its representative entity, then its
         resolved head noun, in encounter order. Literal nodes, already-seen ids, and aggregation
-        sources are skipped; an ``==``-unified pair shares one canonical (so it is named once).
+        sources are skipped; an ``==``-unified pair shares one representative (so it is named
+        once).
         """
         if isinstance(expression, Query):
             expression.build()
@@ -556,7 +561,7 @@ class ReferringExpressions:
             alternatives = (
                 operand_type_alternatives(node)
                 if isinstance(node, Variable) and not isinstance(node, Literal)
-                else None
+                else ()
             )
             grouping.add(
                 node._id_, aliases.get(node._id_, node._id_), noun, alternatives
@@ -677,14 +682,14 @@ class ReferringExpressions:
         """
         return self.head_nouns.get(variable._id_, self._variable_type_label(variable))
 
-    def type_alternatives_of(self, variable: Variable) -> Optional[Tuple[type, ...]]:
+    def type_alternatives_of(self, variable: Variable) -> Tuple[type, ...]:
         """:return: *variable*'s concrete-subclass alternatives, pre-computed in the pre-scan
-        (:func:`operand_type_alternatives`), or ``None`` when it was not scanned or is named
+        (:func:`operand_type_alternatives`), or empty when it was not scanned or is named
         directly rather than by disjunction.
 
         :param variable: The referent variable.
         """
-        return self.type_alternatives.get(variable._id_)
+        return self.type_alternatives.get(variable._id_, ())
 
     def noun_for_parts(self, variable: Variable) -> NounForm:
         """
@@ -717,11 +722,11 @@ def _entity_referent_id(node: SymbolicExpression) -> Optional[uuid.UUID]:
 def referent_aliases(expression: SymbolicExpression) -> Dict[uuid.UUID, uuid.UUID]:
     """
     :param expression: Root expression to scan.
-    :return: A map from each entity referent id that participates in an identity to its canonical
-        id. An ``==`` constraint between two entity referents (``m.assigned_to == r``) makes them one
-        entity, so disambiguation and coreference can treat the pair as a single referent (*"a
-        Robot"*, not *"a Robot"* / *"another Robot"*). Referents in no identity do not appear (each
-        is its own canonical).
+    :return: A map from each entity referent id that participates in an identity to its
+        representative id. An ``==`` constraint between two entity referents (``m.assigned_to ==
+        r``) makes them one entity, so disambiguation and coreference can treat the pair as a
+        single referent (*"a Robot"*, not *"a Robot"* / *"another Robot"*). Referents in no
+        identity do not appear (each is its own representative).
 
     >>> robot, mission = variable(Robot, []), variable(Mission, [])
     >>> aliases = referent_aliases(and_(mission.assigned_to == robot, mission.priority > 2))

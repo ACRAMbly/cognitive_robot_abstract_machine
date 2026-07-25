@@ -198,6 +198,7 @@ class RoleNamedReading(SymbolicFunction):
         return FunctionVerbalizationTemplates.possessive(cls, *fields.values())
 
 
+@dataclass
 class Shape(ABC):
     """
     A stand-in abstract operand type with a small, nameable family of concrete
@@ -208,6 +209,7 @@ class Shape(ABC):
     def area(self) -> float: ...
 
 
+@dataclass
 class Circle(Shape):
     """
     One of two concrete alternatives naming a :class:`Shape`-typed operand.
@@ -217,6 +219,7 @@ class Circle(Shape):
         return 0.0
 
 
+@dataclass
 class Square(Shape):
     """
     The other of two concrete alternatives naming a :class:`Shape`-typed operand.
@@ -226,6 +229,7 @@ class Square(Shape):
         return 0.0
 
 
+@dataclass
 class Instrument(ABC):
     """
     A stand-in abstract operand type with a three-member family -- exercises the Oxford-
@@ -238,21 +242,25 @@ class Instrument(ABC):
     def play(self) -> None: ...
 
 
+@dataclass
 class Drum(Instrument):
     def play(self) -> None:
         pass
 
 
+@dataclass
 class Flute(Instrument):
     def play(self) -> None:
         pass
 
 
+@dataclass
 class Harp(Instrument):
     def play(self) -> None:
         pass
 
 
+@dataclass
 class Polygon(ABC):
     """
     A stand-in abstract operand type whose concrete family is too large to spell out --
@@ -263,41 +271,49 @@ class Polygon(ABC):
     def sides(self) -> int: ...
 
 
+@dataclass
 class Triangle(Polygon):
     def sides(self) -> int:
         return 3
 
 
+@dataclass
 class Quadrilateral(Polygon):
     def sides(self) -> int:
         return 4
 
 
+@dataclass
 class Pentagon(Polygon):
     def sides(self) -> int:
         return 5
 
 
+@dataclass
 class Hexagon(Polygon):
     def sides(self) -> int:
         return 6
 
 
+@dataclass
 class Heptagon(Polygon):
     def sides(self) -> int:
         return 7
 
 
+@dataclass
 class Octagon(Polygon):
     def sides(self) -> int:
         return 8
 
 
+@dataclass
 class Nonagon(Polygon):
     def sides(self) -> int:
         return 9
 
 
+@dataclass
 class ConcreteBase:
     """
     A stand-in *concrete* (non-abstract) operand type that nonetheless has subclasses --
@@ -306,6 +322,7 @@ class ConcreteBase:
     """
 
 
+@dataclass
 class ConcreteBaseVariant(ConcreteBase):
     """
     A subclass of :class:`ConcreteBase`, present only to prove a concrete base with
@@ -313,6 +330,7 @@ class ConcreteBaseVariant(ConcreteBase):
     """
 
 
+@dataclass
 class Sensor:
     """
     A stand-in operand type for the concrete counterpart alongside an abstract-typed
@@ -534,7 +552,7 @@ def test_concrete_type_has_no_alternatives_even_with_subclasses():
     A concrete base is a valid referent in its own right, even with subclasses of its
     own -- only an abstract base (never itself a valid instance) is expanded.
     """
-    assert operand_type_alternatives(variable(ConcreteBase, [])) is None
+    assert operand_type_alternatives(variable(ConcreteBase, [])) == ()
 
 
 def test_abstract_type_beyond_the_cap_has_no_alternatives():
@@ -542,11 +560,11 @@ def test_abstract_type_beyond_the_cap_has_no_alternatives():
     A concrete family too large to spell out falls back to naming the abstract type
     directly, the same bounded-listing trade-off `one_of` makes for a value domain.
     """
-    assert operand_type_alternatives(variable(Polygon, [])) is None
+    assert operand_type_alternatives(variable(Polygon, [])) == ()
 
 
 def test_uninformative_type_has_no_alternatives():
-    assert operand_type_alternatives(variable(object, [])) is None
+    assert operand_type_alternatives(variable(object, [])) == ()
 
 
 def test_disjunctive_type_head_renders_a_bare_or_joined_noun():
@@ -584,13 +602,13 @@ def test_concrete_base_with_subclasses_is_named_directly_by_head_noun():
 
 def test_abstract_operand_reads_as_a_disjunctive_noun_phrase():
     assert verbalize_expression(AbstractOperandRole(variable(Shape, []))) == (
-        "a Circle or Square is warm"
+        "a Circle or a Square is warm"
     )
 
 
 def test_three_member_family_reads_with_an_oxford_comma():
     assert verbalize_expression(InstrumentRole(variable(Instrument, []))) == (
-        "a Drum, Flute, or Harp is warm"
+        "a Drum, a Flute, or a Harp is warm"
     )
 
 
@@ -599,7 +617,7 @@ def test_abstract_operand_alongside_a_concrete_one_reads_naturally():
         verbalize_expression(
             VisibleFromSensor(variable(Shape, []), variable(Sensor, []))
         )
-        == "a Circle or Square is visible from a Sensor"
+        == "a Circle or a Square is visible from a Sensor"
     )
 
 
@@ -624,5 +642,5 @@ def test_reused_abstract_operand_pronominalises_as_the_query_subject():
     subject = variable(Shape, [])
     assert (
         verbalize_expression(an(entity(subject).where(AbstractOperandRole(subject))))
-        == "Find a Circle or Square such that it is warm"
+        == "Find a Circle or a Square such that it is warm"
     )

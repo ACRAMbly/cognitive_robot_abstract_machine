@@ -31,9 +31,6 @@ from krrood.entity_query_language.verbalization.microplanning.coordination impor
     MAX_SET_MEMBERS,
     one_of,
 )
-from krrood.entity_query_language.verbalization.microplanning.referring import (
-    disjunctive_type_head,
-)
 from krrood.entity_query_language.verbalization.grammar.framework.phrase_rule import (
     PhraseRule,
     RuleContext,
@@ -80,13 +77,18 @@ class VariableRule(PhraseRule):
         if context.number is GrammaticalNumber.PLURAL:
             return self._plural(node, context)
         noun_form = context.refer.noun_for_parts(node)
-        head = (
-            disjunctive_type_head(noun_form.type_alternatives)
-            if noun_form.type_alternatives is not None
-            else RoleFragment.for_variable(noun_form.label, node)
-        )
+        if noun_form.type_alternatives:
+            first, *rest = noun_form.type_alternatives
+            head = RoleFragment.for_type(first)
+            additional_heads = [
+                RoleFragment.for_type(alternative) for alternative in rest
+            ]
+        else:
+            head = RoleFragment.for_variable(noun_form.label, node)
+            additional_heads = []
         return NounPhrase(
             head=head,
+            additional_heads=additional_heads,
             definiteness=noun_form.definiteness,
             referent_id=node._id_,
         )

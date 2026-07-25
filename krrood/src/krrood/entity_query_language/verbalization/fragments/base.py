@@ -315,6 +315,13 @@ class NounPhrase(HasNumber, VerbalizationFragment):
     head: VerbalizationFragment
     """The noun leaf or sub-phrase the determiner attaches to."""
 
+    additional_heads: List[VerbalizationFragment] = field(default_factory=list)
+    """Further disjunctive alternatives to :attr:`head`, joined with *"or"* (*"a Body or a
+    Region"*). Each gets its own indefinite article, chosen from its own phonology, rather
+    than :attr:`head`'s determiner covering every alternative — so this differs from a
+    ``head`` that is itself a pre-joined disjunctive phrase (which would read *"a Body or
+    Region"*, one shared article). Empty for an ordinary single-headed noun phrase."""
+
     definiteness: Definiteness = Definiteness.INDEFINITE
     """Determiner-system feature — selects *"a/an"* / *"the"* / no determiner."""
 

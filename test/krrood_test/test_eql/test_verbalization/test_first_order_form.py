@@ -37,6 +37,7 @@ from krrood.entity_query_language.verbalization.vocabulary.parts_of_speech impor
 # %% mimic domain
 
 
+@dataclass
 class Igniter:
     """
     A stand-in operand type whose class name is unremarkable.
@@ -69,6 +70,7 @@ class Kindled(Predicate):
         )
 
 
+@dataclass
 class Fastener(ABC):
     """
     A stand-in abstract operand type with a small, nameable family of concrete
@@ -79,11 +81,13 @@ class Fastener(ABC):
     def grip(self) -> float: ...
 
 
+@dataclass
 class Bolt(Fastener):
     def grip(self) -> float:
         return 0.0
 
 
+@dataclass
 class Screw(Fastener):
     def grip(self) -> float:
         return 0.0
@@ -124,7 +128,7 @@ def test_first_order_form_expands_an_abstract_declared_field_type():
     same operand-naming resolution as any bound variable, so it is expanded into its
     concrete alternatives exactly like a real query would be.
     """
-    assert first_order_form(Fastened) == "a Bolt or Screw is secure"
+    assert first_order_form(Fastened) == "a Bolt or a Screw is secure"
 
 
 # %% first-order form and value-using form are the same pipeline
