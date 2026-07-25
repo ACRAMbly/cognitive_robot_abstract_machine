@@ -105,6 +105,27 @@ pytest test/<package>_test
 
 e.g. `pytest test/coraplex_test`
 
+## Developer / Agent Tooling
+
+`.claude/` holds tooling for AI coding agents (Claude Code) working in this
+repository - hooks that run automatically each session, and skills invoked
+on demand (`/<skill-name>`). Each is documented where it lives; the links
+below are a starting point, not a duplicate of that documentation.
+
+- **[`.claude/hooks/`](.claude/hooks/README.md)** - a `SessionStart` hook
+  that carries a contributor's own personal workflow notes, per-PR
+  plan/progress tracking, and multi-PR plan manifests across sessions via a
+  personal (gitignored, never-merged) branch, with zero required
+  configuration.
+- **[`.claude/skills/plan-dashboard/`](.claude/skills/plan-dashboard/SKILL.md)**
+  - publishes a live status dashboard for a multi-PR/multi-session
+  initiative, cross-checked against live GitHub PR/CI/review state so a
+  plan's manually-tracked status can never silently drift from reality.
+- **[`.claude/skills/plan-create/`](.claude/skills/plan-create/SKILL.md)** -
+  bootstraps a new multi-PR/multi-session plan (or migrates an existing
+  freeform roadmap doc into one), validated against the same schema
+  `plan-dashboard` reads.
+
 ## Contribution
 
 Before committing any changes, please navigate into the project root and install pre-commit hooks:
