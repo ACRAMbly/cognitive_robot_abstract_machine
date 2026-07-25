@@ -125,6 +125,10 @@ below are a starting point, not a duplicate of that documentation.
   bootstraps a new multi-PR/multi-session plan (or migrates an existing
   freeform roadmap doc into one), validated against the same schema
   `plan-dashboard` reads.
+- **[`.claude/skills/local-code-review/`](.claude/skills/local-code-review/SKILL.md)**
+  - reviews the current branch against upstream `main` for bugs and
+  `AGENTS.md` adherence, then hands back an approval-gated plan to fix every
+  finding (including adding missing tests) before you push.
 
 ## Contribution
 
