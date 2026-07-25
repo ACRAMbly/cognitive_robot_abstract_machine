@@ -25,13 +25,7 @@ from krrood.entity_query_language.factories import (
     NodeType,
     RuntimeType,
 )
-from krrood.entity_query_language.predicate import (
-    HasType,
-    HasTypes,
-    Is,
-    Length,
-    SymbolicCallable,
-)
+from krrood.entity_query_language.predicate import HasType, HasTypes, Is, Length
 from krrood.entity_query_language.verbalization._example_domain import (
     IsReachable,
     WorksIn,
