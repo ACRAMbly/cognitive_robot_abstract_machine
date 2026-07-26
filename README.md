@@ -131,6 +131,13 @@ below are a starting point, not a duplicate of that documentation.
   patterns) and proposes an implementation plan via plan mode, without
   writing any code. The "Start now" button on a not-started item's
   dashboard card copies the invoking command for this skill.
+- **[`.claude/skills/plan-item-resolve/`](.claude/skills/plan-item-resolve/SKILL.md)**
+  - gathers everything available about one already-underway item (its
+  branch/PR state, CI, review comments, tracking-issue discussion, recorded
+  blockers) and proposes a plan to resolve whatever is stalling it, via plan
+  mode, without writing any code. The "Resolve"/"Resume"/"Reconsider" button
+  on a blocked/in-progress/deferred item's dashboard card copies the
+  invoking command for this skill.
 - **[`.claude/skills/local-code-review/`](.claude/skills/local-code-review/SKILL.md)**
   - reviews the current branch against upstream `main` for bugs and
   `AGENTS.md` adherence, then hands back an approval-gated plan to fix every
