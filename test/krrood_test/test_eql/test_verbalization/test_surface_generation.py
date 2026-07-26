@@ -2,10 +2,9 @@
 Tests for :class:`VerbalizationSurfaceGenerator`.
 
 ``verbalization_surfaces.py`` itself is regenerated for the real ``krrood`` package by
-``conftest.py`` on every test run (the same way ``ormatic_interface.py`` is), so there
-is no separate test asserting it matches what the generator produces -- it always does,
-by construction. What remains worth testing here is the generation logic itself, against
-a small controlled domain.
+``conftest.py`` on every test run, so there is no separate test asserting it matches
+what the generator produces -- it always does, by construction. What remains worth
+testing here is the generation logic itself, against a small controlled domain.
 """
 
 from __future__ import annotations

@@ -3,11 +3,9 @@ Generates a committed :class:`VerbalizationSurface` snapshot module from a
 :class:`SymbolicSurfaceSnapshot`.
 
 Uses :class:`~krrood.code_generation.generator.CodeGenerator` so the module is produced
-rather than hand-transcribed, the same way :mod:`krrood.ormatic.sqlalchemy_generator`
-produces a test package's ``ormatic_interface.py``: call
-:func:`regenerate_verbalization_surfaces` from that package's own ``conftest.py`` at
-import time, so the committed file is always fresh and a wording change shows up as an
-ordinary diff to review before committing.
+rather than hand-transcribed: call :func:`regenerate_verbalization_surfaces` from a
+package's own ``conftest.py`` at import time, so the committed file is always fresh and a
+wording change shows up as an ordinary diff to review before committing.
 """
 
 from __future__ import annotations
@@ -115,8 +113,7 @@ def regenerate_verbalization_surfaces(
     Writes to a temporary file in *destination*'s own directory and replaces it
     atomically, so a concurrent reader (e.g. a pytest-xdist worker) never observes a
     partially written file. Call this from a package's own ``conftest.py`` at import
-    time -- the same way :mod:`krrood.ormatic` regenerates its own test-time interface
-    module -- so this is a one-line addition for any package, not a bespoke script.
+    time, so this is a one-line addition for any package, not a bespoke script.
 
     :param package: The package whose symbolic callables are discovered and rendered.
     :param destination: The module file to (re)write.
