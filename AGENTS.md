@@ -72,7 +72,7 @@
   X and Y"); document what it does and its contract, not who happens to use it today — that
   reference goes stale the moment a caller changes and misleads a future reader into thinking the
   list is exhaustive or load-bearing
-- Always run `docformatter` on modified files
+- Always run `scripts/format_docstrings.py` (black + docformatter) on modified files
 
 ## Domain-Specific Conventions
 - When dealing with spatial types and connections, adhere to the style guide documented in `semantic_digital_twin/doc/style_guide.md`

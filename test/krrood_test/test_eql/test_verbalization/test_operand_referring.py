@@ -659,3 +659,22 @@ def test_reused_abstract_operand_reads_as_a_definite_disjunction_on_repeat_menti
     ) == (
         "a Circle or a Square is warm, and the Circle or the Square is visible from a Sensor"
     )
+
+
+def test_reused_abstract_operand_pronominalises_on_every_mention_within_its_scope():
+    """
+    A discourse scope (here, the query's WHERE) makes its subject pronoun-eligible for
+    every mention inside it, not just the first repeat -- both conjuncts naming the same
+    disjunctively-typed query subject read "it", each keeping the full first-mention
+    disjunction intact for the one spelled-out occurrence.
+    """
+    subject, sensor = variable(Shape, []), variable(Sensor, [])
+    assert verbalize_expression(
+        an(
+            entity(subject).where(
+                and_(AbstractOperandRole(subject), VisibleFromSensor(subject, sensor))
+            )
+        )
+    ) == (
+        "Find a Circle or a Square such that it is warm, and it is visible from a Sensor"
+    )
