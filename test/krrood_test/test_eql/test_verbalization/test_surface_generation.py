@@ -1,10 +1,15 @@
 """
 Tests for :class:`VerbalizationSurfaceGenerator`.
+
+``verbalization_surfaces.py`` itself is regenerated for the real ``krrood`` package by
+``conftest.py`` on every test run (the same way ``ormatic_interface.py`` is), so there
+is no separate test asserting it matches what the generator produces -- it always does,
+by construction. What remains worth testing here is the generation logic itself, against
+a small controlled domain.
 """
 
 from __future__ import annotations
 
-import krrood
 from krrood.entity_query_language.testing.surface_generation import (
     VerbalizationSurfaceGenerator,
 )
@@ -12,8 +17,6 @@ from krrood.entity_query_language.testing.surface_verification import (
     SymbolicSurfaceSnapshot,
 )
 from krrood.entity_query_language.verbalization import _example_domain
-
-from . import verbalization_surfaces as committed_verbalization_surfaces_module
 
 # %% generation against a small, controlled domain
 
@@ -32,24 +35,3 @@ def test_generated_surfaces_pass_their_own_snapshot_verification():
     )
     round_trip_snapshot.assert_surfaces_cover_every_callable()
     round_trip_snapshot.assert_declared_surfaces_render_as_stated()
-
-
-# %% generation against the real krrood snapshot
-
-
-def test_generated_krrood_module_matches_the_committed_file(tmp_path):
-    """
-    The committed ``verbalization_surfaces.py`` is exactly what the generator's
-    :meth:`~VerbalizationSurfaceGenerator.write` produces for krrood's own snapshot -- it
-    is a generated file, not hand-authored.
-    """
-    snapshot = SymbolicSurfaceSnapshot(package=krrood, surfaces=())
-    generator = VerbalizationSurfaceGenerator(snapshot=snapshot)
-
-    generated_file = tmp_path / "verbalization_surfaces.py"
-    generator.write(generated_file)
-
-    with open(committed_verbalization_surfaces_module.__file__) as committed_file:
-        committed_source = committed_file.read()
-
-    assert generated_file.read_text() == committed_source

@@ -4,14 +4,19 @@ Generates a committed :class:`VerbalizationSurface` snapshot module from a
 
 Uses :class:`~krrood.code_generation.generator.CodeGenerator` so the module is produced
 rather than hand-transcribed, the same way :mod:`krrood.ormatic.sqlalchemy_generator`
-produces ``ormatic_interface.py``: run the generator, review the diff, commit it.
+produces a test package's ``ormatic_interface.py``: call
+:func:`regenerate_verbalization_surfaces` from that package's own ``conftest.py`` at
+import time, so the committed file is always fresh and a wording change shows up as an
+ordinary diff to review before committing.
 """
 
 from __future__ import annotations
 
 import importlib.resources
+import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
+from types import ModuleType
 
 from typing_extensions import Any, Dict, Tuple, Type, Union
 
@@ -99,3 +104,30 @@ class VerbalizationSurfaceGenerator:
         Path(path).write_text(self.generate())
         run_ruff_check_on_file(str(path))
         run_ruff_format_on_file(str(path))
+
+
+def regenerate_verbalization_surfaces(
+    package: ModuleType, destination: Union[str, Path]
+) -> None:
+    """
+    Regenerate *package*'s committed ``SURFACES`` snapshot module at *destination*.
+
+    Writes to a temporary file in *destination*'s own directory and replaces it
+    atomically, so a concurrent reader (e.g. a pytest-xdist worker) never observes a
+    partially written file. Call this from a package's own ``conftest.py`` at import
+    time -- the same way :mod:`krrood.ormatic` regenerates its own test-time interface
+    module -- so this is a one-line addition for any package, not a bespoke script.
+
+    :param package: The package whose symbolic callables are discovered and rendered.
+    :param destination: The module file to (re)write.
+    """
+    destination = Path(destination)
+    generator = VerbalizationSurfaceGenerator(
+        snapshot=SymbolicSurfaceSnapshot(package=package, surfaces=())
+    )
+    with tempfile.NamedTemporaryFile(
+        "w", dir=destination.parent, suffix=".py.tmp", delete=False
+    ) as temporary_file:
+        temporary_path = Path(temporary_file.name)
+    generator.write(temporary_path)
+    temporary_path.replace(destination)
