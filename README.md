@@ -125,6 +125,12 @@ below are a starting point, not a duplicate of that documentation.
   bootstraps a new multi-PR/multi-session plan (or migrates an existing
   freeform roadmap doc into one), validated against the same schema
   `plan-dashboard` reads.
+- **[`.claude/skills/plan-item-kickoff/`](.claude/skills/plan-item-kickoff/SKILL.md)**
+  - gathers everything available about one tracked plan item (its manifest
+  entry, roadmap history, dependency chain's live state, sibling-item
+  patterns) and proposes an implementation plan via plan mode, without
+  writing any code. The "Start now" button on a not-started item's
+  dashboard card copies the invoking command for this skill.
 - **[`.claude/skills/local-code-review/`](.claude/skills/local-code-review/SKILL.md)**
   - reviews the current branch against upstream `main` for bugs and
   `AGENTS.md` adherence, then hands back an approval-gated plan to fix every
