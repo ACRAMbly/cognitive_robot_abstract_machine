@@ -364,12 +364,21 @@ class SymbolicExpression(ABC):
     def _unification_of_(self, result: OperationResult) -> UnificationDict:
         """
         :param result: The result to be mapped.
-        :return: Every binding of *result*, keyed by the expression that produced it.
+        :return: The value bindings of *result*, keyed by the expression that produced
+            each one.
+
+        A truth-valued expression records the truth of an operation rather than a value
+        a caller selects, so its binding is not part of the unification.
         """
+        bound_expressions = (
+            (self._get_expression_by_id_(id_), value)
+            for id_, value in result.bindings.items()
+        )
         return UnificationDict(
             {
-                self._get_expression_by_id_(id_): value
-                for id_, value in result.bindings.items()
+                expression: value
+                for expression, value in bound_expressions
+                if not expression._records_truth_
             }
         )
 

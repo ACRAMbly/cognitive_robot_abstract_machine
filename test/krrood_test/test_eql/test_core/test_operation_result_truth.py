@@ -163,6 +163,34 @@ def test_union_reports_the_truth_value_of_each_child_result():
     assert truth_values(Union((value > 5, other_value > 5))) == [True, False]
 
 
+# %% unification of a result
+
+
+def test_evaluating_a_condition_maps_only_value_producing_expressions():
+    """
+    A truth-valued expression records a truth, not a value a caller selects, so it is
+    absent from the mapping a condition's evaluation yields.
+
+    A caller reading that mapping — ``evaluate_condition`` reduces it to a single
+    boolean — would otherwise see a condition's own operators as bound results.
+    """
+    value = variable_from([6])
+    condition = and_(value > 5, value < 10)
+
+    [unification] = list(condition.evaluate())
+
+    assert condition not in unification
+    assert value in unification
+
+
+def test_a_satisfied_quantifier_binds_nothing_of_its_own():
+    quantified_value = variable_from([1, 7])
+
+    [unification] = list(exists(quantified_value, quantified_value > 5).evaluate())
+
+    assert len(unification) == 0
+
+
 # %% queries
 
 
