@@ -922,15 +922,25 @@ class TruthValueOperator(SymbolicExpression, ABC):
         """
         Evaluate ``child`` in a truth-value context.
 
-        Every truth-bearing expression records its own truth value in the bindings it
-        yields, so a result already reports the truth this operator needs and is passed
-        through untouched.
+        A child that bound a value is re-emitted as a result of its own, so that this
+        evaluation is observed as a fresh one: the observers that record which
+        expressions were evaluated and which conditions were satisfied fill those in only
+        where they are still unset, and would otherwise carry a nested evaluation's
+        record outwards.
 
         :param child: The child expression to evaluate in a truth-value context.
         :param sources: The current OperationResult carrying bindings, or None.
         :return: An iterator of the child's results.
         """
-        yield from child._evaluate_(sources)
+        for result in child._evaluate_(sources):
+            if result.has_value:
+                yield OperationResult(
+                    result.bindings,
+                    result.operand,
+                    result.previous_operation_result,
+                )
+            else:
+                yield result
 
 
 @dataclass(eq=False, repr=False)
