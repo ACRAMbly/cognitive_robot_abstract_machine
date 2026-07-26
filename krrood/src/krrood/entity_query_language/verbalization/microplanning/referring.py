@@ -26,6 +26,7 @@ from krrood.entity_query_language.verbalization.fragments.base import (
 )
 from krrood.entity_query_language.verbalization.fragments.features import Definiteness
 from krrood.entity_query_language.verbalization.microplanning.coordination import (
+    disjunctive_phrase,
     MAX_SET_MEMBERS,
 )
 from krrood.entity_query_language.verbalization.value_lexicon import type_noun
@@ -33,9 +34,6 @@ from krrood.entity_query_language.verbalization.relational_attributes import (
     relational_verb,
 )
 from krrood.entity_query_language.verbalization.vocabulary.english import Keywords
-from krrood.entity_query_language.verbalization.vocabulary.parts_of_speech import (
-    DisjunctivePhrase,
-)
 from krrood.entity_query_language.query.aggregation_structure import (
     aggregation_source_root,
     selected_aggregator,
@@ -192,7 +190,9 @@ def disjunctive_type_head(alternatives: Tuple[type, ...]) -> VerbalizationFragme
 
     :param alternatives: The concrete types to name, from :func:`operand_type_alternatives`.
     """
-    return DisjunctivePhrase(alternatives).as_fragment()
+    return disjunctive_phrase(
+        [RoleFragment.for_type(alternative) for alternative in alternatives]
+    )
 
 
 def operand_head_noun(node: Variable, edges: List[ParentEdge]) -> str:
@@ -318,18 +318,19 @@ class DistinguisherIndex:
     """
 
     representative_of: Dict[uuid.UUID, uuid.UUID] = field(default_factory=dict)
-    """Every referent id's representative id — an ``==``-unified group collapses to one (see
-    :func:`referent_aliases`); a referent in no identity is its own representative."""
+    """Every referent id's representative-referent id — an ``==``-unified group collapses to one
+    (see :func:`referent_aliases`); a referent in no identity is its own representative
+    referent."""
 
     noun_of_representative: Dict[uuid.UUID, str] = field(default_factory=dict)
-    """Each representative's resolved head noun."""
+    """Each representative referent's resolved head noun."""
 
     group_size: Dict[str, int] = field(default_factory=dict)
-    """How many distinct representatives share each noun."""
+    """How many distinct representative referents share each noun."""
 
     _assigned_position: Dict[uuid.UUID, int] = field(default_factory=dict, repr=False)
-    """Each representative's position within its noun group, counting the first member as position
-    0, filled lazily on first encounter."""
+    """Each representative referent's position within its noun group, counting the first member as
+    position 0, filled lazily on first encounter."""
 
     _next_position: Dict[str, int] = field(default_factory=dict, repr=False)
     """The next unassigned position for each noun group."""
@@ -337,11 +338,12 @@ class DistinguisherIndex:
     def distinguisher_for(self, referent_id: uuid.UUID) -> Optional[Distinguisher]:
         """:return: the distinguishing feature for *referent_id*, or ``None`` when it is alone in
         its noun group (or shares no group at all). The first call for a given representative
-        assigns its position, in call order; every later call for the same representative (a
-        repeat mention) returns the same feature — it keeps the distinguisher that was assigned to
-        its first mention.
+        referent assigns its position, in call order; every later call for the same representative
+        referent (a repeat mention) returns the same feature — it keeps the distinguisher that was
+        assigned to its first mention.
 
-        :param referent_id: A referent's own id (before resolving it to its representative).
+        :param referent_id: A referent's own id (before resolving it to its representative
+            referent).
         """
         representative_id = self.representative_of.get(referent_id, referent_id)
         noun = self.noun_of_representative.get(representative_id)
@@ -362,9 +364,9 @@ class DistinguisherIndex:
 @dataclass
 class _HeadNounGrouping:
     """
-    Numberable referents grouped under their representative entity (``==``-unified referents
-    collapse to one) and then by resolved head noun, recording each noun's representatives in
-    first-encounter (pre-scan) order — feeding both the first-mention noun text
+    Numberable referents grouped under their representative referent (``==``-unified referents
+    collapse to one) and then by resolved head noun, recording each noun's representative
+    referents in first-encounter (pre-scan) order — feeding both the first-mention noun text
     (:meth:`ReferringExpressions.head_noun_of`) and the group structure that the coreference pass
     later disambiguates by determiner (:class:`DistinguisherIndex`).
     """
@@ -372,23 +374,24 @@ class _HeadNounGrouping:
     representatives_by_noun: Dict[str, List[uuid.UUID]] = field(
         default_factory=lambda: defaultdict(list)
     )
-    """Each noun's representative entities, in first-encounter order — a noun with two or more is
+    """Each noun's representative referents, in first-encounter order — a noun with two or more is
     disambiguated."""
 
     members_by_representative: Dict[uuid.UUID, List[uuid.UUID]] = field(
         default_factory=lambda: defaultdict(list)
     )
-    """Every original referent id that maps to a given representative entity."""
+    """Every original referent id that maps to a given representative referent."""
 
     _noun_of_representative: Dict[uuid.UUID, str] = field(default_factory=dict)
-    """The noun a representative was first registered under (guards against re-listing it)."""
+    """The noun a representative referent was first registered under (guards against re-listing
+    it)."""
 
     _type_alternatives_of_representative: Dict[uuid.UUID, Tuple[type, ...]] = field(
         default_factory=dict
     )
-    """The concrete-subclass alternatives a representative was first registered under, when its
-    declared type is an abstract base named by disjunction (:func:`operand_type_alternatives`);
-    absent for a representative named directly."""
+    """The concrete-subclass alternatives a representative referent was first registered under,
+    when its declared type is an abstract base named by disjunction
+    (:func:`operand_type_alternatives`); absent for a representative referent named directly."""
 
     def add(
         self,
@@ -397,10 +400,10 @@ class _HeadNounGrouping:
         noun: str,
         type_alternatives: Tuple[type, ...] = (),
     ) -> None:
-        """Record *referent_id* as a member of *representative*, registering *representative*
-        under *noun* (and its *type_alternatives*, if any) on first sight — an ``==``-unified
-        representative whose members would otherwise resolve different nouns keeps the
-        first-encountered one, a single deterministic rule."""
+        """Record *referent_id* as a member of the representative referent *representative*,
+        registering it under *noun* (and its *type_alternatives*, if any) on first sight — an
+        ``==``-unified representative referent whose members would otherwise resolve different
+        nouns keeps the first-encountered one, a single deterministic rule."""
         if representative not in self._noun_of_representative:
             self._noun_of_representative[representative] = noun
             self.representatives_by_noun[noun].append(representative)
@@ -411,7 +414,8 @@ class _HeadNounGrouping:
         self.members_by_representative[representative].append(referent_id)
 
     def head_nouns(self) -> Dict[uuid.UUID, str]:
-        """:return: every member referent id mapped to its representative's resolved head noun."""
+        """:return: every member referent id mapped to its representative referent's resolved
+        head noun."""
         return {
             member: noun
             for noun, representatives in self.representatives_by_noun.items()
@@ -420,9 +424,9 @@ class _HeadNounGrouping:
         }
 
     def type_alternatives(self) -> Dict[uuid.UUID, Tuple[type, ...]]:
-        """:return: every member referent id mapped to its representative's concrete-subclass
-        alternatives — only for representatives named by disjunction, per
-        :func:`operand_type_alternatives`.
+        """:return: every member referent id mapped to its representative referent's
+        concrete-subclass alternatives — only for representative referents named by disjunction,
+        per :func:`operand_type_alternatives`.
         """
         return {
             member: alternatives
@@ -541,10 +545,10 @@ class ReferringExpressions:
     def _group_referents_by_noun(
         cls, expression: SymbolicExpression
     ) -> _HeadNounGrouping:
-        """:return: Every numberable referent grouped under its representative entity, then its
+        """:return: Every numberable referent grouped under its representative referent, then its
         resolved head noun, in encounter order. Literal nodes, already-seen ids, and aggregation
-        sources are skipped; an ``==``-unified pair shares one representative (so it is named
-        once).
+        sources are skipped; an ``==``-unified pair shares one representative referent (so it is
+        named once).
         """
         if isinstance(expression, Query):
             expression.build()
@@ -723,10 +727,10 @@ def referent_aliases(expression: SymbolicExpression) -> Dict[uuid.UUID, uuid.UUI
     """
     :param expression: Root expression to scan.
     :return: A map from each entity referent id that participates in an identity to its
-        representative id. An ``==`` constraint between two entity referents (``m.assigned_to ==
-        r``) makes them one entity, so disambiguation and coreference can treat the pair as a
-        single referent (*"a Robot"*, not *"a Robot"* / *"another Robot"*). Referents in no
-        identity do not appear (each is its own representative).
+        representative-referent id. An ``==`` constraint between two entity referents
+        (``m.assigned_to == r``) makes them one entity, so disambiguation and coreference can
+        treat the pair as a single referent (*"a Robot"*, not *"a Robot"* / *"another Robot"*).
+        Referents in no identity do not appear (each is its own representative referent).
 
     >>> robot, mission = variable(Robot, []), variable(Mission, [])
     >>> aliases = referent_aliases(and_(mission.assigned_to == robot, mission.priority > 2))
