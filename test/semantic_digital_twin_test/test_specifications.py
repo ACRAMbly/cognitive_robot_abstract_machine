@@ -750,6 +750,17 @@ def test_default_spec_matches_handle(empty_world):
     _assert_same_geometry(spec_body.collision, factory.root.collision)
 
 
+def test_default_spec_matches_handle_without_explicit_scale(empty_world):
+    # Both sides must fall back to the same default scale, otherwise the factory and the
+    # specification silently produce differently shaped handles.
+    with empty_world.modify_world():
+        factory = Handle.create_with_new_body_in_world(
+            name="handle", world=empty_world
+        )
+    spec_body = Handle.get_default_body_specification("handle").to_domain_object()
+    _assert_same_geometry(spec_body.collision, factory.root.collision)
+
+
 def test_default_spec_matches_door(empty_world):
     scale = Scale(0.03, 1, 2)
     with empty_world.modify_world():
@@ -1182,3 +1193,40 @@ def test_nested_composite_matches_manual_construction(empty_world):
 
     _assert_same_geometry(drawer.root.collision, manual_drawer.root.collision)
     _assert_same_geometry(drawer.handle.root.collision, manual_handle.root.collision)
+
+
+#####################################################################
+# Factory overrides must not carry shared mutable spatial defaults:
+# a Vector3 default is constructed once at definition time and would
+# be aliased by every caller that mutates it.
+#####################################################################
+
+
+def _factory_overrides():
+    """
+    Yield every ``create_with_new_*_in_world`` factory declared on an annotation class,
+    as ``(owner, method_name, signature)``.
+    """
+    roots = [HasRootBody, HasRootRegion]
+    annotation_types = {
+        subclass
+        for root in roots
+        for subclass in [root, *recursive_subclasses(root)]
+    }
+    for annotation_type in annotation_types:
+        for method_name, method in vars(annotation_type).items():
+            if not method_name.startswith("create_with_new_"):
+                continue
+            yield annotation_type, method_name, inspect.signature(
+                method.__func__ if isinstance(method, classmethod) else method
+            )
+
+
+def test_factories_have_no_shared_mutable_spatial_defaults():
+    offenders = [
+        f"{owner.__name__}.{method_name}({parameter.name})"
+        for owner, method_name, signature in _factory_overrides()
+        for parameter in signature.parameters.values()
+        if isinstance(parameter.default, (Vector3, Point3, Scale))
+    ]
+    assert not offenders, f"shared mutable defaults: {offenders}"

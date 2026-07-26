@@ -39,21 +39,21 @@ Used Concepts:
 - [](semantic_annotations)
 - [](semantic_annotation_factories)
 
-## The two materialization verbs
+## The materialization verbs
 
 Every specification carries a `name` and knows how to turn itself into a domain object. There
-are two distinct contracts, and which one a specification offers tells you what kind of thing it
-describes:
+are three distinct contracts, and which one a specification offers tells you what kind of thing
+it describes:
 
 - **`spawn(world, ...)`** — used by specifications that describe an *entity together with the
   connection that attaches it to a parent*. Spawning materializes the entity, attaches it, and
   recursively materializes its children, all inside one modification block.
 - **`connect(world, parent=, child=)`** — used by [connection
   specifications](connecting-existing-entities), which join two *already existing* entities. A
-  connection is not an entity, so it is never spawned.
-
-There is also `to_domain_object(...)`, which materializes an entity in isolation (without
-attaching it to any world) — useful when you want a free-standing `Body` to pass somewhere else.
+  connection is not a kinematic structure entity — it *is* the attachment between two of them —
+  so there is nothing to spawn and no parent to attach it to.
+- **`to_domain_object(...)`** — materializes an entity in isolation, without attaching it to any
+  world. Use it when you want a free-standing `Body` to pass somewhere else.
 
 Throughout this guide we need a world with a root to materialize into.
 `World.create_with_root_body()` gives us exactly that: a fresh world whose single root body is
