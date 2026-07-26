@@ -4,7 +4,6 @@ Tests for :class:`VerbalizationSurfaceGenerator`.
 
 from __future__ import annotations
 
-import black
 import krrood
 from krrood.entity_query_language.testing.surface_generation import (
     VerbalizationSurfaceGenerator,
@@ -38,17 +37,19 @@ def test_generated_surfaces_pass_their_own_snapshot_verification():
 # %% generation against the real krrood snapshot
 
 
-def test_generated_krrood_module_matches_the_committed_file():
+def test_generated_krrood_module_matches_the_committed_file(tmp_path):
     """
-    The committed ``verbalization_surfaces.py`` is exactly what the generator produces
-    for krrood's own snapshot -- it is a generated file, not hand-authored.
+    The committed ``verbalization_surfaces.py`` is exactly what the generator's
+    :meth:`~VerbalizationSurfaceGenerator.write` produces for krrood's own snapshot -- it
+    is a generated file, not hand-authored.
     """
     snapshot = SymbolicSurfaceSnapshot(package=krrood, surfaces=())
     generator = VerbalizationSurfaceGenerator(snapshot=snapshot)
 
-    generated_source = black.format_str(generator.generate(), mode=black.Mode())
+    generated_file = tmp_path / "verbalization_surfaces.py"
+    generator.write(generated_file)
 
     with open(committed_verbalization_surfaces_module.__file__) as committed_file:
         committed_source = committed_file.read()
 
-    assert generated_source == committed_source
+    assert generated_file.read_text() == committed_source

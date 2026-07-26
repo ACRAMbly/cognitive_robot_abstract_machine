@@ -18,7 +18,7 @@ from krrood.entity_query_language.testing.surface_verification import (
     SymbolicSurfaceSnapshot,
 )
 
-REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
+REPOSITORY_ROOT = Path(krrood.__file__).resolve().parents[3]
 
 SURFACES_MODULE_PATH = (
     REPOSITORY_ROOT

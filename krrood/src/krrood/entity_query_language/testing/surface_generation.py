@@ -15,7 +15,10 @@ from pathlib import Path
 
 from typing_extensions import Any, Dict, Tuple, Type, Union
 
-from krrood.code_generation.formatting import run_black_on_file
+from krrood.code_generation.formatting import (
+    run_ruff_check_on_file,
+    run_ruff_format_on_file,
+)
 from krrood.code_generation.generator import CodeGenerator
 from krrood.code_generation.imports import get_imports_from_types
 from krrood.code_generation.type_hints import value_to_source
@@ -89,9 +92,10 @@ class VerbalizationSurfaceGenerator:
 
     def write(self, path: Union[str, Path]) -> None:
         """
-        Render :meth:`generate` to *path* and format it with Black.
+        Render :meth:`generate` to *path* and format it with Ruff.
 
         :param path: The file to write the generated module to.
         """
         Path(path).write_text(self.generate())
-        run_black_on_file(str(path))
+        run_ruff_check_on_file(str(path))
+        run_ruff_format_on_file(str(path))
