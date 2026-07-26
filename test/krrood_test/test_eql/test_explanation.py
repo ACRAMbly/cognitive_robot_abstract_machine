@@ -345,6 +345,27 @@ def test_satisfied_conditions_or_first_true():
     assert "<" not in expressions
 
 
+def test_satisfied_conditions_exclude_a_short_circuited_operator():
+    """
+    A whole operator skipped by a short-circuit is not satisfied.
+
+    The operand-level cases above only pin a skipped comparator; an operator that was
+    never evaluated must be excluded on the same grounds, since it made no truth claim
+    for this evaluation at all.
+    """
+    val = variable_from([6])
+    query = entity(val).where(or_(val > 5, and_(val < 10, val != 0)))
+
+    true_results = _get_true_results(query)
+    assert len(true_results) == 1
+
+    expressions = _get_satisfied_names(
+        true_results[0].satisfied_condition_ids, val._conditions_root_
+    )
+    assert "OR" in expressions
+    assert "AND" not in expressions
+
+
 def test_satisfied_conditions_or_fallback():
     """
     OR with first false, second true: both children evaluated, OR satisfied.

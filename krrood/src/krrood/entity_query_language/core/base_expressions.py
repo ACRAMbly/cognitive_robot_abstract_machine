@@ -83,6 +83,12 @@ class SymbolicExpression(ABC):
     statement.
     """
 
+    _records_truth_: ClassVar[bool] = False
+    """
+    Whether this expression's own binding holds the truth of an operation, which is what
+    makes its results worth filtering by truth. See :class:`TruthValuedExpression`.
+    """
+
     _children_: List[SymbolicExpression] = field(
         init=False, repr=False, default_factory=list
     )
@@ -221,7 +227,9 @@ class SymbolicExpression(ABC):
         """
         SymbolGraph().remove_dead_instances()
         results = (
-            self._process_result_(res) for res in self._evaluate_() if res.is_true
+            self._process_result_(res)
+            for res in self._evaluate_()
+            if res.is_true or not self._records_truth_
         )
         yield from itertools.islice(results, self._limit_)
 
@@ -351,13 +359,38 @@ class SymbolicExpression(ABC):
         """
         if self._id_ in result:
             return result[self._id_]
-        else:
-            return UnificationDict(
-                {
-                    self._get_expression_by_id_(id_): value
-                    for id_, value in result.bindings.items()
-                }
-            )
+        return self._unification_of_(result)
+
+    def _unification_of_(self, result: OperationResult) -> UnificationDict:
+        """
+        :param result: The result to be mapped.
+        :return: Every binding of *result*, keyed by the expression that produced it.
+        """
+        return UnificationDict(
+            {
+                self._get_expression_by_id_(id_): value
+                for id_, value in result.bindings.items()
+            }
+        )
+
+    def _build_operation_result_with_truth_(
+        self,
+        truth: bool,
+        bindings: Bindings,
+        child_result: Optional[OperationResult] = None,
+    ) -> OperationResult:
+        """
+        Build a result that records *truth* as this expression's own truth value.
+
+        :param truth: The truth value this expression concluded.
+        :param bindings: The bindings to record the truth value in. Copied, so that a
+            sibling evaluation branch sharing them is unaffected.
+        :param child_result: The result this one was derived from, if any.
+        :return: The result carrying the recorded truth value.
+        """
+        bindings = copy(bindings)
+        bindings[self._id_] = truth
+        return OperationResult(bindings, self, child_result)
 
     def _evaluate_(
         self,
@@ -391,7 +424,7 @@ class SymbolicExpression(ABC):
                 bindings = {}
                 sources = OperationResult({})  # empty sentinel for _evaluate__()
             if self._id_ in bindings:
-                result = OperationResult(bindings, False, self, previous_result)
+                result = OperationResult(bindings, self, previous_result)
                 evaluation_context.on_result_yielded(expression=self, result=result)
                 yield result
             else:
@@ -825,6 +858,34 @@ class BinaryExpression(SymbolicExpression, ABC):
 
 
 @dataclass(eq=False, repr=False)
+class TruthValuedExpression(SymbolicExpression, ABC):
+    """
+    An expression whose own binding is the truth of an operation rather than a value a
+    caller can select.
+
+    Truth and value share one binding per expression, so an expression that concludes a
+    truth (a logical operator, a quantifier, a rule-tree selector) has no separate value
+    to report, and one that produces a value (a variable, an aggregator, a query) makes
+    no truth claim of its own outside a condition.
+    """
+
+    _records_truth_: ClassVar[bool] = True
+    """
+    Whether this expression's own binding holds the truth of an operation.
+    """
+
+    def _process_result_(self, result: OperationResult) -> UnificationDict:
+        """
+        Map the result to the bindings it carries.
+
+        :param result: The result to be mapped.
+        :return: Every binding of *result*, since this expression's own binding holds a
+            truth value rather than a selectable one.
+        """
+        return self._unification_of_(result)
+
+
+@dataclass(eq=False, repr=False)
 class TruthValueOperator(SymbolicExpression, ABC):
     """
     An abstract superclass for operators that work with truth values of operations, thus
@@ -836,27 +897,17 @@ class TruthValueOperator(SymbolicExpression, ABC):
         self, child: SymbolicExpression, sources: Optional[OperationResult]
     ) -> Iterator[OperationResult]:
         """
-        Evaluate ``child`` and apply truth-value semantics to each result.
+        Evaluate ``child`` in a truth-value context.
 
-        Expressions that carry their own binding (Selectable: Variable, MappedVariable,
-        Comparator, …) have their truth value computed from the binding's boolean value.
-        Expressions that do not self-bind (LogicalOperators: AND, OR, NOT, …) already
-        carry the correct ``is_false`` flag and are yielded unchanged.
+        Every truth-bearing expression records its own truth value in the bindings it
+        yields, so a result already reports the truth this operator needs and is passed
+        through untouched.
 
         :param child: The child expression to evaluate in a truth-value context.
         :param sources: The current OperationResult carrying bindings, or None.
-        :return: An iterator of OperationResult instances with correct truth values.
+        :return: An iterator of the child's results.
         """
-        for result in child._evaluate_(sources):
-            if result.has_value:
-                yield OperationResult(
-                    result.bindings,
-                    result.is_condition_false,
-                    result.operand,
-                    result.previous_operation_result,
-                )
-            else:
-                yield result
+        yield from child._evaluate_(sources)
 
 
 @dataclass(eq=False, repr=False)
@@ -919,12 +970,6 @@ class OperationResult:
     The bindings resulting from the operation, mapping variable IDs to their values.
     """
 
-    is_false: bool = False
-    """
-    Whether the operation resulted in a false value (i.e., The operation condition was
-    not satisfied)
-    """
-
     operand: Optional[SymbolicExpression] = None
     """
     The operand that produced the result.
@@ -976,21 +1021,22 @@ class OperationResult:
         return self.operand is not None and self.operand._id_ in self.bindings
 
     @property
-    def is_condition_false(self) -> bool:
+    def is_false(self) -> bool:
         """
-        The canonical condition-truth rule: for expressions that bind a direct value
-        (``Attribute``, ``Comparator``, ``Variable``, …) truth is derived from the
-        value's boolean content.
+        Whether the operation was not satisfied.
 
-        For logical operators that manage their own
-        ``is_false`` flag (``NOT``, ``AND``, ``OR``, …) and produce no direct value, the
-        flag is used as-is.
+        Truth is read straight from the binding the operand recorded: an empty collection
+        or a falsy value is false. An operand that recorded nothing makes no truth claim
+        and is therefore not false.
+
+        ..note:: The binding is read directly rather than through
+            :attr:`value`, which maps a result to its caller-facing shape and would
+            answer a different question for an operand whose binding is a truth value.
         """
-        if self.has_value:
-            return not (
-                len(self.value) > 0 if is_iterable(self.value) else bool(self.value)
-            )
-        return self.is_false
+        if not self.has_value:
+            return False
+        binding = self.bindings[self.operand._id_]
+        return not (len(binding) > 0 if is_iterable(binding) else bool(binding))
 
     @property
     def is_true(self) -> bool:
@@ -1074,7 +1120,7 @@ class Selectable(SymbolicExpression, Generic[T], ABC):
         if self._type_ is None:
             self._type_ = self._type__
 
-    def _build_operation_result_and_update_truth_value_(
+    def _build_operation_result_(
         self,
         bindings: Bindings,
         child_result: Optional[OperationResult] = None,
@@ -1082,11 +1128,12 @@ class Selectable(SymbolicExpression, Generic[T], ABC):
         """
         Build an OperationResult instance for this binding.
 
-        :param bindings: The bindings of the result.
+        :param bindings: The bindings of the result, already carrying this expression's
+            own value.
         :param child_result: The result of the child operation, if any.
         :return: The OperationResult instance.
         """
-        return OperationResult(bindings, False, self, child_result)
+        return OperationResult(bindings, self, child_result)
 
     @cached_property
     def _type__(self):

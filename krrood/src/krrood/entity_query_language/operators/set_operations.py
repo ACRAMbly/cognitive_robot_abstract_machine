@@ -15,6 +15,7 @@ from typing_extensions import Iterable, Optional, Tuple, Iterator
 
 from krrood.entity_query_language.core.base_expressions import (
     MultiArityExpression,
+    TruthValuedExpression,
     Bindings,
     OperationResult,
     SymbolicExpression,
@@ -25,7 +26,7 @@ from krrood.entity_query_language.utils import (
 
 
 @dataclass(eq=False, repr=False)
-class Union(MultiArityExpression):
+class Union(TruthValuedExpression, MultiArityExpression):
     """
     A symbolic union operation that can be used to evaluate multiple symbolic
     expressions in a sequence.
@@ -36,17 +37,12 @@ class Union(MultiArityExpression):
         sources: OperationResult,
     ) -> Iterable[OperationResult]:
         yield from (
-            self.get_result_and_update_truth_value(child_result)
+            self._build_operation_result_with_truth_(
+                child_result.is_true, child_result.bindings, child_result
+            )
             for child_result in itertools.chain(
                 *(var._evaluate_(sources) for var in self._operation_children_)
             )
-        )
-
-    def get_result_and_update_truth_value(
-        self, child_result: OperationResult
-    ) -> OperationResult:
-        return OperationResult(
-            child_result.bindings, child_result.is_false, self, child_result
         )
 
     def add_child(self, child: SymbolicExpression) -> None:

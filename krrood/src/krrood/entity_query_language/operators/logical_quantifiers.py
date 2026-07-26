@@ -79,7 +79,8 @@ class ForAll(QuantifiedConditional):
 
         # Yield the remaining bindings (non-universal) merged with the incoming sources
         yield from [
-            OperationResult(sources.bindings | sol, False, self) for sol in solution_set
+            self._build_operation_result_with_truth_(True, sources.bindings | sol)
+            for sol in solution_set
         ]
 
     def get_all_candidate_solutions(self, var_val: OperationResult):
@@ -128,21 +129,20 @@ class Exists(QuantifiedConditional):
             val = val.update(sources.bindings)
             for cond_val in self._evaluate_child_as_condition_(self.condition, val):
                 if cond_val.is_true:
-                    yield OperationResult(
+                    yield self._build_operation_result_with_truth_(
+                        True,
                         sources.bindings
                         | {
                             id_: val.bindings[id_]
                             for id_ in self._ids_of_variables_to_add_to_sources_
                             if id_ in val.bindings
                         },
-                        is_false=False,
-                        operand=self,
-                        previous_operation_result=val,
+                        val,
                     )
                     return
 
         # Negation as failure: no variable value satisfied the condition.
-        yield OperationResult(sources.bindings, is_false=True, operand=self)
+        yield self._build_operation_result_with_truth_(False, sources.bindings)
 
     @cached_property
     def _ids_of_variables_to_add_to_sources_(self):

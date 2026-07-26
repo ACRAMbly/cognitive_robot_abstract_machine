@@ -628,7 +628,6 @@ class Query(
         """
         return OperationResult(
             {v._id_: child_result[v._id_] for v in self._selected_variables_},
-            child_result.is_false,
             self,
             child_result,
         )

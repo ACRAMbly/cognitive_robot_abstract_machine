@@ -8,7 +8,7 @@ pipeline without polluting the core evaluation methods.
 from __future__ import annotations
 
 from ordered_set import OrderedSet
-from typing_extensions import Any, Dict, Optional
+from typing_extensions import Any, Optional
 
 from krrood.entity_query_language._monitoring import monitored
 from krrood.entity_query_language.core.base_expressions import (
@@ -126,18 +126,10 @@ class SatisfiedConditionTracker(EvaluationObserver):
         evaluation_context = get_evaluation_context()
         evaluated = evaluation_context.evaluated_expression_ids
 
-        # Build a truth map from the OperationResult chain: operand_id -> is_false.
-        # This reflects the actual truth values from this specific evaluation path,
-        # with no risk of stale state from previous passes.
-        chain_truth_map: Dict = {}
-        node = result
-        seen: set = set()
-        while node is not None and id(node) not in seen:
-            seen.add(id(node))
-            if node.operand is not None:
-                chain_truth_map[node.operand._id_] = node.is_false
-            node = node.previous_operation_result
-
+        # Every truth-bearing expression records its truth in the bindings of the result
+        # it yields, so one uniform lookup covers operators and value-bearing expressions
+        # alike. An expression short-circuited by an operator recorded nothing, and is
+        # therefore not satisfied.
         satisfied = OrderedSet()
         for expr_id in evaluated:
             try:
@@ -146,13 +138,8 @@ class SatisfiedConditionTracker(EvaluationObserver):
                 continue
             if not is_condition_participant(expr):
                 continue
-            if isinstance(expr, LogicalOperator):
-                # An operator not present in the chain was short-circuited: not satisfied.
-                if not chain_truth_map.get(expr_id, True):
-                    satisfied.add(expr_id)
-            elif expr_id in result.bindings:
-                if result.bindings[expr_id]:
-                    satisfied.add(expr_id)
+            if result.bindings.get(expr_id):
+                satisfied.add(expr_id)
 
         result.satisfied_condition_ids = satisfied
         evaluation_context.satisfied_condition_ids = satisfied
