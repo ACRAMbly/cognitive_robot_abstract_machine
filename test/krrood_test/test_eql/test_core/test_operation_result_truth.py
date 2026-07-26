@@ -182,3 +182,26 @@ def test_query_yields_only_its_true_results_to_callers():
     value = variable_from([3, 6])
 
     assert list(entity(value).where(value > 5).evaluate()) == [6]
+
+
+def test_query_selecting_a_falsy_value_reports_its_result_as_true():
+    """
+    A query's own binding is its selection, not a truth claim, so selecting ``0`` or an
+    empty collection says nothing about whether the query was satisfied.
+
+    Any consumer reading the truth of a query's result — a subquery evaluated as a
+    condition, or a caller filtering results — would otherwise discard a legitimately
+    selected falsy value.
+    """
+    value = variable_from([0, 1])
+    query = entity(value)
+    query.build()
+
+    assert truth_values(query) == [True, True]
+
+
+def test_query_selecting_an_empty_collection_reports_its_result_as_true():
+    query = entity(variable_from([[], [1]]))
+    query.build()
+
+    assert truth_values(query) == [True, True]

@@ -373,6 +373,20 @@ class SymbolicExpression(ABC):
             }
         )
 
+    def _result_is_false_(self, result: OperationResult) -> bool:
+        """
+        Read the truth of a result this expression produced.
+
+        :param result: A result whose operand is this expression.
+        :return: Whether the operation was not satisfied, derived from the binding this
+            expression recorded: an empty collection or a falsy value is false. Having
+            recorded no binding is no truth claim, and therefore not false.
+        """
+        if self._id_ not in result.bindings:
+            return False
+        binding = result.bindings[self._id_]
+        return not (len(binding) > 0 if is_iterable(binding) else bool(binding))
+
     def _build_operation_result_with_truth_(
         self,
         truth: bool,
@@ -1023,20 +1037,18 @@ class OperationResult:
     @property
     def is_false(self) -> bool:
         """
-        Whether the operation was not satisfied.
+        Whether the operation was not satisfied, as read by the operand that produced
+        this result.
 
-        Truth is read straight from the binding the operand recorded: an empty collection
-        or a falsy value is false. An operand that recorded nothing makes no truth claim
-        and is therefore not false.
-
-        ..note:: The binding is read directly rather than through
-            :attr:`value`, which maps a result to its caller-facing shape and would
-            answer a different question for an operand whose binding is a truth value.
+        ..note:: The operand answers this rather than the result reading its binding
+            itself, because what a binding says about truth depends on what the
+            expression records there: a truth for an operator, a value whose truthiness
+            is its truth in a condition for a variable, and a selection saying nothing
+            at all for a query.
         """
-        if not self.has_value:
+        if self.operand is None:
             return False
-        binding = self.bindings[self.operand._id_]
-        return not (len(binding) > 0 if is_iterable(binding) else bool(binding))
+        return self.operand._result_is_false_(self)
 
     @property
     def is_true(self) -> bool:
