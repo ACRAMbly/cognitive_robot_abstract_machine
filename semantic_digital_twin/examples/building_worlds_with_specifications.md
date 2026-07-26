@@ -251,7 +251,7 @@ world = World.create_with_root_body()
 
 drawer = BodySpecification.box(
     name="drawer",
-    sclae=Scale(0.4, 0.5, 0.2),
+    scale=Scale(0.4, 0.5, 0.2),
     connection_specification=PrismaticConnectionSpecification(axis=Vector3.Z()),
 ).spawn(world)
 
