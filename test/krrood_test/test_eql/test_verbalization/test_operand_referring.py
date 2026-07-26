@@ -18,7 +18,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 
-from krrood.entity_query_language.factories import an, entity, for_all, variable
+from krrood.entity_query_language.factories import an, and_, entity, for_all, variable
 from krrood.entity_query_language.predicate import Predicate, SymbolicFunction
 from krrood.entity_query_language.verbalization.fragments.base import (
     flatten_fragment_to_plain_text,
@@ -643,4 +643,19 @@ def test_reused_abstract_operand_pronominalises_as_the_query_subject():
     assert (
         verbalize_expression(an(entity(subject).where(AbstractOperandRole(subject))))
         == "Find a Circle or a Square such that it is warm"
+    )
+
+
+def test_reused_abstract_operand_reads_as_a_definite_disjunction_on_repeat_mention():
+    """
+    A repeat mention that is not the current discourse subject (so it is not
+    pronominalised) still carries every disjunctive alternative through to its definite
+    form -- "the Circle or the Square", not just "the Circle" with the other alternative
+    silently dropped.
+    """
+    shape, sensor = variable(Shape, []), variable(Sensor, [])
+    assert verbalize_expression(
+        and_(AbstractOperandRole(shape), VisibleFromSensor(shape, sensor))
+    ) == (
+        "a Circle or a Square is warm, and the Circle or the Square is visible from a Sensor"
     )

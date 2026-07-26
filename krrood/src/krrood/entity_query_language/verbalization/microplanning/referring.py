@@ -400,10 +400,10 @@ class _HeadNounGrouping:
         noun: str,
         type_alternatives: Tuple[type, ...] = (),
     ) -> None:
-        """Record *referent_id* as a member of the representative referent *representative*,
-        registering it under *noun* (and its *type_alternatives*, if any) on first sight — an
-        ``==``-unified representative referent whose members would otherwise resolve different
-        nouns keeps the first-encountered one, a single deterministic rule."""
+        """Record *referent_id* as a member of the representative referent *representative* names,
+        registering *representative* under *noun* (and its *type_alternatives*, if any) on first
+        sight — an ``==``-unified group whose members would otherwise resolve different nouns
+        keeps the first-encountered one, a single deterministic rule."""
         if representative not in self._noun_of_representative:
             self._noun_of_representative[representative] = noun
             self.representatives_by_noun[noun].append(representative)

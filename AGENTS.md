@@ -68,6 +68,10 @@
 - Keep docstrings short and concise
 - Use Sphinx directives (for example `..note::`, `..warning::`, and `:func:`) where appropriate
 - Do not create type information for docstrings (type hints already convey this)
+- Do not name a function/class's current callers or consumers in its own docstring (e.g. "used by
+  X and Y"); document what it does and its contract, not who happens to use it today — that
+  reference goes stale the moment a caller changes and misleads a future reader into thinking the
+  list is exhaustive or load-bearing
 - Always run `docformatter` on modified files
 
 ## Domain-Specific Conventions

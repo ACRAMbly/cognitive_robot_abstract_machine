@@ -854,11 +854,9 @@ def disjunctive_phrase(
     Join already-rendered *members* as a bare disjunction (*"A, B, or C"*), or return the lone
     member unchanged for a singleton.
 
-    The shared building block behind
-    :class:`~…vocabulary.parts_of_speech.DisjunctivePhrase` and
-    :func:`~…microplanning.referring.disjunctive_type_head` — both need the same *"joined by
-    or"* coordination but live either side of the vocabulary/microplanning boundary, so neither
-    imports the other; both import this instead.
+    The low-level coordination primitive behind a bare *"or"*-joined disjunctive head — kept here,
+    at the base of the vocabulary/microplanning layering, so a caller on either side of that
+    boundary can depend on it without depending on the other side.
 
     :param members: The already-rendered fragments to join (a caller lexicalises each member
         itself, e.g. via :meth:`RoleFragment.for_value`).
