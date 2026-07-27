@@ -21,15 +21,12 @@ class PlotTrajectory(GiskardBehavior):
         self,
         name,
         wait=False,
-        joint_filter=None,
         normalize_position: bool = False,
-        plot_output_directory: str = tempfile.gettempdir(),
         **kwargs,
     ):
         super().__init__(name)
         self.wait = wait
         self.normalize_position = normalize_position
-        self.plot_output_directory = plot_output_directory
         self.kwargs = kwargs
         GiskardBlackboard().executor.trajectory_plotter = WorldStateTrajectoryPlotter()
 
@@ -43,7 +40,7 @@ class PlotTrajectory(GiskardBehavior):
             if len(plotter.world_state_trajectory.times) <= 1:
                 return
             file_name = os.path.join(
-                self.plot_output_directory,
+                tempfile.gettempdir(),
                 "trajectories",
                 f"goal_{GiskardBlackboard().move_action_server.goal_id}.pdf",
             )

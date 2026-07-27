@@ -28,22 +28,18 @@ class CleanupControlLoop(Sequence):
         self,
         normalize_position: bool = False,
         wait: bool = False,
-        plot_output_directory: str = tempfile.gettempdir(),
     ):
         self.insert_child(
             PlotTrajectory(
                 "plot trajectory",
                 wait=wait,
                 normalize_position=normalize_position,
-                plot_output_directory=plot_output_directory,
             ),
             index=-1,
         )
 
-    def add_plot_gantt_chart(self, plot_output_directory: str = tempfile.gettempdir()):
-        self.insert_child(
-            PlotGanttChart(plot_output_directory=plot_output_directory), 2
-        )
+    def add_plot_gantt_chart(self):
+        self.insert_child(PlotGanttChart(), 2)
 
     @toggle_on("has_reset_world_state")
     def add_reset_world_state(self):
