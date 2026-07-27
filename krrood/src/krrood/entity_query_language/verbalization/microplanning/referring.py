@@ -181,12 +181,7 @@ def operand_type_alternatives(node: Variable) -> Tuple[type, ...]:
 
 def disjunctive_type_head(alternatives: Tuple[type, ...]) -> VerbalizationFragment:
     """:return: the bare disjunctive noun naming *alternatives* (*"Body or Region"*), each linked
-    to its own class. This is the flat text used as :func:`operand_head_noun`'s same-noun
-    grouping key, not the final rendered noun phrase — :class:`~…grammar.terms.rules.VariableRule`
-    builds that directly, from :attr:`~…referring.NounForm.type_alternatives`, as a
-    :class:`~…fragments.base.NounPhrase` with one :attr:`~…fragments.base.NounPhrase.
-    additional_heads` entry per further alternative, so each gets its own repeated article
-    (*"a Body or a Region"*) instead of the one shared article this bare join would read as.
+    to its own class — :func:`operand_head_noun`'s same-noun grouping key text.
 
     :param alternatives: The concrete types to name, from :func:`operand_type_alternatives`.
     """
@@ -472,11 +467,9 @@ class NounForm:
     type_alternatives: Tuple[type, ...] = ()
     """
     When non-empty, the noun head is a disjunction of these concrete types
-    (:func:`operand_type_alternatives`), rendered as a
-    :class:`~…fragments.base.NounPhrase` with one alternative per
-    :attr:`~…fragments.base.NounPhrase.additional_heads` entry instead of :attr:`label` — each
-    alternative gets its own repeated article (*"a Body or a Region"*) rather than a single
-    linked type reference.
+    (:func:`operand_type_alternatives`), rendered as a :class:`~…fragments.base.NounPhrase`
+    with one :attr:`~…fragments.base.NounPhrase.additional_heads` entry per alternative
+    (*"a Body or a Region"*).
     """
 
 

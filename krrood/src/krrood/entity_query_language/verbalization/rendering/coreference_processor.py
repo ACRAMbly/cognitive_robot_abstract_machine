@@ -598,9 +598,8 @@ class CoreferenceProcessor(RealizationPass):
         a definite reference (*"the Robot"*), preserving any distinguishing feature already
         stamped by :meth:`_distinguished` (*"the other Robot"*, *"the second Robot"*) so a
         distinguished referent stays told apart on every later mention. A disjunctive head's
-        :attr:`~…fragments.base.NounPhrase.additional_heads` carry over too, so a repeat mention of
-        an abstract-typed operand stays *"the Circle or the Square"* rather than silently losing
-        every alternative but the first.
+        :attr:`~…fragments.base.NounPhrase.additional_heads` carry over too (*"the Circle or the
+        Square"*).
 
         Verbalizing one expression twice against a shared context reduces the repeat to *"the Robot"*:
 

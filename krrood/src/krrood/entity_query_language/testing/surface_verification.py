@@ -46,7 +46,7 @@ from krrood.utils import module_and_class_name
 @dataclass(frozen=True)
 class OverriddenOperand:
     """
-    One dataclass field's concrete VALUE for a symbolic callable whose fragment reads
+    One dataclass field's concrete *value* for a symbolic callable whose fragment reads
     that field directly rather than treating it as a symbolic operand.
 
     A ``Type`` field, for example, cannot be resolved by annotation alone — it may be a
@@ -64,9 +64,10 @@ class OverriddenOperand:
     The concrete value to pass for that field.
     """
 
+
 OperandOverridesDict = Dict[Type[SymbolicCallable], Sequence[OverriddenOperand]]
 """
-A mapping from the symbolic callable class to its operand overrides
+A mapping from the symbolic callable class to its operand overrides.
 """
 
 
@@ -76,15 +77,12 @@ def placeholder_operands(cls: Type[SymbolicCallable]) -> Dict[str, Any]:
     endpoint alone — a fresh variable of that type (``object`` when the endpoint is not
     a plain class), so the surface reads the operand as *"a <TypeName>"*.
 
-    This is genuinely value-agnostic: it needs nothing beyond *cls* itself. A field whose
-    fragment reads its raw VALUE rather than a symbolic operand (a ``Type`` field, say)
-    still gets a placeholder variable here; a caller that must supply a real value for
-    such a field instead (:class:`SymbolicSurfaceSnapshot` does, via its
-    :attr:`~SymbolicSurfaceSnapshot.operand_overrides`) overwrites that entry in the
-    returned dict rather than this function taking on that concern itself.
-
     :param cls: The symbolic callable to build operands for.
     :return: The operand to pass for each init field, keyed by field name.
+
+    >>> operands = placeholder_operands(IsReachable)
+    >>> operands["location"]._type_, operands["body"]._type_
+    (<class 'object'>, <class 'object'>)
     """
     wrapped_class = WrappedClass(clazz=cls)
     operands: Dict[str, Any] = {}
@@ -103,12 +101,13 @@ def first_order_form(cls: Type[SymbolicCallable]) -> str:
     """
     Verbalize *cls* value-agnostically — the *first-order form*: every operand named
     from its declared field type alone (:func:`placeholder_operands`), with no
-    constructed instance or bound literal in hand. The sibling of the ordinary *value-
-    using* form a real, bound expression already renders through
-    :func:`~…pipeline.verbalize_expression`.
+    constructed instance or bound literal in hand.
 
     :param cls: The symbolic callable to render.
     :return: The sentence *cls* renders with placeholder operands.
+
+    >>> first_order_form(IsReachable)
+    'a location is reachable for a body'
     """
     return verbalize_expression(cls(**placeholder_operands(cls)))
 
@@ -153,8 +152,8 @@ class SymbolicSurfaceSnapshot:
 
     operand_overrides: OperandOverridesDict = field(default_factory=dict)
     """
-    Concrete field overrides for classes whose fragment reads a field's raw VALUE rather
-    than treating it as a symbolic operand, keyed by the class.
+    Concrete field overrides for classes whose fragment reads a field's raw *value*
+    rather than treating it as a symbolic operand, keyed by the class.
     """
 
     def discovered_callables(self) -> Tuple[Type[SymbolicCallable], ...]:
@@ -164,8 +163,8 @@ class SymbolicSurfaceSnapshot:
             cls
             for cls in classes_of_package(self.package, recursive=True)
             if isinstance(cls, type)
-               and issubclass(cls, SymbolicCallable)
-               and set(cls.__abstractmethods__) <= {"_verbalization_fragment_"}
+            and issubclass(cls, SymbolicCallable)
+            and set(cls.__abstractmethods__) <= {"_verbalization_fragment_"}
         }
         return tuple(sorted(discovered, key=module_and_class_name))
 
@@ -233,7 +232,7 @@ class SymbolicSurfaceSnapshot:
             )
             for surface in self.surfaces
             if self.has_fragment(surface.callable_class)
-               and self.rendered_surface(surface.callable_class) != surface.sentence
+            and self.rendered_surface(surface.callable_class) != surface.sentence
         }
         assert not mismatches, (
             "Verbalization surfaces changed. Update the sentence for each of these in the snapshot "

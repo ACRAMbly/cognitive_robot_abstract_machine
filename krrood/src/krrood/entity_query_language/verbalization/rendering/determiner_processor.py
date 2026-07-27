@@ -58,11 +58,14 @@ class DeterminerProcessor(RewritePass):
         return self._lower_noun_phrase(leaf) if isinstance(leaf, NounPhrase) else leaf
 
     def _lower_noun_phrase(self, noun_phrase: NounPhrase) -> VerbalizationFragment:
-        """:return: *noun_phrase* lowered to a determiner-bearing phrase — the chosen determiner,
-        an optional ordinal-distinguisher and pre-head qualifier, the number-tagged head, and the
-        recursed modifiers. When :attr:`~…fragments.base.NounPhrase.additional_heads` is
-        non-empty, each alternative becomes its own determiner-and-head group (the ordinal/
-        pre-head qualifier applies only to the first), joined with *"or"*.
+        """Lower *noun_phrase* to a determiner-bearing phrase: the chosen determiner, an optional
+        ordinal-distinguisher and pre-head qualifier, the number-tagged head, and the recursed
+        modifiers. When :attr:`~…fragments.base.NounPhrase.additional_heads` is non-empty, each
+        alternative becomes its own determiner-and-head group (the ordinal/pre-head qualifier
+        applies only to the first), joined with *"or"*.
+
+        :param noun_phrase: The noun-phrase specification to lower.
+        :return: The lowered fragment.
 
         >>> from krrood.entity_query_language.verbalization.fragments.base import flatten_fragment_to_plain_text
         >>> phrase = NounPhrase(head=RoleFragment.for_type(Robot), definiteness=Definiteness.INDEFINITE)
@@ -117,12 +120,21 @@ class DeterminerProcessor(RewritePass):
         pre_head: List[VerbalizationFragment],
         leading_fragment: Optional[VerbalizationFragment],
     ) -> VerbalizationFragment:
-        """:return: one determiner-and-head group — *head*, number-tagged and processed, preceded
-        by its own determiner (chosen from *leading_fragment*, or *head* itself when there is
-        none) and any *pre_head* qualifier. *noun_phrase* supplies the shared definiteness,
-        number, and alternative/pair-distinguisher features every group agrees on; only the
-        article is decided per group, so a disjunctive head reads *"a Body or a Region"* rather
-        than one shared article covering every alternative.
+        """
+        Build one determiner-and-head group: *head*, number-tagged and processed,
+        preceded by its own determiner (chosen from *leading_fragment*, or *head* itself
+        when there is none) and any *pre_head* qualifier. *noun_phrase* supplies the
+        shared definiteness, number, and alternative/pair-distinguisher features every
+        group agrees on; only the article is decided per group.
+
+        :param noun_phrase: The enclosing phrase, for its shared definiteness/number/alternative.
+        :param head: The head fragment for this group (the phrase's own head, or one of its
+            :attr:`~…fragments.base.NounPhrase.additional_heads`).
+        :param pre_head: Any pre-head qualifier fragments (ordinal, ranking phrase) for this
+            group; empty for a non-leading additional head.
+        :param leading_fragment: The article's phonological anchor when it differs from *head*
+            (the ordinal or pre-head qualifier); ``None`` to anchor on *head* itself.
+        :return: The determiner-and-head group fragment.
         """
         processed_head = self._tag_number(self.process(head), noun_phrase.number)
         determiner = self._determiner(
