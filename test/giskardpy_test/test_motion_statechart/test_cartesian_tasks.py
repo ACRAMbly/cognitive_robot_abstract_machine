@@ -318,6 +318,63 @@ class TestCartesianTasks:
             atol=goal.threshold,
         )
 
+    def test_end_motion_waits_for_convergence(self, cylinder_bot_world: World):
+        """
+        EndMotion.when_true(goal) must not end the motion the instant the task's own
+        goal-error threshold is crossed; it must wait until the robot's DOF velocities
+        have actually settled.
+
+        A loose ``threshold`` makes the task report "reached" long before the base has
+        slowed down, so the base is still moving fast when that happens.
+        """
+        tip = cylinder_bot_world.get_kinematic_structure_entity_by_name("bot")
+
+        motion_statechart = MotionStatechart()
+        motion_statechart.add_nodes(
+            [
+                goal := CartesianPose(
+                    root_link=cylinder_bot_world.root,
+                    tip_link=tip,
+                    goal_pose=Pose.from_xyz_rpy(
+                        x=1, reference_frame=cylinder_bot_world.root
+                    ),
+                    threshold=0.5,
+                ),
+            ]
+        )
+        motion_statechart.add_node(EndMotion.when_true(goal))
+
+        executor = Executor(MotionStatechartContext(world=cylinder_bot_world))
+        executor.compile(motion_statechart=motion_statechart)
+
+        goal_reached_tick = None
+        for i in range(1000):
+            executor.tick()
+            if (
+                goal_reached_tick is None
+                and motion_statechart.observation_state[goal]
+                == ObservationStateValues.TRUE
+            ):
+                goal_reached_tick = i
+            if motion_statechart.is_end_motion():
+                break
+        else:
+            raise TimeoutError("motion never ended")
+
+        assert goal_reached_tick is not None
+        assert i > goal_reached_tick, (
+            "EndMotion ended on the same tick the task's own threshold was crossed, "
+            "before the controller had a chance to decelerate"
+        )
+        max_velocity = max(
+            abs(dof.variables.velocity.resolve())
+            for dof in cylinder_bot_world.active_degrees_of_freedom
+        )
+        assert max_velocity < 0.06, (
+            f"EndMotion ended while a DOF was still moving at {max_velocity} m/s or "
+            f"rad/s"
+        )
+
     def test_long_goal(self, pr2_world_state_reset: World):
         motion_statechart = MotionStatechart()
         motion_statechart.add_nodes(
@@ -380,15 +437,17 @@ class TestCartesianTasks:
         expected = pr2_world_state_reset.transform(tip_goal, root)
 
         motion_statechart = MotionStatechart()
-        cart_goal = CartesianPose(
-            root_link=root,
-            tip_link=tip,
-            goal_pose=tip_goal,
+
+        motion_statechart.add_nodes(
+            [
+                cart_goal := CartesianPose(
+                    root_link=root,
+                    tip_link=tip,
+                    goal_pose=tip_goal,
+                ),
+                EndMotion.when_true(cart_goal),
+            ]
         )
-        motion_statechart.add_node(cart_goal)
-        end = EndMotion()
-        motion_statechart.add_node(end)
-        end.start_condition = cart_goal.observation_variable
 
         executor = Executor(
             MotionStatechartContext(
@@ -1042,7 +1101,7 @@ class TestVelocityTasks:
                 root_link=root,
                 tip_link=tip,
                 goal_point=Point3(1, 0, 0, reference_frame=tip),
-                weight=DefaultWeights.WEIGHT_ABOVE_CA,
+                weight=DefaultWeights.WEIGHT_ABOVE_COLLISION_AVOIDANCE,
             )
         else:
             goal = CartesianOrientation(
@@ -1051,11 +1110,13 @@ class TestVelocityTasks:
                 goal_orientation=RotationMatrix.from_rpy(
                     yaw=np.pi / 2, reference_frame=tip
                 ),
-                weight=DefaultWeights.WEIGHT_ABOVE_CA,
+                weight=DefaultWeights.WEIGHT_ABOVE_COLLISION_AVOIDANCE,
             )
 
         low_weight_limit = limit_cls(
-            root_link=root, tip_link=tip, weight=DefaultWeights.WEIGHT_BELOW_CA
+            root_link=root,
+            tip_link=tip,
+            weight=DefaultWeights.WEIGHT_BELOW_COLLISION_AVOIDANCE,
         )
         motion_statechart = self._build_msc(goal_node=goal, limit_node=low_weight_limit)
         cancel_motion = CancelMotion(exception=Exception("test"))
