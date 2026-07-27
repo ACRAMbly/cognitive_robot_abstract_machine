@@ -25,7 +25,9 @@ from krrood.adapters.json_serializer import (
     SubclassJSONSerializer,
     JSON_TYPE_NAME,
     to_json,
+    from_json,
 )
+from krrood.patterns.field_metadata import JSONMetadata
 from krrood.symbolic_math.symbolic_math import FloatVariable, Scalar, trinary_logic_not
 from krrood.exceptions import DataclassException
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
@@ -377,7 +379,7 @@ class NodeArtifacts:
 
 
 @dataclass(repr=False, eq=False)
-class MotionStatechartNode(SubclassJSONSerializer):
+class MotionStatechartNode:
     name: str = field(default=None, kw_only=True)
     """
     A name for the node within a motion statechart.
@@ -401,7 +403,9 @@ class MotionStatechartNode(SubclassJSONSerializer):
     reference nodes by :attr:`unique_name`, which is reproduced deterministically on load.
     """
 
-    parent_node_index: Optional[int] = field(default=None, init=False)
+    parent_node_index: Optional[int] = field(
+        default=None, init=False, metadata=JSONMetadata(serialize=True).as_dict()
+    )
     """
     The index of the parent node in the motion statechart, if None, it is on the top layer of a motion statechart.
     """
@@ -850,49 +854,6 @@ class MotionStatechartNode(SubclassJSONSerializer):
             raise NotInMotionStatechartError(self.name)
         self._reset_condition.update_expression(expression, self)
 
-    def _json_excluded_fields(self) -> set[str]:
-        """
-        Names of init fields that the generic serializer must not write, so subclasses can
-        serialize them in a custom way.
-        """
-        return set()
-
-    def to_json(self) -> Dict[str, Any]:
-        json_data = super().to_json()
-        excluded_fields = self._json_excluded_fields()
-        for field_ in fields(self):
-            if field_.name in excluded_fields:
-                continue
-            if not field_.name.startswith("_") and field_.init:
-                value = getattr(self, field_.name)
-                json_data[field_.name] = to_json(value)
-        if self.parent_node_index is not None:
-            json_data["parent_node_index"] = self.parent_node_index
-        return json_data
-
-    @classmethod
-    def _from_json(cls, data: Dict[str, Any], **kwargs) -> Self:
-        node_kwargs = {}
-        for field_name, field_data in data.items():
-            if field_name == JSON_TYPE_NAME:
-                continue
-            if isinstance(field_data, dict) and JSON_TYPE_NAME in field_data:
-                field_data = SubclassJSONSerializer.from_json(field_data, **kwargs)
-            if isinstance(field_data, list):
-                field_data = [
-                    SubclassJSONSerializer.from_json(element_data, **kwargs)
-                    for element_data in field_data
-                ]
-            if isinstance(field_data, dict):
-                raise NotImplementedError(
-                    "dict parameters of MotionStatechartNode are not supported yet. Use a list instead."
-                )
-            node_kwargs[field_name] = field_data
-        parent_node_index = node_kwargs.pop("parent_node_index", None)
-        result = cls(**node_kwargs)
-        result.parent_node_index = parent_node_index
-        return result
-
     def formatted_name(self, quoted: bool = False) -> str:
         formatted_name = string_shortener(
             original_str=str(self.name), max_lines=4, max_line_length=25
@@ -923,6 +884,47 @@ class MotionStatechartNode(SubclassJSONSerializer):
 GenericMotionStatechartNode = TypeVar(
     "GenericMotionStatechartNode", bound=MotionStatechartNode
 )
+
+
+def velocity_convergence_expression(
+    context: MotionStatechartContext,
+    joint_convergence_threshold: float,
+    minimum_threshold: float,
+    maximum_threshold: float,
+) -> Scalar:
+    """
+    Builds a trinary expression that is true once every active degree of freedom's
+    velocity has dropped below a threshold derived from its own maximum velocity, and
+    at least one simulated second of trajectory time has elapsed.
+
+    :param context: Supplies the world's active degrees of freedom and control cycle
+        timing.
+    :param joint_convergence_threshold: Fraction of a degree of freedom's maximum
+        velocity below which it is considered settled.
+    :param minimum_threshold: Lower bound for the per-degree-of-freedom velocity
+        threshold.
+    :param maximum_threshold: Upper bound for the per-degree-of-freedom velocity
+        threshold.
+    :return: A trinary :class:`~krrood.symbolic_math.symbolic_math.Scalar` expression,
+        true once the world has settled.
+    """
+    ref = []
+    symbols = []
+    for dof in context.world.active_degrees_of_freedom:
+        velocity_limit = dof.limits.upper.velocity * joint_convergence_threshold
+        velocity_limit = min(max(minimum_threshold, velocity_limit), maximum_threshold)
+        ref.append(velocity_limit)
+        symbols.append(dof.variables.velocity)
+
+    dt = (
+        context.qp_controller_config.control_dt
+        or context.qp_controller_config.model_predictive_control_time_step
+    )
+    trajectory_longer_than_one_second = context.control_cycle_variable * dt > 1
+    return sm.trinary_logic_and(
+        trajectory_longer_than_one_second,
+        sm.logic_all(sm.abs(sm.Vector(symbols)) < sm.Vector(ref)),
+    )
 
 
 @dataclass(eq=False, repr=False)
@@ -1058,8 +1060,39 @@ class EndMotion(MotionStatechartNode):
         default_factory=NodePlotSpec.create_end_style, kw_only=True, init=False
     )
 
+    joint_convergence_threshold: float = field(default=0.01, kw_only=True)
+    """
+    Fraction of a degree of freedom's maximum velocity below which it is considered
+    settled. Only used while at least one active degree of freedom exists; see
+    :meth:`build`.
+    """
+
+    minimum_threshold: float = field(default=0.01, kw_only=True)
+    """
+    Lower bound for the per-degree-of-freedom velocity threshold.
+    """
+
+    maximum_threshold: float = field(default=0.06, kw_only=True)
+    """
+    Upper bound for the per-degree-of-freedom velocity threshold.
+    """
+
     def build(self, context: MotionStatechartContext) -> NodeArtifacts:
-        return NodeArtifacts(observation=Scalar.const_true())
+        """
+        Reports "done" only once the world has actually settled, so the motion isn't
+        cut short while the controller is still commanding nonzero velocity.
+        .. note:: If the world has no active degrees of freedom, there is nothing to
+            converge, so this reports done immediately once running, same as before.
+        """
+        if not context.world.active_degrees_of_freedom:
+            return NodeArtifacts(observation=Scalar.const_true())
+        observation = velocity_convergence_expression(
+            context=context,
+            joint_convergence_threshold=self.joint_convergence_threshold,
+            minimum_threshold=self.minimum_threshold,
+            maximum_threshold=self.maximum_threshold,
+        )
+        return NodeArtifacts(observation=observation)
 
     @classmethod
     def when_true(cls, node: MotionStatechartNode) -> Self:
@@ -1118,15 +1151,6 @@ class CancelMotion(MotionStatechartNode):
 
     def on_tick(self, context: MotionStatechartContext) -> Optional[float]:
         raise self.exception
-
-    def _json_excluded_fields(self) -> set[str]:
-        return {"exception"}
-
-    def to_json(self) -> Dict[str, Any]:
-        json_data = super().to_json()
-        # cast to general exception, because it can be json serialized
-        json_data["exception"] = to_json(Exception(str(self.exception)))
-        return json_data
 
     @classmethod
     def when_true(
