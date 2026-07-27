@@ -1,11 +1,11 @@
 """
-Exhaustive verbalization-surface verification for any package.
+Exhaustive verbalization-result verification for any package.
 
-Point a :class:`SymbolicSurfaceSnapshot` at a package and a committed list of
-:class:`VerbalizationSurface` entries. Its three ``assert_*`` methods, used as the bodies of three
+Point a :class:`SymbolicResultSnapshot` at a package and a committed list of
+:class:`VerbalizationResult` entries. Its three ``assert_*`` methods, used as the bodies of three
 tests, check that every concrete symbolic callable the package defines (1) implements its own
-verbalization fragment, (2) has a declared surface, and (3) renders exactly its declared sentence —
-so a new predicate or function, or a changed shared surface builder, cannot slip through unreviewed.
+verbalization fragment, (2) has a declared result, and (3) renders exactly its declared sentence —
+so a new predicate or function, or a changed shared result builder, cannot slip through unreviewed.
 
 The same three-line test works for any package that defines
 :class:`~krrood.entity_query_language.predicate.SymbolicCallable` subclasses (krrood itself,
@@ -32,7 +32,7 @@ from krrood.utils import module_and_class_name
 
 
 @dataclass(frozen=True)
-class VerbalizationSurface:
+class VerbalizationResult:
     """
     One symbolic callable and the sentence it verbalizes to — a committed snapshot
     entry.
@@ -40,7 +40,7 @@ class VerbalizationSurface:
 
     callable_class: Type[SymbolicCallable]
     """
-    The symbolic function or predicate whose surface this records.
+    The symbolic function or predicate whose result this records.
     """
 
     sentence: str
@@ -50,13 +50,13 @@ class VerbalizationSurface:
 
 
 @dataclass(frozen=True)
-class SymbolicSurfaceSnapshot:
+class SymbolicResultSnapshot:
     """
-    Exhaustive verbalization-surface check for the symbolic callables a package defines.
+    Exhaustive verbalization-result check for the symbolic callables a package defines.
 
     Discovers every concrete :class:`~krrood.entity_query_language.predicate.SymbolicCallable` in
     :attr:`package`, renders each with placeholder operands, and checks the rendering against the
-    committed :attr:`surfaces`. Use the three ``assert_*`` methods as the bodies of three tests.
+    committed :attr:`results`. Use the three ``assert_*`` methods as the bodies of three tests.
     """
 
     package: ModuleType
@@ -64,9 +64,9 @@ class SymbolicSurfaceSnapshot:
     The package whose symbolic callables are discovered and checked.
     """
 
-    surfaces: Sequence[VerbalizationSurface]
+    results: Sequence[VerbalizationResult]
     """
-    The committed expected surfaces, one per covered class.
+    The committed expected results, one per covered class.
     """
 
     def discovered_callables(self) -> Tuple[Type[SymbolicCallable], ...]:
@@ -85,7 +85,7 @@ class SymbolicSurfaceSnapshot:
     def has_fragment(cls: Type[SymbolicCallable]) -> bool:
         """
         :param cls: The symbolic callable to check.
-        :return: whether *cls* decided its surface by implementing its own fragment.
+        :return: whether *cls* decided its result by implementing its own fragment.
         """
         return class_implements_own_method(
             cls._verbalization_fragment_, Verbalizable._verbalization_fragment_
@@ -98,7 +98,7 @@ class SymbolicSurfaceSnapshot:
         A field gets the value *cls* declares via
         :meth:`~krrood.entity_query_language.predicate.SymbolicCallable._placeholder_operand_overrides_`,
         else a fresh variable of the field's type endpoint as the class diagram resolves it
-        (``object`` when the endpoint is not a plain class), so the surface reads the operand as
+        (``object`` when the endpoint is not a plain class), so the result reads the operand as
         *"a <TypeName>"*.
 
         :param cls: The symbolic callable to build operands for.
@@ -125,16 +125,16 @@ class SymbolicSurfaceSnapshot:
             operands[field_.name] = variable(placeholder_type, [])
         return operands
 
-    def rendered_surface(self, cls: Type[SymbolicCallable]) -> str:
+    def rendered_result(self, cls: Type[SymbolicCallable]) -> str:
         """
         :param cls: The symbolic callable to render.
         :return: the sentence *cls* renders with placeholder operands.
         """
         return verbalize_expression(cls(**self.placeholder_operands(cls)))
 
-    def assert_surfaces_cover_every_callable(self) -> None:
+    def assert_results_cover_every_callable(self) -> None:
         """
-        Assert the declared surfaces are exactly the discovered callables — a new class
+        Assert the declared results are exactly the discovered callables — a new class
         with no entry, or an entry for a class that no longer exists, is a red test.
         """
         discovered = {
@@ -143,29 +143,29 @@ class SymbolicSurfaceSnapshot:
             if self.has_fragment(cls)
         }
         declared = {
-            module_and_class_name(surface.callable_class) for surface in self.surfaces
+            module_and_class_name(result.callable_class) for result in self.results
         }
         missing = sorted(discovered - declared)
         stale = sorted(declared - discovered)
         assert discovered == declared, (
-            f"Declared surfaces are out of sync. Discovered classes with no entry (add one): "
+            f"Declared results are out of sync. Discovered classes with no entry (add one): "
             f"{missing}. Entries whose class is no longer discovered (remove them): {stale}."
         )
 
-    def assert_declared_surfaces_render_as_stated(self) -> None:
+    def assert_declared_results_render_as_stated(self) -> None:
         """
         Assert every declared sentence matches what its class renders, so any wording
         change is re-approved by updating the entry and reviewing the diff.
         """
         mismatches = {
-            module_and_class_name(surface.callable_class): self.rendered_surface(
-                surface.callable_class
+            module_and_class_name(result.callable_class): self.rendered_result(
+                result.callable_class
             )
-            for surface in self.surfaces
-            if self.has_fragment(surface.callable_class)
-            and self.rendered_surface(surface.callable_class) != surface.sentence
+            for result in self.results
+            if self.has_fragment(result.callable_class)
+            and self.rendered_result(result.callable_class) != result.sentence
         }
         assert not mismatches, (
-            "Verbalization surfaces changed. Update the sentence for each of these in the snapshot "
+            "Verbalization results changed. Update the sentence for each of these in the snapshot "
             f"module: {mismatches}."
         )

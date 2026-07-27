@@ -1,9 +1,9 @@
 """
-Generates a committed :class:`VerbalizationSurface` snapshot module from a
-:class:`SymbolicSurfaceSnapshot`.
+Generates a committed :class:`VerbalizationResult` snapshot module from a
+:class:`SymbolicResultSnapshot`.
 
 Uses :class:`~krrood.code_generation.generator.CodeGenerator` so the module is produced
-rather than hand-transcribed: call :func:`regenerate_verbalization_surfaces` from a
+rather than hand-transcribed: call :func:`regenerate_verbalization_results` from a
 package's own ``conftest.py`` at import time, so the committed file is always fresh and a
 wording change shows up as an ordinary diff to review before committing.
 """
@@ -26,20 +26,20 @@ from krrood.code_generation.generator import CodeGenerator
 from krrood.code_generation.imports import get_imports_from_types
 from krrood.code_generation.type_hints import value_to_source
 from krrood.entity_query_language.predicate import SymbolicCallable
-from krrood.entity_query_language.testing.surface_verification import (
-    SymbolicSurfaceSnapshot,
-    VerbalizationSurface,
+from krrood.entity_query_language.testing.result_verification import (
+    SymbolicResultSnapshot,
+    VerbalizationResult,
 )
 
 
 @dataclass
-class VerbalizationSurfaceGenerator:
+class VerbalizationResultGenerator:
     """
-    Renders the Python source of a ``SURFACES`` snapshot module for a
-    :class:`SymbolicSurfaceSnapshot`.
+    Renders the Python source of a ``RESULTS`` snapshot module for a
+    :class:`SymbolicResultSnapshot`.
     """
 
-    snapshot: SymbolicSurfaceSnapshot
+    snapshot: SymbolicResultSnapshot
     """
     The snapshot whose covered callables and renderings this generator emits.
     """
@@ -66,39 +66,39 @@ class VerbalizationSurfaceGenerator:
             if self.snapshot.has_fragment(cls)
         )
 
-    def covered_surfaces(self) -> Tuple[VerbalizationSurface, ...]:
+    def covered_results(self) -> Tuple[VerbalizationResult, ...]:
         """
         The data the generated module declares.
 
-        :return: one :class:`VerbalizationSurface` per covered callable, built directly
+        :return: one :class:`VerbalizationResult` per covered callable, built directly
             from the snapshot's own rendering.
         """
         return tuple(
-            VerbalizationSurface(cls, self.snapshot.rendered_surface(cls))
+            VerbalizationResult(cls, self.snapshot.rendered_result(cls))
             for cls in self.covered_callables()
         )
 
     @staticmethod
-    def _entry(surface: VerbalizationSurface) -> Dict[str, Any]:
+    def _entry(result: VerbalizationResult) -> Dict[str, Any]:
         return {
-            "class_name": surface.callable_class.__qualname__,
-            "sentence": value_to_source(surface.sentence),
+            "class_name": result.callable_class.__qualname__,
+            "sentence": value_to_source(result.sentence),
         }
 
     def generate(self) -> str:
-        """:return: the Python source of a module declaring ``SURFACES``, one
-        :class:`VerbalizationSurface` per covered callable."""
-        surfaces = self.covered_surfaces()
+        """:return: the Python source of a module declaring ``RESULTS``, one
+        :class:`VerbalizationResult` per covered callable."""
+        results = self.covered_results()
         imports = get_imports_from_types(
             [
-                VerbalizationSurface,
+                VerbalizationResult,
                 Tuple,
-                *(surface.callable_class for surface in surfaces),
+                *(result.callable_class for result in results),
             ]
         )
-        entries = [self._entry(surface) for surface in surfaces]
+        entries = [self._entry(result) for result in results]
         return self.code_generator.render(
-            "verbalization_surfaces.py.jinja", imports=imports, entries=entries
+            "verbalization_results.py.jinja", imports=imports, entries=entries
         )
 
     def write(self, path: Union[str, Path]) -> None:
@@ -112,11 +112,11 @@ class VerbalizationSurfaceGenerator:
         run_ruff_format_on_file(str(path))
 
 
-def regenerate_verbalization_surfaces(
+def regenerate_verbalization_results(
     package: ModuleType, destination: Union[str, Path]
 ) -> None:
     """
-    Regenerate *package*'s committed ``SURFACES`` snapshot module at *destination*.
+    Regenerate *package*'s committed ``RESULTS`` snapshot module at *destination*.
 
     Writes to a temporary file in *destination*'s own directory and replaces it
     atomically, so a concurrent reader (e.g. a pytest-xdist worker) never observes a
@@ -127,8 +127,8 @@ def regenerate_verbalization_surfaces(
     :param destination: The module file to (re)write.
     """
     destination = Path(destination)
-    generator = VerbalizationSurfaceGenerator(
-        snapshot=SymbolicSurfaceSnapshot(package=package, surfaces=())
+    generator = VerbalizationResultGenerator(
+        snapshot=SymbolicResultSnapshot(package=package, results=())
     )
     with tempfile.NamedTemporaryFile(
         "w", dir=destination.parent, suffix=".py.tmp", delete=False
