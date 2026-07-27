@@ -90,11 +90,6 @@ class Executor:
 
     context: MotionStatechartContext
 
-    tmp_folder: str = field(default="/tmp/")
-    """
-    Path to safe temporary files.
-    """
-
     trajectory_plotter: WorldStateTrajectoryPlotter | None = field(default=None)
     """
     The trajectory plotter used to plot the robot's trajectory.
