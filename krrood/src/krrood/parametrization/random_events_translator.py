@@ -88,6 +88,10 @@ class WhereExpressionToRandomEventTranslator:
 
         :param expression: The expression to translate.
         :return: The random event that holds exactly where the expression holds.
+        :raises WhereExpressionIsFirstOrder: When the expression quantifies over a
+            variable.
+        :raises WhereExpressionHasNoRandomEventRepresentation: When the expression
+            constrains nothing that a random event variable stands for.
         """
         if isinstance(expression, QuantifiedConditional):
             raise WhereExpressionIsFirstOrder(expression)
@@ -137,17 +141,17 @@ class WhereExpressionToRandomEventTranslator:
 
         match comparator.operation:
             case operator.eq:
-                self._translate_eq(comparator, variable, result)
+                self._translate_equal(comparator, variable, result)
             case operator.ne:
-                self._translate_ne(comparator, variable, result)
+                self._translate_not_equal(comparator, variable, result)
             case operator.gt:
-                self._translate_gt(comparator, variable, result)
+                self._translate_greater_than(comparator, variable, result)
             case operator.lt:
-                self._translate_lt(comparator, variable, result)
+                self._translate_less_than(comparator, variable, result)
             case operator.ge:
-                self._translate_ge(comparator, variable, result)
+                self._translate_greater_than_or_equal(comparator, variable, result)
             case operator.le:
-                self._translate_le(comparator, variable, result)
+                self._translate_less_than_or_equal(comparator, variable, result)
             case _:
                 assert_never(comparator.operation)
 
@@ -174,7 +178,7 @@ class WhereExpressionToRandomEventTranslator:
         """
         return self.unconstrained_event().complement()
 
-    def _translate_eq(
+    def _translate_equal(
         self,
         comparator: Comparator,
         parametrization_variable: random_events.variable.Variable,
@@ -184,7 +188,7 @@ class WhereExpressionToRandomEventTranslator:
             comparator.right._value_
         )
 
-    def _translate_ne(
+    def _translate_not_equal(
         self,
         comparator: Comparator,
         parametrization_variable: random_events.variable.Variable,
@@ -194,7 +198,7 @@ class WhereExpressionToRandomEventTranslator:
             comparator.right._value_
         ).complement()
 
-    def _translate_gt(
+    def _translate_greater_than(
         self,
         comparator: Comparator,
         parametrization_variable: random_events.variable.Variable,
@@ -202,7 +206,7 @@ class WhereExpressionToRandomEventTranslator:
     ) -> None:
         result[parametrization_variable] &= open(comparator.right._value_, np.inf)
 
-    def _translate_lt(
+    def _translate_less_than(
         self,
         comparator: Comparator,
         parametrization_variable: random_events.variable.Variable,
@@ -213,7 +217,7 @@ class WhereExpressionToRandomEventTranslator:
             comparator.right._value_,
         )
 
-    def _translate_le(
+    def _translate_less_than_or_equal(
         self,
         comparator: Comparator,
         parametrization_variable: random_events.variable.Variable,
@@ -224,7 +228,7 @@ class WhereExpressionToRandomEventTranslator:
             comparator.right._value_,
         )
 
-    def _translate_ge(
+    def _translate_greater_than_or_equal(
         self,
         comparator: Comparator,
         parametrization_variable: random_events.variable.Variable,
