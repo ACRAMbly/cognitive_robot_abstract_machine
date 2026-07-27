@@ -109,9 +109,7 @@ class MetadataNamed(Predicate):
     """
 
     burning_thing: object = field(
-        metadata=FieldMetadata(
-            other_metadata=[GrammarMetadata(display_name="torch")]
-        ).as_dict()
+        metadata=GrammarMetadata(display_name="torch").as_dict()
     )
 
     def __call__(self) -> bool:
