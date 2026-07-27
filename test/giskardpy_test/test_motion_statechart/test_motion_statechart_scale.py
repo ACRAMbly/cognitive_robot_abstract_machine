@@ -8,10 +8,7 @@ from giskardpy.motion_statechart.data_types import LifeCycleValues
 from giskardpy.motion_statechart.goals.templates import Sequence
 from giskardpy.motion_statechart.graph_node import EndMotion, MotionStatechartNode
 from giskardpy.motion_statechart.motion_statechart import MotionStatechart
-from giskardpy.motion_statechart.test_nodes.test_nodes import (
-    ConstFalseNode,
-    ConstTrueNode,
-)
+from giskardpy.motion_statechart.nodes_for_testing.nodes_for_testing import ConstTrueNode, ConstFalseNode
 from semantic_digital_twin.world import World
 
 
