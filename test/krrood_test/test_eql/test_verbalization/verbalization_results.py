@@ -29,7 +29,7 @@ from krrood.entity_query_language.verbalization._example_domain import (
 from krrood.inheritance_path_length import InheritancePathLength
 from krrood.patterns.role_predicates import IsSameSemanticEntity
 
-RESULTS: tuple[VerbalizationResult, ...] = (
+results: tuple[VerbalizationResult, ...] = (
     VerbalizationResult(
         AttributeOwnerClass, "the attribute owner class of an Attribute"
     ),
@@ -54,6 +54,7 @@ RESULTS: tuple[VerbalizationResult, ...] = (
         "the inheritance path length between a child class and a parent class",
     ),
     VerbalizationResult(
-        IsSameSemanticEntity, "an entity 1 is the same entity as an entity 2"
+        IsSameSemanticEntity,
+        "a first entity is the same semantic entity as a second entity",
     ),
 )

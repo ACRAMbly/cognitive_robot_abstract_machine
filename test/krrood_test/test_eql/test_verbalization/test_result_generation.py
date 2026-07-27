@@ -13,7 +13,7 @@ from krrood.entity_query_language.testing.result_generation import (
     VerbalizationResultGenerator,
 )
 from krrood.entity_query_language.testing.result_verification import (
-    SymbolicResultSnapshot,
+    VerbalizationResultsOfPackage,
 )
 from krrood.entity_query_language.verbalization import _example_domain
 
@@ -26,10 +26,10 @@ def test_generated_results_pass_their_own_snapshot_verification():
     verification assertions -- the same coverage and wording checks a hand-written entry
     has to pass, against the real objects the generator produces.
     """
-    snapshot = SymbolicResultSnapshot(package=_example_domain, results=())
+    snapshot = VerbalizationResultsOfPackage(package=_example_domain, results=())
     generator = VerbalizationResultGenerator(snapshot=snapshot)
 
-    round_trip_snapshot = SymbolicResultSnapshot(
+    round_trip_snapshot = VerbalizationResultsOfPackage(
         package=_example_domain, results=generator.covered_results()
     )
     round_trip_snapshot.assert_results_cover_every_callable()

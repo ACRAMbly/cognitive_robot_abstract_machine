@@ -1,6 +1,6 @@
 """
 Generates a committed :class:`VerbalizationResult` snapshot module from a
-:class:`SymbolicResultSnapshot`.
+:class:`VerbalizationResultsOfPackage`.
 
 Uses :class:`~krrood.code_generation.generator.CodeGenerator` so the module is produced
 rather than hand-transcribed: call :func:`regenerate_verbalization_results` from a
@@ -27,7 +27,7 @@ from krrood.code_generation.imports import get_imports_from_types
 from krrood.code_generation.type_hints import value_to_source
 from krrood.entity_query_language.predicate import SymbolicCallable
 from krrood.entity_query_language.testing.result_verification import (
-    SymbolicResultSnapshot,
+    VerbalizationResultsOfPackage,
     VerbalizationResult,
 )
 
@@ -35,11 +35,11 @@ from krrood.entity_query_language.testing.result_verification import (
 @dataclass
 class VerbalizationResultGenerator:
     """
-    Renders the Python source of a ``RESULTS`` snapshot module for a
-    :class:`SymbolicResultSnapshot`.
+    Renders the Python source of a ``results`` snapshot module for a
+    :class:`VerbalizationResultsOfPackage`.
     """
 
-    snapshot: SymbolicResultSnapshot
+    snapshot: VerbalizationResultsOfPackage
     """
     The snapshot whose covered callables and renderings this generator emits.
     """
@@ -86,7 +86,7 @@ class VerbalizationResultGenerator:
         }
 
     def generate(self) -> str:
-        """:return: the Python source of a module declaring ``RESULTS``, one
+        """:return: the Python source of a module declaring ``results``, one
         :class:`VerbalizationResult` per covered callable."""
         results = self.covered_results()
         imports = get_imports_from_types(
@@ -116,7 +116,7 @@ def regenerate_verbalization_results(
     package: ModuleType, destination: Union[str, Path]
 ) -> None:
     """
-    Regenerate *package*'s committed ``RESULTS`` snapshot module at *destination*.
+    Regenerate *package*'s committed ``results`` snapshot module at *destination*.
 
     Writes to a temporary file in *destination*'s own directory and replaces it
     atomically, so a concurrent reader (e.g. a pytest-xdist worker) never observes a
@@ -128,7 +128,7 @@ def regenerate_verbalization_results(
     """
     destination = Path(destination)
     generator = VerbalizationResultGenerator(
-        snapshot=SymbolicResultSnapshot(package=package, results=())
+        snapshot=VerbalizationResultsOfPackage(package=package, results=())
     )
     with tempfile.NamedTemporaryFile(
         "w", dir=destination.parent, suffix=".py.tmp", delete=False

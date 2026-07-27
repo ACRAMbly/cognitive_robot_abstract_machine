@@ -1,7 +1,7 @@
 """
 Exhaustive verbalization-result verification for any package.
 
-Point a :class:`SymbolicResultSnapshot` at a package and a committed list of
+Point a :class:`VerbalizationResultsOfPackage` at a package and a committed list of
 :class:`VerbalizationResult` entries. Its three ``assert_*`` methods, used as the bodies of three
 tests, check that every concrete symbolic callable the package defines (1) implements its own
 verbalization fragment, (2) has a declared result, and (3) renders exactly its declared sentence —
@@ -50,7 +50,7 @@ class VerbalizationResult:
 
 
 @dataclass(frozen=True)
-class SymbolicResultSnapshot:
+class VerbalizationResultsOfPackage:
     """
     Exhaustive verbalization-result check for the symbolic callables a package defines.
 
