@@ -179,7 +179,9 @@ def test_joint_goal(tmp_path):
     msc.draw(str(tmp_path / "muh.pdf"))
     kin_sim.tick_until_end()
     msc.draw(str(tmp_path / "muh.pdf"))
-    assert len(msc.history) == 6
+    # +1 compared to the tick count without a moving dof: EndMotion now waits for the
+    # dof's velocity to settle below its convergence threshold before observing True.
+    assert len(msc.history) == 7
     assert (
         msc.history.get_observation_history_of_node(task1)[-1]
         == ObservationStateValues.TRUE
