@@ -207,7 +207,7 @@ class Verbalizable(ABC):
 @dataclass(frozen=True)
 class OverriddenOperand:
     """
-    One dataclass field's concrete VALUE for a symbolic callable whose fragment reads
+    One dataclass field's concrete value for a symbolic callable whose fragment reads
     that field directly rather than treating it as a symbolic operand.
 
     A ``Type`` field, for example, cannot be resolved by a placeholder variable alone —
@@ -248,7 +248,7 @@ class SymbolicCallable(Symbol, Verbalizable, HasBoundValue, ABC):
     def _placeholder_operand_overrides_(cls) -> Sequence[OverriddenOperand]:
         """:return: concrete field overrides for placeholder-operand rendering (an example
         instantiation built for a snapshot test) -- fields whose fragment reads the field's raw
-        VALUE rather than treating it as a symbolic operand. Empty by default.
+        value rather than treating it as a symbolic operand. Empty by default.
         """
         return ()
 

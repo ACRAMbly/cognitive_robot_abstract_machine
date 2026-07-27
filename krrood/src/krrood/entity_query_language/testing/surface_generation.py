@@ -54,8 +54,12 @@ class VerbalizationSurfaceGenerator:
         self.code_generator = CodeGenerator(template_directory=str(templates))
 
     def covered_callables(self) -> Tuple[Type[SymbolicCallable], ...]:
-        """:return: the discovered callables that implement their own verbalization
-        fragment, in the order they appear in the generated module."""
+        """
+        The callables this generator emits an entry for.
+
+        :return: the discovered callables that implement their own verbalization
+            fragment, in the order they appear in the generated module.
+        """
         return tuple(
             cls
             for cls in self.snapshot.discovered_callables()
@@ -63,8 +67,12 @@ class VerbalizationSurfaceGenerator:
         )
 
     def covered_surfaces(self) -> Tuple[VerbalizationSurface, ...]:
-        """:return: one :class:`VerbalizationSurface` per covered callable, built directly
-        from the snapshot's own rendering -- the data the generated module declares."""
+        """
+        The data the generated module declares.
+
+        :return: one :class:`VerbalizationSurface` per covered callable, built directly
+            from the snapshot's own rendering.
+        """
         return tuple(
             VerbalizationSurface(cls, self.snapshot.rendered_surface(cls))
             for cls in self.covered_callables()
