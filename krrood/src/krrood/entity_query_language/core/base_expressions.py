@@ -229,7 +229,7 @@ class SymbolicExpression(ABC):
         results = (
             self._process_result_(res)
             for res in self._evaluate_()
-            if res.is_true or not self._records_truth_
+            if not self._records_truth_ or res.is_true
         )
         yield from itertools.islice(results, self._limit_)
 
@@ -1030,6 +1030,11 @@ class OperationResult:
     ``satisfied_condition_ids``, this is populated on every yielded result, not only at the conditions root.
     """
 
+    _is_false_: Optional[bool] = field(default=None, init=False, repr=False)
+    """
+    The truth read from the operand, once it has been read. See :attr:`is_false`.
+    """
+
     @property
     def all_bindings(self) -> Bindings:
         """
@@ -1059,15 +1064,22 @@ class OperationResult:
         Whether the operation was not satisfied, as read by the operand that produced
         this result.
 
+        Read from the operand once and kept, since a bound value's truth can be
+        arbitrarily expensive to obtain — a predicate reads as its own truth, and
+        evaluating one runs whatever that predicate does — while truth is read many
+        times over a single result as it flows through the operators that filter on it.
+
         ..note:: The operand answers this rather than the result reading its binding
             itself, because what a binding says about truth depends on what the
             expression records there: a truth for an operator, a value whose truthiness
             is its truth in a condition for a variable, and a selection saying nothing
             at all for a query.
         """
-        if self.operand is None:
-            return False
-        return self.operand._result_is_false_(self)
+        if self._is_false_ is None:
+            self._is_false_ = (
+                self.operand is not None and self.operand._result_is_false_(self)
+            )
+        return self._is_false_
 
     @property
     def is_true(self) -> bool:

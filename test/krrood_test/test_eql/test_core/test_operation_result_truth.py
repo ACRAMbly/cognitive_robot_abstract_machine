@@ -7,6 +7,8 @@ an outcome. Every assertion is on the public contract (``is_true``/``is_false``)
 on how the value is stored.
 """
 
+from dataclasses import dataclass
+
 from typing_extensions import List, Optional
 
 from krrood.entity_query_language.core.base_expressions import (
@@ -16,6 +18,7 @@ from krrood.entity_query_language.core.base_expressions import (
 from krrood.entity_query_language.factories import (
     and_,
     entity,
+    evaluate_condition,
     exists,
     for_all,
     not_,
@@ -161,6 +164,58 @@ def test_union_reports_the_truth_value_of_each_child_result():
     other_value = variable_from([3])
 
     assert truth_values(Union((value > 5, other_value > 5))) == [True, False]
+
+
+# %% cost of reading a result's truth
+
+
+@dataclass
+class TruthCountingValue:
+    """
+    A value that records how often its truth was read.
+
+    Stands in for a bound value whose truth is expensive to obtain — a predicate reads
+    as its own truth, and evaluating one can run arbitrary work.
+    """
+
+    reads: int = 0
+    """
+    How many times the truth of this value has been read.
+    """
+
+    def __bool__(self) -> bool:
+        self.reads += 1
+        return True
+
+
+def test_a_result_reads_the_truth_of_its_binding_once():
+    """
+    Reading a result's truth repeatedly must not re-derive it from the binding.
+
+    A bound value's truth can be arbitrarily expensive to obtain, and truth is read many
+    times over a single result as it flows through the operators that filter on it.
+    """
+    value = TruthCountingValue()
+    [result] = list(variable_from([value])._evaluate_())
+
+    assert result.is_true
+    reads_after_first = value.reads
+
+    assert result.is_true
+    assert not result.is_false
+
+    assert value.reads == reads_after_first
+
+
+def test_reading_truth_does_not_multiply_with_the_operators_filtering_on_it():
+    """
+    Each operator a value flows through asks its result whether it is true, so a value
+    whose truth is expensive must not pay once per operator.
+    """
+    value = TruthCountingValue()
+
+    assert evaluate_condition(and_(variable_from([value]), variable_from([1]) > 0))
+    assert value.reads == 1
 
 
 # %% unification of a result
