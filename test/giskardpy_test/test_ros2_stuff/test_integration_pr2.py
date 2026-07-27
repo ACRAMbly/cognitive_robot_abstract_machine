@@ -53,6 +53,10 @@ from giskardpy.motion_statechart.monitors.overwrite_state_monitors import (
     SetOdometry,
     SetSeedConfiguration,
 )
+from giskardpy.motion_statechart.monitors.payload_monitors import (
+    CountSeconds,
+    CountSimulationTimeSeconds,
+)
 from giskardpy.motion_statechart.motion_statechart import MotionStatechart
 from giskardpy.motion_statechart.tasks.align_planes import AlignPlanes
 from giskardpy.motion_statechart.tasks.cartesian_tasks import (
@@ -931,6 +935,8 @@ class TestSelfCollisionAvoidance:
             ]
         )
         msc.add_node(EndMotion.when_true(cart_goal))
+        msc.add_node(timeout := CountSimulationTimeSeconds(seconds=10))
+        msc.add_node(CancelMotion.when_true(timeout))
         giskard_better_pose.api.execute(msc)
 
     def test_avoid_self_collision_with_l_arm(self, giskard: PR2Tester):
