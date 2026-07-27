@@ -633,7 +633,10 @@ def test_avoid_collision_go_around_corner(pr2_with_box):
     kin_sim.tick_until_end(500)
 
 
-def test_avoid_self_collision_with_l_arm(pr2_with_box):
+def test_avoid_self_collision_with_l_arm(pr2_with_box, rclpy_node):
+    VizMarkerPublisher(
+        _world=pr2_with_box, node=rclpy_node
+    ).with_tf_and_collision_visualization()
     r_tip = pr2_with_box.get_kinematic_structure_entity_by_name("r_gripper_tool_frame")
     l_forearm_link = pr2_with_box.get_kinematic_structure_entity_by_name(
         "l_forearm_link"
@@ -710,6 +713,71 @@ def test_avoid_self_collision_with_l_arm(pr2_with_box):
     assert len(msc.nodes) == 76
 
     kin_sim.tick_until_end(500)
+
+def test_self_collision_is_ignored_without_explicit_task(pr2_with_box, rclpy_node):
+    VizMarkerPublisher(
+        _world=pr2_with_box, node=rclpy_node
+    ).with_tf_and_collision_visualization()
+    r_tip = pr2_with_box.get_kinematic_structure_entity_by_name("r_gripper_tool_frame")
+    base_footprint = pr2_with_box.get_kinematic_structure_entity_by_name(
+        "base_footprint"
+    )
+
+    msc = MotionStatechart()
+    msc.add_node(
+        goal := Sequence(
+            [
+                SetSeedConfiguration(
+                    seed_configuration=JointState.from_str_dict(
+                        {
+                            "r_elbow_flex_joint": -1.43286344265,
+                            "r_forearm_roll_joint": -1.26465060073,
+                            "r_shoulder_lift_joint": 0.47990329056,
+                            "r_shoulder_pan_joint": -0.281272240139,
+                            "r_upper_arm_roll_joint": -0.528415402668,
+                            "r_wrist_flex_joint": -1.18811419869,
+                            "r_wrist_roll_joint": 2.26884630124,
+                            "l_elbow_flex_joint": 0.0,
+                            "l_forearm_roll_joint": 0.0,
+                            "l_shoulder_lift_joint": 0.0,
+                            "l_shoulder_pan_joint": 0.0,
+                            "l_upper_arm_roll_joint": 0.0,
+                            "l_wrist_flex_joint": 0.0,
+                            "l_wrist_roll_joint": 0.0,
+                        },
+                        world=pr2_with_box,
+                    )
+                ),
+                CartesianPose(
+                    root_link=base_footprint,
+                    tip_link=r_tip,
+                    goal_pose=Pose.from_xyz_rpy(
+                        0.2, reference_frame=r_tip
+                    ),
+                    weight=DefaultWeights.WEIGHT_ABOVE_COLLISION_AVOIDANCE,
+                ),
+            ],
+        ),
+    )
+    msc.add_node(EndMotion.when_true(goal))
+
+    kin_sim = Executor(
+        MotionStatechartContext(
+            world=pr2_with_box,
+            qp_controller_config=QPControllerConfig(
+                target_frequency=100,
+                prediction_horizon=30,
+            ),
+        )
+    )
+    kin_sim.compile(motion_statechart=msc)
+
+    for node in msc.nodes:
+        assert not isinstance(node, SelfCollisionAvoidance)
+        assert not isinstance(node, ExternalCollisionAvoidance)
+
+    kin_sim.tick_until_end(500)
+    assert kin_sim.context.collision_manager.collision_consumers[0]._call_counter == 0
 
 
 def test_hard_constraints_violated(cylinder_bot_world: World):
