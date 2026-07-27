@@ -113,27 +113,21 @@ class ActiveConditionsRoot:
     fallback to the evaluation's own starting expression.
     """
 
-    def claim(
-        self, root: SymbolicExpression, originating_expression: SymbolicExpression
-    ) -> None:
+    def claim(self, root: SymbolicExpression, has_condition: bool) -> None:
         """
         Claim *root* as the active conditions root for this pass, if none is claimed
         yet.
 
-        :param root: The node to claim, normally ``originating_expression._conditions_root_``.
-        :param originating_expression: The expression starting this (context-less)
-            evaluation. Used only to detect whether *root* is the Filter-less fallback
-            (``root is originating_expression._root_`` — not necessarily
-            ``originating_expression`` itself, since a
-            :class:`~krrood.entity_query_language.query.query.Query` wrapper's
-            ``_conditions_root_``/``_root_`` both delegate to its compiled product, a
-            different object from the wrapper), so :meth:`has_condition` can answer "was
-            this pass actually gated by a ``Filter``" without recomputing it later in the
-            pass from a node that may itself be shared and structurally ambiguous.
+        :param root: The node to claim, normally
+            ``originating_expression._conditions_root_``.
+        :param has_condition: Whether *root* came from a genuine ``Filter``, so that
+            :meth:`has_condition` can answer "was this pass actually gated by a
+            ``Filter``" without recomputing it later in the pass from a node that may
+            itself be shared and structurally ambiguous.
         """
         if self._root_id is None:
             self._root_id = root._id_
-            self._has_condition = root is not originating_expression._root_
+            self._has_condition = has_condition
 
     def is_active_root(self, node: SymbolicExpression) -> bool:
         """:return: ``True`` if *node* is the active conditions root for this pass."""
@@ -263,25 +257,29 @@ class EvaluationContext:
     """
     List of observers to notify of evaluation events.
     """
+
     subtree_containment_cache: Dict[
         Tuple[uuid.UUID, Type[SymbolicExpression]], bool
     ] = field(default_factory=dict)
     """
-    Memoizes, per ``(node id, expression type)``, whether a node's subtree contains a descendant of
-    that type — a structural fact constant for the duration of an evaluation, so the hot path answers
-    it once instead of re-walking the subtree on every step.
+    Memoizes, per ``(node id, expression type)``, whether a node's subtree contains a
+    descendant of that type — a structural fact constant for the duration of an
+    evaluation, so the hot path answers it once instead of re-walking the subtree on
+    every step.
     """
+
     expression_index_cache: Dict[
         uuid.UUID, weakref.WeakValueDictionary[uuid.UUID, SymbolicExpression]
     ] = field(default_factory=dict)
     """
-    Memoizes, per tree-root id, an ``id -> node`` index built once per evaluation and reused for
-    every lookup instead of re-scanning the tree.
+    Memoizes, per tree-root id, an ``id -> node`` index built once per evaluation and
+    reused for every lookup instead of re-scanning the tree.
 
     ..warning:: The index holds nodes only through weak references. A context can be captured past
         its evaluation (for example by an inference explanation); strong references here would pin
         the whole query tree and its variables' domains.
     """
+
     active_conditions_root: ActiveConditionsRoot = field(
         default_factory=ActiveConditionsRoot
     )

@@ -96,11 +96,8 @@ def test_conditions_root_resolves_for_a_subexpression_shared_by_two_compound_con
     shared_subexpression = handle == fixed_connection.child
 
     first_drawers = deduced_variable(Drawer)
-    first_query = an(
-        entity(first_drawers).where(
-            and_(body == fixed_connection.parent, shared_subexpression)
-        )
-    )
+    first_compound = and_(body == fixed_connection.parent, shared_subexpression)
+    first_query = an(entity(first_drawers).where(first_compound))
     first_query.build()
 
     second_drawers = deduced_variable(Drawer)
@@ -114,7 +111,11 @@ def test_conditions_root_resolves_for_a_subexpression_shared_by_two_compound_con
         "this to exercise conditions-root resolution on a node shared two hops below "
         "its owning filters"
     )
-    assert shared_subexpression._conditions_root_ is not None
+    assert shared_subexpression._conditions_root_ is first_compound, (
+        "the subexpression's primary parent was fixed at its first attachment (to "
+        "first_compound), so resolution must land on first_query's own AND compound, "
+        "never second_query's"
+    )
 
 
 def test_conditions_root_resolves_for_a_rule_condition_reused_as_another_querys_filter():
@@ -141,7 +142,11 @@ def test_conditions_root_resolves_for_a_rule_condition_reused_as_another_querys_
         "Where filter for this to exercise conditions-root resolution on a rule "
         "condition reused outside its own rule tree"
     )
-    assert refinement_condition._conditions_root_ is not None
+    assert refinement_condition._conditions_root_ is query._conditions_root_, (
+        "the refinement condition's primary parent chain was fixed at its first "
+        "attachment inside query's own rule tree, so resolution must land on query's "
+        "own conditions root (its rule tree's Refinement), never other_query's"
+    )
 
 
 def test_conditions_root_resolves_after_insert_at_clones_an_already_parented_condition():
@@ -172,7 +177,11 @@ def test_conditions_root_resolves_after_insert_at_clones_an_already_parented_con
         "the original condition must be unaffected by the splice and still resolve "
         "within its own, untouched query"
     )
-    assert new_condition._conditions_root_ is not None
+    assert new_condition._conditions_root_ is query._conditions_root_, (
+        "the splice attaches new_condition into query's (the anchor's) own rule tree, "
+        "so its primary parent chain must resolve to query's own (now-grown) "
+        "conditions root"
+    )
 
 
 def test_generate_drawers_from_query(handles_and_containers_world):
@@ -622,7 +631,9 @@ def test_doc_example(rule_tree_doc_example_connections, alternative_code, result
 
 
 def test_conclusions_of_type_returns_matching_conclusions(handles_and_containers_world):
-    """``conclusions_of_type`` returns the attached conclusions of the requested subtype."""
+    """
+    ``conclusions_of_type`` returns the attached conclusions of the requested subtype.
+    """
     world = handles_and_containers_world
     container = variable(Container, domain=world.bodies)
     handle = variable(Handle, domain=world.bodies)
@@ -644,7 +655,10 @@ def test_conclusions_of_type_returns_matching_conclusions(handles_and_containers
 def test_conclusions_of_type_is_empty_without_matching_conclusions(
     handles_and_containers_world,
 ):
-    """``conclusions_of_type`` returns an empty list on an expression with no such conclusions."""
+    """
+    ``conclusions_of_type`` returns an empty list on an expression with no such
+    conclusions.
+    """
     world = handles_and_containers_world
     fixed_connection = variable(FixedConnection, domain=world.connections)
 
@@ -652,7 +666,9 @@ def test_conclusions_of_type_is_empty_without_matching_conclusions(
 
 
 def test_unwrapped_value_strips_literal_wrapper(handles_and_containers_world):
-    """``unwrapped_value`` returns the raw value behind a :class:`Literal` right-hand side."""
+    """
+    ``unwrapped_value`` returns the raw value behind a :class:`Literal` right-hand side.
+    """
     world = handles_and_containers_world
     container = variable(Container, domain=world.bodies)
     drawers = variable(Drawer, domain=[])
@@ -668,7 +684,10 @@ def test_unwrapped_value_strips_literal_wrapper(handles_and_containers_world):
 def test_unwrapped_value_returns_non_literal_right_unchanged(
     handles_and_containers_world,
 ):
-    """``unwrapped_value`` returns the right-hand expression unchanged when it is not a literal."""
+    """
+    ``unwrapped_value`` returns the right-hand expression unchanged when it is not a
+    literal.
+    """
     world = handles_and_containers_world
     container = variable(Container, domain=world.bodies)
     handle = variable(Handle, domain=world.bodies)

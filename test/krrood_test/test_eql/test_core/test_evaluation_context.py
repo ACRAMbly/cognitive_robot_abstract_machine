@@ -3,6 +3,7 @@ Tests for the typed per-pass state collaborators on EvaluationContext.
 """
 
 import uuid
+from dataclasses import dataclass, field
 
 from ordered_set import OrderedSet
 
@@ -12,26 +13,26 @@ from krrood.entity_query_language.evaluation_context import (
 )
 
 
+@dataclass
 class _NodeStub:
     """
-    Minimal stand-in for a SymbolicExpression: only ``_id_`` and ``_root_`` are needed by
-    these collaborators. ``_root_`` defaults to itself, matching an unattached node's own
-    structural root.
+    Minimal stand-in for a SymbolicExpression: only ``_id_`` is needed by these
+    collaborators.
     """
 
-    def __init__(self):
-        self._id_ = uuid.uuid4()
-        self._root_ = self
+    _id_: uuid.UUID = field(default_factory=uuid.uuid4, init=False)
+    """
+    Identifier for this stub node.
+    """
 
 
 def test_active_conditions_root_claims_first_node_and_ignores_later_claims():
     tracking = ActiveConditionsRoot()
-    originating = _NodeStub()
     first = _NodeStub()
     second = _NodeStub()
 
-    tracking.claim(first, originating)
-    tracking.claim(second, originating)
+    tracking.claim(first, has_condition=True)
+    tracking.claim(second, has_condition=True)
 
     assert tracking.is_active_root(first)
     assert not tracking.is_active_root(second)
@@ -43,33 +44,31 @@ def test_active_conditions_root_resolves_by_claim_not_by_construction_order():
     root, regardless of any other node's structural/construction history.
     """
     tracking = ActiveConditionsRoot()
-    originating = _NodeStub()
     node = _NodeStub()
 
     assert not tracking.is_active_root(node), "unclaimed pass must not match any node"
-    tracking.claim(node, originating)
+    tracking.claim(node, has_condition=True)
     assert tracking.is_active_root(node)
 
 
-def test_active_conditions_root_has_condition_when_claimed_root_differs_from_originator():
+def test_active_conditions_root_has_condition_when_claimed_with_a_genuine_filter():
     tracking = ActiveConditionsRoot()
-    originating = _NodeStub()
     filter_condition = _NodeStub()
 
-    tracking.claim(filter_condition, originating)
+    tracking.claim(filter_condition, has_condition=True)
 
     assert tracking.has_condition()
 
 
-def test_active_conditions_root_has_no_condition_when_claimed_root_is_the_originators_root():
+def test_active_conditions_root_has_no_condition_when_claimed_without_a_filter():
     """
     A Filter-less evaluation's own _conditions_root_ falls back to its plain _root_, so
-    claiming with that same value must record "no real condition" for this pass.
+    claiming with ``has_condition=False`` must record "no real condition" for this pass.
     """
     tracking = ActiveConditionsRoot()
-    originating = _NodeStub()
+    node = _NodeStub()
 
-    tracking.claim(originating._root_, originating)
+    tracking.claim(node, has_condition=False)
 
     assert not tracking.has_condition()
 

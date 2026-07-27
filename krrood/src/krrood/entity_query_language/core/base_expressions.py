@@ -358,7 +358,7 @@ class SymbolicExpression(ABC):
             evaluation_context = create_default_evaluation_context()
             context_token = set_evaluation_context(evaluation_context)
             evaluation_context.active_conditions_root.claim(
-                self._conditions_root_, self
+                self._conditions_root_, has_condition=self._has_condition_
             )
         try:
             evaluation_context.on_evaluate_enter(expression=self, sources=sources)
@@ -492,11 +492,22 @@ class SymbolicExpression(ABC):
         """
         return next(
             (
-                expr.condition
-                for expr in self._all_expressions_
-                if isinstance(expr, Filter)
+                expression.condition
+                for expression in self._all_expressions_
+                if isinstance(expression, Filter)
             ),
             self._root_,
+        )
+
+    @property
+    def _has_condition_(self) -> bool:
+        """
+        :return: Whether this expression's tree contains a genuine ``Filter``, i.e.
+            whether ``_conditions_root_`` came from one rather than falling back to
+            ``_root_``.
+        """
+        return any(
+            isinstance(expression, Filter) for expression in self._all_expressions_
         )
 
     @property

@@ -294,11 +294,16 @@ def test_satisfied_conditions_simple():
 def test_satisfied_condition_ids_for_a_variable_first_used_in_a_filterless_query():
     """
     A variable first used only as a selected/output variable of a Filter-less query, then
-    reused as a different query's where-condition, must still report a satisfied condition
-    for the second query.
+    reused as a different query's where-condition, must still get a satisfied-condition
+    tracking pass for the second query: a real (if empty) ``OrderedSet``, not the ``None``
+    a skipped pass would leave behind.
 
-    The variable's primary parent is fixed by its first attachment (the Filter-less query),
-    so a naive walk from its structural root never reaches the second query's Where filter.
+    The variable's primary parent is fixed by its first attachment (the Filter-less
+    query), so a naive walk from its structural root never reaches the second query's
+    Where filter. ``flag`` itself is a bare variable, not a Comparator/Predicate/
+    LogicalOperator, so it is not a condition participant (see
+    ``is_condition_participant``) and the expected satisfied set is empty — what this
+    test proves is that tracking ran at all for the second query, not what it found.
     """
     flag = variable_from([True])
     where_less_query = entity(flag)
@@ -309,7 +314,7 @@ def test_satisfied_condition_ids_for_a_variable_first_used_in_a_filterless_query
 
     true_results = _get_true_results(query)
     assert len(true_results) == 1
-    assert true_results[0].satisfied_condition_ids is not None
+    assert true_results[0].satisfied_condition_ids == set()
 
 
 def test_satisfied_conditions_and_both_true():

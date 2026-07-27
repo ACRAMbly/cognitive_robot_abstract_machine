@@ -115,17 +115,22 @@ class SatisfiedConditionTracker(EvaluationObserver):
             result.satisfied_condition_ids = satisfied
 
     def on_conclusions_processed(self, expression, result):
-        # The caller (_evaluate_conclusions_and_update_bindings_) already established that
-        # `expression` is the active conditions root for this evaluation pass before invoking
-        # this hook, so no re-check on `expression` itself is needed here — only whether this
-        # pass was actually gated by a Filter at all (as opposed to the Filter-less fallback,
-        # where conclusions fire unconditionally and there is nothing to track). That fact was
-        # already decided once, unambiguously, when ActiveConditionsRoot.claim() ran on the
-        # evaluation's own starting expression. Recomputing it here via `expression`'s own
-        # _conditions_root_ is not reliable: `expression` can be a node reused elsewhere (for
-        # example first attached as a plain selected variable of a Filter-less query), in which
-        # case its structural root does not reach the Filter it is actually the condition of
-        # for this pass.
+        """
+        Record which conditions were satisfied once this pass's conclusions have fired.
+
+        The caller (``_evaluate_conclusions_and_update_bindings_``) already established
+        that *expression* is the active conditions root for this evaluation pass before
+        invoking this hook, so no re-check on *expression* itself is needed here — only
+        whether this pass was actually gated by a ``Filter`` at all (as opposed to the
+        Filter-less fallback, where conclusions fire unconditionally and there is
+        nothing to track). That fact was already decided once, unambiguously, when
+        ``ActiveConditionsRoot.claim()`` ran on the evaluation's own starting
+        expression. Recomputing it here via *expression*'s own ``_conditions_root_`` is
+        not reliable: *expression* can be a node reused elsewhere (for example first
+        attached as a plain selected variable of a Filter-less query), in which case its
+        structural root does not reach the ``Filter`` it is actually the condition of
+        for this pass.
+        """
         if result.is_false:
             return
         evaluation_context = get_evaluation_context()
