@@ -14,6 +14,11 @@ class BehaviorTreeConfig:
     tree_tick_rate: float = 0.05
     debug_mode: bool = False
 
+    plot_output_directory: str = "/tmp/"
+    """
+    Directory that debug plots (trajectory and gantt chart PDFs) are saved to.
+    """
+
     add_gantt_chart_plotter: bool = False
     add_goal_graph_plotter: bool = False
     add_trajectory_plotter: bool = False
@@ -95,11 +100,13 @@ class BehaviorTreeConfig:
         :param wait: True: Behavior tree waits for this plotter to finish.
                      False: Plot is generated in a separate thread to not slow down Giskard.
         """
-        self.tree.cleanup_control_loop.add_plot_trajectory(normalize_position, wait)
+        self.tree.cleanup_control_loop.add_plot_trajectory(
+            normalize_position, wait, self.plot_output_directory
+        )
 
     def _add_gantt_chart_plotter(self):
         self.add_evaluate_debug_expressions()
-        self.tree.cleanup_control_loop.add_plot_gantt_chart()
+        self.tree.cleanup_control_loop.add_plot_gantt_chart(self.plot_output_directory)
 
     def _add_goal_graph_plotter(self):
         self.add_evaluate_debug_expressions()

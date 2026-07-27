@@ -6635,10 +6635,6 @@ class ExecutorDAO(Base, DataAccessObject[giskardpy.executor.Executor]):
         Integer, primary_key=True, use_existing_column=True
     )
 
-    tmp_folder: Mapped[builtins.str] = mapped_column(
-        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
-    )
-
     polymorphic_type: Mapped[str] = mapped_column(
         String(255), nullable=False, use_existing_column=True
     )
@@ -6721,6 +6717,9 @@ class BehaviorTreeConfigDAO(
 
     tree_tick_rate: Mapped[builtins.float] = mapped_column(use_existing_column=True)
     debug_mode: Mapped[builtins.bool] = mapped_column(use_existing_column=True)
+    plot_output_directory: Mapped[builtins.str] = mapped_column(
+        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
+    )
     add_gantt_chart_plotter: Mapped[builtins.bool] = mapped_column(
         use_existing_column=True
     )
@@ -8745,6 +8744,12 @@ class EndMotionDAO(
         primary_key=True,
         use_existing_column=True,
     )
+
+    joint_convergence_threshold: Mapped[builtins.float] = mapped_column(
+        use_existing_column=True
+    )
+    minimum_threshold: Mapped[builtins.float] = mapped_column(use_existing_column=True)
+    maximum_threshold: Mapped[builtins.float] = mapped_column(use_existing_column=True)
 
     __mapper_args__ = {
         "polymorphic_identity": "EndMotionDAO",

@@ -158,7 +158,9 @@ class PR2Tester(GiskardTester):
             world_config=WorldWithPR2Config(urdf=robot_desc),
             robot_interface_config=PR2StandaloneInterface(),
             behavior_tree_config=StandAloneBTConfig(
-                debug_mode=True, add_debug_marker_publisher=True
+                debug_mode=True,
+                add_debug_marker_publisher=True,
+                add_trajectory_plotter=True,
             ),
             qp_controller_config=QPControllerConfig(
                 target_frequency=20,

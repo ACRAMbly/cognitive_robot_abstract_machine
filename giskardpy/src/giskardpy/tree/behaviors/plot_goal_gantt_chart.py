@@ -10,8 +10,11 @@ from giskardpy.tree.blackboard_utils import GiskardBlackboard
 
 class PlotGanttChart(GiskardBehavior):
 
-    def __init__(self, name: str = "plot gantt chart"):
+    def __init__(
+        self, name: str = "plot gantt chart", plot_output_directory: str = "/tmp/"
+    ):
         super().__init__(name)
+        self.plot_output_directory = plot_output_directory
 
     @record_time
     def update(self):
@@ -19,7 +22,7 @@ class PlotGanttChart(GiskardBehavior):
             return Status.SUCCESS
         try:
             file_name = (
-                GiskardBlackboard().executor.tmp_folder
+                self.plot_output_directory
                 + f"gantt_charts/goal_{GiskardBlackboard().move_action_server.goal_id}.pdf"
             )
             GiskardBlackboard().motion_statechart.plot_gantt_chart(

@@ -7,6 +7,9 @@ from giskardpy.utils.decorators import record_time
 from giskardpy.middleware.ros2 import rospy
 from giskardpy.tree.behaviors.plugin import GiskardBehavior
 from giskardpy.tree.blackboard_utils import GiskardBlackboard
+from semantic_digital_twin.world_description.world_state_trajectory_plotter import (
+    WorldStateTrajectoryPlotter,
+)
 
 
 class PlotTrajectory(GiskardBehavior):
@@ -18,12 +21,15 @@ class PlotTrajectory(GiskardBehavior):
         wait=False,
         joint_filter=None,
         normalize_position: bool = False,
+        plot_output_directory: str = "/tmp/",
         **kwargs,
     ):
         super().__init__(name)
         self.wait = wait
         self.normalize_position = normalize_position
+        self.plot_output_directory = plot_output_directory
         self.kwargs = kwargs
+        GiskardBlackboard().executor.trajectory_plotter = WorldStateTrajectoryPlotter()
 
     def initialise(self):
         self.plot_thread = Thread(target=self.plot, name=self.name)
@@ -31,12 +37,11 @@ class PlotTrajectory(GiskardBehavior):
 
     def plot(self):
         try:
-            if plotter := GiskardBlackboard().executor.trajectory_plotter is None:
-                return
+            plotter = GiskardBlackboard().executor.trajectory_plotter
             if len(plotter.world_state_trajectory.times) <= 1:
                 return
             file_name = (
-                GiskardBlackboard().executor.tmp_folder
+                self.plot_output_directory
                 + f"trajectories/goal_{GiskardBlackboard().move_action_server.goal_id}.pdf"
             )
             GiskardBlackboard().executor.plot_trajectory(file_name)
