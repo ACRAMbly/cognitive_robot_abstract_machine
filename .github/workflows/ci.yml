@@ -59,4 +59,4 @@ jobs:
           pip install pytest -r "${PLAN_DASHBOARD_REQUIREMENTS_FILE}"
       - run: |
           source .claude/hooks/resolve-personal-notes-config.sh
-          python -m pytest "${PLAN_DASHBOARD_TESTS_DIR}"
+          python -m pytest "${PLAN_DASHBOARD_TESTS_DIRECTORY}"
