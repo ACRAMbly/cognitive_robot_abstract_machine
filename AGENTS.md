@@ -13,6 +13,7 @@
 - When fixing failing tests, never modify the test itself
 - All new features and fixes must be covered by tests
 - Name test classes (and the mimic classes used by tests) after the pattern or behaviour they exercise, not after the concrete external class they happen to stand in for
+- Make assertions as specific as possible: when the correct expected value can be determined, assert equality to that value rather than only a weaker check such as not-None or not-empty
 
 ## Code Style
 - Divide a file into logical sections with `# %% <short description>` comment headers (e.g. `# %% same-noun disambiguation`), not decorative box-drawing dividers. Applies to source files as well as test files
