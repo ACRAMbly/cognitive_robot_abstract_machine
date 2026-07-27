@@ -1,14 +1,12 @@
-import tempfile
-
 from py_trees.composites import Sequence
 from py_trees.decorators import FailureIsSuccess
 
+from giskardpy.tree.behaviors.append_zero_velocity import SetZeroVelocity
 from giskardpy.tree.behaviors.plot_goal_gantt_chart import PlotGanttChart
 from giskardpy.tree.behaviors.plot_trajectory import PlotTrajectory
 from giskardpy.tree.behaviors.publish_feedback import ForcePublishFeedback
 from giskardpy.tree.behaviors.reset_joint_state import ResetWorldState
 from giskardpy.utils.decorators import toggle_on, toggle_off
-from giskardpy.tree.behaviors.append_zero_velocity import SetZeroVelocity
 
 
 class CleanupControlLoop(Sequence):
