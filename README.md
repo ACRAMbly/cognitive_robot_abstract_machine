@@ -125,7 +125,9 @@ plan dashboards) end to end, in order.
 - **[`.claude/skills/plan-dashboard/`](.claude/skills/plan-dashboard/SKILL.md)**
   - publishes a live status dashboard for a multi-PR/multi-session
   initiative, cross-checked against live GitHub PR/CI/review state so a
-  plan's manually-tracked status can never silently drift from reality.
+  plan's manually-tracked status can never silently drift from reality. See
+  [`EXAMPLE_WALKTHROUGH.md`](.claude/skills/plan-dashboard/EXAMPLE_WALKTHROUGH.md)
+  for a short, worked example - idea to dashboard, with screenshots.
 - **[`.claude/skills/plan-create/`](.claude/skills/plan-create/SKILL.md)** -
   bootstraps a new multi-PR/multi-session plan (or migrates an existing
   freeform roadmap doc into one), validated against the same schema
