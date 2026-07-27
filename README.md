@@ -112,6 +112,11 @@ repository - hooks that run automatically each session, and skills invoked
 on demand (`/<skill-name>`). Each is documented where it lives; the links
 below are a starting point, not a duplicate of that documentation.
 
+**New here? Start with [`.claude/hooks/README.md`](.claude/hooks/README.md)** -
+it walks through the one-time setup (a single script, no config needed) and
+everything it unlocks (personal notes, per-PR progress tracking, multi-PR
+plan dashboards) end to end, in order.
+
 - **[`.claude/hooks/`](.claude/hooks/README.md)** - a `SessionStart` hook
   that carries a contributor's own personal workflow notes, per-PR
   plan/progress tracking, and multi-PR plan manifests across sessions via a
