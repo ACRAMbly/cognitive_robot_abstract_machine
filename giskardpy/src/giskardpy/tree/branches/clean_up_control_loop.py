@@ -1,3 +1,5 @@
+import tempfile
+
 from py_trees.composites import Sequence
 from py_trees.decorators import FailureIsSuccess
 
@@ -26,7 +28,7 @@ class CleanupControlLoop(Sequence):
         self,
         normalize_position: bool = False,
         wait: bool = False,
-        plot_output_directory: str = "/tmp/",
+        plot_output_directory: str = tempfile.gettempdir(),
     ):
         self.insert_child(
             PlotTrajectory(
@@ -38,7 +40,7 @@ class CleanupControlLoop(Sequence):
             index=-1,
         )
 
-    def add_plot_gantt_chart(self, plot_output_directory: str = "/tmp/"):
+    def add_plot_gantt_chart(self, plot_output_directory: str = tempfile.gettempdir()):
         self.insert_child(
             PlotGanttChart(plot_output_directory=plot_output_directory), 2
         )

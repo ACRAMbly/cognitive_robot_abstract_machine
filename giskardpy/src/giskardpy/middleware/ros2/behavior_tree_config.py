@@ -1,3 +1,4 @@
+import tempfile
 from dataclasses import dataclass, field
 
 from py_trees.decorators import FailureIsSuccess
@@ -14,7 +15,7 @@ class BehaviorTreeConfig:
     tree_tick_rate: float = 0.05
     debug_mode: bool = False
 
-    plot_output_directory: str = "/tmp/"
+    plot_output_directory: str = field(default_factory=tempfile.gettempdir)
     """
     Directory that debug plots (trajectory and gantt chart PDFs) are saved to.
     """

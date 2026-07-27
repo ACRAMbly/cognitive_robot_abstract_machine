@@ -1,3 +1,5 @@
+import os
+import tempfile
 import traceback
 from threading import Thread
 
@@ -21,7 +23,7 @@ class PlotTrajectory(GiskardBehavior):
         wait=False,
         joint_filter=None,
         normalize_position: bool = False,
-        plot_output_directory: str = "/tmp/",
+        plot_output_directory: str = tempfile.gettempdir(),
         **kwargs,
     ):
         super().__init__(name)
@@ -40,9 +42,10 @@ class PlotTrajectory(GiskardBehavior):
             plotter = GiskardBlackboard().executor.trajectory_plotter
             if len(plotter.world_state_trajectory.times) <= 1:
                 return
-            file_name = (
-                self.plot_output_directory
-                + f"trajectories/goal_{GiskardBlackboard().move_action_server.goal_id}.pdf"
+            file_name = os.path.join(
+                self.plot_output_directory,
+                "trajectories",
+                f"goal_{GiskardBlackboard().move_action_server.goal_id}.pdf",
             )
             GiskardBlackboard().executor.plot_trajectory(file_name)
             rospy.node.get_logger().info(f"saved {file_name}")
