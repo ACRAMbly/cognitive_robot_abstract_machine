@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+import uuid
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Type
 
 import numpy as np
 from builtin_interfaces.msg import Duration
@@ -13,13 +13,16 @@ from geometry_msgs.msg import (
     Vector3 as RosVector3,
 )
 from std_msgs.msg import ColorRGBA, Header
-from typing_extensions import ClassVar, Generic, TypeVar, get_args
+from typing_extensions import ClassVar, TypeVar, Generic
 from visualization_msgs.msg import Marker
 
-from krrood.exceptions import DataclassException
+from krrood.patterns.subclass_safe_generic import SubClassSafeGeneric
 from krrood.utils import recursive_subclasses
 from semantic_digital_twin.adapters.ros.semdt_to_ros2_converters import (
     ColorToRos2Converter,
+)
+from semantic_digital_twin.adapters.ros.visualization.exceptions import (
+    CannotRenderSpatialTypeError,
 )
 from semantic_digital_twin.spatial_types.spatial_types import (
     HomogeneousTransformationMatrix,
@@ -37,22 +40,6 @@ SpatialTypeInput = TypeVar("SpatialTypeInput", bound=SpatialType)
 
 
 @dataclass
-class CannotRenderSpatialTypeError(DataclassException):
-    """Raised when no renderer can turn a spatial type into RViz markers."""
-
-    spatial_type_type: Type = field(kw_only=True)
-    """The type of the spatial type that could not be rendered."""
-
-    def error_message(self) -> str:
-        return (
-            f"No renderer available for spatial type {self.spatial_type_type.__name__}."
-        )
-
-    def suggest_correction(self) -> str:
-        return ""
-
-
-@dataclass
 class SpatialTypeVisualization:
     """A spatial type together with the display metadata needed to render it as markers."""
 
@@ -62,11 +49,15 @@ class SpatialTypeVisualization:
     color: Color = field(default_factory=Color)
     """The color of the markers. Ignored for the fixed RGB axes of pose-like spatial types."""
 
-    namespace: str = "spatial_type"
-    """The marker namespace. RViz scopes marker ids per namespace, so it must be unique per request."""
+    namespace: str = field(default_factory=lambda: f"spatial_type_{uuid.uuid4().hex}")
+    """The marker namespace. RViz scopes marker ids per namespace, so it must be unique per request.
+
+    Defaults to a random value so unrelated requests don't silently collide; pass an explicit,
+    stable namespace when a request's markers should be updated in place across republishes.
+    """
 
     marker_id_offset: int = 0
-    """The base marker id. Renderers that emit several markers add small offsets to it."""
+    """The offset added to each marker's local id. The first marker of a request uses it directly, further markers add small increments."""
 
     label: str | None = None
     """An optional text label rendered alongside the markers."""
@@ -82,7 +73,7 @@ class SpatialTypeVisualization:
 
 
 @dataclass
-class SpatialTypeMarkerRenderer(ABC, Generic[SpatialTypeInput]):
+class SpatialTypeMarkerRenderer(Generic[SpatialTypeInput], SubClassSafeGeneric, ABC):
     """
     Renders a single category of spatial type into one or more RViz markers.
 
@@ -93,16 +84,25 @@ class SpatialTypeMarkerRenderer(ABC, Generic[SpatialTypeInput]):
     @classmethod
     def input_type(cls) -> type[SpatialTypeInput]:
         """The spatial type category handled by this renderer."""
-        return get_args(cls.__orig_bases__[0])[0]
+        return cls.get_generic_type_parameters()[0]
 
     @classmethod
     def can_render(cls, spatial_type: SpatialType) -> bool:
-        """Whether this renderer can render the given spatial type."""
+        """
+        Whether this renderer can render the given spatial type.
+
+        :param spatial_type: The spatial type to check.
+        """
         return isinstance(spatial_type, cls.input_type())
 
     @classmethod
     def renderer_for(cls, spatial_type: SpatialType) -> type[SpatialTypeMarkerRenderer]:
-        """Find the renderer responsible for the given spatial type."""
+        """
+        Find the renderer responsible for the given spatial type.
+
+        :param spatial_type: The spatial type to find a renderer for.
+        :return: The renderer responsible for rendering the spatial type.
+        """
         for subclass in recursive_subclasses(cls):
             if subclass.can_render(spatial_type):
                 return subclass
@@ -117,6 +117,7 @@ class SpatialTypeMarkerRenderer(ABC, Generic[SpatialTypeInput]):
 
         :param request: The spatial type and its display metadata.
         :param root_frame_name: The frame used when the spatial type has no reference frame.
+        :return: The markers representing the spatial type.
         """
         renderer = cls.renderer_for(request.spatial_type)
         return renderer.render_markers(request, root_frame_name)
@@ -126,12 +127,24 @@ class SpatialTypeMarkerRenderer(ABC, Generic[SpatialTypeInput]):
     def render_markers(
         cls, request: SpatialTypeVisualization, root_frame_name: str
     ) -> list[Marker]:
-        """Build the markers for the spatial type of the given request."""
+        """
+        Build the markers for the spatial type of the given request.
+
+        :param request: The spatial type and its display metadata.
+        :param root_frame_name: The frame used when the spatial type has no reference frame.
+        :return: The markers representing the spatial type.
+        """
         raise NotImplementedError
 
     @staticmethod
     def _reference_frame_name(spatial_type: SpatialType, root_frame_name: str) -> str:
-        """The name of the spatial type's reference frame, falling back to the root frame."""
+        """
+        The name of the spatial type's reference frame, falling back to the root frame.
+
+        :param spatial_type: The spatial type to resolve the reference frame of.
+        :param root_frame_name: The frame used when the spatial type has no reference frame.
+        :return: The name of the spatial type's reference frame, or the root frame.
+        """
         reference_frame = spatial_type.reference_frame
         if reference_frame is None:
             return root_frame_name
@@ -141,7 +154,14 @@ class SpatialTypeMarkerRenderer(ABC, Generic[SpatialTypeInput]):
     def _base_marker(
         cls, request: SpatialTypeVisualization, marker_id: int, frame_id: str
     ) -> Marker:
-        """Create a marker with the shared fields filled in."""
+        """
+        Create a marker with the shared fields filled in.
+
+        :param request: The spatial type and its display metadata.
+        :param marker_id: The marker's local id.
+        :param root_frame_name: The frame used when the spatial type has no reference frame.
+        :return: The marker with the shared fields filled in.
+        """
         marker = Marker()
         marker.action = Marker.ADD
         marker.ns = request.namespace
@@ -160,7 +180,14 @@ class SpatialTypeMarkerRenderer(ABC, Generic[SpatialTypeInput]):
         frame_id: str,
         pose: RosPose,
     ) -> Marker:
-        """Create the optional label marker shared by the renderers."""
+        """
+        Create the optional label marker shared by the renderers.
+
+        :param request: The spatial type and its display metadata.
+        :param marker_id: The marker's local id.
+        :param pose: The pose of the label.
+        :return: The marker representing the label.
+        """
         marker = cls._base_marker(request, marker_id, frame_id)
         marker.type = Marker.TEXT_VIEW_FACING
         marker.text = request.label
@@ -178,6 +205,9 @@ class Point3MarkerRenderer(SpatialTypeMarkerRenderer[Point3]):
     def render_markers(
         cls, request: SpatialTypeVisualization, root_frame_name: str
     ) -> list[Marker]:
+        """
+        Build a sphere marker at the point's position, plus an optional label.
+        """
         frame_id = cls._reference_frame_name(request.spatial_type, root_frame_name)
         position = request.spatial_type.evaluate()
         marker = cls._base_marker(request, 0, frame_id)
@@ -200,6 +230,9 @@ class Vector3MarkerRenderer(SpatialTypeMarkerRenderer[Vector3]):
     def render_markers(
         cls, request: SpatialTypeVisualization, root_frame_name: str
     ) -> list[Marker]:
+        """
+        Build an arrow marker from the origin along the vector, plus an optional label.
+        """
         vector = request.spatial_type
         if vector.visualisation_frame is not None:
             frame_id = str(vector.visualisation_frame.name)
@@ -240,6 +273,9 @@ class PoseLikeMarkerRenderer(SpatialTypeMarkerRenderer[Pose]):
     def render_markers(
         cls, request: SpatialTypeVisualization, root_frame_name: str
     ) -> list[Marker]:
+        """
+        Build an RGB axis triad at the pose, plus an optional label.
+        """
         frame_id = cls._reference_frame_name(request.spatial_type, root_frame_name)
         position, orientation = cls._position_and_orientation(request.spatial_type)
         pose = RosPose(
@@ -267,7 +303,14 @@ class PoseLikeMarkerRenderer(SpatialTypeMarkerRenderer[Pose]):
         frame_id: str,
         pose: RosPose,
     ) -> Marker:
-        """Create one colored arrow for the given axis of the triad."""
+        """
+        Create one colored arrow for the given axis of the triad.
+
+        :param request: The spatial type and its display metadata.
+        :param axis_index: The index of the axis to render.
+        :param frame_id: The frame used when the spatial type has no reference frame.
+        :param pose: The pose of the triad.
+        """
         end_point = [0.0, 0.0, 0.0]
         end_point[axis_index] = request.arrow_length
         axis_color = [0.0, 0.0, 0.0, 1.0]
@@ -289,7 +332,11 @@ class PoseLikeMarkerRenderer(SpatialTypeMarkerRenderer[Pose]):
     def _position_and_orientation(
         spatial_type: SpatialType,
     ) -> tuple[np.ndarray, np.ndarray]:
-        """Resolve the current position and orientation quaternion of the spatial type."""
+        """
+        Resolve the current position and orientation quaternion of the spatial type.
+
+        :param spatial_type: The spatial type to resolve.
+        """
         if isinstance(spatial_type, Quaternion):
             return np.zeros(3), spatial_type.evaluate()
         if isinstance(spatial_type, RotationMatrix):

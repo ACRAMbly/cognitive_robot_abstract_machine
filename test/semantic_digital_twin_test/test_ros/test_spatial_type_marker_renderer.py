@@ -3,8 +3,10 @@ import pytest
 from visualization_msgs.msg import Marker
 
 from krrood.symbolic_math.symbolic_math import Scalar
-from semantic_digital_twin.adapters.ros.visualization.spatial_type_marker_renderer import (
+from semantic_digital_twin.adapters.ros.visualization.exceptions import (
     CannotRenderSpatialTypeError,
+)
+from semantic_digital_twin.adapters.ros.visualization.spatial_type_marker_renderer import (
     SpatialTypeMarkerRenderer,
     SpatialTypeVisualization,
 )
