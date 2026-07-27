@@ -11,7 +11,7 @@ import krrood.symbolic_math.symbolic_math as sm
 from giskardpy.motion_statechart.plotters.gantt_chart_plotter import (
     HistoryGanttChartPlotter,
 )
-from krrood.adapters.json_serializer import SubclassJSONSerializer
+from krrood.adapters.json_serializer import SubclassJSONSerializer, from_json, to_json
 from krrood.symbolic_math.symbolic_math import VariableParameters
 from giskardpy.motion_statechart.context import MotionStatechartContext
 from giskardpy.motion_statechart.data_types import (
@@ -859,7 +859,7 @@ class MotionStatechart(SubclassJSONSerializer):
         self._add_transitions()
         result = super().to_json()
         result["nodes"] = [
-            node.to_json() for node in sorted(self.nodes, key=lambda n: n.index)
+            to_json(node) for node in sorted(self.nodes, key=lambda n: n.index)
         ]
         result["unique_edges"] = [edge.to_json() for edge in self.unique_edges]
         return result
@@ -876,7 +876,7 @@ class MotionStatechart(SubclassJSONSerializer):
         """
         motion_statechart = cls()
         for json_data in data["nodes"]:
-            node = MotionStatechartNode.from_json(json_data, **kwargs)
+            node = from_json(json_data, **kwargs)
             motion_statechart.add_node(node)
         for json_data in data["unique_edges"]:
             transition = TrinaryCondition.from_json(
