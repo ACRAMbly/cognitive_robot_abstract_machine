@@ -486,9 +486,10 @@ class SymbolicExpression(ABC):
             self._parent__ = value
 
     @property
-    def _conditions_root_(self) -> Optional[SymbolicExpression]:
+    def _filter_condition_(self) -> Optional[SymbolicExpression]:
         """
-        :return: The root of the symbolic expression graph that contains conditions, or None if no conditions found.
+        :return: The condition of the first ``Filter`` in this expression's graph, or
+            ``None`` when no ``Filter`` gates it.
         """
         return next(
             (
@@ -496,19 +497,28 @@ class SymbolicExpression(ABC):
                 for expression in self._all_expressions_
                 if isinstance(expression, Filter)
             ),
-            self._root_,
+            None,
         )
+
+    @property
+    def _conditions_root_(self) -> SymbolicExpression:
+        """
+        :return: The condition gating this expression, or the root of its graph when no
+            ``Filter`` gates it.
+        """
+        filter_condition = self._filter_condition_
+        if filter_condition is None:
+            return self._root_
+        return filter_condition
 
     @property
     def _has_condition_(self) -> bool:
         """
-        :return: Whether this expression's tree contains a genuine ``Filter``, i.e.
-            whether ``_conditions_root_`` came from one rather than falling back to
-            ``_root_``.
+        :return: Whether a ``Filter`` gates this expression, i.e. whether
+            :attr:`_conditions_root_` came from one rather than falling back to
+            :attr:`_root_`.
         """
-        return any(
-            isinstance(expression, Filter) for expression in self._all_expressions_
-        )
+        return self._filter_condition_ is not None
 
     @property
     def _root_(self) -> SymbolicExpression:

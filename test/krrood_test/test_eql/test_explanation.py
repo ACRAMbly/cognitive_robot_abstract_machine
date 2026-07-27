@@ -291,30 +291,32 @@ def test_satisfied_conditions_simple():
     assert len(result.satisfied_condition_ids) > 0
 
 
-def test_satisfied_condition_ids_for_a_variable_first_used_in_a_filterless_query():
+def test_satisfied_condition_ids_for_a_condition_first_used_in_a_filterless_query():
     """
-    A variable first used only as a selected/output variable of a Filter-less query, then
-    reused as a different query's where-condition, must still get a satisfied-condition
-    tracking pass for the second query: a real (if empty) ``OrderedSet``, not the ``None``
-    a skipped pass would leave behind.
+    A condition first used only as a selected/output expression of a Filter-less query,
+    then reused as a different query's where-condition, must still have its satisfied
+    conditions tracked for the second query.
 
-    The variable's primary parent is fixed by its first attachment (the Filter-less
+    The condition's primary parent is fixed by its first attachment (the Filter-less
     query), so a naive walk from its structural root never reaches the second query's
-    Where filter. ``flag`` itself is a bare variable, not a Comparator/Predicate/
-    LogicalOperator, so it is not a condition participant (see
-    ``is_condition_participant``) and the expected satisfied set is empty — what this
-    test proves is that tracking ran at all for the second query, not what it found.
+    Where filter and the pass is wrongly treated as having no where-clause at all.
+
+    ..note:: The shared node is a ``Comparator`` rather than a bare variable so that it
+        is a condition participant (see :func:`is_condition_participant`) and the
+        expected satisfied set is exactly it, rather than an empty set that could not
+        distinguish tracking the right ids from tracking none.
     """
-    flag = variable_from([True])
-    where_less_query = entity(flag)
+    value = variable_from([6])
+    condition = value > 5
+    where_less_query = entity(condition)
     where_less_query.build()
 
     target = variable_from([1])
-    query = entity(target).where(flag)
+    query = entity(target).where(condition)
 
     true_results = _get_true_results(query)
     assert len(true_results) == 1
-    assert true_results[0].satisfied_condition_ids == set()
+    assert set(true_results[0].satisfied_condition_ids) == {condition._id_}
 
 
 def test_satisfied_conditions_and_both_true():
