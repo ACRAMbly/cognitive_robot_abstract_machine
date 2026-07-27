@@ -54,5 +54,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - run: pip install pytest -r .claude/skills/plan-dashboard/requirements.txt
-      - run: python -m pytest .claude/skills/plan-dashboard/tests
+      - run: |
+          source .claude/hooks/resolve-personal-notes-config.sh
+          pip install pytest -r "${PLAN_DASHBOARD_REQUIREMENTS_FILE}"
+      - run: |
+          source .claude/hooks/resolve-personal-notes-config.sh
+          python -m pytest "${PLAN_DASHBOARD_TESTS_DIR}"
