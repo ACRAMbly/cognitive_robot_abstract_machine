@@ -403,12 +403,13 @@ deep-copied and never mutated, so one specification can produce many independent
 
 ```{code-cell} ipython3
 import os
-from pkg_resources import resource_filename
+from importlib.resources import files
+from pathlib import Path
 
 from semantic_digital_twin.api.specifications import WorldSpecification
 
 table_urdf = os.path.join(
-    resource_filename("semantic_digital_twin", "../../"), "resources", "urdf", "table.urdf"
+    Path(files("semantic_digital_twin")).parent.parent, "resources", "urdf", "table.urdf"
 )
 
 specification = WorldSpecification.from_urdf(

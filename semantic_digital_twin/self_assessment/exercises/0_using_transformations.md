@@ -38,7 +38,8 @@ import math
 import os
 
 
-from pkg_resources import resource_filename
+from importlib.resources import files
+from pathlib import Path
 from semantic_digital_twin.adapters.urdf import URDFParser
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 from semantic_digital_twin.spatial_types.spatial_types import HomogeneousTransformationMatrix
@@ -48,7 +49,7 @@ from semantic_digital_twin.world_description.geometry import Box, Scale, Color
 from semantic_digital_twin.world_description.shape_collection import ShapeCollection
 from semantic_digital_twin.spatial_computations.raytracer import RayTracer
 
-root = resource_filename("semantic_digital_twin", "../../")
+root = Path(files("semantic_digital_twin")).parent.parent
 urdf_path = os.path.join(root, "resources", "urdf", "table.urdf")
 table_world = URDFParser.from_file(urdf_path).parse()
 

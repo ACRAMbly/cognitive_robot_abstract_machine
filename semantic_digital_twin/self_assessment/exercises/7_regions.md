@@ -28,7 +28,8 @@ You will:
 import os
 import logging
 
-from pkg_resources import resource_filename
+from importlib.resources import files
+from pathlib import Path
 
 from semantic_digital_twin.adapters.urdf import URDFParser
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
@@ -38,7 +39,7 @@ from semantic_digital_twin.world_description.geometry import Box, Scale
 from semantic_digital_twin.world_description.world_entity import Body, Region
 
 logging.disable(logging.CRITICAL)
-root_path = resource_filename("semantic_digital_twin", "../../")
+root_path = Path(files("semantic_digital_twin")).parent.parent
 table_urdf = os.path.join(root_path, "resources", "urdf", "table.urdf")
 ```
 

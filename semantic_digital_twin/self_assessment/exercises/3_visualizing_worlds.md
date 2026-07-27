@@ -26,7 +26,8 @@ You will:
 :tags: [remove-input]
 import os
 import logging
-from pkg_resources import resource_filename
+from importlib.resources import files
+from pathlib import Path
 from semantic_digital_twin.adapters.urdf import URDFParser
 from semantic_digital_twin.spatial_computations.raytracer import RayTracer
 
@@ -40,7 +41,7 @@ Your goal:
 
 ```{code-cell} ipython3
 :tags: [exercise]
-root = resource_filename("semantic_digital_twin", "../../")
+root = Path(files("semantic_digital_twin")).parent.parent
 table_urdf = os.path.join(root, "resources", "urdf", "table.urdf")
 world = URDFParser.from_file(table_urdf).parse()
 
@@ -54,7 +55,7 @@ viz = ...
 
 ```{code-cell} ipython3
 :tags: [example-solution]
-root = resource_filename("semantic_digital_twin", "../../")
+root = Path(files("semantic_digital_twin")).parent.parent
 table_urdf = os.path.join(root, "resources", "urdf", "table.urdf")
 world = URDFParser.from_file(table_urdf).parse()
 
