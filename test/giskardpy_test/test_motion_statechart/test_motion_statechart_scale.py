@@ -37,7 +37,7 @@ def _build_chain(
     return chain
 
 
-# @pytest.mark.slow
+@pytest.mark.slow
 @pytest.mark.parametrize("node_count", [100, 1_000, 10_000])
 def test_long_sequence_scale(node_count: int):
     """
@@ -68,7 +68,7 @@ def test_long_sequence_scale(node_count: int):
     assert executor.control_cycles == node_count + 2
 
 
-# @pytest.mark.slow
+@pytest.mark.slow
 @pytest.mark.parametrize("branch_length", [10, 100, 1_000])
 def test_many_alternative_branches_scale(branch_length: int):
     """
