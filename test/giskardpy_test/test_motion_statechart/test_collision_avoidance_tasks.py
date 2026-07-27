@@ -824,11 +824,7 @@ def _run_and_count_collision_checks(
     return observer
 
 
-def test_collisions_are_not_computed_without_collision_nodes(pr2_with_box, rclpy_node):
-    VizMarkerPublisher(
-        _world=pr2_with_box, node=rclpy_node
-    ).with_tf_and_collision_visualization()
-
+def test_collisions_are_not_computed_without_collision_nodes(pr2_with_box):
     msc = _build_arms_crossing_statechart(pr2_with_box, collision_avoidance=False)
 
     for node in msc.nodes:
