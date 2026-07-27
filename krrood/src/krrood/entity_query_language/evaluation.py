@@ -118,9 +118,12 @@ class SatisfiedConditionTracker(EvaluationObserver):
         # The caller (_evaluate_conclusions_and_update_bindings_) already established that
         # `expression` is the active conditions root for this evaluation pass before invoking
         # this hook, so no re-check is needed here.
-        if result.is_false:
-            return
+        # The structural check comes first because reading a result's truth can be expensive
+        # (a bound predicate evaluates itself), and an evaluation with no conditions to track
+        # is dismissed without needing the truth at all.
         if expression._conditions_root_ is expression._root_:
+            return
+        if result.is_false:
             return
 
         evaluation_context = get_evaluation_context()

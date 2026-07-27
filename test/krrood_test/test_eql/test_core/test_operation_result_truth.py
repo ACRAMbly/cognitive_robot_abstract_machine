@@ -207,6 +207,22 @@ def test_a_result_reads_the_truth_of_its_binding_once():
     assert value.reads == reads_after_first
 
 
+def test_a_fresh_observation_keeps_the_truth_already_read():
+    """
+    Re-emitting a result so the observers treat it as a fresh evaluation must not cost
+    another reading of its binding's truth.
+    """
+    value = TruthCountingValue()
+    [result] = list(variable_from([value])._evaluate_())
+
+    assert result.is_true
+    reads_after_first = value.reads
+
+    assert result._as_fresh_observation_().is_true
+
+    assert value.reads == reads_after_first
+
+
 def test_reading_truth_does_not_multiply_with_the_operators_filtering_on_it():
     """
     Each operator a value flows through asks its result whether it is true, so a value

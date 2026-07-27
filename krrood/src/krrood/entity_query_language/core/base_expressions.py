@@ -487,12 +487,16 @@ class SymbolicExpression(ABC):
             )
         else:
             is_active_root = self._conditions_root_ is self
-        if not is_active_root or current_result.is_false:
+        if not is_active_root:
             return current_result
-        for conclusion in self._conclusions_:
-            current_result.bindings = next(
-                conclusion._evaluate_(current_result)
-            ).bindings
+        # Truth is only consulted where it decides something, since reading it can be
+        # expensive (a bound predicate evaluates itself). The observers below apply the
+        # same rule to their own work.
+        if self._conclusions_ and current_result.is_true:
+            for conclusion in self._conclusions_:
+                current_result.bindings = next(
+                    conclusion._evaluate_(current_result)
+                ).bindings
 
         if evaluation_context is not None:
             evaluation_context.on_conclusions_processed(
@@ -934,11 +938,7 @@ class TruthValueOperator(SymbolicExpression, ABC):
         """
         for result in child._evaluate_(sources):
             if result.has_value:
-                yield OperationResult(
-                    result.bindings,
-                    result.operand,
-                    result.previous_operation_result,
-                )
+                yield result._as_fresh_observation_()
             else:
                 yield result
 
@@ -1057,6 +1057,20 @@ class OperationResult:
     @property
     def has_value(self) -> bool:
         return self.operand is not None and self.operand._id_ in self.bindings
+
+    def _as_fresh_observation_(self) -> OperationResult:
+        """
+        :return: An equivalent result that no observer has recorded anything on yet.
+
+        The same operand and bindings, so the truth already read from them carries over
+        rather than being read again, while the records the observers fill in start
+        empty — this evaluation is a new one to them.
+        """
+        fresh_observation = OperationResult(
+            self.bindings, self.operand, self.previous_operation_result
+        )
+        fresh_observation._is_false_ = self._is_false_
+        return fresh_observation
 
     @property
     def is_false(self) -> bool:
