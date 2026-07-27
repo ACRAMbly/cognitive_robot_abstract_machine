@@ -912,8 +912,8 @@ class TestSelfCollisionAvoidance:
         giskard_better_pose.add_box_to_world(
             name=box_name,
             size=(0.2, 0.1, 0.1),
-            pose=HomogeneousTransformationMatrix(
-                reference_frame=giskard_better_pose.r_tip
+            pose=HomogeneousTransformationMatrix.from_xyz_rpy(
+                x=0.05, reference_frame=giskard_better_pose.r_tip
             ),
             parent_link=giskard_better_pose.r_tip,
         )
