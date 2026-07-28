@@ -261,19 +261,13 @@ def test_robust_monitoring_check():
 
 def _get_true_results(query: Query):
     """
-    Build, evaluate a query and return only the true raw OperationResults.
+    Build *query* and return its raw true ``OperationResult``s (via
+    :meth:`SymbolicExpression._true_results_`), which carries evaluation metadata
+    (``satisfied_condition_ids``) that ``evaluate()``'s processed output does not
+    expose.
     """
     query.build()
-    raw_results = list(query._evaluate_())
-    return [r for r in raw_results if r.is_true]
-
-
-def _get_satisfied_names(ids, condition_root):
-    """
-    Get expression names from satisfied condition IDs by traversing the condition tree.
-    """
-    all_cond = [condition_root] + list(condition_root._descendants_)
-    return {e._name_ for e in all_cond if e._id_ in ids}
+    return list(query._true_results_())
 
 
 def test_satisfied_conditions_simple():
@@ -332,10 +326,7 @@ def test_satisfied_conditions_and_both_true():
 
     ids = result.satisfied_condition_ids
     assert ids is not None
-    # Find expressions by traversing condition tree
-    condition_root = val._conditions_root_
-    all_cond = [condition_root] + list(condition_root._descendants_)
-    expressions = {e._name_ for e in all_cond if e._id_ in ids}
+    expressions = val._conditions_root_._names_for_ids_(ids)
     assert "AND" in expressions
     assert ">" in expressions
     assert "<" in expressions
@@ -366,7 +357,7 @@ def test_satisfied_conditions_or_first_true():
 
     ids = result.satisfied_condition_ids
     assert ids is not None
-    expressions = _get_satisfied_names(ids, val._conditions_root_)
+    expressions = val._conditions_root_._names_for_ids_(ids)
     assert "OR" in expressions
     assert ">" in expressions
     # The right side was short-circuited, should NOT be in satisfied set
@@ -386,7 +377,7 @@ def test_satisfied_conditions_or_fallback():
 
     ids = result.satisfied_condition_ids
     assert ids is not None
-    expressions = _get_satisfied_names(ids, val._conditions_root_)
+    expressions = val._conditions_root_._names_for_ids_(ids)
     assert "OR" in expressions
     # The right side (< 10) is satisfied
     assert "<" in expressions
@@ -407,7 +398,7 @@ def test_satisfied_conditions_not():
 
     ids = result.satisfied_condition_ids
     assert ids is not None
-    expressions = _get_satisfied_names(ids, val._conditions_root_)
+    expressions = val._conditions_root_._names_for_ids_(ids)
     # Not should be satisfied
     assert "Not" in expressions
     # The inner comparator is false, so not satisfied
@@ -439,7 +430,7 @@ def test_satisfied_conditions_nested_and_or_satisfied():
 
     ids = result.satisfied_condition_ids
     assert ids is not None
-    expressions = _get_satisfied_names(ids, val._conditions_root_)
+    expressions = val._conditions_root_._names_for_ids_(ids)
     assert "AND" in expressions
     assert "OR" in expressions
     assert ">" in expressions  # val > 5 is true

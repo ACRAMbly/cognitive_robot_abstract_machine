@@ -220,10 +220,15 @@ class SymbolicExpression(ABC):
             argument.
         """
         SymbolGraph().remove_dead_instances()
-        results = (
-            self._process_result_(res) for res in self._evaluate_() if res.is_true
-        )
+        results = (self._process_result_(res) for res in self._true_results_())
         yield from itertools.islice(results, self._limit_)
+
+    def _true_results_(self) -> Iterator[OperationResult]:
+        """
+        :return: The raw ``OperationResult`` instances from ``_evaluate_()`` whose truth
+            value is true, before :meth:`_process_result_` maps them to output values.
+        """
+        return (result for result in self._evaluate_() if result.is_true)
 
     def _replace_child_(
         self, old_child: SymbolicExpression, new_child: SymbolicExpression
@@ -597,6 +602,19 @@ class SymbolicExpression(ABC):
         ``_descendants_`` override).
         """
         yield from self._iter_descendants_(set())
+
+    def _names_for_ids_(self, ids: OrderedSet[uuid.UUID]) -> Set[str]:
+        """
+        :param ids: Expression identifiers to resolve, typically an
+            :attr:`OperationResult.satisfied_condition_ids`.
+        :return: The ``_name_`` of every expression in this node's subtree (itself
+            included) whose id is in *ids*.
+        """
+        return {
+            expression._name_
+            for expression in itertools.chain((self,), self._descendants_)
+            if expression._id_ in ids
+        }
 
     def _iter_descendants_(
         self, visited_ids: Set[uuid.UUID]
