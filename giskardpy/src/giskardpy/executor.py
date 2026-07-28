@@ -168,7 +168,7 @@ class Executor:
 
     def tick(self):
         self.control_cycles += 1
-        if self.context.collision_manager.has_consumers():
+        if self.context.requires_collision_checking:
             self.context.collision_manager.compute_collisions()
         self.motion_statechart.tick(self.context)
         if self.debug_expression_plotter is not None:
