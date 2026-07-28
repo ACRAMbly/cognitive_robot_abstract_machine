@@ -725,9 +725,11 @@ class Sage10kDoor(Sage10kWithID):
             hinge = Hinge.create_with_new_body_in_world(
                 name=f"{self.id}_hinge",
                 world=world,
-                active_axis=Vector3.Z(),
                 world_root_T_self=world_root_T_hinge,
-                connection_limits=DegreeOfFreedomLimits(lower=lower, upper=upper),
+                parent_connection_specification=Hinge.parent_connection_specification(
+                    axis=Vector3.Z(),
+                    dof_limits=DegreeOfFreedomLimits(lower=lower, upper=upper),
+                ),
             )
             door.add(hinge)
 

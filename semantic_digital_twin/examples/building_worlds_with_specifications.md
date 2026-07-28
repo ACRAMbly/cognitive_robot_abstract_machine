@@ -331,14 +331,17 @@ assert isinstance(milk.root.parent_connection, FixedConnection)
 print("Spawned", type(milk).__name__, "rooted via", type(milk.root.parent_connection).__name__)
 ```
 
-Notice that the specification usually never states *how* the root is connected. By default the
-connection used for the root body is fixed by the annotation type through its
-`_parent_connection_specification_type` (a `FixedConnectionSpecification` for most annotations, a
+The root entity is what attaches to the parent, so the connection lives on the root
+specification. You rarely have to state it: each annotation type builds its own through
+`parent_connection_specification()` — a `FixedConnectionSpecification` for most annotations, a
 `PrismaticConnectionSpecification` for a `Slider`, a `RevoluteConnectionSpecification` for a
-`Hinge`). The specification only supplies the *parameters* an active connection needs — `axis`,
-`multiplier`, `offset`, and `connection_limits` — which are ignored for fixed annotations. This is
-why spawning a `Slider` requires an `axis`. If the root specification sets its own
-`connection_specification`, that connection is used instead and overrides the annotation-type default.
+`Hinge`. Because each connection family carries exactly the parameters it uses, that method takes
+the parameters of *that* family and no others: `Slider.parent_connection_specification(axis=...)`
+is valid, while offering an `axis` to a fixed annotation is an error rather than a silently
+ignored argument.
+
+What a type declares is only a default: setting `connection_specification` on the root
+specification replaces it, so a `Milk` may rest rigidly or float freely as a `Connection6DoF`.
 
 ```{code-cell} ipython3
 from semantic_digital_twin.semantic_annotations.semantic_annotations import Slider
@@ -349,8 +352,7 @@ slider = SemanticAnnotationWithRootSpecification(
     name="slider",
     semantic_annotation_type=Slider,
     root_specification=BodySpecification.box("slider", Scale(0.1, 0.1, 0.1)),
-    axis=Vector3.Z(),  # required because Slider's parent connection is prismatic
-).spawn(world)
+).spawn(world)  # Slider's default parent connection is prismatic about z
 
 assert isinstance(slider.root.parent_connection, PrismaticConnection)
 print("Slider root is attached by a", type(slider.root.parent_connection).__name__)
@@ -365,6 +367,25 @@ shape built from [random events](https://random-events.readthedocs.io/) (a hollo
 carved container case, a wall minus its apertures) — behind a single scale. Reach for it when a
 default shape is good enough, and build the specification directly (previous section) when you
 need a custom root shape.
+
+Some geometries take more than a scale: a handle has a `thickness`, a container case a
+`wall_thickness`. Those are not *default* geometry, so they do not belong on
+`get_default_annotation_specification`. Build the root through the type's own
+`get_default_body_specification` (or `get_default_region_specification`), whose signature names
+them, and hand it to the specification directly:
+
+```python
+SemanticAnnotationWithRootSpecification(
+    name="drawer",
+    semantic_annotation_type=Drawer,
+    root_specification=Drawer.get_default_body_specification(
+        "drawer", Scale(0.4, 0.5, 0.6), wall_thickness=0.05
+    ),
+)
+```
+
+Those builders also take a `connection_specification`, exactly as `BodySpecification.box(...)`
+does, so custom geometry and a custom attachment stay a single expression.
 
 Its `part_specifications` argument mounts nested annotations onto part-whole relationship fields,
 keyed by the field name — spelled out before anything touches a world.

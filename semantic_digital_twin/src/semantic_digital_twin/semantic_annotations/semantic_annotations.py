@@ -86,24 +86,6 @@ class Handle(HasRootBody):
     """
 
     @classmethod
-    def create_with_new_body_in_world(
-        cls,
-        name: str,
-        world: World,
-        world_root_T_self: Optional[HomogeneousTransformationMatrix] = None,
-        connection_limits: Optional[DegreeOfFreedomLimits] = None,
-        active_axis: Optional[Vector3] = None,
-        connection_multiplier: float = 1.0,
-        connection_offset: float = 0.0,
-        *,
-        scale: Optional[Scale] = None,
-        thickness: float = 0.005,
-    ) -> Self:
-        return cls.get_default_annotation_specification(
-            name, scale=scale, thickness=thickness
-        ).spawn(world, parent_T_self=world_root_T_self)
-
-    @classmethod
     def _create_handle_geometry(
         cls, scale: Scale, thickness: float = 0.0
     ) -> SimpleEvent:
@@ -133,6 +115,7 @@ class Handle(HasRootBody):
         cls,
         name: str,
         scale: Optional[Scale] = None,
+        connection_specification: Optional[ConnectionSpecification] = None,
         *,
         thickness: float = 0.005,
     ) -> BodySpecification:
@@ -143,6 +126,8 @@ class Handle(HasRootBody):
         :param name: The name of bodies created from the specification.
         :param scale: The scale of the handle. Defaults to ``Scale(0.05, 0.02, 0.1)``.
         :param thickness: The thickness of the handle walls.
+        :param connection_specification: Connection attaching the entity to its parent.
+            ``None`` defers to the annotation type's default at spawn time.
         :return: A body specification with the handle geometry.
         """
         scale = scale or Scale(0.05, 0.02, 0.1)
@@ -152,7 +137,9 @@ class Handle(HasRootBody):
         ).as_composite_set()
         handle_event -= inner_box
 
-        return BodySpecification.from_event(name, handle_event)
+        return BodySpecification.from_event(
+            name, handle_event, connection_specification=connection_specification
+        )
 
 
 @dataclass(eq=False)
@@ -177,27 +164,6 @@ class Aperture(HasRootRegion):
 
     An example is like a hole in a wall that can be used to enter a room.
     """
-
-    @classmethod
-    def create_with_new_region_in_world(
-        cls,
-        name: str,
-        world: World,
-        world_root_T_self: Optional[HomogeneousTransformationMatrix] = None,
-        connection_limits: Optional[DegreeOfFreedomLimits] = None,
-        active_axis: Optional[Vector3] = None,
-        connection_multiplier: float = 1.0,
-        connection_offset: float = 0.0,
-        *,
-        scale: Optional[Scale] = None,
-    ) -> Self:
-        """
-        Create a new semantic annotation with a new region in the given world.
-        """
-        scale = scale or Scale()
-        return cls.get_default_annotation_specification(name, scale=scale).spawn(
-            world, parent_T_self=world_root_T_self
-        )
 
     @classmethod
     def create_with_new_region_in_world_from_body(
@@ -250,6 +216,7 @@ class Aperture(HasRootRegion):
         cls,
         name: str,
         scale: Optional[Scale] = None,
+        connection_specification: Optional[ConnectionSpecification] = None,
     ) -> RegionSpecification:
         """
         Build the default region specification whose ``area`` geometry matches what
@@ -257,19 +224,23 @@ class Aperture(HasRootRegion):
 
         :param name: The name of regions created from the specification.
         :param scale: The scale used to generate the region area geometry. Defaults to ``Scale()``.
+        :param connection_specification: Connection attaching the entity to its parent.
+            ``None`` defers to the annotation type's default at spawn time.
         :return: A region specification with a single box area derived from ``scale``.
         """
         scale = scale or Scale()
         return RegionSpecification.from_event(
-            name, scale.to_simple_event().as_composite_set()
+            name,
+            scale.to_simple_event().as_composite_set(),
+            connection_specification=connection_specification,
         )
 
     @classmethod
     def _default_root_specification(
-        cls, name: str, *args, **kwargs
+        cls, name: str, scale: Optional[Scale] = None
     ) -> RegionSpecification:
         """Root spec for the Aperture annotation: its default region area geometry spec."""
-        return cls.get_default_region_specification(name, *args, **kwargs)
+        return cls.get_default_region_specification(name, scale)
 
 
 @dataclass(eq=False)
@@ -313,9 +284,29 @@ class Hinge(MechanicalJoint):
     around a fixed axis.
     """
 
-    @classproperty
-    def _parent_connection_specification_type(self) -> Type[ConnectionSpecification]:
-        return RevoluteConnectionSpecification
+    @classmethod
+    def parent_connection_specification(
+        cls,
+        axis: Optional[Vector3] = None,
+        multiplier: float = 1.0,
+        offset: float = 0.0,
+        dof_limits: Optional[DegreeOfFreedomLimits] = None,
+    ) -> RevoluteConnectionSpecification:
+        """
+        Build the revolute connection a hinge rotates about.
+
+        :param axis: Rotation axis. Defaults to the z axis.
+        :param multiplier: Scaling factor applied to the degree of freedom's motion.
+        :param offset: Constant offset applied to the degree of freedom's motion.
+        :param dof_limits: Limits for the generated degree of freedom.
+        :return: The revolute connection specification.
+        """
+        return RevoluteConnectionSpecification(
+            axis=axis if axis is not None else Vector3.Z(),
+            multiplier=multiplier,
+            offset=offset,
+            dof_limits=dof_limits,
+        )
 
 
 @dataclass(eq=False)
@@ -325,9 +316,29 @@ class Slider(MechanicalJoint):
     translate along a fixed axis.
     """
 
-    @classproperty
-    def _parent_connection_specification_type(self) -> Type[ConnectionSpecification]:
-        return PrismaticConnectionSpecification
+    @classmethod
+    def parent_connection_specification(
+        cls,
+        axis: Optional[Vector3] = None,
+        multiplier: float = 1.0,
+        offset: float = 0.0,
+        dof_limits: Optional[DegreeOfFreedomLimits] = None,
+    ) -> PrismaticConnectionSpecification:
+        """
+        Build the prismatic connection a slider translates along.
+
+        :param axis: Translation axis. Defaults to the z axis.
+        :param multiplier: Scaling factor applied to the degree of freedom's motion.
+        :param offset: Constant offset applied to the degree of freedom's motion.
+        :param dof_limits: Limits for the generated degree of freedom.
+        :return: The prismatic connection specification.
+        """
+        return PrismaticConnectionSpecification(
+            axis=axis if axis is not None else Vector3.Z(),
+            multiplier=multiplier,
+            offset=offset,
+            dof_limits=dof_limits,
+        )
 
 
 @dataclass(eq=False)
@@ -352,17 +363,14 @@ class Door(HasHandle, HasMechanicalJoint):
         name: str,
         world: World,
         world_root_T_self: Optional[HomogeneousTransformationMatrix] = None,
-        connection_limits: Optional[DegreeOfFreedomLimits] = None,
-        active_axis: Optional[Vector3] = None,
-        connection_multiplier: float = 1.0,
-        connection_offset: float = 0.0,
-        *,
+        parent_connection_specification: Optional[ConnectionSpecification] = None,
         scale: Optional[Scale] = None,
     ) -> Self:
-        scale = scale or Scale(0.03, 1, 2)
-        door = cls.get_default_annotation_specification(name, scale=scale).spawn(
-            world, parent_T_self=world_root_T_self
-        )
+        door = cls.get_default_annotation_specification(
+            name,
+            scale,
+            parent_connection_specification=parent_connection_specification,
+        ).spawn(world, parent_T_self=world_root_T_self)
 
         # TODO: The EntryWay is spawn-time structure that cannot yet be expressed as a nested
         #       part-whole annotation spec, so it is built directly here for now (see
@@ -387,6 +395,7 @@ class Door(HasHandle, HasMechanicalJoint):
         cls,
         name: str,
         scale: Optional[Scale] = None,
+        connection_specification: Optional[ConnectionSpecification] = None,
     ) -> BodySpecification:
         """
         Build the default door body specification. The door geometry is the base
@@ -395,12 +404,16 @@ class Door(HasHandle, HasMechanicalJoint):
 
         :param name: The name of bodies created from the specification.
         :param scale: The scale of the door. ``scale.x`` must be the smallest dimension. Defaults to ``Scale(0.03, 1, 2)``.
+        :param connection_specification: Connection attaching the entity to its parent.
+            ``None`` defers to the annotation type's default at spawn time.
         :return: A body specification with the door box geometry.
         """
         scale = scale or Scale(0.03, 1, 2)
         if not (scale.x < scale.y and scale.x < scale.z):
             raise InvalidPlaneDimensions(scale, clazz=Door)
-        return super().get_default_body_specification(name, scale)
+        return super().get_default_body_specification(
+            name, scale, connection_specification
+        )
 
     def calculate_world_T_hinge_based_on_handle(
         self, opening_axis: Vector3
@@ -546,34 +559,6 @@ class Wardrobe(Cabinet): ...
 @dataclass(eq=False)
 class Floor(HasSupportingSurface):
     @classmethod
-    def create_with_new_body_in_world(
-        cls,
-        name: str,
-        world: World,
-        world_root_T_self: Optional[HomogeneousTransformationMatrix] = None,
-        connection_limits: Optional[DegreeOfFreedomLimits] = None,
-        active_axis: Optional[Vector3] = None,
-        connection_multiplier: float = 1.0,
-        connection_offset: float = 0.0,
-        *,
-        scale: Optional[Scale] = None,
-    ) -> Self:
-        """
-        Create a Floor semantic annotation with a new body defined by the given scale.
-
-        :param name: The name of the floor body.
-        :param scale: The scale defining the floor polytope. Defaults to a unit :class:`Scale`.
-        """
-        scale = scale or Scale()
-        polytope = scale.to_bounding_box().get_points()
-        return cls.create_with_new_body_from_polytope_in_world(
-            name=name,
-            floor_polytope=polytope,
-            world=world,
-            world_root_T_self=world_root_T_self,
-        )
-
-    @classmethod
     def create_with_new_body_from_polytope_in_world(
         cls,
         name: str,
@@ -599,6 +584,7 @@ class Floor(HasSupportingSurface):
         cls,
         name: str,
         scale: Optional[Scale] = None,
+        connection_specification: Optional[ConnectionSpecification] = None,
     ) -> BodySpecification:
         """
         Build the default floor body specification, matching the convex-hull
@@ -607,11 +593,15 @@ class Floor(HasSupportingSurface):
 
         :param name: The name of bodies created from the specification.
         :param scale: The scale defining the floor polytope. Defaults to ``Scale()``.
+        :param connection_specification: Connection attaching the entity to its parent.
+            ``None`` defers to the annotation type's default at spawn time.
         :return: A body specification with the floor polytope mesh.
         """
         scale = scale or Scale()
         return BodySpecification.from_3d_points(
-            name, scale.to_bounding_box().get_points()
+            name,
+            scale.to_bounding_box().get_points(),
+            connection_specification=connection_specification,
         )
 
 
@@ -651,24 +641,6 @@ class Wall(HasApertures):
     Doors are a computed property.
     """
 
-    @classmethod
-    def create_with_new_body_in_world(
-        cls,
-        name: str,
-        world: World,
-        world_root_T_self: Optional[HomogeneousTransformationMatrix] = None,
-        connection_limits: Optional[DegreeOfFreedomLimits] = None,
-        active_axis: Optional[Vector3] = None,
-        connection_multiplier: float = 1.0,
-        connection_offset: float = 0.0,
-        *,
-        scale: Optional[Scale] = None,
-    ) -> Self:
-        scale = scale or Scale()
-        return cls.get_default_annotation_specification(name, scale=scale).spawn(
-            world, parent_T_self=world_root_T_self
-        )
-
     @property
     def doors(self) -> Iterable[Door]:
         return [
@@ -703,6 +675,7 @@ class Wall(HasApertures):
         cls,
         name: str,
         scale: Optional[Scale] = None,
+        connection_specification: Optional[ConnectionSpecification] = None,
     ) -> BodySpecification:
         """
         Build the default wall body specification, matching the geometry generated
@@ -710,13 +683,17 @@ class Wall(HasApertures):
 
         :param name: The name of bodies created from the specification. ``scale.x`` must be the smallest dimension.
         :param scale: The scale of the wall. Defaults to ``Scale()``.
+        :param connection_specification: Connection attaching the entity to its parent.
+            ``None`` defers to the annotation type's default at spawn time.
         :return: A body specification with the wall box geometry.
         """
         scale = scale or Scale()
         if not (scale.x < scale.y and scale.x < scale.z):
             raise InvalidPlaneDimensions(scale, clazz=Wall)
         return BodySpecification.from_event(
-            name, cls._create_wall_event(scale).as_composite_set()
+            name,
+            cls._create_wall_event(scale).as_composite_set(),
+            connection_specification=connection_specification,
         )
 
 

@@ -83,6 +83,9 @@ TKinematicStructureEntity = TypeVar(
     "TKinematicStructureEntity", bound=KinematicStructureEntity
 )
 TConnection = TypeVar("TConnection", bound=Connection)
+TSemanticAnnotation = TypeVar(
+    "TSemanticAnnotation", bound="HasRootKinematicStructureEntity"
+)
 
 
 @dataclass
@@ -218,25 +221,6 @@ class ConnectionSpecification(
 
         return result
 
-    @classmethod
-    def from_kwargs(
-        cls, *, name: Optional[str] = None, **connection_parameters
-    ) -> Self:
-        """
-        Instantiate this specification, applying the parameters its connection family
-        uses.
-
-        Parameters that the family does not use are ignored, so a caller holding a bare
-        specification type can parameterize any family uniformly.
-
-        :param name: Optional connection name. If None, the name is auto-generated at
-            materialization time.
-        :param connection_parameters: Connection parameters of other families, ignored
-            here.
-        :return: The created specification.
-        """
-        return cls(name=name)
-
     def connect(
         self,
         world: World,
@@ -326,11 +310,12 @@ class ActiveConnection1DOFSpecification(ConnectionSpecification[TConnection], AB
     prismatic or revolute).
     """
 
-    axis: Optional[Vector3] = None
+    axis: Vector3 = field(kw_only=True)
     """
     Movement axis of the connection.
 
-    Required by ``create_with_dofs`` at spawn time.
+    Mandatory: a single-DoF connection without an axis has no meaning, so it cannot be
+    constructed.
     """
 
     multiplier: float = 1.0
@@ -347,40 +332,6 @@ class ActiveConnection1DOFSpecification(ConnectionSpecification[TConnection], AB
     """
     Limits for the generated degree of freedom.
     """
-
-    @classmethod
-    def from_kwargs(
-        cls,
-        *,
-        name: Optional[str] = None,
-        axis: Vector3 | None = None,
-        multiplier: float = 1.0,
-        offset: float = 0.0,
-        dof_limits: Optional[DegreeOfFreedomLimits] = None,
-        **_,
-    ) -> Self:
-        """
-        Instantiate the specification from the single-DoF parameters (axis, multiplier,
-        offset, limits).
-
-        Parameters this connection family does not use are ignored, so a caller holding
-        a bare specification type can parameterize any family uniformly.
-
-        :param name: Optional connection name. If None, the name is auto-generated at
-            materialization time.
-        :param axis: Movement axis of the connection.
-        :param multiplier: Scaling factor applied to the degree of freedom's motion.
-        :param offset: Constant offset applied to the degree of freedom's motion.
-        :param dof_limits: Limits for the generated degree of freedom.
-        :return: The created specification.
-        """
-        return cls(
-            name=name,
-            axis=axis,
-            multiplier=multiplier,
-            offset=offset,
-            dof_limits=dof_limits,
-        )
 
 
 @dataclass
@@ -836,19 +787,22 @@ class RegionSpecification(KinematicStructureEntitySpecification[Region]):
 
 
 @dataclass
-class SemanticAnnotationWithRootSpecification(
-    SpawnSpecification["HasRootKinematicStructureEntity"]
-):
+class SemanticAnnotationWithRootSpecification(SpawnSpecification[TSemanticAnnotation]):
     """
     World-independent description of a semantic annotation rooted in a single kinematic
     structure entity.
 
-    The annotation type owns the parent connection specification type (via its
-    ``_parent_connection_specification_type``); this specification only supplies the
-    connection parameters for active connections.
+    The annotation's root entity is what attaches to the parent, so its parent
+    connection lives on ``root_specification.connection_specification`` and nowhere
+    else. Leaving it unset falls back to the annotation type's own
+    :meth:`~semantic_digital_twin.semantic_annotations.mixins.HasRootKinematicStructureEntity.parent_connection_specification`.
+
+    ..note:: There is deliberately no way to pass loose connection parameters here. Each
+        connection family carries exactly the parameters it uses, so an inapplicable
+        parameter is a construction error rather than a silently ignored field.
     """
 
-    semantic_annotation_type: Type[HasRootKinematicStructureEntity]
+    semantic_annotation_type: Type[TSemanticAnnotation]
     """
     The type of the semantic annotation that is a subclass of
     HasRootKinematicStructureEntity.
@@ -857,29 +811,8 @@ class SemanticAnnotationWithRootSpecification(
     root_specification: KinematicStructureEntitySpecification
     """
     The specification of the root kinematic structure entity of the annotation.
-    """
 
-    axis: Optional[Vector3] = None
-    """
-    Movement axis for the parent connection.
-
-    Required when the annotation's ``_parent_connection_specification_type`` is an
-    active connection; ignored otherwise.
-    """
-
-    multiplier: float = 1.0
-    """
-    DoF multiplier for the parent connection (active connections only).
-    """
-
-    offset: float = 0.0
-    """
-    DoF offset for the parent connection (active connections only).
-    """
-
-    connection_limits: Optional[DegreeOfFreedomLimits] = None
-    """
-    Degree-of-freedom limits for the parent connection (active connections only).
+    Its :attr:`connection_specification` is the annotation's parent connection.
     """
 
     annotation_kwargs: dict[str, Any] = field(default_factory=dict)
@@ -919,15 +852,14 @@ class SemanticAnnotationWithRootSpecification(
         name: Optional[str] = None,
         parent: KinematicStructureEntity | None = None,
         parent_T_self: HomogeneousTransformationMatrix | None = None,
-    ) -> HasRootKinematicStructureEntity:
+    ) -> TSemanticAnnotation:
         """
         Materialize the annotation in ``world``: spawn its root entity, attach it to
         ``parent``, register the annotation, and spawn its geometry children and mounted
         part specifications.
 
         The root's connection is the root specification's
-        :attr:`connection_specification` when set; otherwise it is derived from the
-        annotation type's parent connection.
+        :attr:`connection_specification`, which construction guarantees is set.
 
         :param world: The world the annotation, its root and its parts are added to.
         :param name: Overrides the specification's own name. If None, the spec's name is
@@ -948,12 +880,7 @@ class SemanticAnnotationWithRootSpecification(
 
         connection_specification = (
             self.root_specification.connection_specification
-            or self.semantic_annotation_type._parent_connection_specification_type.from_kwargs(
-                axis=self.axis,
-                multiplier=self.multiplier,
-                offset=self.offset,
-                dof_limits=self.connection_limits,
-            )
+            or self.semantic_annotation_type.parent_connection_specification()
         )
 
         with world.modify_world():
@@ -994,7 +921,7 @@ class SemanticAnnotationWithRootSpecification(
             )
 
     def _validate_part_specifications(
-        self, instance: type[HasRootKinematicStructureEntity]
+        self, instance: type[TSemanticAnnotation]
     ) -> None:
         """
         Validate that every :attr:`part_specifications` key names a part-whole

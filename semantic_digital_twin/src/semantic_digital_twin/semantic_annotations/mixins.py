@@ -62,9 +62,6 @@ from semantic_digital_twin.spatial_types import (
 from semantic_digital_twin.world_description.connections import (
     FixedConnection,
 )
-from semantic_digital_twin.world_description.degree_of_freedom import (
-    DegreeOfFreedomLimits,
-)
 from semantic_digital_twin.world_description.geometry import Scale
 from semantic_digital_twin.world_description.shape_collection import (
     BoundingBoxCollection,
@@ -139,18 +136,34 @@ class HasRootKinematicStructureEntity(
     def __hash__(self):
         return hash((self.__class__, self.root))
 
-    @classproperty
-    def _parent_connection_specification_type(self) -> Type[ConnectionSpecification]:
+    @classmethod
+    def parent_connection_specification(cls) -> ConnectionSpecification:
         """
-        The connection specification type that attaches the root kinematic structure entity to the world.
-        .. note:: Currently its always fixed, except with sliders and hinges, but in the future this may change. So override if needed.
+        Build the connection that attaches this annotation's root entity to its parent.
+
+        Annotation types whose connection takes parameters override this with their own
+        concrete signature, so callers get the parameters that family actually uses and
+        nothing else (e.g. :meth:`Slider.parent_connection_specification` takes an
+        ``axis``, this one takes none).
+
+        :meth:`get_default_annotation_specification` calls this to fill in the connection
+        when the caller supplies none. To parameterize it, call this method yourself and
+        hand the result to that factory.
+
+        .. warning:: Every override must stay callable with no arguments, since that is
+            how the default is resolved. Add parameters only with defaults.
+
+        .. note:: Currently always fixed, except for sliders and hinges. This may change
+            in the future, so override where needed.
+
+        :return: A freshly built connection specification.
         """
-        return FixedConnectionSpecification
+        return FixedConnectionSpecification()
 
     @classmethod
     @abstractmethod
     def _default_root_specification(
-        cls, name: str, *args, **kwargs
+        cls, name: str, scale: Optional[Scale] = None
     ) -> KinematicStructureEntitySpecification:
         """Root spec for a kinematic structure entity-rooted annotation: its default geometry spec."""
 
@@ -158,50 +171,43 @@ class HasRootKinematicStructureEntity(
     def get_default_annotation_specification(
         cls,
         name: str,
-        *geometry_args,
-        active_axis: Optional[Vector3] = None,
-        connection_multiplier: float = 1.0,
-        connection_offset: float = 0.0,
-        connection_limits: Optional[DegreeOfFreedomLimits] = None,
+        scale: Optional[Scale] = None,
+        *,
+        parent_connection_specification: Optional[ConnectionSpecification] = None,
         annotation_kwargs: Optional[dict] = None,
         part_specifications: Optional[dict] = None,
-        **geometry_kwargs,
     ) -> SemanticAnnotationWithRootSpecification[Self]:
         """
         Build the default annotation specification for this semantic annotation type: a
         :class:`SemanticAnnotationWithRootSpecification` whose ``root_specification`` is this
-        type's default geometry spec (see :meth:`_default_root_specification`), plus the
-        parent-connection parameters.
+        type's default geometry spec (see :meth:`_default_root_specification`).
 
         This is the reusable specification form of :meth:`create_with_new_body_in_world`;
         spawn the returned specification to materialize the annotation in a world.
 
-        Extra positional/keyword arguments are forwarded to the geometry method, so per-class
-        geometry parameters (e.g. ``wall_thickness``, ``thickness``) and per-class default
-        scales are preserved.
+        This builds *this type's default* geometry from ``scale``. Geometry that needs more
+        than a scale (a handle's ``thickness``, a case's ``wall_thickness``) is no longer the
+        default, so build it with this type's own ``get_default_body_specification`` /
+        ``get_default_region_specification`` and pass the result straight to
+        :class:`SemanticAnnotationWithRootSpecification`.
 
         :param name: The name of the annotation and its root entity.
-        :param geometry_args: Positional geometry arguments forwarded to :meth:`_default_root_specification`.
-        :param active_axis: Movement axis for an active parent connection (e.g. Slider/Hinge).
-        :param connection_multiplier: DoF multiplier for an active parent connection.
-        :param connection_offset: DoF offset for an active parent connection.
-        :param connection_limits: DoF limits for an active parent connection.
+        :param scale: The scale its default geometry is generated from.
+        :param parent_connection_specification: Connection attaching the root to its parent.
+            When omitted, :meth:`parent_connection_specification` supplies this type's default.
         :param annotation_kwargs: Inert keyword arguments for the annotation constructor.
         :param part_specifications: Nested annotation parts keyed by part-whole relationship field name.
-        :param geometry_kwargs: Keyword geometry arguments forwarded to :meth:`_default_root_specification`.
         :return: The annotation specification.
         """
-        root_specification = cls._default_root_specification(
-            name, *geometry_args, **geometry_kwargs
-        )
+        root_specification = cls._default_root_specification(name, scale)
+        if parent_connection_specification is not None:
+            root_specification.connection_specification = (
+                parent_connection_specification
+            )
         return SemanticAnnotationWithRootSpecification(
             name=name,
             semantic_annotation_type=cls,
             root_specification=root_specification,
-            axis=active_axis,
-            multiplier=connection_multiplier,
-            offset=connection_offset,
-            connection_limits=connection_limits,
             annotation_kwargs=annotation_kwargs or {},
             part_specifications=part_specifications or {},
         )
@@ -255,10 +261,7 @@ class HasRootBody(HasRootKinematicStructureEntity[TBody], ABC):
         name: str,
         world: World,
         world_root_T_self: Optional[HomogeneousTransformationMatrix] = None,
-        connection_limits: Optional[DegreeOfFreedomLimits] = None,
-        active_axis: Optional[Vector3] = None,
-        connection_multiplier: float = 1.0,
-        connection_offset: float = 0.0,
+        parent_connection_specification: Optional[ConnectionSpecification] = None,
         scale: Optional[Scale] = None,
     ) -> Self:
         """
@@ -267,10 +270,8 @@ class HasRootBody(HasRootKinematicStructureEntity[TBody], ABC):
         :param name: The name of the semantic annotation.
         :param world: The world to add the annotation and body to.
         :param world_root_T_self: The initial pose of the body in the world root frame.
-        :param connection_limits: The limits for the connection's degrees of freedom.
-        :param active_axis: The active axis for the connection.
-        :param connection_multiplier: The multiplier for the connection.
-        :param connection_offset: The offset for the connection.
+        :param parent_connection_specification: Connection attaching the body to the world
+            root. When omitted, this type's default parent connection applies.
         :param scale: The scale used to generate the geometry of the body. When omitted, the
             type's default geometry scale applies.
         :return: The created semantic annotation instance.
@@ -278,10 +279,7 @@ class HasRootBody(HasRootKinematicStructureEntity[TBody], ABC):
         return cls.get_default_annotation_specification(
             name,
             scale,
-            active_axis=active_axis,
-            connection_multiplier=connection_multiplier,
-            connection_offset=connection_offset,
-            connection_limits=connection_limits,
+            parent_connection_specification=parent_connection_specification,
         ).spawn(world, parent_T_self=world_root_T_self)
 
     @classmethod
@@ -289,6 +287,7 @@ class HasRootBody(HasRootKinematicStructureEntity[TBody], ABC):
         cls,
         name: str,
         scale: Optional[Scale] = None,
+        connection_specification: Optional[ConnectionSpecification] = None,
     ) -> BodySpecification:
         """
         Build the default body specification whose geometry matches what
@@ -300,19 +299,25 @@ class HasRootBody(HasRootKinematicStructureEntity[TBody], ABC):
         :param name: The name of bodies created from the specification. ``None`` yields a
             geometry-less specification, matching a factory call without a scale.
         :param scale: The scale used to generate the box geometry.
+        :param connection_specification: Connection attaching the entity to its parent.
+            ``None`` defers to the annotation type's default at spawn time.
         :return: A body specification with a single solid box derived from ``scale``.
         """
         if scale is None:
-            return BodySpecification(name=name)
+            return BodySpecification(
+                name=name, connection_specification=connection_specification
+            )
         return BodySpecification.from_event(
-            name, scale.to_simple_event().as_composite_set()
+            name,
+            scale.to_simple_event().as_composite_set(),
+            connection_specification=connection_specification,
         )
 
     @classmethod
     def _default_root_specification(
-        cls, name: str, *args, **kwargs
+        cls, name: str, scale: Optional[Scale] = None
     ) -> BodySpecification:
-        return cls.get_default_body_specification(name, *args, **kwargs)
+        return cls.get_default_body_specification(name, scale)
 
 
 TRegion = TypeVar("TRegion", bound=Region)
@@ -330,11 +335,8 @@ class HasRootRegion(HasRootKinematicStructureEntity[TRegion], ABC):
         name: str,
         world: World,
         world_root_T_self: Optional[HomogeneousTransformationMatrix] = None,
-        connection_limits: Optional[DegreeOfFreedomLimits] = None,
-        active_axis: Optional[Vector3] = None,
-        connection_multiplier: float = 1.0,
-        connection_offset: float = 0.0,
-        **kwargs,
+        parent_connection_specification: Optional[ConnectionSpecification] = None,
+        scale: Optional[Scale] = None,
     ) -> Self:
         """
         Create a new semantic annotation with a new region in the given world.
@@ -342,18 +344,15 @@ class HasRootRegion(HasRootKinematicStructureEntity[TRegion], ABC):
         :param name: The name of the semantic annotation.
         :param world: The world to add the annotation and region to.
         :param world_root_T_self: The initial pose of the region in the world root frame.
-        :param connection_limits: The limits for the connection's degrees of freedom.
-        :param active_axis: The active axis for the connection.
-        :param connection_multiplier: The multiplier for the connection.
-        :param connection_offset: The offset for the connection.
+        :param parent_connection_specification: Connection attaching the region to the world
+            root. When omitted, this type's default parent connection applies.
+        :param scale: The scale used to generate the region area geometry.
         :return: The created semantic annotation instance.
         """
         return cls.get_default_annotation_specification(
             name,
-            active_axis=active_axis,
-            connection_multiplier=connection_multiplier,
-            connection_offset=connection_offset,
-            connection_limits=connection_limits,
+            scale,
+            parent_connection_specification=parent_connection_specification,
         ).spawn(world, parent_T_self=world_root_T_self)
 
     @classmethod
@@ -361,6 +360,7 @@ class HasRootRegion(HasRootKinematicStructureEntity[TRegion], ABC):
         cls,
         name: str,
         scale: Optional[Scale] = None,
+        connection_specification: Optional[ConnectionSpecification] = None,
     ) -> RegionSpecification:
         """
         Build the default region specification whose geometry matches what
@@ -369,19 +369,25 @@ class HasRootRegion(HasRootKinematicStructureEntity[TRegion], ABC):
         :param name: The name of regions created from the specification.
         :param scale: The scale used to generate the region area geometry. ``None`` yields a
             geometry-less specification, matching the bare region of the base factory.
+        :param connection_specification: Connection attaching the entity to its parent.
+            ``None`` defers to the annotation type's default at spawn time.
         :return: A region specification.
         """
         if scale is None:
-            return RegionSpecification(name=name)
+            return RegionSpecification(
+                name=name, connection_specification=connection_specification
+            )
         return RegionSpecification.from_event(
-            name, scale.to_simple_event().as_composite_set()
+            name,
+            scale.to_simple_event().as_composite_set(),
+            connection_specification=connection_specification,
         )
 
     @classmethod
     def _default_root_specification(
-        cls, name: str, *args, **kwargs
+        cls, name: str, scale: Optional[Scale] = None
     ) -> RegionSpecification:
-        return cls.get_default_region_specification(name, *args, **kwargs)
+        return cls.get_default_region_specification(name, scale)
 
 
 @lru_cache(maxsize=None)
@@ -985,45 +991,6 @@ class HasCaseAsRootBody(HasSupportingSurface, ABC):
         ...
 
     @classmethod
-    def create_with_new_body_in_world(
-        cls,
-        name: str,
-        world: World,
-        world_root_T_self: Optional[HomogeneousTransformationMatrix] = None,
-        connection_limits: Optional[DegreeOfFreedomLimits] = None,
-        active_axis: Optional[Vector3] = None,
-        connection_multiplier: float = 1.0,
-        connection_offset: float = 0.0,
-        scale: Optional[Scale] = None,
-        *,
-        wall_thickness: float = 0.01,
-    ) -> Self:
-        """
-        Create a new semantic annotation with a new body in the given world.
-
-        :param name: The name of the semantic annotation.
-        :param world: The world to add the annotation and body to.
-        :param world_root_T_self: The initial pose of the body in the world root frame.
-        :param connection_limits: The limits for the connection's degrees of freedom.
-        :param active_axis: The active axis for the connection.
-        :param connection_multiplier: The multiplier for the connection.
-        :param connection_offset: The offset for the connection.
-        :param scale: The scale of the case. Defaults to a unit :class:`Scale` when omitted.
-        :param wall_thickness: The thickness of the case walls.
-        :return: The created semantic annotation instance.
-        """
-        scale = scale if scale is not None else Scale()
-        return cls.get_default_annotation_specification(
-            name,
-            scale,
-            wall_thickness=wall_thickness,
-            active_axis=active_axis,
-            connection_multiplier=connection_multiplier,
-            connection_offset=connection_offset,
-            connection_limits=connection_limits,
-        ).spawn(world, parent_T_self=world_root_T_self)
-
-    @classmethod
     def _create_container_event(cls, scale: Scale, wall_thickness: float) -> Event:
         """
         Return an event representing a container with walls of a specified thickness.
@@ -1048,6 +1015,7 @@ class HasCaseAsRootBody(HasSupportingSurface, ABC):
         cls,
         name: str,
         scale: Optional[Scale] = None,
+        connection_specification: Optional[ConnectionSpecification] = None,
         *,
         wall_thickness: float = 0.01,
     ) -> BodySpecification:
@@ -1058,9 +1026,13 @@ class HasCaseAsRootBody(HasSupportingSurface, ABC):
         :param name: The name of bodies created from the specification.
         :param scale: The outer scale of the case. Defaults to a unit :class:`Scale` when omitted.
         :param wall_thickness: The thickness of the case walls.
+        :param connection_specification: Connection attaching the entity to its parent.
+            ``None`` defers to the annotation type's default at spawn time.
         :return: A body specification with hollow container geometry.
         """
         scale = scale if scale is not None else Scale()
         return BodySpecification.from_event(
-            name, cls._create_container_event(scale, wall_thickness)
+            name,
+            cls._create_container_event(scale, wall_thickness),
+            connection_specification=connection_specification,
         )

@@ -78,11 +78,13 @@ def wall_door_handle_world():
         hinge = Hinge.create_with_new_body_in_world(
             name="hinge",
             world=world,
-            active_axis=Vector3.Z(),
             world_root_T_self=world_T_hinge,
-            connection_limits=DegreeOfFreedomLimits(
-                lower=DerivativeMap(position=0.0, velocity=0.0),
-                upper=DerivativeMap(position=np.pi / 2, velocity=1.0),
+            parent_connection_specification=Hinge.parent_connection_specification(
+                axis=Vector3.Z(),
+                dof_limits=DegreeOfFreedomLimits(
+                    lower=DerivativeMap(position=0.0, velocity=0.0),
+                    upper=DerivativeMap(position=np.pi / 2, velocity=1.0),
+                ),
             ),
         )
         door.add(hinge)

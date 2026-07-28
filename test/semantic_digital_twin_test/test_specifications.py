@@ -10,6 +10,7 @@ from krrood.utils import recursive_subclasses
 from semantic_digital_twin.api.specifications import (
     BodySpecification,
     RegionSpecification,
+    ActiveConnection1DOFSpecification,
     ConnectionSpecification,
     FixedConnectionSpecification,
     Connection6DoFSpecification,
@@ -170,7 +171,6 @@ def test_active_annotation_spawns(empty_world):
         name="slider",
         semantic_annotation_type=Slider,
         root_specification=BodySpecification.box("slider", Scale(0.1, 0.1, 0.1)),
-        axis=Vector3.Z(),
     )
     annotation = spec.spawn(empty_world)
     assert isinstance(annotation, Slider)
@@ -193,26 +193,18 @@ def test_annotation_root_connection_specification_overrides_type(empty_world):
     assert isinstance(annotation.root.parent_connection, Connection6DoF)
 
 
-def test_active_connection_requires_parameters_body(empty_world):
-    # An active connection without an axis is rejected at spawn time by create_with_dofs.
-    spec = BodySpecification.box(
-        "b",
-        Scale(1, 1, 1),
-        connection_specification=PrismaticConnectionSpecification(),
-    )
-    with pytest.raises(MissingConnectionAxisError):
-        spec.spawn(empty_world)
+def test_active_connection_specification_requires_axis():
+    # An axis-less single-DoF connection is meaningless, so it cannot be built at all.
+    # This replaces the former spawn-time MissingConnectionAxisError for specifications.
+    with pytest.raises(TypeError):
+        PrismaticConnectionSpecification()
 
 
-def test_active_annotation_requires_parameters(empty_world):
-    # Slider's parent connection is active, so spawning without an axis must raise.
-    spec = SemanticAnnotationWithRootSpecification(
-        name="slider",
-        semantic_annotation_type=Slider,
-        root_specification=BodySpecification.box("slider", Scale(0.1, 0.1, 0.1)),
-    )
-    with pytest.raises(MissingConnectionAxisError):
-        spec.spawn(empty_world)
+def test_fixed_connection_annotation_rejects_axis():
+    # A fixed parent connection takes no axis, so offering one is a call-time error
+    # rather than a silently ignored argument.
+    with pytest.raises(TypeError):
+        Milk.parent_connection_specification(axis=Vector3.Z())
 
 
 def test_nested_annotation_on_non_part_whole_field_raises():
@@ -545,30 +537,22 @@ def test_active_1dof_spec_captures_parameters():
 
 
 def test_active_1dof_spec_defaults():
-    spec = RevoluteConnectionSpecification()
+    axis = Vector3.Z()
+    spec = RevoluteConnectionSpecification(axis=axis)
     assert spec.connection_type is RevoluteConnection
     assert spec._create_with_dofs_kwargs() == {
-        "axis": None,
+        "axis": axis,
         "multiplier": 1.0,
         "offset": 0.0,
         "dof_limits": None,
     }
 
 
-def test_parameterized_active_consumes_parameters():
-    axis = Vector3.Z()
-    spec = PrismaticConnectionSpecification.from_kwargs(axis=axis, multiplier=2.0)
-    assert isinstance(spec, PrismaticConnectionSpecification)
-    assert spec.axis is axis
-    assert spec.multiplier == 2.0
-
-
-def test_parameterized_fixed_ignores_active_parameters():
-    # A fixed spec must accept and ignore active parameters, so a caller holding a bare
-    # specification type can parameterize any family uniformly.
-    spec = FixedConnectionSpecification.from_kwargs(axis=Vector3.Z(), multiplier=2.0)
-    assert isinstance(spec, FixedConnectionSpecification)
-    assert spec._create_with_dofs_kwargs() == {}
+def test_fixed_spec_rejects_active_parameters():
+    # Each connection family carries exactly its own parameters, so an inapplicable one
+    # is a construction error instead of being silently dropped.
+    with pytest.raises(TypeError):
+        FixedConnectionSpecification(axis=Vector3.Z())
 
 
 def _connection_specification_types() -> list[type[ConnectionSpecification]]:
@@ -581,11 +565,20 @@ def _connection_specification_types() -> list[type[ConnectionSpecification]]:
     ]
 
 
+def _build_connection_specification(
+    specification_type: type[ConnectionSpecification],
+) -> ConnectionSpecification:
+    """Build a specification, supplying the parameters its own family requires."""
+    if issubclass(specification_type, ActiveConnection1DOFSpecification):
+        return specification_type(axis=Vector3.Z())
+    return specification_type()
+
+
 @pytest.mark.parametrize("specification_type", _connection_specification_types())
 def test_spec_kwargs_match_create_with_dofs_signature(specification_type):
     # The forwarded kwargs must be keyword arguments that create_with_dofs accepts,
     # otherwise the specification cannot materialize its connection.
-    spec = specification_type()
+    spec = _build_connection_specification(specification_type)
     accepted_parameters = inspect.signature(
         spec.connection_type.create_with_dofs
     ).parameters
@@ -675,10 +668,18 @@ def test_connection_spec_connect_without_name_matches_direct_creation(empty_worl
 def test_annotation_declares_parent_connection_specification_type(
     annotation_type, expected_specification_type
 ):
-    assert (
-        annotation_type._parent_connection_specification_type
-        is expected_specification_type
+    assert isinstance(
+        annotation_type.parent_connection_specification(), expected_specification_type
     )
+
+
+def test_parent_connection_specification_is_built_per_call():
+    # Callers may mutate the returned specification, so each call must hand out a fresh
+    # instance rather than a shared default.
+    first = Slider.parent_connection_specification()
+    second = Slider.parent_connection_specification()
+    assert first is not second
+    assert first.axis is not second.axis
 
 
 #####################################################################
@@ -726,12 +727,13 @@ def test_default_spec_matches_case_body(empty_world):
 def test_default_spec_matches_case_body_with_wall_thickness(empty_world):
     scale = Scale(0.4, 0.5, 0.6)
     with empty_world.modify_world():
-        factory = Drawer.create_with_new_body_in_world(
+        factory = SemanticAnnotationWithRootSpecification(
             name="drawer",
-            world=empty_world,
-            scale=scale,
-            wall_thickness=0.05,
-        )
+            semantic_annotation_type=Drawer,
+            root_specification=Drawer.get_default_body_specification(
+                "drawer", scale, wall_thickness=0.05
+            ),
+        ).spawn(empty_world)
     spec_body = Drawer.get_default_body_specification(
         "drawer", scale, wall_thickness=0.05
     ).to_domain_object()
@@ -741,9 +743,13 @@ def test_default_spec_matches_case_body_with_wall_thickness(empty_world):
 def test_default_spec_matches_handle(empty_world):
     scale = Scale(0.1, 0.05, 0.05)
     with empty_world.modify_world():
-        factory = Handle.create_with_new_body_in_world(
-            name="handle", world=empty_world, scale=scale, thickness=0.01
-        )
+        factory = SemanticAnnotationWithRootSpecification(
+            name="handle",
+            semantic_annotation_type=Handle,
+            root_specification=Handle.get_default_body_specification(
+                "handle", scale, thickness=0.01
+            ),
+        ).spawn(empty_world)
     spec_body = Handle.get_default_body_specification(
         "handle", scale, thickness=0.01
     ).to_domain_object()
@@ -754,9 +760,7 @@ def test_default_spec_matches_handle_without_explicit_scale(empty_world):
     # Both sides must fall back to the same default scale, otherwise the factory and the
     # specification silently produce differently shaped handles.
     with empty_world.modify_world():
-        factory = Handle.create_with_new_body_in_world(
-            name="handle", world=empty_world
-        )
+        factory = Handle.create_with_new_body_in_world(name="handle", world=empty_world)
     spec_body = Handle.get_default_body_specification("handle").to_domain_object()
     _assert_same_geometry(spec_body.collision, factory.root.collision)
 
@@ -852,50 +856,23 @@ def test_annotation_spec_base_body(empty_world):
 def test_annotation_spec_active_slider(empty_world):
     scale = Scale(0.1, 0.1, 0.1)
     spec = Slider.get_default_annotation_specification(
-        "slider", scale, active_axis=Vector3.Z()
+        "slider",
+        scale,
+        parent_connection_specification=Slider.parent_connection_specification(
+            axis=Vector3.Z()
+        ),
     )
     annotation = spec.spawn(empty_world)
     assert isinstance(annotation, Slider)
     assert isinstance(annotation.root.parent_connection, PrismaticConnection)
 
 
-def test_annotation_spec_active_requires_axis(empty_world):
-    # Slider's parent connection is active, so spawning without an axis must raise.
+def test_annotation_spec_active_uses_default_axis(empty_world):
+    # Slider declares its own parameterized default, so omitting the axis still yields a
+    # usable prismatic connection instead of failing at spawn time.
     spec = Slider.get_default_annotation_specification("slider", Scale(0.1, 0.1, 0.1))
-    with pytest.raises(MissingConnectionAxisError):
-        spec.spawn(empty_world)
-
-
-def test_annotation_spec_case_forwards_wall_thickness(empty_world):
-    scale = Scale(0.4, 0.5, 0.6)
-    spec = Drawer.get_default_annotation_specification(
-        "drawer", scale, wall_thickness=0.05
-    )
-    annotation = spec.spawn(empty_world)
-    factory_world = _fresh_world()
-    with factory_world.modify_world():
-        factory = Drawer.create_with_new_body_in_world(
-            name="drawer_factory",
-            world=factory_world,
-            scale=scale,
-            wall_thickness=0.05,
-        )
-    _assert_same_geometry(annotation.root.collision, factory.root.collision)
-
-
-def test_annotation_spec_handle_forwards_thickness(empty_world):
-    scale = Scale(0.1, 0.05, 0.05)
-    spec = Handle.get_default_annotation_specification("handle", scale, thickness=0.01)
-    annotation = spec.spawn(empty_world)
-    factory_world = _fresh_world()
-    with factory_world.modify_world():
-        factory = Handle.create_with_new_body_in_world(
-            name="handle_factory",
-            world=factory_world,
-            scale=scale,
-            thickness=0.01,
-        )
-    _assert_same_geometry(annotation.root.collision, factory.root.collision)
+    slider = spec.spawn(empty_world)
+    assert isinstance(slider.root.parent_connection, PrismaticConnection)
 
 
 def test_annotation_spec_aperture_region(empty_world):
@@ -948,7 +925,11 @@ def test_nested_handle_attaches_as_child(empty_world):
 
 def test_nested_mechanical_joint_reparents_whole(empty_world):
     hinge_part = Hinge.get_default_annotation_specification(
-        "hinge", Scale(0.05, 0.05, 0.05), active_axis=Vector3.Z()
+        "hinge",
+        Scale(0.05, 0.05, 0.05),
+        parent_connection_specification=Hinge.parent_connection_specification(
+            axis=Vector3.Z()
+        ),
     )
     drawer = _spawn_with_parts(
         empty_world, Drawer, Scale(0.4, 0.5, 0.6), {"mechanical_joint": hinge_part}
@@ -1046,8 +1027,9 @@ def test_annotation_connection_limits_threaded(empty_world):
     spec = Slider.get_default_annotation_specification(
         "slider",
         Scale(0.1, 0.1, 0.1),
-        active_axis=Vector3.Z(),
-        connection_limits=limits,
+        parent_connection_specification=Slider.parent_connection_specification(
+            axis=Vector3.Z(), dof_limits=limits
+        ),
     )
     slider = spec.spawn(empty_world)
     dof_limits = slider.root.parent_connection.dof.limits
@@ -1120,7 +1102,11 @@ def test_complex_spawned_world_is_deepcopyable(empty_world):
                 "handle", Scale(0.1, 0.05, 0.05)
             ),
             "mechanical_joint": Hinge.get_default_annotation_specification(
-                "hinge", Scale(0.05, 0.05, 0.05), active_axis=Vector3.Z()
+                "hinge",
+                Scale(0.05, 0.05, 0.05),
+                parent_connection_specification=Hinge.parent_connection_specification(
+                    axis=Vector3.Z()
+                ),
             ),
         },
     ).spawn(empty_world)
@@ -1162,7 +1148,11 @@ def test_nested_composite_matches_manual_construction(empty_world):
                 "handle", handle_scale
             ),
             "mechanical_joint": Hinge.get_default_annotation_specification(
-                "hinge", hinge_scale, active_axis=Vector3.Z()
+                "hinge",
+                hinge_scale,
+                parent_connection_specification=Hinge.parent_connection_specification(
+                    axis=Vector3.Z()
+                ),
             ),
         },
     ).spawn(empty_world)
@@ -1186,7 +1176,9 @@ def test_nested_composite_matches_manual_construction(empty_world):
             name="hinge_manual",
             world=manual_world,
             scale=hinge_scale,
-            active_axis=Vector3.Z(),
+            parent_connection_specification=Hinge.parent_connection_specification(
+                axis=Vector3.Z()
+            ),
         )
         manual_drawer.add(manual_handle)
         manual_drawer.add(manual_hinge)
@@ -1209,9 +1201,7 @@ def _factory_overrides():
     """
     roots = [HasRootBody, HasRootRegion]
     annotation_types = {
-        subclass
-        for root in roots
-        for subclass in [root, *recursive_subclasses(root)]
+        subclass for root in roots for subclass in [root, *recursive_subclasses(root)]
     }
     for annotation_type in annotation_types:
         for method_name, method in vars(annotation_type).items():
@@ -1230,3 +1220,75 @@ def test_factories_have_no_shared_mutable_spatial_defaults():
         if isinstance(parameter.default, (Vector3, Point3, Scale))
     ]
     assert not offenders, f"shared mutable defaults: {offenders}"
+
+
+#####################################################################
+# Spawning resolves an annotation's parent connection through the
+# zero-argument form, so every override must keep that form working.
+#####################################################################
+
+
+def _annotation_types_declaring_a_parent_connection():
+    roots = [HasRootBody, HasRootRegion]
+    return {
+        annotation_type
+        for root in roots
+        for annotation_type in [root, *recursive_subclasses(root)]
+        if "parent_connection_specification" in vars(annotation_type)
+    }
+
+
+def test_parent_connection_specification_overrides_stay_zero_argument():
+    # spawn() falls back to parent_connection_specification() with no arguments, so an
+    # override that adds a *required* parameter would only fail once a world is built.
+    offenders = [
+        f"{annotation_type.__name__}({parameter.name})"
+        for annotation_type in _annotation_types_declaring_a_parent_connection()
+        for parameter in inspect.signature(
+            annotation_type.parent_connection_specification
+        ).parameters.values()
+        if parameter.default is inspect.Parameter.empty
+        and parameter.kind not in (parameter.VAR_POSITIONAL, parameter.VAR_KEYWORD)
+    ]
+    assert not offenders, f"required parameters break the spawn fallback: {offenders}"
+
+
+#####################################################################
+# The per-class default geometry builders take a connection just like
+# BodySpecification's own builders do.
+#####################################################################
+
+
+@pytest.mark.parametrize(
+    "annotation_type, builder_name",
+    [
+        (Milk, "get_default_body_specification"),
+        (Drawer, "get_default_body_specification"),
+        (Handle, "get_default_body_specification"),
+        (Aperture, "get_default_region_specification"),
+    ],
+)
+def test_default_geometry_builder_takes_a_connection(annotation_type, builder_name):
+    # Without this, custom geometry would force the connection to be assigned afterwards.
+    specification = getattr(annotation_type, builder_name)(
+        "entity",
+        Scale(0.1, 0.1, 0.1),
+        connection_specification=Connection6DoFSpecification(),
+    )
+    assert isinstance(
+        specification.connection_specification, Connection6DoFSpecification
+    )
+
+
+def test_custom_geometry_and_connection_build_in_one_expression(empty_world):
+    annotation = SemanticAnnotationWithRootSpecification(
+        name="handle",
+        semantic_annotation_type=Handle,
+        root_specification=Handle.get_default_body_specification(
+            "handle",
+            Scale(0.1, 0.05, 0.05),
+            connection_specification=Connection6DoFSpecification(),
+            thickness=0.01,
+        ),
+    ).spawn(empty_world)
+    assert isinstance(annotation.root.parent_connection, Connection6DoF)

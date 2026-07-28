@@ -194,7 +194,11 @@ def test_part_whole_relationship_field_survives_deepcopy():
             )
             handle = Handle.create_with_new_body_in_world(name="handle", world=world)
             slider = Slider.create_with_new_body_in_world(
-                name="slider", world=world, active_axis=Vector3.X()
+                name="slider",
+                world=world,
+                parent_connection_specification=Slider.parent_connection_specification(
+                    axis=Vector3.X()
+                ),
             )
             drawer.add(handle)
             drawer.add(slider)
@@ -275,7 +279,11 @@ def test_part_whole_relationship_field_metadata_survives_orm_round_trip(session)
         )
         handle = Handle.create_with_new_body_in_world(name="handle", world=world)
         slider = Slider.create_with_new_body_in_world(
-            name="slider", world=world, active_axis=Vector3.X()
+            name="slider",
+            world=world,
+            parent_connection_specification=Slider.parent_connection_specification(
+                axis=Vector3.X()
+            ),
         )
         drawer.add(handle)
         drawer.add(slider)

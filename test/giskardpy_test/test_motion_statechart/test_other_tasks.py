@@ -775,10 +775,12 @@ class TestOpenClose:
                     yaw=np.pi,
                     reference_frame=pr2_world_copy.root,
                 ),
-                connection_limits=DegreeOfFreedomLimits(
-                    lower=lower_limits, upper=upper_limits
+                parent_connection_specification=Hinge.parent_connection_specification(
+                    dof_limits=DegreeOfFreedomLimits(
+                        lower=lower_limits, upper=upper_limits
+                    ),
+                    axis=Vector3.Z(),
                 ),
-                active_axis=Vector3.Z(),
             )
 
             door.add(handle)

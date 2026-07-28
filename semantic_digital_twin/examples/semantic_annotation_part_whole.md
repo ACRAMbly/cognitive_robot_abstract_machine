@@ -75,7 +75,9 @@ with world.modify_world():
         name="drawer_slider",
         world_root_T_self=HomogeneousTransformationMatrix(),
         world=world,
-        active_axis=Vector3.X(),
+        parent_connection_specification=Slider.parent_connection_specification(
+            axis=Vector3.X()
+        ),
     )
 
     # One method, routed by type: handle -> drawer.handle, slider -> drawer.mechanical_joint

@@ -77,6 +77,9 @@ from semantic_digital_twin.world_description.shape_collection import (
     BoundingBoxCollection,
 )
 from semantic_digital_twin.world_description.world_entity import Body
+from semantic_digital_twin.api.specifications import (
+    SemanticAnnotationWithRootSpecification,
+)
 
 
 class TestFactories(unittest.TestCase):
@@ -86,12 +89,13 @@ class TestFactories(unittest.TestCase):
         with world.modify_world():
             world.add_body(root)
         with world.modify_world():
-            returned_handle = Handle.create_with_new_body_in_world(
+            returned_handle = SemanticAnnotationWithRootSpecification(
                 name="handle",
-                scale=Scale(0.1, 0.2, 0.03),
-                thickness=0.03,
-                world=world,
-            )
+                semantic_annotation_type=Handle,
+                root_specification=Handle.get_default_body_specification(
+                    "handle", Scale(0.1, 0.2, 0.03), thickness=0.03
+                ),
+            ).spawn(world)
         semantic_handle_annotations = world.get_semantic_annotations_by_type(Handle)
         self.assertEqual(len(semantic_handle_annotations), 1)
         self.assertTrue(
@@ -115,12 +119,16 @@ class TestFactories(unittest.TestCase):
             returned_hinge = Hinge.create_with_new_body_in_world(
                 name="hinge",
                 world=world,
-                active_axis=Vector3.Z(),
+                parent_connection_specification=Hinge.parent_connection_specification(
+                    axis=Vector3.Z()
+                ),
             )
             returned_slider = Slider.create_with_new_body_in_world(
                 name="slider",
                 world=world,
-                active_axis=Vector3.X(),
+                parent_connection_specification=Slider.parent_connection_specification(
+                    axis=Vector3.X()
+                ),
             )
         semantic_hinge_annotations = world.get_semantic_annotations_by_type(Hinge)
         self.assertEqual(len(semantic_hinge_annotations), 1)
@@ -197,7 +205,11 @@ class TestFactories(unittest.TestCase):
                 name="door", scale=Scale(0.03, 1, 2), world=world
             )
             hinge = Hinge.create_with_new_body_in_world(
-                name="hinge", world=world, active_axis=Vector3.Z()
+                name="hinge",
+                world=world,
+                parent_connection_specification=Hinge.parent_connection_specification(
+                    axis=Vector3.Z()
+                ),
             )
         assert len(world.kinematic_structure_entities) == 4
         assert isinstance(hinge.root.parent_connection, RevoluteConnection)
@@ -280,7 +292,11 @@ class TestFactories(unittest.TestCase):
                 world=world,
             )
             slider = Slider.create_with_new_body_in_world(
-                name="slider", world=world, active_axis=Vector3.X()
+                name="slider",
+                world=world,
+                parent_connection_specification=Slider.parent_connection_specification(
+                    axis=Vector3.X()
+                ),
             )
         assert len(world.kinematic_structure_entities) == 3
         with world.modify_world():
@@ -813,9 +829,13 @@ class TestFactories(unittest.TestCase):
         with world.modify_world():
             world.add_body(root)
         with world.modify_world():
-            handle = Handle.create_with_new_body_in_world(
-                name="handle", world=world, thickness=0.005
-            )
+            handle = SemanticAnnotationWithRootSpecification(
+                name="handle",
+                semantic_annotation_type=Handle,
+                root_specification=Handle.get_default_body_specification(
+                    "handle", thickness=0.005
+                ),
+            ).spawn(world)
         self.assertTrue(len(handle.root.collision) > 1)
 
     def test_add_aperture_geometry(self):
@@ -851,8 +871,9 @@ class TestFactories(unittest.TestCase):
             Hinge.create_with_new_body_in_world(
                 name="hinge",
                 world=world,
-                connection_limits=limits,
-                active_axis=Vector3.Z(),
+                parent_connection_specification=Hinge.parent_connection_specification(
+                    dof_limits=limits, axis=Vector3.Z()
+                ),
             )
 
         dof = world.degrees_of_freedom[0]
@@ -874,8 +895,9 @@ class TestFactories(unittest.TestCase):
             Hinge.create_with_new_body_in_world(
                 name="hinge",
                 world=world,
-                connection_limits=limits,
-                active_axis=Vector3.Z(),
+                parent_connection_specification=Hinge.parent_connection_specification(
+                    dof_limits=limits, axis=Vector3.Z()
+                ),
             )
 
     def test_perceivable_cup(self):
@@ -1011,12 +1033,13 @@ class TestFactories(unittest.TestCase):
     def test_characterize_handle_geometry(self):
         world = self._world_with_root()
         with world.modify_world():
-            handle = Handle.create_with_new_body_in_world(
+            handle = SemanticAnnotationWithRootSpecification(
                 name="handle",
-                world=world,
-                scale=Scale(0.1, 0.05, 0.05),
-                thickness=0.01,
-            )
+                semantic_annotation_type=Handle,
+                root_specification=Handle.get_default_body_specification(
+                    "handle", Scale(0.1, 0.05, 0.05), thickness=0.01
+                ),
+            ).spawn(world)
         collision = handle.root.collision
         self.assertIs(collision, handle.root.visual)
         self.assertGreater(len(collision), 1)
@@ -1195,7 +1218,11 @@ def test_add_routes_hinge_by_reparenting_self():
             name="door", scale=Scale(0.03, 1, 2), world=world
         )
         hinge = Hinge.create_with_new_body_in_world(
-            name="hinge", world=world, active_axis=Vector3.Z()
+            name="hinge",
+            world=world,
+            parent_connection_specification=Hinge.parent_connection_specification(
+                axis=Vector3.Z()
+            ),
         )
         door.add(hinge)
 
@@ -1214,7 +1241,11 @@ def test_add_routes_slider_by_reparenting_self():
             name="drawer", scale=Scale(0.2, 0.3, 0.2), world=world
         )
         slider = Slider.create_with_new_body_in_world(
-            name="slider", world=world, active_axis=Vector3.X()
+            name="slider",
+            world=world,
+            parent_connection_specification=Slider.parent_connection_specification(
+                axis=Vector3.X()
+            ),
         )
         drawer.add(slider)
 
@@ -1338,7 +1369,11 @@ def test_add_raises_on_ambiguous_part():
             name="whole", world=world
         )
         hinge = Hinge.create_with_new_body_in_world(
-            name="hinge", world=world, active_axis=Vector3.Z()
+            name="hinge",
+            world=world,
+            parent_connection_specification=Hinge.parent_connection_specification(
+                axis=Vector3.Z()
+            ),
         )
         # A Hinge is both a MechanicalJoint (joint field) and a Hinge (specific_joint field).
         with pytest.raises(AmbiguousPart):
@@ -1356,7 +1391,11 @@ def test_add_field_name_resolves_ambiguity_to_base_field():
             name="whole", world=world
         )
         hinge = Hinge.create_with_new_body_in_world(
-            name="hinge", world=world, active_axis=Vector3.Z()
+            name="hinge",
+            world=world,
+            parent_connection_specification=Hinge.parent_connection_specification(
+                axis=Vector3.Z()
+            ),
         )
         whole.add(hinge, field_name="joint")
     assert whole.joint is hinge
@@ -1373,7 +1412,11 @@ def test_add_field_name_resolves_ambiguity_to_specific_field():
             name="whole", world=world
         )
         hinge = Hinge.create_with_new_body_in_world(
-            name="hinge", world=world, active_axis=Vector3.Z()
+            name="hinge",
+            world=world,
+            parent_connection_specification=Hinge.parent_connection_specification(
+                axis=Vector3.Z()
+            ),
         )
         whole.add(hinge, field_name="specific_joint")
     assert whole.specific_joint is hinge
@@ -1390,7 +1433,11 @@ def test_add_unknown_field_name_raises():
             name="whole", world=world
         )
         hinge = Hinge.create_with_new_body_in_world(
-            name="hinge", world=world, active_axis=Vector3.Z()
+            name="hinge",
+            world=world,
+            parent_connection_specification=Hinge.parent_connection_specification(
+                axis=Vector3.Z()
+            ),
         )
         with pytest.raises(UnknownPartWholeRelationshipField):
             whole.add(hinge, field_name="not_a_field")
@@ -1440,7 +1487,11 @@ def test_mechanical_joint_mount_splices_under_whole_parent():
         assert door.root.parent_kinematic_structure_entity == fridge.root
 
         hinge = Hinge.create_with_new_body_in_world(
-            name="hinge", world=world, active_axis=Vector3.Z()
+            name="hinge",
+            world=world,
+            parent_connection_specification=Hinge.parent_connection_specification(
+                axis=Vector3.Z()
+            ),
         )
         door.add(hinge)
 
@@ -1470,7 +1521,11 @@ def test_mechanical_joint_mount_onto_same_whole_is_idempotent():
             name="door", scale=Scale(0.03, 1, 2), world=world
         )
         hinge = Hinge.create_with_new_body_in_world(
-            name="hinge", world=world, active_axis=Vector3.Z()
+            name="hinge",
+            world=world,
+            parent_connection_specification=Hinge.parent_connection_specification(
+                axis=Vector3.Z()
+            ),
         )
         door.add(hinge)
         door.add(hinge)
@@ -1492,7 +1547,11 @@ def test_mechanical_joint_cannot_be_mounted_onto_a_second_whole():
             name="door2", scale=Scale(0.03, 1, 2), world=world
         )
         hinge = Hinge.create_with_new_body_in_world(
-            name="hinge", world=world, active_axis=Vector3.Z()
+            name="hinge",
+            world=world,
+            parent_connection_specification=Hinge.parent_connection_specification(
+                axis=Vector3.Z()
+            ),
         )
         door1.add(hinge)
         with pytest.raises(MechanicalJointAlreadyMounted):

@@ -246,7 +246,9 @@ class ProcthorDoor:
                 name=f"{name}_hinge",
                 world=world,
                 world_root_T_self=world_T_hinge,
-                active_axis=Vector3.Z(),
+                parent_connection_specification=Hinge.parent_connection_specification(
+                    axis=Vector3.Z()
+                ),
             )
 
             door.add(hinge)

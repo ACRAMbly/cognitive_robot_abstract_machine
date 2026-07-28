@@ -79,7 +79,10 @@ from semantic_digital_twin.world_description.world_modification import (
 
 if TYPE_CHECKING:
     from semantic_digital_twin.world import World
-    from semantic_digital_twin.api.specifications import BodySpecification
+    from semantic_digital_twin.api.specifications import (
+        BodySpecification,
+        ConnectionSpecification,
+    )
 else:
     World = Any
 
@@ -266,12 +269,8 @@ class AbstractRobotPart(HasRootBody, HasRobotParts, ABC):
         name: str,
         world: World,
         world_root_T_self: Optional[HomogeneousTransformationMatrix] = None,
-        connection_limits: Optional[DegreeOfFreedomLimits] = None,
-        active_axis: Optional[Vector3] = None,
-        connection_multiplier: float = 1.0,
-        connection_offset: float = 0.0,
+        parent_connection_specification: Optional[ConnectionSpecification] = None,
         scale: Optional[Scale] = None,
-        **kwargs,
     ) -> Self:
         """
         Robot-part bodies originate from the parsed URDF, so they cannot be spawned from scratch.
@@ -287,6 +286,7 @@ class AbstractRobotPart(HasRootBody, HasRobotParts, ABC):
         cls,
         name: str,
         scale: Optional[Scale] = None,
+        connection_specification: Optional[ConnectionSpecification] = None,
     ) -> BodySpecification:
         """
         Robot-part geometry comes from the parsed URDF, not from a scale, so a default
