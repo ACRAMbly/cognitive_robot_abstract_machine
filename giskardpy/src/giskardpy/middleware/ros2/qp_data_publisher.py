@@ -1,17 +1,21 @@
-from dataclasses import dataclass
+from __future__ import annotations
+
+from dataclasses import dataclass, field
 
 import numpy as np
-from py_trees.common import Status
+from rclpy.publisher import Publisher
 from sensor_msgs.msg import JointState
 
-from giskardpy.qp.qp_controller import QPController
-from giskardpy.tree.behaviors.plugin import GiskardBehavior
-from giskardpy.utils.decorators import record_time
 from giskardpy.middleware.ros2 import rospy
+from giskardpy.qp.qp_controller import QPController
 
 
 @dataclass
 class QPDataPublisherConfig:
+    """
+    Selects which parts of the quadratic program are streamed for debugging.
+    """
+
     publish_lb: bool = False
     publish_ub: bool = False
     publish_lbA: bool = False
@@ -25,6 +29,9 @@ class QPDataPublisherConfig:
     publish_debug: bool = False
 
     def any(self) -> bool:
+        """
+        Whether at least one part of the quadratic program is streamed.
+        """
         return any(
             [
                 self.publish_lb,
@@ -42,21 +49,35 @@ class QPDataPublisherConfig:
         )
 
 
-class PublishDebugExpressions(GiskardBehavior):
+@dataclass
+class QPDataPublisher:
+    """
+    Streams the internals of the quadratic program so they can be inspected in tools
+    like plotjuggler.
 
-    def __init__(
-        self, publish_config: QPDataPublisherConfig, name: str = "publish qp data"
-    ):
-        super().__init__(name)
-        self.config = publish_config
+    .. warning::
+        This publisher needs fixing; :meth:`publish` raises instead of streaming.
+    """
 
-    def setup(self, timeout):
+    config: QPDataPublisherConfig
+    """
+    Selects which parts of the quadratic program are streamed.
+    """
+
+    publisher: Publisher = field(init=False)
+    """
+    The publisher for the qp data topic.
+    """
+
+    def __post_init__(self):
         self.publisher = rospy.node.create_publisher(
             JointState, f"{rospy.node.get_name()}/qp_data", 10
         )
-        return super().setup(timeout)
 
-    def create_msg(self, qp_controller: QPController):
+    def create_msg(self, qp_controller: QPController) -> JointState:
+        """
+        Pack the selected parts of the quadratic program into a joint state message.
+        """
         msg = JointState()
         msg.header.stamp = rospy.node.get_clock().now().to_msg()
 
@@ -148,21 +169,19 @@ class PublishDebugExpressions(GiskardBehavior):
                 names = [f"Ax/{entry_name}" for entry_name in inequality_constr_names]
                 msg.name.extend(names)
                 Ax = np.dot(A, pure_xdot)
-                # Ax[-num_constr:] /= sample_period
                 msg.position.extend(Ax.tolist())
             if self.config.publish_Ex:
                 names = [f"Ex/{entry_name}" for entry_name in equality_constr_names]
                 msg.name.extend(names)
                 Ex = np.dot(E, pure_xdot)
-                # Ex[-num_constr:] /= sample_period
                 msg.position.extend(Ex.tolist())
 
         return msg
 
-    @record_time
-    def update(self):
+    def publish(self, qp_controller: QPController) -> None:
+        """
+        Publish the current state of the quadratic program.
+
+        :raises NotImplementedError: Always, this publisher still needs fixing.
+        """
         raise NotImplementedError("needs fixing")
-        qp_controller: QPController = GiskardBlackboard().executor.qp_controller
-        msg = self.create_msg(qp_controller)
-        self.publisher.publish(msg)
-        return Status.SUCCESS

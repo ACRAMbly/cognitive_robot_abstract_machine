@@ -68,17 +68,6 @@ class WorldWithTracyConfig(WorldWithFixedRobot):
 #                          collision_checker)
 
 
-class TracyJointTrajServerMujocoInterface(RobotInterfaceConfig):
-    def setup(self):
-        self.sync_joint_state_topic("joint_states")
-        self.add_follow_joint_trajectory_server(
-            namespace="/left_arm/scaled_pos_joint_traj_controller_left"
-        )
-        self.add_follow_joint_trajectory_server(
-            namespace="/right_arm/scaled_pos_joint_traj_controller_right"
-        )
-
-
 class TracyStandAloneRobotInterfaceConfig(StandAloneRobotInterfaceConfig):
     def __init__(self):
         super().__init__(

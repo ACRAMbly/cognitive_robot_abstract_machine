@@ -348,7 +348,7 @@ class GiskardExecutable(Executable):
             if executor.motion_statechart.is_end_motion():
                 break
 
-        executor._set_velocity_acceleration_jerk_to_zero()
+        executor.set_velocity_acceleration_jerk_to_zero()
         executor.motion_statechart.cleanup_nodes(context=executor.context)
         executor.context.cleanup()
 

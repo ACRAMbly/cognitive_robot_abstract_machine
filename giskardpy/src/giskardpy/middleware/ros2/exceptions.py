@@ -183,13 +183,57 @@ class FollowJointTrajectory_GOAL_TOLERANCE_VIOLATED(FollowJointTrajectoryError):
 
 
 @dataclass
-class FollowJointTrajectoryServerRequiresPlanningModeError(SetupException):
+class AlreadyTrackedByTfFrameError(SetupException):
     """
-    Raised when a follow joint trajectory server is added outside of planning mode.
+    Raised when a connection is registered for tf tracking a second time.
+    """
+
+    connection_name: str
+    """
+    The name of the connection that is already tracked.
+    """
+
+    tf_parent_frame: str
+    """
+    The tf parent frame the connection is already tracked with.
+    """
+
+    tf_child_frame: str
+    """
+    The tf child frame the connection is already tracked with.
     """
 
     def error_message(self) -> str:
-        return "add_follow_joint_trajectory_server only works in planning mode."
+        return (
+            f"Connection '{self.connection_name}' is already tracked with a tf frame: "
+            f"'{self.tf_parent_frame}'<-'{self.tf_child_frame}'"
+        )
+
+    def suggest_correction(self) -> str:
+        return ""
+
+
+@dataclass
+class ConnectionCannotBeTrackedByTfFrameError(SetupException):
+    """
+    Raised when a connection without 6 degrees of freedom is registered for tf tracking.
+    """
+
+    connection_name: str
+    """
+    The name of the connection that cannot be tracked.
+    """
+
+    connection_type: str
+    """
+    The type of the connection that cannot be tracked.
+    """
+
+    def error_message(self) -> str:
+        return (
+            f"Can only sync Connection6DoF with tf, but '{self.connection_name}' is of "
+            f"type '{self.connection_type}'."
+        )
 
     def suggest_correction(self) -> str:
         return ""

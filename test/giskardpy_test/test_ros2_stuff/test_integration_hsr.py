@@ -4,7 +4,7 @@ from time import sleep
 import numpy as np
 import pytest
 from geometry_msgs.msg import PoseStamped, PointStamped
-from giskardpy.middleware.ros2.behavior_tree_config import StandAloneBTConfig
+from giskardpy.middleware.ros2.server_config import ExecutionMode, GiskardServerConfig
 from giskardpy.middleware.ros2.giskard import Giskard
 from giskardpy.middleware.ros2.scripts.iai_robots.hsr.configs import (
     WorldWithHSRConfig,
@@ -25,7 +25,6 @@ from giskardpy.motion_statechart.tasks.cartesian_tasks import CartesianPose
 from giskardpy.motion_statechart.tasks.joint_tasks import JointPositionList, JointState
 from giskardpy.motion_statechart.tasks.pointing import Pointing
 from giskardpy.qp.qp_controller_config import QPControllerConfig
-from giskardpy.tree.blackboard_utils import GiskardBlackboard
 from numpy import pi
 from semantic_digital_twin.robots.hsrb import HSRB
 from semantic_digital_twin.spatial_types import (
@@ -79,22 +78,20 @@ class HSRTester(GiskardTester):
         return Giskard(
             world_config=WorldWithHSRConfig(urdf=robot_desc),
             robot_interface_config=HSRStandaloneInterface(),
-            behavior_tree_config=StandAloneBTConfig(
+            server_config=GiskardServerConfig(
+                execution_mode=ExecutionMode.STANDALONE,
                 debug_mode=True,
-                add_debug_marker_publisher=True,
-                add_gantt_chart_plotter=True,
-                add_trajectory_plotter=True,
+                plot_gantt_chart=True,
+                plot_trajectory=True,
             ),
             qp_controller_config=QPControllerConfig.create_with_simulation_defaults(),
         )
 
     @property
     def robot(self) -> HSRB:
-        return (
-            GiskardBlackboard().executor.context.world.get_semantic_annotations_by_type(
-                HSRB
-            )[0]
-        )
+        return self.giskard.executor.context.world.get_semantic_annotations_by_type(
+            HSRB
+        )[0]
 
 
 @pytest.fixture()
@@ -134,9 +131,7 @@ class TestJointGoals:
         msc.add_node(EndMotion.when_true(joint_goal))
         giskard.api.execute(msc)
 
-        arm_lift_joint: (
-            ActiveConnection1DOF
-        ) = GiskardBlackboard().giskard.world_config.world.get_connection_by_name(
+        arm_lift_joint: ActiveConnection1DOF = giskard.world.get_connection_by_name(
             "arm_lift_joint"
         )
         hand_T_finger_current = giskard.compute_fk_pose(
@@ -186,9 +181,7 @@ class TestJointGoals:
 
         giskard.api.execute(msc)
 
-        arm_lift_joint: (
-            ActiveConnection1DOF
-        ) = GiskardBlackboard().giskard.world_config.world.get_connection_by_name(
+        arm_lift_joint: ActiveConnection1DOF = giskard.world.get_connection_by_name(
             "arm_lift_joint"
         )
         np.testing.assert_almost_equal(
@@ -225,9 +218,7 @@ class TestJointGoals:
 
         giskard.api.execute(msc)
 
-        arm_lift_joint: (
-            ActiveConnection1DOF
-        ) = GiskardBlackboard().giskard.world_config.world.get_connection_by_name(
+        arm_lift_joint: ActiveConnection1DOF = giskard.world.get_connection_by_name(
             "arm_lift_joint"
         )
         np.testing.assert_almost_equal(

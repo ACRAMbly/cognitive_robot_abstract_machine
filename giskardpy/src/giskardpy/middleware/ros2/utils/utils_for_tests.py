@@ -13,7 +13,6 @@ import semantic_digital_twin.spatial_types.spatial_types as cas
 from giskardpy.middleware.ros2 import rospy
 from giskardpy.middleware.ros2.giskard import Giskard
 from giskardpy.middleware.ros2.python_interface import GiskardWrapperNode
-from giskardpy.tree.blackboard_utils import GiskardBlackboard
 from semantic_digital_twin.adapters.ros import (
     Ros2ToSemDTConverter,
     SemDTToRos2Converter,
@@ -27,6 +26,7 @@ from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 from semantic_digital_twin.exceptions import WorldEntityNotFoundError
 from semantic_digital_twin.robots.robot_parts import AbstractRobot
 from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix
+from semantic_digital_twin.world import World
 from semantic_digital_twin.world_description.connections import (
     OmniDrive,
     FixedConnection,
@@ -134,17 +134,14 @@ class GiskardTester(ABC):
         self.giskard = self.setup_giskard()
         self.giskard.setup()
         self.robot_names = [
-            v.name
-            for v in GiskardBlackboard().executor.context.world.get_semantic_annotations_by_type(
-                AbstractRobot
-            )
+            v.name for v in self.world.get_semantic_annotations_by_type(AbstractRobot)
         ]
-        self.default_root = GiskardBlackboard().executor.context.world.root
+        self.default_root = self.world.root
 
-        self.original_number_of_links = len(
-            GiskardBlackboard().executor.context.world.bodies
+        self.original_number_of_links = len(self.world.bodies)
+        self.heart = Thread(
+            target=self.giskard.motion_server.live, name="motion server"
         )
-        self.heart = Thread(target=GiskardBlackboard().tree.live, name="bt ticker")
         self.heart.start()
         self.wait_heartbeats(1)
         self.api = GiskardWrapperNode(node_name="tests")
@@ -152,39 +149,25 @@ class GiskardTester(ABC):
     @abstractmethod
     def setup_giskard(self) -> Giskard: ...
 
+    @property
+    def world(self) -> World:
+        return self.giskard.executor.context.world
+
     def get_odometry_joint(self) -> OmniDrive:
-        return (
-            GiskardBlackboard()
-            .giskard.executor.context.world.get_semantic_annotations_by_type(
-                AbstractRobot
-            )[0]
-            .drive
-        )
+        return self.world.get_semantic_annotations_by_type(AbstractRobot)[0].drive
 
     def compute_fk_pose(self, root_link: str, tip_link: str) -> PoseStamped:
-        root_T_tip = GiskardBlackboard().executor.context.world.compute_forward_kinematics(
-            root=GiskardBlackboard().executor.context.world.get_kinematic_structure_entity_by_name(
-                root_link
-            ),
-            tip=GiskardBlackboard().executor.context.world.get_kinematic_structure_entity_by_name(
-                tip_link
-            ),
+        root_T_tip = self.world.compute_forward_kinematics(
+            root=self.world.get_kinematic_structure_entity_by_name(root_link),
+            tip=self.world.get_kinematic_structure_entity_by_name(tip_link),
         )
         return SemDTToRos2Converter.convert(root_T_tip.to_pose())
 
     def compute_fk_point(self, root_link: str, tip_link: str) -> PointStamped:
-        root_T_tip = (
-            GiskardBlackboard()
-            .executor.world.compute_forward_kinematics(
-                root=GiskardBlackboard().executor.context.world.get_kinematic_structure_entity_by_name(
-                    root_link
-                ),
-                tip=GiskardBlackboard().executor.context.world.get_kinematic_structure_entity_by_name(
-                    tip_link
-                ),
-            )
-            .to_position()
-        )
+        root_T_tip = self.world.compute_forward_kinematics(
+            root=self.world.get_kinematic_structure_entity_by_name(root_link),
+            tip=self.world.get_kinematic_structure_entity_by_name(tip_link),
+        ).to_position()
         return SemDTToRos2Converter.convert(root_T_tip)
 
     def has_odometry_joint(self) -> bool:
@@ -195,14 +178,17 @@ class GiskardTester(ABC):
         return isinstance(joint, (OmniDrive,))
 
     def wait_heartbeats(self, number=5):
-        behavior_tree = GiskardBlackboard().tree
-        c = behavior_tree.count
-        while behavior_tree.count < c + number:
+        """
+        Block until the motion server completed ``number`` more idle cycles.
+        """
+        motion_server = self.giskard.motion_server
+        first_cycle = motion_server.cycle_count
+        while motion_server.cycle_count < first_cycle + number:
             sleep(0.001)
 
     def print_stats(self):
         giskarding_time = self.total_time_spend_giskarding
-        if not GiskardBlackboard().tree_config.is_standalone():
+        if not self.giskard.server_config.is_standalone:
             giskarding_time -= self.total_time_spend_moving
         rospy.node.get_logger().info(f"total time spend giskarding: {giskarding_time}")
         rospy.node.get_logger().info(
@@ -218,9 +204,7 @@ class GiskardTester(ABC):
         for joint_name in goal_js:
             goal = goal_js[joint_name]
             current = current_js[joint_name]
-            connection: (
-                ActiveConnection1DOF
-            ) = GiskardBlackboard().executor.context.world.get_connection_by_name(
+            connection: ActiveConnection1DOF = self.world.get_connection_by_name(
                 joint_name
             )
             if not connection.dof.has_position_limits():
@@ -414,7 +398,7 @@ class GiskardTester(ABC):
         self.wait_heartbeats()
 
     def compute_all_collisions(self) -> CollisionCheckingResult:
-        collision_manager = GiskardBlackboard().executor.context.world.collision_manager
+        collision_manager = self.world.collision_manager
         collision_manager.clear_temporary_rules()
         collision_manager.add_temporary_rule(
             AvoidAllCollisions(buffer_zone_distance=0.5)

@@ -105,9 +105,9 @@ class Executor:
     pacer: Pacer = field(default_factory=SimulationPacer)
 
     # %% init False
-    motion_statechart: MotionStatechart = field(init=False)
+    motion_statechart: Optional[MotionStatechart] = field(init=False, default=None)
     """
-    The motion statechart describing the robot's motion logic.
+    The motion statechart describing the robot's motion logic, set by :meth:`compile`.
     """
 
     qp_controller: Optional[QPController] = field(default=None, init=False)
@@ -204,11 +204,14 @@ class Executor:
                     return
             raise TimeoutError("Timeout reached while waiting for end of motion.")
         finally:
-            self._set_velocity_acceleration_jerk_to_zero()
+            self.set_velocity_acceleration_jerk_to_zero()
             self.motion_statechart.cleanup_nodes(context=self.context)
             self.context.cleanup()
 
-    def _set_velocity_acceleration_jerk_to_zero(self):
+    def set_velocity_acceleration_jerk_to_zero(self):
+        """
+        Clear all commanded derivatives of the world state.
+        """
         self.context.world.state.velocities[:] = 0
         self.context.world.state.accelerations[:] = 0
         self.context.world.state.jerks[:] = 0

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Optional, List, Dict, Union
+from typing import TYPE_CHECKING, List, Optional, Union
 
 from geometry_msgs.msg import Twist
 from nav_msgs.msg import Odometry
@@ -12,9 +12,19 @@ from giskardpy.data_types.exceptions import (
     JointRegistrationRequiresStandaloneModeError,
 )
 from giskardpy.middleware.ros2 import rospy
-from giskardpy.middleware.ros2.exceptions import (
-    FollowJointTrajectoryServerRequiresPlanningModeError,
+from giskardpy.middleware.ros2.command_publishing import (
+    DriveVelocityCommandPublisher,
+    JointGroupVelocityCommandPublisher,
+    JointVelocityCommandPublisher,
 )
+from giskardpy.middleware.ros2.control_loop import ControlLoop
+from giskardpy.middleware.ros2.input_synchronization import (
+    JointPositionSynchronizer,
+    JointStateSynchronizer,
+    OdometrySynchronizer,
+    TfFrameSynchronizer,
+)
+from giskardpy.middleware.ros2.motion_server import MotionServer
 from giskardpy.middleware.ros2.ros2_interface import (
     search_for_subscriber_of_node_with_type,
     get_parameters,
@@ -22,22 +32,43 @@ from giskardpy.middleware.ros2.ros2_interface import (
     search_for_unique_publisher_of_type,
     search_for_unique_subscriber_of_type,
 )
-from giskardpy.tree.blackboard_utils import GiskardBlackboard
-from giskardpy.tree.branches.giskard_bt import GiskardBT
+from giskardpy.middleware.ros2.server_config import GiskardServerConfig
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 from semantic_digital_twin.robots.robot_parts import AbstractRobot
-from semantic_digital_twin.spatial_types.derivatives import Derivatives
 from semantic_digital_twin.world import World
 from semantic_digital_twin.world_description.connections import (
-    OmniDrive,
     ActiveConnection,
+    ActiveConnection1DOF,
     Connection6DoF,
     DifferentialDrive,
+    OmniDrive,
 )
-from semantic_digital_twin.world_description.world_entity import Connection
+
+if TYPE_CHECKING:
+    from giskardpy.middleware.ros2.giskard import Giskard
 
 
 class RobotInterfaceConfig(ABC):
+    """
+    Describes how Giskard reads the state of a robot and how it commands it.
+    """
+
+    giskard: Giskard
+    """
+    The Giskard instance this interface belongs to, set by :meth:`attach`.
+    """
+
+    tf_frame_synchronizer: Optional[TfFrameSynchronizer] = None
+    """
+    Created on demand, tracks all 6 degree of freedom connections that follow tf.
+    """
+
+    def attach(self, giskard: Giskard) -> None:
+        """
+        Bind this interface to the Giskard instance it configures.
+        """
+        self.giskard = giskard
+
     @abstractmethod
     def setup(self):
         """
@@ -49,15 +80,25 @@ class RobotInterfaceConfig(ABC):
 
     @property
     def world(self) -> World:
-        return GiskardBlackboard().executor.context.world
+        return self.giskard.executor.context.world
 
     @property
     def robot(self) -> AbstractRobot:
-        return GiskardBlackboard().giskard.robot
+        return self.giskard.robot
 
     @property
-    def tree(self) -> GiskardBT:
-        return GiskardBlackboard().tree
+    def server_config(self) -> GiskardServerConfig:
+        return self.giskard.server_config
+
+    @property
+    def motion_server(self) -> MotionServer:
+        return self.giskard.motion_server
+
+    @property
+    def control_loop(self) -> ControlLoop:
+        return self.giskard.motion_server.control_loop
+
+    # %% reading the state of the robot
 
     def sync_odometry_topic(
         self,
@@ -71,13 +112,12 @@ class RobotInterfaceConfig(ABC):
         if odometry_topic is None:
             odometry_topic = search_for_unique_publisher_of_type(Odometry)
         assert isinstance(joint, (OmniDrive, DifferentialDrive))
-        self.tree.wait_for_goal.synchronization.sync_odometry_topic(
-            odometry_topic, joint
+        synchronizer = OdometrySynchronizer(
+            world=self.world, topic_name=odometry_topic, connection=joint
         )
-        if sync_in_control_loop and GiskardBlackboard().tree_config.is_closed_loop():
-            self.tree.control_loop_branch.closed_loop_synchronization.sync_odometry_topic(
-                odometry_topic, joint
-            )
+        self.motion_server.inputs.synchronizers.append(synchronizer)
+        if sync_in_control_loop and self.server_config.is_closed_loop:
+            self.control_loop.inputs.synchronizers.append(synchronizer)
 
     def sync_6dof_joint_with_tf_frame(
         self, joint: Connection6DoF, tf_parent_frame: str, tf_child_frame: str
@@ -85,13 +125,16 @@ class RobotInterfaceConfig(ABC):
         """
         Tell Giskard to sync a 6dof joint with a tf frame.
         """
-        self.tree.wait_for_goal.synchronization.sync_6dof_joint_with_tf_frame(
-            joint, tf_parent_frame, tf_child_frame
-        )
-        if GiskardBlackboard().tree_config.is_closed_loop():
-            self.tree.control_loop_branch.closed_loop_synchronization.sync_6dof_joint_with_tf_frame(
-                joint, tf_parent_frame, tf_child_frame
+        if self.tf_frame_synchronizer is None:
+            self.tf_frame_synchronizer = TfFrameSynchronizer(world=self.world)
+            self.motion_server.inputs.synchronizers.insert(
+                0, self.tf_frame_synchronizer
             )
+            if self.server_config.is_closed_loop:
+                self.control_loop.inputs.synchronizers.insert(
+                    0, self.tf_frame_synchronizer
+                )
+        self.tf_frame_synchronizer.track(joint, tf_parent_frame, tf_child_frame)
 
     def sync_joint_state_topic(self, topic_name: str, group_name: Optional[str] = None):
         """
@@ -99,47 +142,87 @@ class RobotInterfaceConfig(ABC):
         """
         if group_name is None:
             group_name = self.robot.name
-        self.tree.wait_for_goal.synchronization.sync_joint_state_topic(
-            group_name=group_name, topic_name=topic_name
+        self.motion_server.inputs.synchronizers.append(
+            JointStateSynchronizer(world=self.world, topic_name=topic_name)
         )
-        if (
-            GiskardBlackboard().tree_config.is_closed_loop()
-            and group_name == self.robot.name
-        ):
-            self.tree.control_loop_branch.closed_loop_synchronization.sync_joint_state2_topic(
-                group_name=group_name, topic_name=topic_name
-            )
+        if not self.server_config.is_closed_loop or group_name != self.robot.name:
+            return
+        self.control_loop.inputs.synchronizers.append(
+            JointPositionSynchronizer(world=self.world, topic_name=topic_name)
+        )
+
+    # %% commanding the robot
 
     def add_base_cmd_velocity(
         self,
         cmd_vel_topic: Optional[str] = None,
-        joint: OmniDrive = None,
-        track_only_velocity: bool = False,
+        joint: Union[OmniDrive, DifferentialDrive] = None,
     ):
         """
         Tell Giskard how it can control an odom joint of the robot.
 
         :param cmd_vel_topic: a Twist topic
-        :param track_only_velocity: The tracking mode. If true, any position error is
-            not considered which makes the tracking smoother but less accurate.
         :param joint: omni or diff drive joint. Doesn't need to be specified if there is
             only one.
         """
         if cmd_vel_topic is None:
             cmd_vel_topic = search_for_unique_subscriber_of_type(Twist)
-        if GiskardBlackboard().tree_config.is_closed_loop():
-            self.tree.control_loop_branch.send_controls.add_send_cmd_velocity(
-                topic_name=cmd_vel_topic, joint=joint
+        if not self.server_config.is_closed_loop:
+            return
+        self.control_loop.command_publishers.append(
+            DriveVelocityCommandPublisher(
+                world=self.world, cmd_topic=cmd_vel_topic, connection=joint
             )
-        elif GiskardBlackboard().tree_config.is_open_loop():
-            self.tree.execute_traj.add_base_traj_action_server(
-                cmd_vel_topic=cmd_vel_topic, track_only_velocity=track_only_velocity
+        )
+
+    def add_joint_velocity_controller(self, namespaces: List[str]):
+        """
+        For closed loop mode.
+
+        Tell Giskard how it can send velocities to joints.
+        :param namespaces: A list of namespaces where Giskard can find the topics and
+            parameters.
+        """
+        self.control_loop.command_publishers.append(
+            JointVelocityCommandPublisher(world=self.world, namespaces=namespaces)
+        )
+
+    def add_joint_velocity_group_controller(
+        self,
+        cmd_topic: str,
+        connections: List[str],
+        minimum_valid_velocity: float = 0.0,
+    ):
+        """
+        For closed loop mode.
+
+        Tell Giskard how it can send velocities for a group of connections.
+        :param minimum_valid_velocity: minimum magnitude that small non-prismatic, non-
+            finger joint velocities are raised to so the hardware moves. ``0.0``
+            disables clamping.
+        """
+        controlled_connections: List[ActiveConnection1DOF] = [
+            self.world.get_connection_by_name(connection_name)
+            for connection_name in connections
+        ]
+        self.control_loop.command_publishers.append(
+            JointGroupVelocityCommandPublisher(
+                cmd_topic=cmd_topic,
+                connections=controlled_connections,
+                minimum_valid_velocity=minimum_valid_velocity,
             )
+        )
 
     def register_controlled_joints(
         self, joint_names: List[Union[str, PrefixedName]]
     ) -> None:
-        if not GiskardBlackboard().tree_config.is_standalone():
+        """
+        Flag the given joints as controlled by Giskard itself.
+
+        :raises JointRegistrationRequiresStandaloneModeError: If Giskard is not in
+            standalone mode.
+        """
+        if not self.server_config.is_standalone:
             raise JointRegistrationRequiresStandaloneModeError()
         for joint_name in joint_names:
             connection: ActiveConnection = self.world.get_connection_by_name(joint_name)
@@ -149,32 +232,7 @@ class RobotInterfaceConfig(ABC):
                 )
             connection.has_hardware_interface = True
 
-    def add_follow_joint_trajectory_server(
-        self,
-        namespace: str,
-        group_name: Optional[str] = None,
-        fill_velocity_values: bool = False,
-        path_tolerance: Dict[Derivatives, float] = None,
-    ):
-        """
-        Connect Giskard to a follow joint trajectory server.
-
-        It will automatically figure out which joints are offered and can be controlled.
-        :param namespace: namespace of the action server
-        :param group_name: set if there are multiple robots
-        :param fill_velocity_values: whether to fill the velocity entries in the message
-            send to the robot
-        """
-        if group_name is None:
-            group_name = self.world.robot_name
-        if not GiskardBlackboard().tree_config.is_open_loop():
-            raise FollowJointTrajectoryServerRequiresPlanningModeError()
-        self.tree.execute_traj.add_follow_joint_traj_action_server(
-            namespace=namespace,
-            group_name=group_name,
-            fill_velocity_values=fill_velocity_values,
-            path_tolerance=path_tolerance,
-        )
+    # %% discovery
 
     def discover_interfaces_from_controller_manager(
         self,
@@ -217,7 +275,7 @@ class RobotInterfaceConfig(ABC):
                         .string_array_value
                     )
                     self.add_joint_velocity_group_controller(
-                        cmd_topic=cmt_topic, joints=joints
+                        cmd_topic=cmt_topic, connections=joints
                     )
                 elif controller.type == "diff_drive_controller/DiffDriveController":
                     self.add_base_cmd_velocity(controller.name)
@@ -245,48 +303,16 @@ class RobotInterfaceConfig(ABC):
                 controller for controller in controllers if controller.name in whitelist
             ]
 
-    def add_joint_velocity_controller(self, namespaces: List[str]):
-        """
-        For closed loop mode.
-
-        Tell Giskard how it can send velocities to joints.
-        :param namespaces: A list of namespaces where Giskard can find the topics and
-            rosparams.
-        """
-        self.tree.control_loop_branch.send_controls.add_joint_velocity_controllers(
-            namespaces
-        )
-
-    def add_joint_velocity_group_controller(
-        self,
-        cmd_topic: str,
-        connections: List[str],
-        minimum_valid_velocity: float = 0.0,
-    ):
-        """
-        For closed loop mode.
-
-        Tell Giskard how it can send velocities for a group of connections.
-        :param minimum_valid_velocity: minimum magnitude that small non-prismatic, non-
-            finger joint velocities are raised to so the hardware moves. ``0.0``
-            disables clamping.
-        """
-        controlled_connections: List[Connection] = []
-        for i in range(len(connections)):
-            controlled_connections.append(
-                GiskardBlackboard().executor.context.world.get_connection_by_name(
-                    connections[i]
-                )
-            )
-        self.tree.control_loop_branch.send_controls.add_joint_velocity_group_controllers(
-            cmd_topic=cmd_topic,
-            connections=controlled_connections,
-            minimum_valid_velocity=minimum_valid_velocity,
-        )
-
 
 class StandAloneRobotInterfaceConfig(RobotInterfaceConfig):
+    """
+    Controls the given joints without talking to any hardware.
+    """
+
     joint_names: List[str]
+    """
+    The joints Giskard is allowed to control.
+    """
 
     def __init__(self, joint_names: List[str]):
         self.joint_names = joint_names

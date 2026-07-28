@@ -2,11 +2,10 @@ from dataclasses import dataclass, field
 from typing import List, Optional
 
 import pytest
-from py_trees.common import Status
 from std_msgs.msg import Float64MultiArray
 
-from giskardpy.tree.behaviors.joint_group_vel_controller_publisher import (
-    JointGroupVelController,
+from giskardpy.middleware.ros2.command_publishing import (
+    JointGroupVelocityCommandPublisher,
 )
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 from semantic_digital_twin.spatial_types import Vector3
@@ -47,7 +46,7 @@ class ConnectionSpec:
 
     velocity: float
     """
-    The commanded velocity written to the world state before ticking.
+    The commanded velocity written to the world state before publishing.
     """
 
     connection_type: type = RevoluteConnection
@@ -58,7 +57,7 @@ class ConnectionSpec:
 
 def build_controller(
     specs: List[ConnectionSpec], minimum_valid_velocity: float = 0.0
-) -> JointGroupVelController:
+) -> JointGroupVelocityCommandPublisher:
     """
     Build a controller over a chain of freshly created connections.
     """
@@ -80,20 +79,20 @@ def build_controller(
             parent = child
     for spec, connection in zip(specs, connections):
         connection.velocity = spec.velocity
-    return JointGroupVelController(
+    return JointGroupVelocityCommandPublisher(
         cmd_topic="test_cmd",
         connections=connections,
         minimum_valid_velocity=minimum_valid_velocity,
     )
 
 
-def tick(controller: JointGroupVelController) -> List[float]:
+def publish(controller: JointGroupVelocityCommandPublisher) -> List[float]:
     """
-    Replace the publisher with a recorder, tick once, and return the data.
+    Replace the publisher with a recorder, publish once, and return the data.
     """
     recorder = RecordingPublisher()
     controller.cmd_pub = recorder
-    assert controller.update() == Status.RUNNING
+    controller.publish()
     return list(recorder.published_message.data)
 
 
@@ -105,7 +104,7 @@ def test_publishes_one_value_per_connection(init_rospy):
     ]
     controller = build_controller(specs)
 
-    data = tick(controller)
+    data = publish(controller)
 
     assert len(data) == len(specs)
 
@@ -117,7 +116,7 @@ def test_below_threshold_velocity_is_raised_to_minimum(init_rospy):
     ]
     controller = build_controller(specs, minimum_valid_velocity=0.03)
 
-    data = tick(controller)
+    data = publish(controller)
 
     assert data[0] == pytest.approx(0.03)
     assert data[1] == pytest.approx(-0.03)
@@ -130,7 +129,7 @@ def test_default_minimum_valid_velocity_does_not_clamp(init_rospy):
     ]
     controller = build_controller(specs)
 
-    data = tick(controller)
+    data = publish(controller)
 
     assert data[0] == pytest.approx(0.01)
     assert data[1] == pytest.approx(-0.01)
@@ -143,7 +142,7 @@ def test_velocities_outside_threshold_are_unchanged(init_rospy):
     ]
     controller = build_controller(specs)
 
-    data = tick(controller)
+    data = publish(controller)
 
     assert data[0] == pytest.approx(0.1)
     assert data[1] == pytest.approx(0.0)
@@ -160,7 +159,7 @@ def test_prismatic_and_finger_joints_are_not_clamped(init_rospy):
     ]
     controller = build_controller(specs, minimum_valid_velocity=0.03)
 
-    data = tick(controller)
+    data = publish(controller)
 
     assert data[0] == pytest.approx(0.01)
     assert data[1] == pytest.approx(0.01)

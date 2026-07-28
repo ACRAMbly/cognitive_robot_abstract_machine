@@ -2,7 +2,7 @@
 from rclpy import Parameter
 
 from giskardpy.qp.qp_controller_config import QPControllerConfig
-from giskardpy.middleware.ros2.behavior_tree_config import StandAloneBTConfig
+from giskardpy.middleware.ros2.server_config import ExecutionMode, GiskardServerConfig
 from giskardpy.middleware.ros2.giskard import Giskard
 from giskardpy.middleware.ros2.scripts.iai_robots.pr2.configs import WorldWithPR2Config
 from giskardpy.middleware.ros2.robot_interface_config import (
@@ -41,7 +41,9 @@ def main():
                 "odom_combined_T_base_footprint",
             ]
         ),
-        behavior_tree_config=StandAloneBTConfig(debug_mode=True),
+        server_config=GiskardServerConfig(
+            execution_mode=ExecutionMode.STANDALONE, debug_mode=True
+        ),
         qp_controller_config=QPControllerConfig(target_frequency=20),
     )
     giskard.live()

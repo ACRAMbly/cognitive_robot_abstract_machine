@@ -24,7 +24,7 @@ from giskardpy.data_types.exceptions import (
     MaxTrajectoryLengthException,
 )
 from giskardpy.middleware.ros2 import rospy
-from giskardpy.middleware.ros2.behavior_tree_config import StandAloneBTConfig
+from giskardpy.middleware.ros2.server_config import ExecutionMode, GiskardServerConfig
 from giskardpy.middleware.ros2.scripts.iai_robots.pr2.configs import (
     PR2StandaloneInterface,
     WorldWithPR2Config,
@@ -68,7 +68,6 @@ from giskardpy.motion_statechart.tasks.joint_tasks import (
 )
 from giskardpy.motion_statechart.tasks.pointing import Pointing
 from giskardpy.qp.qp_controller_config import QPControllerConfig
-from giskardpy.tree.blackboard_utils import GiskardBlackboard
 from giskardpy.utils.math import (
     quaternion_from_axis_angle,
     quaternion_from_rotation_matrix,
@@ -161,10 +160,10 @@ class PR2Tester(GiskardTester):
         return Giskard(
             world_config=WorldWithPR2Config(urdf=robot_desc),
             robot_interface_config=PR2StandaloneInterface(),
-            behavior_tree_config=StandAloneBTConfig(
+            server_config=GiskardServerConfig(
+                execution_mode=ExecutionMode.STANDALONE,
                 debug_mode=True,
-                add_debug_marker_publisher=True,
-                add_trajectory_plotter=True,
+                plot_trajectory=True,
             ),
             qp_controller_config=QPControllerConfig(
                 target_frequency=20,
@@ -173,10 +172,8 @@ class PR2Tester(GiskardTester):
 
     @property
     def robot(self) -> AbstractRobot:
-        return (
-            GiskardBlackboard().executor.context.world.get_semantic_annotation_by_name(
-                self.api.robot_name
-            )
+        return self.giskard.executor.context.world.get_semantic_annotation_by_name(
+            self.api.robot_name
         )
 
     @property
@@ -1127,7 +1124,7 @@ class TestCollisionAvoidanceGoals:
         fake_table_setup.check_cpi_geq(fake_table_setup.get_l_gripper_links(), 0.05)
         fake_table_setup.check_cpi_geq(
             [
-                GiskardBlackboard().executor.context.world.get_kinematic_structure_entity_by_name(
+                self.giskard.executor.context.world.get_kinematic_structure_entity_by_name(
                     "r_gripper_l_finger_tip_link"
                 )
             ],
@@ -1135,7 +1132,7 @@ class TestCollisionAvoidanceGoals:
         )
         fake_table_setup.check_cpi_geq(
             [
-                GiskardBlackboard().executor.context.world.get_kinematic_structure_entity_by_name(
+                self.giskard.executor.context.world.get_kinematic_structure_entity_by_name(
                     "r_gripper_r_finger_tip_link"
                 )
             ],
@@ -1932,7 +1929,7 @@ class TestActionServerEvents:
         # worlds should be out of sync until the motion is done
         assert giskard.api.world.get_kinematic_structure_entity_by_name("box")
         with pytest.raises(WorldEntityNotFoundError):
-            GiskardBlackboard().executor.context.world.get_kinematic_structure_entity_by_name(
+            self.giskard.executor.context.world.get_kinematic_structure_entity_by_name(
                 "box"
             )
         wait_for_future_to_complete(giskard.api.cancel_goal_async())
@@ -1942,8 +1939,10 @@ class TestActionServerEvents:
         await asyncio.sleep(1)
         # they should be in sync after its over
         assert giskard.api.world.get_kinematic_structure_entity_by_name("box")
-        assert GiskardBlackboard().executor.context.world.get_kinematic_structure_entity_by_name(
-            "box"
+        assert (
+            self.giskard.executor.context.world.get_kinematic_structure_entity_by_name(
+                "box"
+            )
         )
 
 
