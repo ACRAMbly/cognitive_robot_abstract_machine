@@ -326,7 +326,7 @@ def test_satisfied_conditions_and_both_true():
 
     ids = result.satisfied_condition_ids
     assert ids is not None
-    expressions = val._conditions_root_._names_for_ids_(ids)
+    expressions = val._conditions_root_._subtree_names_for_ids_(ids)
     assert "AND" in expressions
     assert ">" in expressions
     assert "<" in expressions
@@ -357,7 +357,7 @@ def test_satisfied_conditions_or_first_true():
 
     ids = result.satisfied_condition_ids
     assert ids is not None
-    expressions = val._conditions_root_._names_for_ids_(ids)
+    expressions = val._conditions_root_._subtree_names_for_ids_(ids)
     assert "OR" in expressions
     assert ">" in expressions
     # The right side was short-circuited, should NOT be in satisfied set
@@ -377,7 +377,7 @@ def test_satisfied_conditions_or_fallback():
 
     ids = result.satisfied_condition_ids
     assert ids is not None
-    expressions = val._conditions_root_._names_for_ids_(ids)
+    expressions = val._conditions_root_._subtree_names_for_ids_(ids)
     assert "OR" in expressions
     # The right side (< 10) is satisfied
     assert "<" in expressions
@@ -398,7 +398,7 @@ def test_satisfied_conditions_not():
 
     ids = result.satisfied_condition_ids
     assert ids is not None
-    expressions = val._conditions_root_._names_for_ids_(ids)
+    expressions = val._conditions_root_._subtree_names_for_ids_(ids)
     # Not should be satisfied
     assert "Not" in expressions
     # The inner comparator is false, so not satisfied
@@ -430,7 +430,7 @@ def test_satisfied_conditions_nested_and_or_satisfied():
 
     ids = result.satisfied_condition_ids
     assert ids is not None
-    expressions = val._conditions_root_._names_for_ids_(ids)
+    expressions = val._conditions_root_._subtree_names_for_ids_(ids)
     assert "AND" in expressions
     assert "OR" in expressions
     assert ">" in expressions  # val > 5 is true
