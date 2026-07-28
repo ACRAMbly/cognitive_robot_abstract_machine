@@ -35,13 +35,32 @@ from krrood.entity_query_language.verbalization.pipeline import verbalize_expres
 from krrood.ormatic.utils import classes_of_package
 from krrood.utils import module_and_class_name
 
-PLACEHOLDER_EXAMPLE_VALUES: Dict[Tuple[Type[SymbolicCallable], str], Any] = {
-    (HasType, "types_"): int,
-    (HasTypes, "types_"): (int, str),
+
+@dataclass(frozen=True)
+class PlaceholderExampleField:
+    """
+    One dataclass field of a symbolic callable, identified for
+    :data:`PLACEHOLDER_EXAMPLE_VALUES` lookup.
+    """
+
+    callable_class: Type[SymbolicCallable]
+    """
+    The symbolic callable the field belongs to.
+    """
+
+    field_name: str
+    """
+    The dataclass field's name.
+    """
+
+
+PLACEHOLDER_EXAMPLE_VALUES: Dict[PlaceholderExampleField, Any] = {
+    PlaceholderExampleField(HasType, "types_"): int,
+    PlaceholderExampleField(HasTypes, "types_"): (int, str),
 }
 """
-A literal example value to bind instead of a placeholder variable, keyed by
-*(callable class, field name)*.
+A literal example value to bind instead of a placeholder variable, keyed by the field it
+replaces.
 
 Some fields (``HasType.types_``, for instance) are never bound to a symbolic operand in
 real usage -- only ever a literal, since e.g. ``isinstance`` needs a concrete type at
@@ -130,7 +149,7 @@ class VerbalizationResultsOfPackage:
         for field_ in dataclass_fields(cls):
             if not field_.init:
                 continue
-            example_value_key = (cls, field_.name)
+            example_value_key = PlaceholderExampleField(cls, field_.name)
             if example_value_key in PLACEHOLDER_EXAMPLE_VALUES:
                 operands[field_.name] = PLACEHOLDER_EXAMPLE_VALUES[example_value_key]
                 continue
