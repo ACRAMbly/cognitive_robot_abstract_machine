@@ -5,6 +5,7 @@
 - Avoid accessing any ormatic_interface.py files. if there are issues regarding the ormatic interface run the script `scripts/regenerate_all_orm.py`. If it does not fix the issue, consider consulting the developer.
 - Avoid using mutable objects as default arguments
 - If you are unsure why something was done or why specific numbers were chosen, ask the developer instead of inventing the reason and writing it as a comment.
+- Never comment on or modify pull requests on the upstream `cram2/cognitive_robot_abstract_machine` repository. You may only do so when working in a fork and the user has explicitly allowed it - either through existing personal notes/instructions, or by asking the user first and having them accept.
 
 ## Testing
 - If you need to run tests, execute them with pytest
@@ -14,6 +15,7 @@
 - All new features and fixes must be covered by tests
 - Name test classes (and the mimic classes used by tests) after the pattern or behaviour they exercise, not after the concrete external class they happen to stand in for
 - Make assertions as specific as possible: when the correct expected value can be determined, assert equality to that value rather than only a weaker check such as not-None or not-empty
+- Keep each test focused on the one behaviour it names: assert exactly the values that behaviour determines, and do not also pin down incidental output a change unrelated to that behaviour could alter (for example, an unrelated wording tweak to an error message a test isn't about). Prefer deriving an expected value from the same production code that computes it (e.g. by calling the lower-level function under test and reusing its result) over hardcoding a second literal copy of output another test already asserts exactly — a hardcoded copy duplicates coverage and turns one wording change into two unrelated test failures. Tests should be separable and independent, each failing only for its own reason.
 - CI safety: All added tests must be part of the CI suite, but only need to execute there if they can run without live external calls or missing credentials — tests requiring unavailable credentials must be skipped (or removed if new), not left to break the pipeline.
 - Credentials: Any test requiring credentials to run in CI must be pre-approved by the user and have those credentials available in CI; otherwise it must be skipped there.
 - No inline snippets: Code snippets must live in separate files with the correct file type, imported or read into the test rather than embedded as strings.
