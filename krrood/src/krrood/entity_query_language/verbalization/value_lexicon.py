@@ -3,7 +3,7 @@ from __future__ import annotations
 import datetime
 import enum
 
-from typing_extensions import Any, List, Optional
+from typing_extensions import Any, Iterable, List, Optional
 
 #: Human-readable nouns for the primitive types, whose bare ``__name__`` reads as programmer jargon
 #: (*"int"*, *"str"*). Every other type keeps its ``__name__``.
@@ -33,20 +33,22 @@ def type_noun(type_: type) -> str:
 
 def type_members(value: Any) -> Optional[List[type]]:
     """
-    :return: the classes of a non-empty tuple/list of types, or ``None`` when *value* is not
-        such a collection.
+    :return: the classes of a non-empty iterable of types, or ``None`` when *value* is not
+        such a collection. A bare ``str``/``bytes`` is excluded even though it is itself
+        iterable.
 
     >>> type_members((int, str))
+    [<class 'int'>, <class 'str'>]
+    >>> sorted(type_members({int, str}), key=lambda t: t.__name__)
     [<class 'int'>, <class 'str'>]
     >>> type_members([1, 2]) is None
     True
     """
-    if (
-        isinstance(value, (tuple, list))
-        and value
-        and all(isinstance(member, type) for member in value)
-    ):
-        return list(value)
+    if isinstance(value, (str, bytes)) or not isinstance(value, Iterable):
+        return None
+    members = list(value)
+    if members and all(isinstance(member, type) for member in members):
+        return members
     return None
 
 
