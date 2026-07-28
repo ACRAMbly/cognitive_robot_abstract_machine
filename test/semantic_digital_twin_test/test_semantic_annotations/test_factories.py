@@ -44,6 +44,8 @@ from semantic_digital_twin.semantic_annotations.semantic_annotations import (
     Hinge,
     Fridge,
     Slider,
+    ScrewJoint,
+    BottleCap,
     Aperture,
     MechanicalJoint,
     Table,
@@ -67,6 +69,7 @@ from semantic_digital_twin.world_description.connections import (
 from semantic_digital_twin.world_description.connections import (
     RevoluteConnection,
     PrismaticConnection,
+    ScrewConnection,
 )
 from semantic_digital_twin.world_description.degree_of_freedom import (
     DegreeOfFreedomLimits,
@@ -207,6 +210,54 @@ class TestFactories(unittest.TestCase):
         assert isinstance(hinge.root.parent_connection, RevoluteConnection)
         assert door.root.parent_kinematic_structure_entity == hinge.root
         assert door.mechanical_joint == hinge
+
+    def test_screw_joint_factory(self):
+        world = World()
+        root = Body(name=PrefixedName("root"))
+        pitch = 0.005
+        with world.modify_world():
+            world.add_body(root)
+        with world.modify_world():
+            screw_joint = ScrewJoint.create_with_new_body_in_world(
+                name=PrefixedName("screw_joint"),
+                world=world,
+                active_axis=Vector3.Z(),
+                pitch=pitch,
+            )
+        connection = screw_joint.root.parent_connection
+        assert isinstance(connection, ScrewConnection)
+        assert connection.pitch == pitch
+        assert screw_joint.pitch == pitch
+        assert root == screw_joint.root.parent_kinematic_structure_entity
+
+    def test_bottle_cap_mount_screw_joint(self):
+        world = World()
+        root = Body(name=PrefixedName("root"))
+        pitch = 0.005
+        with world.modify_world():
+            world.add_body(root)
+        with world.modify_world():
+            bottle_cap = BottleCap.create_with_new_body_in_world(
+                name=PrefixedName("bottle_cap"),
+                world=world,
+                scale=Scale(0.03, 0.03, 0.02),
+            )
+            screw_joint = ScrewJoint.create_with_new_body_in_world(
+                name=PrefixedName("screw_joint"),
+                world=world,
+                active_axis=Vector3.Z(),
+                pitch=pitch,
+            )
+        with world.modify_world():
+            bottle_cap.add(screw_joint)
+
+        connection = screw_joint.root.parent_connection
+        assert isinstance(connection, ScrewConnection)
+        # The mount re-parents the joint; pitch must survive the connection copy.
+        assert connection.pitch == pitch
+        assert bottle_cap.root.parent_kinematic_structure_entity == screw_joint.root
+        assert isinstance(bottle_cap.root.parent_connection, FixedConnection)
+        assert bottle_cap.mechanical_joint == screw_joint
 
     def test_has_handle_factory(self):
         world = World()

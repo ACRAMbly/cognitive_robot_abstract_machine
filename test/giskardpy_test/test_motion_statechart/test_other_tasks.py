@@ -33,7 +33,11 @@ from semantic_digital_twin.semantic_annotations.semantic_annotations import (
     Handle,
     Door,
     Hinge,
+    Bottle,
+    BottleCap,
+    ScrewJoint,
 )
+from semantic_digital_twin.world_description.geometry import Scale
 from semantic_digital_twin.spatial_types import (
     HomogeneousTransformationMatrix,
     Vector3,
@@ -848,3 +852,159 @@ class TestOpenClose:
 
         assert opened.observation_state == ObservationStateValues.TRUE
         assert closed.observation_state == ObservationStateValues.TRUE
+
+    def test_unscrew_and_tighten_bottle_cap(self, pr2_world_copy):
+        pitch = 0.005
+        unscrew_goal = 2 * np.pi
+        with pr2_world_copy.modify_world():
+            # The bottle lies on its side, its thread axis pointing towards the robot.
+            Bottle.create_with_new_body_in_world(
+                name=PrefixedName("bottle"),
+                world=pr2_world_copy,
+                world_root_T_self=HomogeneousTransformationMatrix.from_xyz_rpy(
+                    x=0.77, y=-0.2, z=0.9, reference_frame=pr2_world_copy.root
+                ),
+                scale=Scale(0.2, 0.06, 0.06),
+            )
+
+            bottle_cap = BottleCap.create_with_new_body_in_world(
+                name=PrefixedName("bottle_cap"),
+                world=pr2_world_copy,
+                world_root_T_self=HomogeneousTransformationMatrix.from_xyz_rpy(
+                    x=0.65, y=-0.2, z=0.9, reference_frame=pr2_world_copy.root
+                ),
+                scale=Scale(0.02, 0.04, 0.04),
+            )
+
+            lower_limits = DerivativeMap()
+            lower_limits.position = 0
+            lower_limits.velocity = -1
+            upper_limits = DerivativeMap()
+            upper_limits.position = unscrew_goal
+            upper_limits.velocity = 1
+
+            # The thread axis points from the bottle out through the cap, here
+            # towards the robot, so unscrewing moves the cap away from the bottle.
+            screw_joint = ScrewJoint.create_with_new_body_in_world(
+                name=PrefixedName("screw_joint"),
+                world=pr2_world_copy,
+                world_root_T_self=HomogeneousTransformationMatrix.from_xyz_rpy(
+                    x=0.65, y=-0.2, z=0.9, reference_frame=pr2_world_copy.root
+                ),
+                connection_limits=DegreeOfFreedomLimits(
+                    lower=lower_limits, upper=upper_limits
+                ),
+                active_axis=Vector3(-1, 0, 0),
+                pitch=pitch,
+            )
+
+            bottle_cap.add(screw_joint)
+
+        root_C_screw = bottle_cap.mechanical_joint.root.parent_connection
+        cap_body = bottle_cap.root
+        r_tip = pr2_world_copy.get_body_by_name("r_gripper_tool_frame")
+
+        world_T_cap_before = pr2_world_copy.compute_forward_kinematics_np(
+            pr2_world_copy.root, cap_body
+        )
+
+        unscrew_statechart = MotionStatechart()
+        unscrew_statechart.add_nodes(
+            [
+                Sequence(
+                    [
+                        # Grasp with the roll axis of the gripper collinear with the
+                        # screw axis, so the wrist can follow the cap's rotation.
+                        CartesianPose(
+                            root_link=pr2_world_copy.root,
+                            tip_link=r_tip,
+                            goal_pose=HomogeneousTransformationMatrix.from_xyz_rpy(
+                                reference_frame=cap_body
+                            ),
+                        ),
+                        Parallel(
+                            [
+                                Open(
+                                    tip_link=r_tip,
+                                    environment_link=cap_body,
+                                    goal_joint_state=unscrew_goal,
+                                ),
+                                unscrewed := JointPositionReached(
+                                    connection=root_C_screw,
+                                    position=unscrew_goal,
+                                    name="unscrewed",
+                                ),
+                            ]
+                        ),
+                    ]
+                ),
+            ]
+        )
+        unscrew_statechart.add_node(EndMotion.when_true(unscrew_statechart.nodes[0]))
+
+        kin_sim = Executor(
+            MotionStatechartContext(
+                world=pr2_world_copy,
+            )
+        )
+        kin_sim.compile(motion_statechart=unscrew_statechart)
+        kin_sim.tick_until_end()
+
+        assert unscrewed.observation_state == ObservationStateValues.TRUE
+
+        # The unscrewed cap must have travelled pitch * angle along the screw axis,
+        # away from the bottle (towards the robot, -x).
+        world_T_cap_unscrewed = pr2_world_copy.compute_forward_kinematics_np(
+            pr2_world_copy.root, cap_body
+        )
+        cap_translation = world_T_cap_unscrewed[:3, 3] - world_T_cap_before[:3, 3]
+        np.testing.assert_allclose(
+            cap_translation, [-pitch * unscrew_goal, 0.0, 0.0], atol=1e-2
+        )
+
+        # Tighten again, this time commanding how far the cap must travel back down
+        # the thread instead of how far it must rotate.
+        unscrew_travel_distance = float(np.linalg.norm(cap_translation))
+        tightened_goal_joint_state = (
+            unscrew_goal
+            - root_C_screw.rotation_angle_for_travel_distance(unscrew_travel_distance)
+        )
+
+        tighten_statechart = MotionStatechart()
+        tighten_statechart.add_nodes(
+            [
+                Parallel(
+                    [
+                        Close(
+                            tip_link=r_tip,
+                            environment_link=cap_body,
+                            goal_joint_state=tightened_goal_joint_state,
+                        ),
+                        tightened := JointPositionReached(
+                            connection=root_C_screw,
+                            position=tightened_goal_joint_state,
+                            name="tightened",
+                        ),
+                    ]
+                ),
+            ]
+        )
+        tighten_statechart.add_node(EndMotion.when_true(tighten_statechart.nodes[0]))
+
+        kin_sim = Executor(
+            MotionStatechartContext(
+                world=pr2_world_copy,
+            )
+        )
+        kin_sim.compile(motion_statechart=tighten_statechart)
+        kin_sim.tick_until_end()
+
+        assert tightened.observation_state == ObservationStateValues.TRUE
+
+        # The tightened cap must be back at its initial pose.
+        world_T_cap_tightened = pr2_world_copy.compute_forward_kinematics_np(
+            pr2_world_copy.root, cap_body
+        )
+        np.testing.assert_allclose(
+            world_T_cap_tightened[:3, 3], world_T_cap_before[:3, 3], atol=1e-2
+        )
