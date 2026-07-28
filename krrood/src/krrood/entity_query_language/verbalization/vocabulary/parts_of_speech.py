@@ -32,6 +32,7 @@ from krrood.entity_query_language.verbalization.microplanning.possessive import 
     possessive_path,
 )
 from krrood.entity_query_language.verbalization.navigation_path import PathStep
+from krrood.entity_query_language.verbalization.value_lexicon import type_members
 from krrood.entity_query_language.verbalization.vocabulary.english import (
     Conjunctions,
     Copulas,
@@ -231,9 +232,7 @@ class OneOf(ClauseElement):
             return listed
         # Past the cap the members are summarised by count; the category noun still distinguishes a
         # set of types from a set of plain values.
-        are_types = bool(members) and all(
-            isinstance(member, type) for member in members
-        )
+        are_types = type_members(members) is not None
         return PhraseFragment(
             parts=[
                 SetMembership.ONE_OF.as_fragment(),

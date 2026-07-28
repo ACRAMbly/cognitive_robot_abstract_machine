@@ -720,6 +720,7 @@ class Articles(VocabEnum):
     Definite articles (THE, THE UNIQUE), the fused *another* / *the other* alternative
     determiners, and a static helper for indefinite articles.
     """
+
     A = PlainWord("a")
     AN = PlainWord("an")
     THE = PlainWord("the")
@@ -745,7 +746,11 @@ class Articles(VocabEnum):
         >>> Articles.indefinite("robot").text
         'a'
         """
-        text = morphology.indefinite_article(following_word) if following_word else cls.A.text
+        text = (
+            morphology.indefinite_article(following_word)
+            if following_word
+            else cls.A.text
+        )
         return WordFragment(text=text)
 
 

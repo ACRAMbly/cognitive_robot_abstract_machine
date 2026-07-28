@@ -35,6 +35,7 @@ from krrood.entity_query_language.verbalization.grammar.framework.phrase_rule im
     PhraseRule,
     RuleContext,
 )
+from krrood.entity_query_language.verbalization.value_lexicon import type_members
 from krrood.entity_query_language.verbalization.vocabulary.english import (
     Conjunctions,
     FallbackNouns,
@@ -163,25 +164,13 @@ class LiteralRule(PhraseRule):
             return self._concrete_object(node, context)
         if isinstance(value, type):
             return RoleFragment.for_type(value)
-        type_members = self._type_members(value)
-        if type_members is not None:
+        class_members = type_members(value)
+        if class_members is not None:
             return oxford_comma(
-                [RoleFragment.for_type(member) for member in type_members],
+                [RoleFragment.for_type(member) for member in class_members],
                 Conjunctions.AND.as_fragment(),
             )
         return RoleFragment.for_literal(value)
-
-    @staticmethod
-    def _type_members(value: Any) -> Optional[List[type]]:
-        """:return: the classes of a non-empty tuple/list of types, or ``None`` when *value* is not
-        such a sequence."""
-        if (
-            isinstance(value, (tuple, list))
-            and value
-            and all(isinstance(member, type) for member in value)
-        ):
-            return list(value)
-        return None
 
     def _concrete_object(
         self, node: Literal, context: RuleContext
