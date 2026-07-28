@@ -603,14 +603,18 @@ class SymbolicExpression(ABC):
         """
         yield from self._iter_descendants_(set())
 
-    def _subtree_names_for_ids_(self, ids: OrderedSet[uuid.UUID]) -> Set[str]:
+    def _get_expression_names_by_their_ids_(
+        self, ids: OrderedSet[uuid.UUID]
+    ) -> List[str]:
         """
-        :param ids: Identifiers of expressions within this node's own subtree,
-            typically an :attr:`OperationResult.satisfied_condition_ids` produced for
-            this node's condition tree.
-        :return: The ``_name_`` of the expression for each id in *ids*.
+        :param ids: Expression identifiers to resolve, typically an
+            :attr:`OperationResult.satisfied_condition_ids`.
+        :return: The ``_name_`` of the expression for each id in *ids*, one entry per
+            id. A list rather than a set, since expression names are not unique (for
+            example two ``>`` comparators in the same query) and a set would silently
+            collapse those into one entry.
         """
-        return {self._get_expression_by_id_(id_)._name_ for id_ in ids}
+        return [self._get_expression_by_id_(id_)._name_ for id_ in ids]
 
     def _iter_descendants_(
         self, visited_ids: Set[uuid.UUID]
