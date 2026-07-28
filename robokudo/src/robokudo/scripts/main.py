@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import argparse
+from contextlib import suppress
+from dataclasses import dataclass
 import logging
 import os
 import sys
@@ -18,8 +20,14 @@ import rclpy.impl.logging_severity
 import rclpy.logging
 from py_trees.blackboard import Blackboard
 from py_trees.common import Status
-from rclpy.executors import SingleThreadedExecutor, MultiThreadedExecutor
+from rclpy.executors import (
+    Executor,
+    ExternalShutdownException,
+    MultiThreadedExecutor,
+    SingleThreadedExecutor,
+)
 from rclpy.parameter import Parameter
+from rclpy.signals import SignalHandlerOptions
 from typing_extensions import TYPE_CHECKING
 
 # RoboKudo imports
@@ -34,9 +42,59 @@ from robokudo.utils.tree import setup_with_descendants_rk
 
 if TYPE_CHECKING:
     from py_trees_ros.trees import BehaviourTree
+    from rclpy.node import Node
 
 # Silence some TensorFlow GPU logs if needed
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
+
+
+def initialize_rclpy(arguments: list[str]) -> None:
+    """Initialize ROS while leaving Ctrl+C handling to the main thread.
+
+    :param arguments: Command-line arguments forwarded to ROS.
+    """
+    rclpy.init(
+        args=arguments,
+        signal_handler_options=SignalHandlerOptions.SIGTERM,
+    )
+
+
+def spin_executor(executor: Executor) -> None:
+    """Spin an executor until interruption or ROS context shutdown.
+
+    :param executor: ROS executor to spin.
+    """
+    with suppress(KeyboardInterrupt, ExternalShutdownException):
+        executor.spin()
+
+
+@dataclass(frozen=True, slots=True)
+class RuntimeResources:
+    """Own resources that require ordered application shutdown."""
+
+    analysis_tree: BehaviourTree
+    """Behavior tree containing runtime annotators and recorders."""
+
+    executors: tuple[Executor, ...]
+    """ROS executors serving application nodes."""
+
+    threads: tuple[Thread, ...]
+    """Threads spinning the ROS executors."""
+
+    nodes: tuple[Node, ...]
+    """ROS nodes owned by the application."""
+
+    def shutdown(self) -> None:
+        """Release resources from data producers toward the ROS context."""
+        self.analysis_tree.shutdown()
+        for executor in self.executors:
+            executor.shutdown()
+        for thread in self.threads:
+            thread.join()
+        for node in self.nodes:
+            node.destroy_node()
+        if rclpy.ok():
+            rclpy.shutdown()
 
 
 def run_ae(
@@ -74,7 +132,7 @@ def run_ae(
     interval = 1.0 / tickrate
     next_tick = time.monotonic()
 
-    while True:
+    while rclpy.ok():
         current_time = time.monotonic()
         elapsed = current_time - next_tick
 
@@ -141,7 +199,7 @@ def main() -> None:
     args = parser.parse_args()
 
     # 2. Initialize RCL
-    rclpy.init(args=sys.argv)
+    initialize_rclpy(sys.argv)
 
     if args.debugmode:
         rclpy.logging.set_logger_level(
@@ -186,12 +244,6 @@ def main() -> None:
     executor_main.add_node(node1)
     executor_asrv.add_node(query_action_server)
 
-    def spin_executor(exec_: rclpy.Executor) -> None:
-        try:
-            exec_.spin()
-        except KeyboardInterrupt:
-            pass
-
     thread_main = Thread(target=spin_executor, args=(executor_main,), daemon=True)
     thread_asrv = Thread(target=spin_executor, args=(executor_asrv,), daemon=True)
     thread_main.start()
@@ -210,6 +262,12 @@ def main() -> None:
 
     # If you have a custom version of `setup_with_descendants`, call it:
     setup_with_descendants_rk(ae_root)
+    runtime_resources = RuntimeResources(
+        analysis_tree=ae_root,
+        executors=(executor_main, executor_asrv),
+        threads=(thread_main, thread_asrv),
+        nodes=(node1, query_action_server),
+    )
 
     try:
         # 9. Start ticking the Behavior Tree
@@ -217,20 +275,7 @@ def main() -> None:
     except KeyboardInterrupt:
         logger.info("Keyboard interrupt received; shutting down.")
     finally:
-        # 10. Shutdown executors cleanly
-        executor_main.shutdown()
-        executor_asrv.shutdown()
-
-        # 11. Wait for shutdown
-        thread_main.join()
-        thread_asrv.join()
-
-        # 12. Clean up nodes
-        node1.destroy_node()
-        query_action_server.destroy_node()
-
-        if rclpy.ok():
-            rclpy.shutdown()
+        runtime_resources.shutdown()
 
 
 if __name__ == "__main__":

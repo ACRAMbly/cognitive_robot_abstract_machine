@@ -216,6 +216,11 @@ class CollectionReaderAnnotator(BaseAnnotator):
             % (self.__class__.__name__, self.status, new_status)
         )
 
+    def shutdown(self) -> None:
+        """Release camera interfaces owned by this collection reader."""
+        for collection_reader in self.collection_readers:
+            collection_reader.parameters.camera_interface.shutdown()
+
 
 """ROS1 TO ROS2 
 The setup method in the ROS2 version has three parameters (timeout, node, visitor) 

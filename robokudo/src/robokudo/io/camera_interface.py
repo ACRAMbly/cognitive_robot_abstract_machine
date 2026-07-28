@@ -24,6 +24,8 @@ from __future__ import annotations
 
 import logging
 import struct
+from contextlib import suppress
+from dataclasses import dataclass
 from threading import Lock, Thread
 
 import builtin_interfaces.msg
@@ -35,6 +37,11 @@ import rclpy
 from cv_bridge import CvBridge
 from message_filters import ApproximateTimeSynchronizer, Subscriber
 from rclpy.duration import Duration
+from rclpy.executors import (
+    Executor,
+    ExternalShutdownException,
+    SingleThreadedExecutor,
+)
 from rclpy.node import Node
 from rclpy.time import Time
 from sensor_msgs.msg import CompressedImage, CameraInfo, Image
@@ -50,6 +57,46 @@ from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix
 
 if TYPE_CHECKING:
     import numpy.typing as npt
+
+
+def spin_camera_executor(executor: Executor) -> None:
+    """Spin a camera executor until explicit or context shutdown.
+
+    :param executor: Executor serving a camera interface node.
+    """
+    with suppress(KeyboardInterrupt, ExternalShutdownException):
+        executor.spin()
+
+
+@dataclass(slots=True)
+class CameraRuntimeResources:
+    """Own the ROS resources serving one camera interface."""
+
+    node: Node
+    """ROS node owning the camera subscriptions."""
+
+    executor: Executor
+    """Executor serving the camera node."""
+
+    thread: Thread
+    """Thread spinning the camera executor."""
+
+    is_shutdown: bool = False
+    """Whether all camera runtime resources have been released."""
+
+    def start(self) -> None:
+        """Start processing camera subscription callbacks."""
+        self.thread.start()
+
+    def shutdown(self) -> None:
+        """Stop callbacks before destroying the camera node."""
+        if self.is_shutdown:
+            return
+
+        self.executor.shutdown()
+        self.thread.join()
+        self.node.destroy_node()
+        self.is_shutdown = True
 
 
 class CameraInterface(object):
@@ -93,6 +140,9 @@ class CameraInterface(object):
         """
         raise NotImplementedError
 
+    def shutdown(self) -> None:
+        """Release resources owned by the camera interface."""
+
 
 class ROSCameraInterface(CameraInterface):
     """Base class for ROS-based camera interfaces.
@@ -111,6 +161,12 @@ class ROSCameraInterface(CameraInterface):
 
         self.node = node if node is not None else Node("ros_camera_node")
         """ROS node for communication with ROS"""
+
+        self.runtime_resources: Optional[CameraRuntimeResources] = None
+        """Executor, thread, and node serving camera subscriptions."""
+
+        self.is_shutdown = False
+        """Whether this interface has released its ROS resources."""
 
         if hasattr(self.camera_config, "lookup_viewpoint"):
             self.lookup_viewpoint: bool = self.camera_config.lookup_viewpoint
@@ -133,6 +189,37 @@ class ROSCameraInterface(CameraInterface):
         if self.lookup_viewpoint:
             self.transform_listener: Buffer = tf_listener_proxy.instance(self.node)
             """ROS transform listener"""
+
+    def start(self) -> None:
+        """Start processing callbacks for the camera node."""
+        if self.runtime_resources is not None:
+            return
+
+        executor = SingleThreadedExecutor()
+        executor.add_node(self.node)
+        thread = Thread(
+            target=spin_camera_executor,
+            args=(executor,),
+            daemon=True,
+            name="Camera Interface Executor",
+        )
+        self.runtime_resources = CameraRuntimeResources(
+            node=self.node,
+            executor=executor,
+            thread=thread,
+        )
+        self.runtime_resources.start()
+
+    def shutdown(self) -> None:
+        """Stop camera callbacks and destroy the camera node once."""
+        if self.is_shutdown:
+            return
+
+        if self.runtime_resources is None:
+            self.node.destroy_node()
+        else:
+            self.runtime_resources.shutdown()
+        self.is_shutdown = True
 
     def lookup_transform(self) -> bool:
         """Look up the camera transform from TF.
@@ -387,16 +474,7 @@ class KinectCameraInterface(ROSCameraInterface):
 
         self.lock: Lock = Lock()
         """Thread synchronization lock"""
-        # rclpy.spin_once(self.node)
-
-        Thread(
-            target=rclpy.spin,
-            args=(self.node,),
-            daemon=True,
-            name="Cam Interface Thread",
-        ).start()
-
-        # Thread(target=rclpy.spin_once(self.node), args=(self.node,), daemon=True).start()
+        self.start()
 
     def compressed_depth_configured(self) -> bool:
         """Check if compressed depth images are configured.
