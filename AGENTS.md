@@ -5,6 +5,7 @@
 - Avoid accessing any ormatic_interface.py files. if there are issues regarding the ormatic interface run the script `scripts/regenerate_all_orm.py`. If it does not fix the issue, consider consulting the developer.
 - Avoid using mutable objects as default arguments
 - If you are unsure why something was done or why specific numbers were chosen, ask the developer instead of inventing the reason and writing it as a comment.
+- Never comment on or modify pull requests on the upstream `cram2/cognitive_robot_abstract_machine` repository. You may only do so when working in a fork and the user has explicitly allowed it - either through existing personal notes/instructions, or by asking the user first and having them accept.
 
 ## Testing
 - If you need to run tests, execute them with pytest
