@@ -21,6 +21,7 @@
 - Live API tests: You may add tests that hit external APIs directly, but they must have skip conditions so they don't run in CI, and must be paired with an equivalent mock-based test that does run in CI.
 
 ## Code Style
+- Divide a file into logical sections with `# %% <short description>` comment headers (e.g. `# %% same-noun disambiguation`), not decorative box-drawing dividers. Applies to source files as well as test files
 - Do not use abbreviations in variable names, methods, classes, or any other identifiers
 - Method and class names should be concise and descriptive: they should tell *what* they do, not *how* they do it
 - Create classes instead of using too many primitives. If a return type is always repeated, consider whether a dedicated class or type alias would convey more meaningful information
@@ -72,6 +73,7 @@
 - Write docstrings that explain what the function does and not how it does it
 - Keep docstrings short and concise
 - Use Sphinx directives (for example `..note::`, `..warning::`, and `:func:`) where appropriate
+- Do not use all-caps words for emphasis in docstrings or comments; use RST emphasis (`*word*`) if emphasis is genuinely needed
 - Do not create type information for docstrings (type hints already convey this)
 - Always run `docformatter` on modified files
 
