@@ -67,6 +67,7 @@
 - Write docstrings that explain what the function does and not how it does it
 - Keep docstrings short and concise
 - Use Sphinx directives (for example `..note::`, `..warning::`, and `:func:`) where appropriate
+- Do not use all-caps words for emphasis in docstrings or comments; use RST emphasis (`*word*`) if emphasis is genuinely needed
 - Do not create type information for docstrings (type hints already convey this)
 - Always run `docformatter` on modified files
 
