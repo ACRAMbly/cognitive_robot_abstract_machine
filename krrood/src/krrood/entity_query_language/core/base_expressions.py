@@ -609,10 +609,7 @@ class SymbolicExpression(ABC):
         """
         :param ids: Expression identifiers to resolve, typically an
             :attr:`OperationResult.satisfied_condition_ids`.
-        :return: The ``_name_`` of the expression for each id in *ids*, one entry per
-            id. A list rather than a set, since expression names are not unique (for
-            example two ``>`` comparators in the same query) and a set would silently
-            collapse those into one entry.
+        :return: The ``_name_`` of the expression for each id in *ids*.
         """
         return [self._get_expression_by_id_(id_)._name_ for id_ in ids]
 
