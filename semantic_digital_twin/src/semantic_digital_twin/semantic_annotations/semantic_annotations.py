@@ -358,16 +358,15 @@ class ScrewJoint(MechanicalJoint):
         :param pitch: Translation along ``active_axis`` in meters per radian of
             rotation.
         """
-        return super().create_with_new_body_in_world(
-            name=name,
+        return cls(
+            name=name, root=cls._create_body(name, scale), pitch=pitch
+        )._connect_and_add_to_world(
             world=world,
             world_root_T_self=world_root_T_self,
             connection_limits=connection_limits,
             active_axis=active_axis,
             connection_multiplier=connection_multiplier,
             connection_offset=connection_offset,
-            scale=scale,
-            pitch=pitch,
         )
 
 

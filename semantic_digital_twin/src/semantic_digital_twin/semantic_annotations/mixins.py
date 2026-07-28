@@ -29,7 +29,6 @@ from random_events.set import Set as EventSet
 from random_events.variable import Symbolic
 from typing_extensions import (
     TYPE_CHECKING,
-    Any,
     Generic,
     List,
     Optional,
@@ -153,10 +152,14 @@ class HasRootKinematicStructureEntity(
         active_axis: Optional[Vector3] = None,
         connection_multiplier: float = 1.0,
         connection_offset: float = 0.0,
-        **annotation_fields: Any,
     ) -> Self:
         """
         Create a new instance and connect its root entity to the world's root.
+
+        Annotation classes with additional required fields (for example
+        :class:`~semantic_digital_twin.semantic_annotations.semantic_annotations.ScrewJoint`)
+        cannot be created this way; construct them directly and use
+        :meth:`_connect_and_add_to_world`.
 
         :param name: The name of the semantic annotation.
         :param world: The world to add the annotation and entity to.
@@ -167,20 +170,46 @@ class HasRootKinematicStructureEntity(
         :param active_axis: The active axis for the connection.
         :param connection_multiplier: The multiplier for the connection.
         :param connection_offset: The offset for the connection.
-        :param annotation_fields: Additional field values of the concrete annotation
-            class (for example a screw joint's ``pitch``).
         :return: The created semantic annotation instance.
         """
-        self_instance = cls(
-            name=name, root=kinematic_structure_entity, **annotation_fields
+        return cls(
+            name=name, root=kinematic_structure_entity
+        )._connect_and_add_to_world(
+            world=world,
+            world_root_T_self=world_root_T_self,
+            connection_limits=connection_limits,
+            active_axis=active_axis,
+            connection_multiplier=connection_multiplier,
+            connection_offset=connection_offset,
         )
+
+    def _connect_and_add_to_world(
+        self,
+        world: World,
+        world_root_T_self: Optional[HomogeneousTransformationMatrix] = None,
+        connection_limits: Optional[DegreeOfFreedomLimits] = None,
+        active_axis: Optional[Vector3] = None,
+        connection_multiplier: float = 1.0,
+        connection_offset: float = 0.0,
+    ) -> Self:
+        """
+        Connect this annotation's root entity to the world's root and add the annotation
+        to the world.
+
+        :param world: The world to add the annotation and entity to.
+        :param world_root_T_self: The initial pose of the entity in the world root
+            frame.
+        :param connection_limits: The limits for the connection's degrees of freedom.
+        :param active_axis: The active axis for the connection.
+        :param connection_multiplier: The multiplier for the connection.
+        :param connection_offset: The offset for the connection.
+        :return: This annotation instance.
+        """
         world_root_T_self = world_root_T_self or HomogeneousTransformationMatrix()
+        world_root_T_self.reference_frame = world.root
+        world_root_T_self.child_frame = self.root
 
-        root = world.root
-        world_root_T_self.reference_frame = root
-        world_root_T_self.child_frame = kinematic_structure_entity
-
-        world_root_C_self = self_instance._create_parent_connection(
+        world_root_C_self = self._create_parent_connection(
             world=world,
             world_root_T_self=world_root_T_self,
             connection_limits=connection_limits,
@@ -190,9 +219,9 @@ class HasRootKinematicStructureEntity(
         )
 
         world.add_connection(world_root_C_self)
-        world.add_semantic_annotation(self_instance)
+        world.add_semantic_annotation(self)
 
-        return self_instance
+        return self
 
     def _create_parent_connection(
         self,
@@ -292,7 +321,7 @@ class HasRootBody(HasRootKinematicStructureEntity[TBody], ABC):
         connection_multiplier: float = 1.0,
         connection_offset: float = 0.0,
         scale: Scale = None,
-        **annotation_fields: Any,
+        **kwargs,
     ) -> Self:
         """
         Create a new semantic annotation with a new body in the given world.
@@ -305,9 +334,28 @@ class HasRootBody(HasRootKinematicStructureEntity[TBody], ABC):
         :param connection_multiplier: The multiplier for the connection.
         :param connection_offset: The offset for the connection.
         :param scale: The scale used to generate the geometry of the body.
-        :param annotation_fields: Additional field values of the concrete annotation
-            class.
         :return: The created semantic annotation instance.
+        """
+        return cls._create_with_connection_in_world(
+            name=name,
+            world=world,
+            kinematic_structure_entity=cls._create_body(name, scale),
+            world_root_T_self=world_root_T_self,
+            connection_multiplier=connection_multiplier,
+            connection_offset=connection_offset,
+            active_axis=active_axis,
+            connection_limits=connection_limits,
+        )
+
+    @classmethod
+    def _create_body(cls, name: PrefixedName, scale: Optional[Scale] = None) -> Body:
+        """
+        Create the root body for a new annotation, with box geometry when a scale is
+        given.
+
+        :param name: The name of the body.
+        :param scale: The scale used to generate the geometry of the body.
+        :return: The created body.
         """
         body = Body(name=name)
 
@@ -318,17 +366,7 @@ class HasRootBody(HasRootKinematicStructureEntity[TBody], ABC):
             body.collision = collision_shapes
             body.visual = collision_shapes
 
-        return cls._create_with_connection_in_world(
-            name=name,
-            world=world,
-            kinematic_structure_entity=body,
-            world_root_T_self=world_root_T_self,
-            connection_multiplier=connection_multiplier,
-            connection_offset=connection_offset,
-            active_axis=active_axis,
-            connection_limits=connection_limits,
-            **annotation_fields,
-        )
+        return body
 
 
 TRegion = TypeVar("TRegion", bound=Region)
@@ -350,7 +388,7 @@ class HasRootRegion(HasRootKinematicStructureEntity[TRegion], ABC):
         active_axis: Optional[Vector3] = None,
         connection_multiplier: float = 1.0,
         connection_offset: float = 0.0,
-        **annotation_fields: Any,
+        **kwargs,
     ) -> Self:
         """
         Create a new semantic annotation with a new region in the given world.
@@ -363,22 +401,17 @@ class HasRootRegion(HasRootKinematicStructureEntity[TRegion], ABC):
         :param active_axis: The active axis for the connection.
         :param connection_multiplier: The multiplier for the connection.
         :param connection_offset: The offset for the connection.
-        :param annotation_fields: Additional field values of the concrete annotation
-            class.
         :return: The created semantic annotation instance.
         """
-        region = Region(name=name)
-
         return cls._create_with_connection_in_world(
             name=name,
             world=world,
-            kinematic_structure_entity=region,
+            kinematic_structure_entity=Region(name=name),
             world_root_T_self=world_root_T_self,
             connection_multiplier=connection_multiplier,
             connection_offset=connection_offset,
             active_axis=active_axis,
             connection_limits=connection_limits,
-            **annotation_fields,
         )
 
 
