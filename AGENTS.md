@@ -13,6 +13,12 @@
 - When fixing failing tests, never modify the test itself
 - All new features and fixes must be covered by tests
 - Name test classes (and the mimic classes used by tests) after the pattern or behaviour they exercise, not after the concrete external class they happen to stand in for
+- Make assertions as specific as possible: when the correct expected value can be determined, assert equality to that value rather than only a weaker check such as not-None or not-empty
+- CI safety: All added tests must be part of the CI suite, but only need to execute there if they can run without live external calls or missing credentials — tests requiring unavailable credentials must be skipped (or removed if new), not left to break the pipeline.
+- Credentials: Any test requiring credentials to run in CI must be pre-approved by the user and have those credentials available in CI; otherwise it must be skipped there.
+- No inline snippets: Code snippets must live in separate files with the correct file type, imported or read into the test rather than embedded as strings.
+- Mock over live calls: Tests for code depending on external APIs should mock those APIs instead of calling them live, except when an API call is needed to download a dataset required for other tests to run.
+- Live API tests: You may add tests that hit external APIs directly, but they must have skip conditions so they don't run in CI, and must be paired with an equivalent mock-based test that does run in CI.
 
 ## Code Style
 - Divide a file into logical sections with `# %% <short description>` comment headers (e.g. `# %% same-noun disambiguation`), not decorative box-drawing dividers. Applies to source files as well as test files
