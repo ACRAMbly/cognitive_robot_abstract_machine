@@ -25,10 +25,32 @@ from krrood.class_diagrams.class_diagram import WrappedClass
 from krrood.class_diagrams.utils import class_implements_own_method
 from krrood.class_diagrams.wrapped_field import WrappedField
 from krrood.entity_query_language.factories import variable
-from krrood.entity_query_language.predicate import SymbolicCallable, Verbalizable
+from krrood.entity_query_language.predicate import (
+    HasType,
+    HasTypes,
+    SymbolicCallable,
+    Verbalizable,
+)
 from krrood.entity_query_language.verbalization.pipeline import verbalize_expression
 from krrood.ormatic.utils import classes_of_package
 from krrood.utils import module_and_class_name
+
+PLACEHOLDER_EXAMPLE_VALUES: Dict[Tuple[Type[SymbolicCallable], str], Any] = {
+    (HasType, "types_"): int,
+    (HasTypes, "types_"): (int, str),
+}
+"""
+A literal example value to bind instead of a placeholder variable, keyed by
+*(callable class, field name)*.
+
+Some fields (``HasType.types_``, for instance) are never bound to a symbolic operand in
+real usage -- only ever a literal, since e.g. ``isinstance`` needs a concrete type at
+evaluation time. A field's fragment already renders a literal by its own value (a
+:class:`~krrood.entity_query_language.predicate.RenderedFields` entry unwraps a
+``Literal`` child to its concrete value); a placeholder variable has no such value to
+show. This registry is the only place that says which fields need a literal example
+instead of a placeholder, and what the example is.
+"""
 
 
 @dataclass(frozen=True)
@@ -95,26 +117,22 @@ class VerbalizationResultsOfPackage:
         """
         One placeholder operand per init dataclass field.
 
-        A field gets the value *cls* declares via
-        :meth:`~krrood.entity_query_language.predicate.SymbolicCallable._placeholder_operand_overrides_`,
-        else a fresh variable of the field's type endpoint as the class diagram resolves it
-        (``object`` when the endpoint is not a plain class), so the result reads the operand as
-        *"a <TypeName>"*.
+        A field named in :data:`PLACEHOLDER_EXAMPLE_VALUES` gets that literal example
+        value; every other field gets a fresh variable of the field's type endpoint as
+        the class diagram resolves it (``object`` when the endpoint is not a plain
+        class), so the result reads the operand as *"a <TypeName>"*.
 
         :param cls: The symbolic callable to build operands for.
         :return: The operand to pass for each init field, keyed by field name.
         """
-        overridden_operands = {
-            override.name: override.value
-            for override in cls._placeholder_operand_overrides_()
-        }
         wrapped_class = WrappedClass(clazz=cls)
         operands: Dict[str, Any] = {}
         for field_ in dataclass_fields(cls):
             if not field_.init:
                 continue
-            if field_.name in overridden_operands:
-                operands[field_.name] = overridden_operands[field_.name]
+            example_value_key = (cls, field_.name)
+            if example_value_key in PLACEHOLDER_EXAMPLE_VALUES:
+                operands[field_.name] = PLACEHOLDER_EXAMPLE_VALUES[example_value_key]
                 continue
             endpoint = WrappedField(wrapped_class, field_).type_endpoint
             placeholder_type = (

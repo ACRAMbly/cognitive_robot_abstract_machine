@@ -20,7 +20,6 @@ from typing_extensions import (
     Tuple,
     ClassVar,
     Mapping,
-    Sequence,
     Sized,
     TYPE_CHECKING,
     Dict,
@@ -204,28 +203,6 @@ class Verbalizable(ABC):
         """
 
 
-@dataclass(frozen=True)
-class OverriddenOperand:
-    """
-    One dataclass field's concrete value for a symbolic callable whose fragment reads
-    that field directly rather than treating it as a symbolic operand.
-
-    A ``Type`` field, for example, cannot be resolved by a placeholder variable alone —
-    it may be a symbolic operand in one class and a named value in another — so its
-    value is stated here, per class, via :meth:`SymbolicCallable._placeholder_operand_overrides_`.
-    """
-
-    name: str
-    """
-    The dataclass field name being overridden.
-    """
-
-    value: Any
-    """
-    The concrete value to pass for that field.
-    """
-
-
 @dataclass(eq=False)
 class SymbolicCallable(Symbol, Verbalizable, HasBoundValue, ABC):
     """
@@ -243,14 +220,6 @@ class SymbolicCallable(Symbol, Verbalizable, HasBoundValue, ABC):
     """
     Instances are not cached -- they do not persist.
     """
-
-    @classmethod
-    def _placeholder_operand_overrides_(cls) -> Sequence[OverriddenOperand]:
-        """:return: concrete field overrides for placeholder-operand rendering (an example
-        instantiation built for a snapshot test) -- fields whose fragment reads the field's raw
-        value rather than treating it as a symbolic operand. Empty by default.
-        """
-        return ()
 
     def __new__(cls, *args, **kwargs):
         all_kwargs = merge_args_and_kwargs(
@@ -443,10 +412,6 @@ class HasType(Triple):
         return self.types_
 
     @classmethod
-    def _placeholder_operand_overrides_(cls) -> Sequence[OverriddenOperand]:
-        return (OverriddenOperand("types_", int),)
-
-    @classmethod
     def _verbalization_fragment_(
         cls, fields: Mapping[str, VerbalizationFragment]
     ) -> VerbalizationFragment:
@@ -490,10 +455,6 @@ class HasTypes(HasType):
     """
     A tuple containing Type objects that are associated with this instance.
     """
-
-    @classmethod
-    def _placeholder_operand_overrides_(cls) -> Sequence[OverriddenOperand]:
-        return (OverriddenOperand("types_", (int, str)),)
 
 
 @dataclass(eq=False)

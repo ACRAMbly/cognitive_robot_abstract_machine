@@ -9,6 +9,8 @@ testing here is the generation logic itself, against a small controlled domain.
 
 from __future__ import annotations
 
+import krrood
+from krrood.entity_query_language.predicate import HasType, HasTypes
 from krrood.entity_query_language.testing.result_generation import (
     VerbalizationResultGenerator,
 )
@@ -34,3 +36,21 @@ def test_generated_results_pass_their_own_snapshot_verification():
     )
     round_trip_snapshot.assert_results_cover_every_callable()
     round_trip_snapshot.assert_declared_results_render_as_stated()
+
+
+# %% literal example values instead of placeholder variables
+
+
+def test_placeholder_example_value_names_itself_instead_of_a_placeholder():
+    """
+    ``HasType``/``HasTypes.types_`` are registered in ``PLACEHOLDER_EXAMPLE_VALUES``
+    because they are never bound to a symbolic operand in real usage -- only ever a
+    literal.
+
+    Their placeholder rendering names the literal's own value, the same way it would for
+    a real query, instead of falling back to a generic *"a Type"* placeholder.
+    """
+    snapshot = VerbalizationResultsOfPackage(package=krrood, results=())
+
+    assert snapshot.rendered_result(HasType) == "a variable is of type Integer"
+    assert snapshot.rendered_result(HasTypes) == "a variable is of type Integer or Text"
