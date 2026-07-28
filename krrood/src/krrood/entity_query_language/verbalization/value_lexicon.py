@@ -3,7 +3,9 @@ from __future__ import annotations
 import datetime
 import enum
 
-from typing_extensions import Any, Iterable, List, Optional
+from typing_extensions import Any, List, Optional
+
+from krrood.entity_query_language.utils import is_iterable
 
 #: Human-readable nouns for the primitive types, whose bare ``__name__`` reads as programmer jargon
 #: (*"int"*, *"str"*). Every other type keeps its ``__name__``.
@@ -34,8 +36,7 @@ def type_noun(type_: type) -> str:
 def type_members(value: Any) -> Optional[List[type]]:
     """
     :return: the classes of a non-empty iterable of types, or ``None`` when *value* is not
-        such a collection. A bare ``str``/``bytes`` is excluded even though it is itself
-        iterable.
+        such a collection.
 
     >>> type_members((int, str))
     [<class 'int'>, <class 'str'>]
@@ -44,7 +45,7 @@ def type_members(value: Any) -> Optional[List[type]]:
     >>> type_members([1, 2]) is None
     True
     """
-    if isinstance(value, (str, bytes)) or not isinstance(value, Iterable):
+    if not is_iterable(value):
         return None
     members = list(value)
     if members and all(isinstance(member, type) for member in members):
