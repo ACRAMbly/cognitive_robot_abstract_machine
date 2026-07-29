@@ -300,7 +300,6 @@ class ColorLegend(RXUtilsColorLegend):
             case Variable():
                 color = "cornflowerblue"
             case Concatenation():
-                name = "Union"
                 color = "#949292"
             case MappedVariable():
                 name = "DomainMapping"
