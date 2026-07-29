@@ -77,7 +77,17 @@
 - Use Sphinx directives (for example `..note::`, `..warning::`, and `:func:`) where appropriate
 - Do not use all-caps words for emphasis in docstrings or comments; use RST emphasis (`*word*`) if emphasis is genuinely needed
 - Do not create type information for docstrings (type hints already convey this)
-- Always run `docformatter` on modified files
+- Do not name a function/class's current callers or consumers in its own docstring (e.g. "used by
+  X and Y"); document what it does and its contract, not who happens to use it today — that
+  reference goes stale the moment a caller changes and misleads a future reader into thinking the
+  list is exhaustive or load-bearing
+- Docstrings must be short and to the point: state what the code does, not a conversation about
+  it. Do not compare against a rejected/alternative design, narrate the review or implementation
+  history, or explain what would happen under a hypothetical design that was not chosen
+- Do not use ALL-CAPS words for emphasis in docstrings or comments; use RST emphasis (`*word*`)
+  instead. This does not apply to genuine identifiers, acronyms, or enum/constant names (e.g.
+  `UUID`, `WHERE`, `Definiteness.DEFINITE`)
+- Always run `scripts/format_docstrings.py` (black + docformatter) on modified files
 
 ## Domain-Specific Conventions
 - When dealing with spatial types and connections, adhere to the style guide documented in `semantic_digital_twin/doc/style_guide.md`
