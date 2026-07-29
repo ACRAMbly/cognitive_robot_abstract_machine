@@ -11880,8 +11880,6 @@ class WorldSynchronizerDAO(
         use_existing_column=True,
     )
 
-    synchronize_model: Mapped[builtins.bool] = mapped_column(use_existing_column=True)
-    synchronize_state: Mapped[builtins.bool] = mapped_column(use_existing_column=True)
     defer_incoming_updates: Mapped[builtins.bool] = mapped_column(
         use_existing_column=True
     )

@@ -81,6 +81,7 @@ import giskardpy.middleware.ros2.control_loop
 import giskardpy.middleware.ros2.exceptions
 import giskardpy.middleware.ros2.feedback_publisher
 import giskardpy.middleware.ros2.giskard
+import giskardpy.middleware.ros2.heartbeat
 import giskardpy.middleware.ros2.input_synchronization
 import giskardpy.middleware.ros2.motion_server
 import giskardpy.middleware.ros2.post_goal_plotters
@@ -93,6 +94,7 @@ import giskardpy.middleware.ros2.scripts.iai_robots.tracy.configs
 import giskardpy.middleware.ros2.scripts.tools.interactive_marker
 import giskardpy.middleware.ros2.server_config
 import giskardpy.middleware.ros2.utils.utils_for_tests
+import giskardpy.middleware.ros2.world_updates
 import giskardpy.model.world_config
 import giskardpy.motion_statechart.binding_policy
 import giskardpy.motion_statechart.constraint_builders
@@ -8149,6 +8151,16 @@ class ControlLoopDAO(
         nullable=True,
         use_existing_column=True,
     )
+    heartbeat_id: Mapped[int] = mapped_column(
+        ForeignKey("HeartbeatDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
+    )
+    world_updates_id: Mapped[int] = mapped_column(
+        ForeignKey("IncomingWorldUpdatesDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
+    )
     qp_data_publisher_id: Mapped[typing.Optional[builtins.int]] = mapped_column(
         ForeignKey("QPDataPublisherDAO.database_id", use_alter=True),
         nullable=True,
@@ -8172,6 +8184,15 @@ class ControlLoopDAO(
     )
     inputs: Mapped[WorldStateInputsDAO] = relationship(
         "WorldStateInputsDAO", uselist=False, foreign_keys=[inputs_id], post_update=True
+    )
+    heartbeat: Mapped[HeartbeatDAO] = relationship(
+        "HeartbeatDAO", uselist=False, foreign_keys=[heartbeat_id], post_update=True
+    )
+    world_updates: Mapped[IncomingWorldUpdatesDAO] = relationship(
+        "IncomingWorldUpdatesDAO",
+        uselist=False,
+        foreign_keys=[world_updates_id],
+        post_update=True,
     )
     command_publishers: Mapped[
         builtins.list[ControlLoopDAO_command_publishers_association]
@@ -8533,6 +8554,27 @@ class NoActiveGoalToCancelErrorDAO(
     }
 
 
+class WorldModelModifiedDuringMotionErrorDAO(
+    ExecutionExceptionDAO,
+    DataAccessObject[
+        giskardpy.middleware.ros2.exceptions.WorldModelModifiedDuringMotionError
+    ],
+):
+    __tablename__ = "WorldModelModifiedDuringMotionErrorDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(ExecutionExceptionDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
+    )
+
+    __mapper_args__ = {
+        "polymorphic_identity": "WorldModelModifiedDuringMotionErrorDAO",
+        "inherit_condition": database_id == ExecutionExceptionDAO.database_id,
+        "polymorphic_load": "selectin",
+    }
+
+
 class ActionFeedbackPublisherDAO(
     Base,
     DataAccessObject[
@@ -8608,6 +8650,18 @@ class GiskardDAO(Base, DataAccessObject[giskardpy.middleware.ros2.giskard.Giskar
         foreign_keys=[qp_controller_config_id],
         post_update=True,
     )
+
+
+class HeartbeatDAO(
+    Base, DataAccessObject[giskardpy.middleware.ros2.heartbeat.Heartbeat]
+):
+    __tablename__ = "HeartbeatDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
+
+    count: Mapped[builtins.int] = mapped_column(use_existing_column=True)
 
 
 class InputSynchronizerDAO(
@@ -8819,7 +8873,6 @@ class MotionServerDAO(
         Integer, primary_key=True, use_existing_column=True
     )
 
-    publish_world_state: Mapped[builtins.bool] = mapped_column(use_existing_column=True)
     idle_frequency: Mapped[builtins.float] = mapped_column(use_existing_column=True)
 
     executor_id: Mapped[int] = mapped_column(
@@ -8837,8 +8890,8 @@ class MotionServerDAO(
         nullable=True,
         use_existing_column=True,
     )
-    world_synchronizer_id: Mapped[int] = mapped_column(
-        ForeignKey("WorldSynchronizerDAO.database_id", use_alter=True),
+    world_updates_id: Mapped[int] = mapped_column(
+        ForeignKey("IncomingWorldUpdatesDAO.database_id", use_alter=True),
         nullable=True,
         use_existing_column=True,
     )
@@ -8849,6 +8902,11 @@ class MotionServerDAO(
     )
     inputs_id: Mapped[int] = mapped_column(
         ForeignKey("WorldStateInputsDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
+    )
+    heartbeat_id: Mapped[int] = mapped_column(
+        ForeignKey("HeartbeatDAO.database_id", use_alter=True),
         nullable=True,
         use_existing_column=True,
     )
@@ -8868,10 +8926,10 @@ class MotionServerDAO(
         foreign_keys=[control_loop_id],
         post_update=True,
     )
-    world_synchronizer: Mapped[WorldSynchronizerDAO] = relationship(
-        "WorldSynchronizerDAO",
+    world_updates: Mapped[IncomingWorldUpdatesDAO] = relationship(
+        "IncomingWorldUpdatesDAO",
         uselist=False,
-        foreign_keys=[world_synchronizer_id],
+        foreign_keys=[world_updates_id],
         post_update=True,
     )
     feedback_publisher: Mapped[ActionFeedbackPublisherDAO] = relationship(
@@ -8882,6 +8940,9 @@ class MotionServerDAO(
     )
     inputs: Mapped[WorldStateInputsDAO] = relationship(
         "WorldStateInputsDAO", uselist=False, foreign_keys=[inputs_id], post_update=True
+    )
+    heartbeat: Mapped[HeartbeatDAO] = relationship(
+        "HeartbeatDAO", uselist=False, foreign_keys=[heartbeat_id], post_update=True
     )
     post_goal_plotters: Mapped[
         builtins.list[MotionServerDAO_post_goal_plotters_association]
@@ -9203,7 +9264,6 @@ class GiskardServerConfigDAO(
     plot_motion_statechart: Mapped[builtins.bool] = mapped_column(
         use_existing_column=True
     )
-    publish_world_state: Mapped[builtins.bool] = mapped_column(use_existing_column=True)
     idle_frequency: Mapped[builtins.float] = mapped_column(use_existing_column=True)
 
     execution_mode: Mapped[giskardpy.middleware.ros2.server_config.ExecutionMode] = (
@@ -9256,6 +9316,40 @@ class GiskardTesterDAO(
             foreign_keys="[GiskardTesterDAO_robot_names_association.source_giskardtesterdao_id]",
             lazy="selectin",
         )
+    )
+
+
+class IncomingWorldUpdatesDAO(
+    Base, DataAccessObject[giskardpy.middleware.ros2.world_updates.IncomingWorldUpdates]
+):
+    __tablename__ = "IncomingWorldUpdatesDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
+
+    world_synchronizer_id: Mapped[int] = mapped_column(
+        ForeignKey("WorldSynchronizerDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
+    )
+    model_reload_synchronizer_id: Mapped[typing.Optional[builtins.int]] = mapped_column(
+        ForeignKey("ModelReloadSynchronizerDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
+    )
+
+    world_synchronizer: Mapped[WorldSynchronizerDAO] = relationship(
+        "WorldSynchronizerDAO",
+        uselist=False,
+        foreign_keys=[world_synchronizer_id],
+        post_update=True,
+    )
+    model_reload_synchronizer: Mapped[ModelReloadSynchronizerDAO] = relationship(
+        "ModelReloadSynchronizerDAO",
+        uselist=False,
+        foreign_keys=[model_reload_synchronizer_id],
+        post_update=True,
     )
 
 
@@ -24664,6 +24758,10 @@ class ModelReloadSynchronizerDAO(
         use_existing_column=True,
     )
 
+    defer_incoming_reloads: Mapped[builtins.bool] = mapped_column(
+        use_existing_column=True
+    )
+
     __mapper_args__ = {
         "polymorphic_identity": "ModelReloadSynchronizerDAO",
         "inherit_condition": database_id == SynchronizerDAO.database_id,
@@ -24979,8 +25077,9 @@ class WorldSynchronizerDAO(
         use_existing_column=True,
     )
 
-    synchronize_model: Mapped[builtins.bool] = mapped_column(use_existing_column=True)
-    synchronize_state: Mapped[builtins.bool] = mapped_column(use_existing_column=True)
+    defer_incoming_updates: Mapped[builtins.bool] = mapped_column(
+        use_existing_column=True
+    )
 
     __mapper_args__ = {
         "polymorphic_identity": "WorldSynchronizerDAO",

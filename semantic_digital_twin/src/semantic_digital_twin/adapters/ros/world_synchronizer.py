@@ -499,31 +499,11 @@ class WorldSynchronizer(Synchronizer, ModelChangeCallback, StateChangeCallback):
     ordering guarantees — a model update published before a state update will always be
     received first, eliminating the cross-topic race that causes ``KeyError`` when state
     messages arrive before the model update that introduced the referenced DOF UUIDs.
-
-    The ``synchronize_model`` and ``synchronize_state`` flags control whether outgoing
-    changes are published.  Incoming messages from other nodes are always received and
-    applied regardless of these flags.
     """
 
     message_type: ClassVar[Optional[Type[Message]]] = WorldUpdate
 
     topic_name: str = "/semantic_digital_twin/world_sync"
-
-    synchronize_model: bool = True
-    """
-    If ``True``, model changes on this world are published to the synchronization topic.
-
-    If ``False``, this synchronizer acts as a receive-only participant for model
-    changes.
-    """
-
-    synchronize_state: bool = True
-    """
-    If ``True``, state changes on this world are published to the synchronization topic.
-
-    If ``False``, this synchronizer acts as a receive-only participant for state
-    changes.
-    """
 
     defer_incoming_updates: bool = False
     """
@@ -562,12 +542,11 @@ class WorldSynchronizer(Synchronizer, ModelChangeCallback, StateChangeCallback):
     """
 
     def __post_init__(self):
+        # Called explicitly instead of via super(): Synchronizer does not chain to its own
+        # base, so only naming both branches of the MRO runs the ros setup and the callback
+        # registration.
         Synchronizer.__post_init__(self)
-        if self.synchronize_model:
-            self._world.get_world_model_manager().model_change_callbacks.append(self)
-        if self.synchronize_state:
-            self._world.state.state_change_callbacks.append(self)
-        self.update_previous_world_state()
+        ModelChangeCallback.__post_init__(self)
 
     def on_model_change(self, **kwargs):
         publish_changes = kwargs.get("publish_changes")
@@ -817,21 +796,6 @@ class WorldSynchronizer(Synchronizer, ModelChangeCallback, StateChangeCallback):
         Missed messages are NOT applied automatically.
         """
         super().resume()
-
-    def stop(self):
-        if self.synchronize_model:
-            try:
-                self._world.get_world_model_manager().model_change_callbacks.remove(
-                    self
-                )
-            except ValueError:
-                pass
-        if self.synchronize_state:
-            try:
-                self._world.state.state_change_callbacks.remove(self)
-            except ValueError:
-                pass
-        super().stop()
 
     def close(self):
         self.stop()

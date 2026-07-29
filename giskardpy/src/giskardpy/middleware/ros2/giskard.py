@@ -209,7 +209,6 @@ class Giskard:
             _world=self.world_config.world,
             node=rospy.node,
             defer_incoming_updates=True,
-            synchronize_state=self.server_config.publish_world_state,
         )
         self.world_fetcher = FetchWorldServer(
             node=rospy.node, world=self.world_config.world

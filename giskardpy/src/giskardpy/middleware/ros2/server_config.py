@@ -62,11 +62,6 @@ class GiskardServerConfig:
     Streams the internals of the quadratic program, requires ``debug_mode``.
     """
 
-    publish_world_state: bool = True
-    """
-    Publish the world state while Giskard is waiting for a goal.
-    """
-
     idle_frequency: float = 20.0
     """
     Frequency in hertz at which Giskard waits for goals.
