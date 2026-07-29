@@ -455,13 +455,6 @@ class Elevator(HasCaseAsRootBody, HasDoors, HasMechanicalJoint):
     the elevator to other floors.
     """
 
-    floor_positions: Dict[Level, float] = field(
-        kw_only=True, default_factory=dict, init=False
-    )
-    """
-    Positions of the drive which corresponds to the floor the elevator can reach.
-    """
-
     @classproperty
     def hole_direction(self) -> Vector3:
         return Vector3.NEGATIVE_X()
@@ -482,17 +475,13 @@ class Elevator(HasCaseAsRootBody, HasDoors, HasMechanicalJoint):
         for door in self.doors:
             door.mechanical_joint.position = 0.0
 
-    def add_floor(self, floor: Level, floor_position: float):
-        """
-        Adds a floor to the possible targets for the elevator
-        """
-        self.floor_positions[floor] = floor_position
-
     def drive_to_floor(self, floor: Level):
         """
         Drives the elevator to the floor given
         """
-        self.mechanical_joint.position = self.floor_positions[floor]
+        floor_plane_height = (floor.floor_plane.z + floor.floor_plane.z) / 2
+        drive_height = floor_plane_height + (self.scale.z / 2)
+        self.mechanical_joint.position = drive_height
 
 
 ############################### subclasses to Furniture
@@ -633,6 +622,10 @@ class Level(SemanticAnnotation):
     """
     The region in space which makes up the level
     """
+
+    @property
+    def floor_plane(self) -> Scale:
+        return self.root.area.scale.xy
 
 
 @dataclass(eq=False)
