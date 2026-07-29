@@ -8,6 +8,11 @@ import numpy as np
 import objgraph
 import pytest
 
+from semantic_digital_twin.spatial_types.derivatives import DerivativeMap
+from semantic_digital_twin.world_description.degree_of_freedom import (
+    DegreeOfFreedomLimits,
+)
+
 try:
     from semantic_digital_twin.robots.garmi import Garmi
 except ImportError:
@@ -59,8 +64,15 @@ from semantic_digital_twin.semantic_annotations.semantic_annotations import (
     Spoon,
     Drawer,
     Handle,
+    Elevator,
+    Slider,
+    Door,
 )
-from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix, Vector3
+from semantic_digital_twin.spatial_types import (
+    HomogeneousTransformationMatrix,
+    Vector3,
+    Point3,
+)
 from semantic_digital_twin.utils import rclpy_installed, tracy_installed
 from semantic_digital_twin.world import World
 from semantic_digital_twin.world_description.connections import (
@@ -568,6 +580,80 @@ def _apartment_world_setup():
         )
 
     return apartment_world
+
+
+@pytest.fixture(scope="session")
+def _elevator_world_setup():
+
+    world = World()
+
+    with world.modify_world():
+        world.add_body(Body(name=PrefixedName("root")))
+
+        wall_thickness = 0.05
+        scale = Scale(1, 1, 1)
+        name = PrefixedName("elevaotr")
+        elevator = Elevator.create_with_new_body_in_world(
+            name=PrefixedName("Elevator"),
+            world=world,
+            scale=Scale(1, 1, 1),
+            wall_thickness=0.05,
+        )
+
+        vertical_drive = Slider.create_with_new_body_in_world(
+            name=PrefixedName(f"{name.name}_drive", name.prefix),
+            world=world,
+            active_axis=Vector3.Z(),
+        )
+        elevator.add(vertical_drive)
+
+        door_scale = Scale(wall_thickness, scale.y / 2, scale.z)
+        door1 = Door.create_with_new_body_in_world(
+            name=PrefixedName(f"{name.name}_door0", name.prefix),
+            world=world,
+            world_root_T_self=HomogeneousTransformationMatrix.from_point_rotation_matrix(
+                Point3(-scale.x / 2, -scale.y / 4, 0),
+                reference_frame=world.root,
+            ),
+            scale=door_scale,
+        )
+        door2 = Door.create_with_new_body_in_world(
+            name=PrefixedName(f"{name.name}_door1", name.prefix),
+            world=world,
+            world_root_T_self=HomogeneousTransformationMatrix.from_point_rotation_matrix(
+                Point3(-scale.x / 2, scale.y / 4, 0),
+                reference_frame=world.root,
+            ),
+            scale=door_scale,
+        )
+
+        elevator.add(door1)
+        elevator.add(door2)
+
+        door_travel = door_scale.y
+        door_slider_configs = (
+            (
+                door1,
+                DerivativeMap(position=0.0),
+                DerivativeMap(position=door_travel),
+            ),
+            (
+                door2,
+                DerivativeMap(position=0.0),
+                DerivativeMap(position=door_travel),
+            ),
+        )
+        for i, (current_door, lower, upper) in enumerate(door_slider_configs):
+            door_slider = Slider.create_with_new_body_in_world(
+                name=PrefixedName(f"{name.name}_door{i}_drive", name.prefix),
+                world=world,
+                active_axis=(Vector3.Y() * ((-1) ** (i + 1))),
+                connection_limits=DegreeOfFreedomLimits(lower=lower, upper=upper),
+            )
+            current_door.add(door_slider)
+
+        world.add_semantic_annotation(elevator)
+    return world
 
 
 @pytest.fixture(scope="function")
