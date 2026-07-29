@@ -23,7 +23,6 @@ from semantic_digital_twin.exceptions import (
     MechanicalJointAlreadyMounted,
 )
 from semantic_digital_twin.reasoning.predicates import InsideOf
-from semantic_digital_twin.regions.regions import Level
 from semantic_digital_twin.semantic_annotations.mixins import (
     HasSupportingSurface,
     HasRootRegion,
@@ -622,6 +621,30 @@ class Bathroom(Room): ...
 
 @dataclass(eq=False)
 class LivingRoom(Room): ...
+
+
+@dataclass(eq=False)
+class Level(SemanticAnnotation):
+    """
+    A level of a building
+    """
+
+    root: Region = field(kw_only=True)
+    """
+    The region in space which makes up the level
+    """
+
+
+@dataclass(eq=False)
+class GroundFloor(Level): ...
+
+
+@dataclass(eq=False)
+class FirstFloor(Level): ...
+
+
+@dataclass(eq=False)
+class SecondFloor(Level): ...
 
 
 @dataclass(eq=False)
