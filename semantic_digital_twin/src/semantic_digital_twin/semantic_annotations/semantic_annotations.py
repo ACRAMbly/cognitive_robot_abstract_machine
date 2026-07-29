@@ -21,6 +21,9 @@ from semantic_digital_twin.exceptions import (
     MechanicalJointAlreadyMounted,
 )
 from semantic_digital_twin.reasoning.predicates import InsideOf
+from semantic_digital_twin.semantic_annotations.part_whole import (
+    IsPartWholeRelationship,
+)
 from semantic_digital_twin.semantic_annotations.mixins import (
     HasSupportingSurface,
     HasRootRegion,
@@ -30,7 +33,6 @@ from semantic_digital_twin.semantic_annotations.mixins import (
     HasCaseAsRootBody,
     HasMechanicalJoint,
     HasApertures,
-    IsPartWholeRelationship,
     IsPerceivable,
     HasRootBody,
     IsStorageSpace,
@@ -60,6 +62,7 @@ from semantic_digital_twin.world_description.world_entity import (
 from semantic_digital_twin.api.specifications import (
     BodySpecification,
     ConnectionSpecification,
+    KinematicStructureEntitySpecification,
     PrismaticConnectionSpecification,
     RegionSpecification,
     RevoluteConnectionSpecification,
@@ -110,9 +113,9 @@ class Handle(HasRootBody):
         )
 
     @classmethod
-    def get_default_body_specification(
+    def get_default_root_specification(
         cls,
-        name: str,
+        name: Optional[str] = None,
         scale: Optional[Scale] = None,
         connection_specification: Optional[ConnectionSpecification] = None,
         *,
@@ -222,9 +225,9 @@ class Aperture(HasRootRegion):
         parent.root.visual = new_bounding_box_collection
 
     @classmethod
-    def get_default_region_specification(
+    def get_default_root_specification(
         cls,
-        name: str,
+        name: Optional[str] = None,
         scale: Optional[Scale] = None,
         connection_specification: Optional[ConnectionSpecification] = None,
     ) -> RegionSpecification:
@@ -359,9 +362,9 @@ class EntryWay(Aperture):
     """
 
     @classmethod
-    def get_default_region_specification(
+    def get_default_root_specification(
         cls,
-        name: str,
+        name: Optional[str] = None,
         scale: Optional[Scale] = None,
         connection_specification: Optional[ConnectionSpecification] = None,
         *,
@@ -412,52 +415,52 @@ class Door(HasHandle, HasMechanicalJoint):
         return Scale(0.03, 1, 2)
 
     @classmethod
-    def get_default_annotation_specification(
+    def get_specification(
         cls,
         name: str,
-        scale: Optional[Scale] = None,
+        root_specification: KinematicStructureEntitySpecification,
         *,
         parent_connection_specification: Optional[ConnectionSpecification] = None,
         annotation_kwargs: Optional[dict] = None,
         part_specifications: Optional[dict] = None,
     ) -> SemanticAnnotationWithRootSpecification[Self]:
         """
-        Extend the default door specification with its entry way, declared as a nested
-        part so a door's default form always carries the passage it covers.
+        Extend the door specification with its entry way, declared as a nested part so a
+        door always carries the passage it covers.
 
-        A caller-supplied ``entry_way`` entry replaces the default one.
-
-        .. note:: A hand-built
-            :class:`~semantic_digital_twin.api.specifications.SemanticAnnotationWithRootSpecification`
-            does not gain an entry way; the default form lives here.
+        The entry way is coextensive with the door leaf, so it is sized from the root
+        specification's own geometry rather than from a separately supplied scale. A
+        caller-supplied ``entry_way`` entry replaces the default one.
 
         :param name: The name of the annotation and its root entity.
-        :param scale: The scale the door and its entry way are generated from.
-        :param parent_connection_specification: Connection attaching the root to its parent.
-        :param annotation_kwargs: Inert keyword arguments for the annotation constructor.
-        :param part_specifications: Nested annotation parts keyed by part-whole relationship
-            field name.
+        :param root_specification: The specification of the door's root body.
+        :param parent_connection_specification: Connection attaching the root to its
+            parent.
+        :param annotation_kwargs: Inert keyword arguments for the annotation
+            constructor.
+        :param part_specifications: Nested annotation parts keyed by part-whole
+            relationship field name.
         :return: The annotation specification.
         """
-        scale = scale or cls.default_scale
-        entry_way_specification = EntryWay.get_default_annotation_specification(
-            f"{name}_entry_way", scale
+        entry_way_specification = EntryWay.get_specification(
+            f"{name}_entry_way",
+            EntryWay.get_default_root_specification(scale=root_specification.scale),
         )
-        return super().get_default_annotation_specification(
+        return super().get_specification(
             name,
-            scale,
+            root_specification,
             parent_connection_specification=parent_connection_specification,
             annotation_kwargs=annotation_kwargs,
             part_specifications={
                 "entry_way": entry_way_specification,
-                **(part_specifications or {}),
+                **(part_specifications if part_specifications is not None else {}),
             },
         )
 
     @classmethod
-    def get_default_body_specification(
+    def get_default_root_specification(
         cls,
-        name: str,
+        name: Optional[str] = None,
         scale: Optional[Scale] = None,
         connection_specification: Optional[ConnectionSpecification] = None,
     ) -> BodySpecification:
@@ -477,7 +480,7 @@ class Door(HasHandle, HasMechanicalJoint):
         scale = scale or cls.default_scale
         if not (scale.x < scale.y and scale.x < scale.z):
             raise InvalidPlaneDimensions(scale, clazz=Door)
-        return super().get_default_body_specification(
+        return super().get_default_root_specification(
             name, scale, connection_specification
         )
 
@@ -639,16 +642,15 @@ class Floor(HasSupportingSurface):
         :param name: The name of the floor body.
         :param floor_polytope: A list of 3D points defining the floor poly
         """
-        return SemanticAnnotationWithRootSpecification(
-            name=name,
-            semantic_annotation_type=cls,
-            root_specification=BodySpecification.from_3d_points(name, floor_polytope),
+        return cls.get_specification(
+            name,
+            BodySpecification.from_3d_points(name, floor_polytope),
         ).spawn(world, parent_T_self=world_root_T_self)
 
     @classmethod
-    def get_default_body_specification(
+    def get_default_root_specification(
         cls,
-        name: str,
+        name: Optional[str] = None,
         scale: Optional[Scale] = None,
         connection_specification: Optional[ConnectionSpecification] = None,
     ) -> BodySpecification:
@@ -737,9 +739,9 @@ class Wall(HasApertures):
         )
 
     @classmethod
-    def get_default_body_specification(
+    def get_default_root_specification(
         cls,
-        name: str,
+        name: Optional[str] = None,
         scale: Optional[Scale] = None,
         connection_specification: Optional[ConnectionSpecification] = None,
     ) -> BodySpecification:

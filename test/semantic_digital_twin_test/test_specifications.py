@@ -20,11 +20,12 @@ from semantic_digital_twin.api.specifications import (
     WorldSpecification,
     SpawnSpecification,
 )
+from krrood.ormatic.data_access_objects.helper import to_dao
+
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 from semantic_digital_twin.exceptions import (
     InvalidPlaneDimensions,
     MissingConnectionAxisError,
-    MissingConnectionChildError,
     ParsingError,
     PartWholeCardinalityError,
     PartWholeFieldInAnnotationKwargs,
@@ -56,6 +57,8 @@ from semantic_digital_twin.semantic_annotations.mixins import (
     HasApertures,
     HasRootBody,
     HasRootRegion,
+)
+from semantic_digital_twin.semantic_annotations.part_whole import (
     IsPartWholeRelationship,
 )
 from semantic_digital_twin.world import World
@@ -75,9 +78,7 @@ from semantic_digital_twin.world_description.inertial_properties import Inertial
 from semantic_digital_twin.world_description.shape_collection import ShapeCollection
 from semantic_digital_twin.world_description.world_entity import Body, Region
 
-RESOURCES = (
-    Path(__file__).resolve().parents[2] / "semantic_digital_twin" / "resources" / "stl"
-)
+RESOURCES = Path(__file__).resolve().parents[2] / "semantic_digital_twin" / "resources"
 
 
 # %% spawning entities, connections and annotations
@@ -166,10 +167,9 @@ def test_child_specification_recursion(empty_world):
 
 
 def test_fixed_annotation_spawns(empty_world):
-    spec = SemanticAnnotationWithRootSpecification(
-        name="milk",
-        semantic_annotation_type=Milk,
-        root_specification=BodySpecification.box("milk", Scale(0.1, 0.1, 0.2)),
+    spec = Milk.get_specification(
+        "milk",
+        BodySpecification.box("milk", Scale(0.1, 0.1, 0.2)),
     )
     annotation = spec.spawn(empty_world)
     assert isinstance(annotation, Milk)
@@ -178,10 +178,9 @@ def test_fixed_annotation_spawns(empty_world):
 
 
 def test_active_annotation_spawns(empty_world):
-    spec = SemanticAnnotationWithRootSpecification(
-        name="slider",
-        semantic_annotation_type=Slider,
-        root_specification=BodySpecification.box("slider", Scale(0.1, 0.1, 0.1)),
+    spec = Slider.get_specification(
+        "slider",
+        BodySpecification.box("slider", Scale(0.1, 0.1, 0.1)),
     )
     annotation = spec.spawn(empty_world)
     assert isinstance(annotation, Slider)
@@ -191,10 +190,9 @@ def test_active_annotation_spawns(empty_world):
 def test_annotation_root_connection_specification_overrides_type(empty_world):
     # Milk fixes its root connection to fixed by type, but a connection set on the root
     # specification wins.
-    spec = SemanticAnnotationWithRootSpecification(
-        name="milk",
-        semantic_annotation_type=Milk,
-        root_specification=BodySpecification.box(
+    spec = Milk.get_specification(
+        "milk",
+        BodySpecification.box(
             "milk",
             Scale(0.1, 0.1, 0.2),
             connection_specification=Connection6DoFSpecification(),
@@ -220,30 +218,21 @@ def test_fixed_connection_annotation_rejects_axis():
 
 def test_nested_annotation_on_non_part_whole_field_raises():
     # Milk has no part-whole field, so a nested annotation spec cannot be mounted onto it.
-    # part_specifications are validated at construction.
+    # Part bindings are validated at construction.
     with pytest.raises(UnknownPartWholeRelationshipField):
-        SemanticAnnotationWithRootSpecification(
-            name="milk",
-            semantic_annotation_type=Milk,
-            root_specification=BodySpecification.box("milk", Scale(0.1, 0.1, 0.2)),
+        Milk.get_specification(
+            "milk",
+            BodySpecification.box("milk", Scale(0.1, 0.1, 0.2)),
             part_specifications={
-                "handle": Handle.get_default_annotation_specification(
-                    "handle", Scale(0.1, 0.05, 0.05)
+                "handle": Handle.get_specification(
+                    "handle",
+                    Handle.get_default_root_specification(scale=Scale(0.1, 0.05, 0.05)),
                 )
             },
         )
 
 
 # %% world specifications
-
-
-RESOURCE_DIR = os.path.join(
-    os.path.dirname(os.path.abspath(__file__)),
-    "..",
-    "..",
-    "semantic_digital_twin",
-    "resources",
-)
 
 
 def test_world_specification_robotless(empty_world):
@@ -272,7 +261,7 @@ def test_to_domain_object_does_not_mutate_stored_world(empty_world):
 
 def test_world_specification_from_urdf_environment():
     world = WorldSpecification.from_urdf(
-        os.path.join(RESOURCE_DIR, "urdf", "table.urdf")
+        os.path.join(RESOURCES, "urdf", "table.urdf")
     ).to_domain_object()
     assert not world.is_empty()
     assert world.root is not None
@@ -281,7 +270,7 @@ def test_world_specification_from_urdf_environment():
 def test_world_specification_from_mjcf_environment():
     pytest.importorskip("mujoco")
     world = WorldSpecification.from_mjcf(
-        os.path.join(RESOURCE_DIR, "mjcf", "table.xml")
+        os.path.join(RESOURCES, "mjcf", "table.xml")
     ).to_domain_object()
     assert not world.is_empty()
     assert world.root is not None
@@ -296,7 +285,7 @@ def test_world_specification_from_mjcf_environment():
         lambda: BodySpecification.box("shape", Scale(1, 1, 1)),
         lambda: BodySpecification.sphere("shape", 0.5),
         lambda: BodySpecification.cylinder("shape", 0.4, 1.0),
-        lambda: BodySpecification.mesh("shape", str(RESOURCES / "milk.stl")),
+        lambda: BodySpecification.mesh("shape", str(RESOURCES / "stl" / "milk.stl")),
     ],
 )
 def test_shape_constructors_spawn(empty_world, make_spec):
@@ -320,7 +309,7 @@ def test_from_event_constructor_spawns(empty_world):
         lambda pose: BodySpecification.sphere("shape", 0.5, parent_T_self=pose),
         lambda pose: BodySpecification.cylinder("shape", 0.4, 1.0, parent_T_self=pose),
         lambda pose: BodySpecification.mesh(
-            "shape", str(RESOURCES / "milk.stl"), parent_T_self=pose
+            "shape", str(RESOURCES / "stl" / "milk.stl"), parent_T_self=pose
         ),
         lambda pose: BodySpecification.from_event(
             "shape",
@@ -363,7 +352,7 @@ def test_has_root_body_default_specification_without_scale_is_geometryless(empty
     """
     A scale-less body factory yields a bare body, mirrored by an empty body spec.
     """
-    spec = HasRootBody.get_default_body_specification("bare_body")
+    spec = HasRootBody.get_default_root_specification("bare_body")
     assert isinstance(spec, BodySpecification)
 
     body = spec.spawn(empty_world)
@@ -377,7 +366,7 @@ def test_has_root_region_default_specification_without_scale_is_geometryless(
     """
     The base region factory creates a bare region, mirrored by an empty region spec.
     """
-    spec = HasRootRegion.get_default_region_specification("bare_region")
+    spec = HasRootRegion.get_default_root_specification("bare_region")
     assert isinstance(spec, RegionSpecification)
 
     region = spec.spawn(empty_world)
@@ -492,7 +481,7 @@ def test_world_specification_with_robot(empty_world):
 def test_world_specification_from_urdf_with_robot():
     try:
         world = WorldSpecification.from_urdf(
-            os.path.join(RESOURCE_DIR, "urdf", "table.urdf"),
+            os.path.join(RESOURCES, "urdf", "table.urdf"),
             robot_semantic_annotation=PR2,
         ).to_domain_object()
     except ParsingError as error:
@@ -509,10 +498,9 @@ def test_world_specification_annotation_starting_object(empty_world):
     world = WorldSpecification(
         world=empty_world,
         objects=[
-            SemanticAnnotationWithRootSpecification(
-                name="milk",
-                semantic_annotation_type=Milk,
-                root_specification=BodySpecification.box("milk", Scale(0.1, 0.1, 0.2)),
+            Milk.get_specification(
+                "milk",
+                BodySpecification.box("milk", Scale(0.1, 0.1, 0.2)),
             )
         ],
     ).to_domain_object()
@@ -651,8 +639,10 @@ def test_connection_spec_connect_applies_pose(empty_world):
     np.testing.assert_allclose(root_T_child.to_position().to_np()[:3], [1, 2, 3])
 
 
-def test_connection_spec_connect_without_child_raises(empty_world):
-    with pytest.raises(MissingConnectionChildError):
+def test_connection_spec_connect_requires_child(empty_world):
+    # The child a connection joins is mandatory in the signature, so omitting it is
+    # rejected at call time rather than by a runtime guard inside connect.
+    with pytest.raises(TypeError):
         FixedConnectionSpecification().connect(empty_world)
 
 
@@ -701,7 +691,7 @@ def test_parent_connection_specification_is_built_per_call():
 
 
 # %% default geometry specifications match the factories
-# get_default_body_specification / get_default_region_specification
+# get_default_root_specification / get_default_root_specification
 # reproduce the geometry that create_with_new_body_in_world(scale=...)
 # (and Aperture's region factory) generate, for every class that
 # implements its own geometry-generating factory override.
@@ -723,7 +713,7 @@ def test_default_spec_matches_base_body(empty_world):
         factory = Milk.create_with_new_body_in_world(
             name="milk", world=empty_world, scale=scale
         )
-    spec_body = Milk.get_default_body_specification("milk", scale).to_domain_object()
+    spec_body = Milk.get_default_root_specification("milk", scale).to_domain_object()
     _assert_same_geometry(spec_body.collision, factory.root.collision)
     assert spec_body.collision is spec_body.visual
 
@@ -734,7 +724,7 @@ def test_default_spec_matches_case_body(empty_world):
         factory = Drawer.create_with_new_body_in_world(
             name="drawer", world=empty_world, scale=scale
         )
-    spec_body = Drawer.get_default_body_specification(
+    spec_body = Drawer.get_default_root_specification(
         "drawer", scale
     ).to_domain_object()
     _assert_same_geometry(spec_body.collision, factory.root.collision)
@@ -744,14 +734,11 @@ def test_default_spec_matches_case_body(empty_world):
 def test_default_spec_matches_case_body_with_wall_thickness(empty_world):
     scale = Scale(0.4, 0.5, 0.6)
     with empty_world.modify_world():
-        factory = SemanticAnnotationWithRootSpecification(
-            name="drawer",
-            semantic_annotation_type=Drawer,
-            root_specification=Drawer.get_default_body_specification(
-                "drawer", scale, wall_thickness=0.05
-            ),
+        factory = Drawer.get_specification(
+            "drawer",
+            Drawer.get_default_root_specification(scale=scale, wall_thickness=0.05),
         ).spawn(empty_world)
-    spec_body = Drawer.get_default_body_specification(
+    spec_body = Drawer.get_default_root_specification(
         "drawer", scale, wall_thickness=0.05
     ).to_domain_object()
     _assert_same_geometry(spec_body.collision, factory.root.collision)
@@ -760,14 +747,11 @@ def test_default_spec_matches_case_body_with_wall_thickness(empty_world):
 def test_default_spec_matches_handle(empty_world):
     scale = Scale(0.1, 0.05, 0.05)
     with empty_world.modify_world():
-        factory = SemanticAnnotationWithRootSpecification(
-            name="handle",
-            semantic_annotation_type=Handle,
-            root_specification=Handle.get_default_body_specification(
-                "handle", scale, thickness=0.01
-            ),
+        factory = Handle.get_specification(
+            "handle",
+            Handle.get_default_root_specification(scale=scale, thickness=0.01),
         ).spawn(empty_world)
-    spec_body = Handle.get_default_body_specification(
+    spec_body = Handle.get_default_root_specification(
         "handle", scale, thickness=0.01
     ).to_domain_object()
     _assert_same_geometry(spec_body.collision, factory.root.collision)
@@ -778,7 +762,7 @@ def test_default_spec_matches_handle_without_explicit_scale(empty_world):
     # specification silently produce differently shaped handles.
     with empty_world.modify_world():
         factory = Handle.create_with_new_body_in_world(name="handle", world=empty_world)
-    spec_body = Handle.get_default_body_specification("handle").to_domain_object()
+    spec_body = Handle.get_default_root_specification("handle").to_domain_object()
     _assert_same_geometry(spec_body.collision, factory.root.collision)
 
 
@@ -788,13 +772,13 @@ def test_default_spec_matches_door(empty_world):
         factory = Door.create_with_new_body_in_world(
             name="door", world=empty_world, scale=scale
         )
-    spec_body = Door.get_default_body_specification("door", scale).to_domain_object()
+    spec_body = Door.get_default_root_specification("door", scale).to_domain_object()
     _assert_same_geometry(spec_body.collision, factory.root.collision)
 
 
 def test_default_spec_door_validates_plane():
     with pytest.raises(InvalidPlaneDimensions):
-        Door.get_default_body_specification("door", Scale(2, 1, 1))
+        Door.get_default_root_specification("door", Scale(2, 1, 1))
 
 
 def test_default_spec_matches_floor(empty_world):
@@ -803,7 +787,7 @@ def test_default_spec_matches_floor(empty_world):
         factory = Floor.create_with_new_body_in_world(
             name="floor", world=empty_world, scale=scale
         )
-    spec_body = Floor.get_default_body_specification("floor", scale).to_domain_object()
+    spec_body = Floor.get_default_root_specification("floor", scale).to_domain_object()
     _assert_same_geometry(spec_body.collision, factory.root.collision)
 
 
@@ -813,7 +797,7 @@ def test_default_spec_matches_wall(empty_world):
         factory = Wall.create_with_new_body_in_world(
             name="wall", world=empty_world, scale=scale
         )
-    spec_body = Wall.get_default_body_specification("wall", scale).to_domain_object()
+    spec_body = Wall.get_default_root_specification("wall", scale).to_domain_object()
     _assert_same_geometry(spec_body.collision, factory.root.collision)
 
 
@@ -823,7 +807,7 @@ def test_default_spec_matches_aperture_region(empty_world):
         factory = Aperture.create_with_new_region_in_world(
             name="aperture", world=empty_world, scale=scale
         )
-    spec_region = Aperture.get_default_region_specification(
+    spec_region = Aperture.get_default_root_specification(
         "aperture", scale
     ).to_domain_object()
     _assert_same_geometry(spec_region.area, factory.root.area)
@@ -833,18 +817,20 @@ def test_default_spec_robot_part_raises():
     # AbstractRobotPart's geometry must come from URDF parsing, not from scale,
     # so it raises just like its create_with_new_body_in_world override.
     with pytest.raises(UselessConceptError):
-        AbstractRobotPart.get_default_body_specification("part", Scale(1, 1, 1))
+        AbstractRobotPart.get_default_root_specification("part", Scale(1, 1, 1))
 
 
-# %% default annotation specifications
-# get_default_annotation_specification wraps the geometry spec into a
+# %% annotation specifications
+# get_specification wraps a geometry spec into a
 # SemanticAnnotationWithRootSpecification that spawns an annotation
 # equivalent to create_with_new_body_in_world.
 
 
 def test_annotation_spec_base_body(empty_world):
     scale = Scale(0.2, 0.3, 0.4)
-    spec = Milk.get_default_annotation_specification("milk", scale)
+    spec = Milk.get_specification(
+        "milk", Milk.get_default_root_specification(scale=scale)
+    )
     assert isinstance(spec, SemanticAnnotationWithRootSpecification)
     assert spec.semantic_annotation_type is Milk
     assert isinstance(spec.root_specification, BodySpecification)
@@ -864,9 +850,9 @@ def test_annotation_spec_base_body(empty_world):
 
 def test_annotation_spec_active_slider(empty_world):
     scale = Scale(0.1, 0.1, 0.1)
-    spec = Slider.get_default_annotation_specification(
+    spec = Slider.get_specification(
         "slider",
-        scale,
+        Slider.get_default_root_specification(scale=scale),
         parent_connection_specification=Slider.parent_connection_specification(
             axis=Vector3.Z()
         ),
@@ -879,14 +865,18 @@ def test_annotation_spec_active_slider(empty_world):
 def test_annotation_spec_active_uses_default_axis(empty_world):
     # Slider declares its own parameterized default, so omitting the axis still yields a
     # usable prismatic connection instead of failing at spawn time.
-    spec = Slider.get_default_annotation_specification("slider", Scale(0.1, 0.1, 0.1))
+    spec = Slider.get_specification(
+        "slider", Slider.get_default_root_specification(scale=Scale(0.1, 0.1, 0.1))
+    )
     slider = spec.spawn(empty_world)
     assert isinstance(slider.root.parent_connection, PrismaticConnection)
 
 
 def test_annotation_spec_aperture_region(empty_world):
     scale = Scale(0.1, 1, 2)
-    spec = Aperture.get_default_annotation_specification("aperture", scale)
+    spec = Aperture.get_specification(
+        "aperture", Aperture.get_default_root_specification(scale=scale)
+    )
     assert isinstance(spec.root_specification, RegionSpecification)
 
     annotation = spec.spawn(empty_world)
@@ -901,7 +891,10 @@ def test_annotation_spec_aperture_region(empty_world):
 
 def test_annotation_spec_robot_part_raises():
     with pytest.raises(UselessConceptError):
-        AbstractRobotPart.get_default_annotation_specification("part", Scale(1, 1, 1))
+        AbstractRobotPart.get_specification(
+            "part",
+            AbstractRobotPart.get_default_root_specification(scale=Scale(1, 1, 1)),
+        )
 
 
 # %% nested annotation parts
@@ -914,14 +907,16 @@ def _spawn_with_parts(world, whole_type, whole_scale, parts):
     Spawn ``whole_type`` from its default annotation spec, with ``parts`` as nested
     annotations.
     """
-    return whole_type.get_default_annotation_specification(
-        "whole", whole_scale, part_specifications=parts
+    return whole_type.get_specification(
+        "whole",
+        whole_type.get_default_root_specification(scale=whole_scale),
+        part_specifications=parts,
     ).spawn(world)
 
 
 def test_nested_handle_attaches_as_child(empty_world):
-    handle_part = Handle.get_default_annotation_specification(
-        "handle", Scale(0.1, 0.05, 0.05)
+    handle_part = Handle.get_specification(
+        "handle", Handle.get_default_root_specification(scale=Scale(0.1, 0.05, 0.05))
     )
     drawer = _spawn_with_parts(
         empty_world, Drawer, Scale(0.4, 0.5, 0.6), {"handle": handle_part}
@@ -932,9 +927,9 @@ def test_nested_handle_attaches_as_child(empty_world):
 
 
 def test_nested_mechanical_joint_reparents_whole(empty_world):
-    hinge_part = Hinge.get_default_annotation_specification(
+    hinge_part = Hinge.get_specification(
         "hinge",
-        Scale(0.05, 0.05, 0.05),
+        Hinge.get_default_root_specification(scale=Scale(0.05, 0.05, 0.05)),
         parent_connection_specification=Hinge.parent_connection_specification(
             axis=Vector3.Z()
         ),
@@ -952,13 +947,13 @@ def test_nested_mechanical_joint_reparents_whole(empty_world):
 
 
 def test_nested_aperture_cuts_geometry(empty_world):
-    plain_wall = Wall.get_default_annotation_specification(
-        "plain_wall", Scale(0.1, 2, 2)
+    plain_wall = Wall.get_specification(
+        "plain_wall", Wall.get_default_root_specification(scale=Scale(0.1, 2, 2))
     ).spawn(empty_world)
     plain_shape_count = len(plain_wall.root.collision.shapes)
 
-    aperture_part = Aperture.get_default_annotation_specification(
-        "hole", Scale(0.1, 0.5, 0.5)
+    aperture_part = Aperture.get_specification(
+        "hole", Aperture.get_default_root_specification(scale=Scale(0.1, 0.5, 0.5))
     )
     wall = _spawn_with_parts(
         empty_world, Wall, Scale(0.1, 2, 2), {"apertures": aperture_part}
@@ -970,21 +965,21 @@ def test_nested_aperture_cuts_geometry(empty_world):
 
 
 def test_nested_list_valued_parts_on_to_many_field(empty_world):
-    aperture_a = Aperture.get_default_annotation_specification(
-        "hole_a", Scale(0.1, 0.5, 0.5)
+    aperture_a = Aperture.get_specification(
+        "hole_a", Aperture.get_default_root_specification(scale=Scale(0.1, 0.5, 0.5))
     )
     aperture_a.root_specification.parent_T_self = (
         HomogeneousTransformationMatrix.from_xyz_rpy(y=-0.8)
     )
-    aperture_b = Aperture.get_default_annotation_specification(
-        "hole_b", Scale(0.1, 0.5, 0.5)
+    aperture_b = Aperture.get_specification(
+        "hole_b", Aperture.get_default_root_specification(scale=Scale(0.1, 0.5, 0.5))
     )
     aperture_b.root_specification.parent_T_self = (
         HomogeneousTransformationMatrix.from_xyz_rpy(y=0.8)
     )
-    wall = Wall.get_default_annotation_specification(
+    wall = Wall.get_specification(
         "wall",
-        Scale(0.1, 3, 3),
+        Wall.get_default_root_specification(scale=Scale(0.1, 3, 3)),
         part_specifications={"apertures": [aperture_a, aperture_b]},
     ).spawn(empty_world)
     assert len(wall.apertures) == 2
@@ -994,16 +989,22 @@ def test_nested_list_valued_parts_on_to_many_field(empty_world):
 def test_list_value_on_singular_part_field_raises():
     # part_specifications are validated at construction.
     with pytest.raises(PartWholeCardinalityError):
-        Drawer.get_default_annotation_specification(
+        Drawer.get_specification(
             "drawer",
-            Scale(0.4, 0.5, 0.6),
+            Drawer.get_default_root_specification(scale=Scale(0.4, 0.5, 0.6)),
             part_specifications={
                 "handle": [
-                    Handle.get_default_annotation_specification(
-                        "h1", Scale(0.1, 0.05, 0.05)
+                    Handle.get_specification(
+                        "h1",
+                        Handle.get_default_root_specification(
+                            scale=Scale(0.1, 0.05, 0.05)
+                        ),
                     ),
-                    Handle.get_default_annotation_specification(
-                        "h2", Scale(0.1, 0.05, 0.05)
+                    Handle.get_specification(
+                        "h2",
+                        Handle.get_default_root_specification(
+                            scale=Scale(0.1, 0.05, 0.05)
+                        ),
                     ),
                 ]
             },
@@ -1011,8 +1012,8 @@ def test_list_value_on_singular_part_field_raises():
 
 
 def test_nested_part_placement_is_relative_to_whole(empty_world):
-    handle_part = Handle.get_default_annotation_specification(
-        "handle", Scale(0.1, 0.05, 0.05)
+    handle_part = Handle.get_specification(
+        "handle", Handle.get_default_root_specification(scale=Scale(0.1, 0.05, 0.05))
     )
     handle_part.root_specification.parent_T_self = (
         HomogeneousTransformationMatrix.from_xyz_rpy(y=0.5)
@@ -1032,9 +1033,9 @@ def test_annotation_connection_limits_threaded(empty_world):
     limits = DegreeOfFreedomLimits(
         lower=DerivativeMap(velocity=-1.5), upper=DerivativeMap(velocity=1.5)
     )
-    spec = Slider.get_default_annotation_specification(
+    spec = Slider.get_specification(
         "slider",
-        Scale(0.1, 0.1, 0.1),
+        Slider.get_default_root_specification(scale=Scale(0.1, 0.1, 0.1)),
         parent_connection_specification=Slider.parent_connection_specification(
             axis=Vector3.Z(), dof_limits=limits
         ),
@@ -1049,8 +1050,10 @@ def test_inert_annotation_kwargs_reach_constructor(empty_world):
     # supporting_surface is a plain (non-part-whole) constructor field, so it is allowed in
     # annotation_kwargs and reaches the constructor unchanged.
     surface = RegionSpecification.box("surface", Scale(1, 1, 0.01)).spawn(empty_world)
-    table = Table.get_default_annotation_specification(
-        "table", Scale(1, 1, 0.5), annotation_kwargs={"supporting_surface": surface}
+    table = Table.get_specification(
+        "table",
+        Table.get_default_root_specification(scale=Scale(1, 1, 0.5)),
+        annotation_kwargs={"supporting_surface": surface},
     ).spawn(empty_world)
     assert table.supporting_surface is surface
 
@@ -1059,12 +1062,13 @@ def test_part_whole_field_in_annotation_kwargs_raises():
     # A part-whole relationship field (Drawer.handle) must not be passed via annotation_kwargs;
     # it belongs in part_specifications. This is rejected at spec construction.
     with pytest.raises(PartWholeFieldInAnnotationKwargs):
-        Drawer.get_default_annotation_specification(
+        Drawer.get_specification(
             "drawer",
-            Scale(0.4, 0.5, 0.6),
+            Drawer.get_default_root_specification(scale=Scale(0.4, 0.5, 0.6)),
             annotation_kwargs={
-                "handle": Handle.get_default_annotation_specification(
-                    "handle", Scale(0.1, 0.05, 0.05)
+                "handle": Handle.get_specification(
+                    "handle",
+                    Handle.get_default_root_specification(scale=Scale(0.1, 0.05, 0.05)),
                 )
             },
         )
@@ -1074,9 +1078,9 @@ def test_non_part_whole_field_in_part_specifications_raises():
     # supporting_surface is not a part-whole relationship, so it cannot hold a nested part spec.
     # part_specifications are validated at construction.
     with pytest.raises(UnknownPartWholeRelationshipField):
-        Table.get_default_annotation_specification(
+        Table.get_specification(
             "table",
-            Scale(1, 1, 0.5),
+            Table.get_default_root_specification(scale=Scale(1, 1, 0.5)),
             part_specifications={
                 "supporting_surface": RegionSpecification.box(
                     "surface", Scale(1, 1, 0.01)
@@ -1088,13 +1092,14 @@ def test_non_part_whole_field_in_part_specifications_raises():
 def test_storage_objects_in_part_specifications_raises():
     # IsStorageSpace.objects is not a part-whole relationship, so spec-based occupants are unsupported.
     with pytest.raises(UnknownPartWholeRelationshipField):
-        Table.get_default_annotation_specification(
+        Table.get_specification(
             "table",
-            Scale(1, 1, 0.5),
+            Table.get_default_root_specification(scale=Scale(1, 1, 0.5)),
             part_specifications={
                 "objects": [
-                    Milk.get_default_annotation_specification(
-                        "milk", Scale(0.1, 0.1, 0.2)
+                    Milk.get_specification(
+                        "milk",
+                        Milk.get_default_root_specification(scale=Scale(0.1, 0.1, 0.2)),
                     )
                 ]
             },
@@ -1102,34 +1107,36 @@ def test_storage_objects_in_part_specifications_raises():
 
 
 def test_complex_spawned_world_is_deepcopyable(empty_world):
-    Drawer.get_default_annotation_specification(
+    Drawer.get_specification(
         "drawer",
-        Scale(0.4, 0.5, 0.6),
+        Drawer.get_default_root_specification(scale=Scale(0.4, 0.5, 0.6)),
         part_specifications={
-            "handle": Handle.get_default_annotation_specification(
-                "handle", Scale(0.1, 0.05, 0.05)
+            "handle": Handle.get_specification(
+                "handle",
+                Handle.get_default_root_specification(scale=Scale(0.1, 0.05, 0.05)),
             ),
-            "mechanical_joint": Hinge.get_default_annotation_specification(
+            "mechanical_joint": Hinge.get_specification(
                 "hinge",
-                Scale(0.05, 0.05, 0.05),
+                Hinge.get_default_root_specification(scale=Scale(0.05, 0.05, 0.05)),
                 parent_connection_specification=Hinge.parent_connection_specification(
                     axis=Vector3.Z()
                 ),
             ),
         },
     ).spawn(empty_world)
-    Wall.get_default_annotation_specification(
+    Wall.get_specification(
         "wall",
-        Scale(0.1, 2, 2),
+        Wall.get_default_root_specification(scale=Scale(0.1, 2, 2)),
         part_specifications={
-            "apertures": Aperture.get_default_annotation_specification(
-                "hole", Scale(0.1, 0.5, 0.5)
+            "apertures": Aperture.get_specification(
+                "hole",
+                Aperture.get_default_root_specification(scale=Scale(0.1, 0.5, 0.5)),
             )
         },
     ).spawn(empty_world)
-    Milk.get_default_annotation_specification("milk", Scale(0.1, 0.1, 0.2)).spawn(
-        empty_world
-    )
+    Milk.get_specification(
+        "milk", Milk.get_default_root_specification(scale=Scale(0.1, 0.1, 0.2))
+    ).spawn(empty_world)
 
     world_copy = copy.deepcopy(empty_world)
 
@@ -1148,16 +1155,16 @@ def test_nested_composite_matches_manual_construction(empty_world):
     handle_scale = Scale(0.1, 0.05, 0.05)
     hinge_scale = Scale(0.05, 0.05, 0.05)
 
-    drawer = Drawer.get_default_annotation_specification(
+    drawer = Drawer.get_specification(
         "drawer",
-        scale,
+        Drawer.get_default_root_specification(scale=scale),
         part_specifications={
-            "handle": Handle.get_default_annotation_specification(
-                "handle", handle_scale
+            "handle": Handle.get_specification(
+                "handle", Handle.get_default_root_specification(scale=handle_scale)
             ),
-            "mechanical_joint": Hinge.get_default_annotation_specification(
+            "mechanical_joint": Hinge.get_specification(
                 "hinge",
-                hinge_scale,
+                Hinge.get_default_root_specification(scale=hinge_scale),
                 parent_connection_specification=Hinge.parent_connection_specification(
                     axis=Vector3.Z()
                 ),
@@ -1267,10 +1274,10 @@ def test_parent_connection_specification_overrides_stay_zero_argument():
 @pytest.mark.parametrize(
     "annotation_type, builder_name",
     [
-        (Milk, "get_default_body_specification"),
-        (Drawer, "get_default_body_specification"),
-        (Handle, "get_default_body_specification"),
-        (Aperture, "get_default_region_specification"),
+        (Milk, "get_default_root_specification"),
+        (Drawer, "get_default_root_specification"),
+        (Handle, "get_default_root_specification"),
+        (Aperture, "get_default_root_specification"),
     ],
 )
 def test_default_geometry_builder_takes_a_connection(annotation_type, builder_name):
@@ -1286,12 +1293,10 @@ def test_default_geometry_builder_takes_a_connection(annotation_type, builder_na
 
 
 def test_custom_geometry_and_connection_build_in_one_expression(empty_world):
-    annotation = SemanticAnnotationWithRootSpecification(
-        name="handle",
-        semantic_annotation_type=Handle,
-        root_specification=Handle.get_default_body_specification(
-            "handle",
-            Scale(0.1, 0.05, 0.05),
+    annotation = Handle.get_specification(
+        "handle",
+        Handle.get_default_root_specification(
+            scale=Scale(0.1, 0.05, 0.05),
             connection_specification=Connection6DoFSpecification(),
             thickness=0.01,
         ),
@@ -1305,6 +1310,22 @@ def test_custom_geometry_and_connection_build_in_one_expression(empty_world):
 # must not cut the door; mounting the same instance onto a wall must still cut.
 
 
+def test_entry_way_matches_custom_door_geometry(empty_world):
+    # The entry way is coextensive with the door leaf, so a door built from custom
+    # geometry must get an entry way sized from that geometry rather than from the
+    # type's default scale.
+    with empty_world.modify_world():
+        door = Door.get_specification(
+            "door",
+            Door.get_default_root_specification(scale=Scale(0.05, 2.0, 2.5)),
+        ).spawn(empty_world)
+    door_scale = door.root.collision.scale
+    entry_way_scale = door.entry_way.root.area.scale
+    assert (entry_way_scale.x, entry_way_scale.y, entry_way_scale.z) == pytest.approx(
+        (door_scale.x, door_scale.y, door_scale.z)
+    )
+
+
 def test_door_keeps_geometry_when_entry_way_is_mounted(empty_world):
     scale = Scale(0.03, 1, 2)
     with empty_world.modify_world():
@@ -1312,7 +1333,7 @@ def test_door_keeps_geometry_when_entry_way_is_mounted(empty_world):
             name="door", world=empty_world, scale=scale
         )
     assert len(door.root.collision.shapes) > 0
-    expected = Door.get_default_body_specification("door", scale).to_domain_object()
+    expected = Door.get_default_root_specification("door", scale).to_domain_object()
     _assert_same_geometry(expected.collision, door.root.collision)
 
 
@@ -1367,28 +1388,39 @@ def test_entry_way_is_named_after_the_door(empty_world):
 
 
 def test_door_default_specification_declares_the_entry_way_part():
-    specification = Door.get_default_annotation_specification("door")
-    entry_way_specification = specification.part_specifications["entry_way"]
+    specification = Door.get_specification(
+        "door", Door.get_default_root_specification()
+    )
+    [entry_way_binding] = [
+        binding
+        for binding in specification.part_bindings
+        if binding.field_name == "entry_way"
+    ]
+    [entry_way_specification] = entry_way_binding.specifications
     assert entry_way_specification.semantic_annotation_type is EntryWay
 
 
 def test_caller_supplied_entry_way_specification_replaces_the_default(empty_world):
-    custom = EntryWay.get_default_annotation_specification(
-        "custom", Scale(0.03, 0.5, 1)
+    custom = EntryWay.get_specification(
+        "custom", EntryWay.get_default_root_specification(scale=Scale(0.03, 0.5, 1))
     )
-    door = Door.get_default_annotation_specification(
-        "door", part_specifications={"entry_way": custom}
+    door = Door.get_specification(
+        "door",
+        Door.get_default_root_specification(),
+        part_specifications={"entry_way": custom},
     ).spawn(empty_world)
     assert door.entry_way.name == PrefixedName("custom")
     assert len(empty_world.get_semantic_annotations_by_type(EntryWay)) == 1
 
 
 def test_caller_supplied_parts_survive_entry_way_injection(empty_world):
-    handle_part = Handle.get_default_annotation_specification(
-        "handle", Scale(0.1, 0.05, 0.05)
+    handle_part = Handle.get_specification(
+        "handle", Handle.get_default_root_specification(scale=Scale(0.1, 0.05, 0.05))
     )
-    door = Door.get_default_annotation_specification(
-        "door", part_specifications={"handle": handle_part}
+    door = Door.get_specification(
+        "door",
+        Door.get_default_root_specification(),
+        part_specifications={"handle": handle_part},
     ).spawn(empty_world)
     assert isinstance(door.handle, Handle)
     assert isinstance(door.entry_way, EntryWay)
@@ -1396,8 +1428,10 @@ def test_caller_supplied_parts_survive_entry_way_injection(empty_world):
 
 def test_entry_way_in_annotation_kwargs_raises():
     with pytest.raises(PartWholeFieldInAnnotationKwargs):
-        Door.get_default_annotation_specification(
-            "door", annotation_kwargs={"entry_way": None}
+        Door.get_specification(
+            "door",
+            Door.get_default_root_specification(),
+            annotation_kwargs={"entry_way": None},
         )
 
 
@@ -1421,12 +1455,54 @@ def test_only_aperture_fields_remove_geometry_from_the_whole():
 def test_aperture_default_annotation_specification_without_scale_uses_default_scale(
     empty_world,
 ):
-    # Aperture overrides get_default_region_specification to fall back to Scale() where
+    # Aperture overrides get_default_root_specification to fall back to Scale() where
     # the base yields a geometry-less spec; dispatch must reach that override.
-    annotation = Aperture.get_default_annotation_specification("aperture").spawn(
-        empty_world
-    )
-    expected = Aperture.get_default_region_specification(
+    annotation = Aperture.get_specification(
+        "aperture", Aperture.get_default_root_specification()
+    ).spawn(empty_world)
+    expected = Aperture.get_default_root_specification(
         "aperture", Scale()
     ).to_domain_object()
     _assert_same_geometry(expected.area, annotation.root.area)
+
+
+# %% specification persistence
+# A specification that survives a database round trip must still describe the same
+# annotation, otherwise persisting one silently loses its geometry and its parts.
+
+
+def _drawer_specification_with_handle() -> SemanticAnnotationWithRootSpecification:
+    return Drawer.get_specification(
+        "drawer",
+        Drawer.get_default_root_specification(scale=Scale(0.2, 0.3, 0.2)),
+        part_specifications={
+            "handle": Handle.get_specification(
+                "handle",
+                Handle.get_default_root_specification(scale=Scale(0.1, 0.05, 0.05)),
+            )
+        },
+    )
+
+
+def test_part_bindings_survive_orm_round_trip():
+    # The parts a specification declares are part of what is persisted: the annotation
+    # type and the part-whole fields the parts were bound to come back unchanged.
+    reconstructed = to_dao(_drawer_specification_with_handle()).from_dao()
+
+    assert reconstructed.semantic_annotation_type is Drawer
+    assert [binding.field_name for binding in reconstructed.part_bindings] == ["handle"]
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason="ormatic maps no specification-valued field, so a persisted specification "
+    "comes back without its root_specification and with empty part bindings. Remove "
+    "this marker once the generator maps those fields.",
+)
+def test_annotation_specification_survives_orm_round_trip(empty_world):
+    reconstructed = to_dao(_drawer_specification_with_handle()).from_dao()
+
+    drawer = reconstructed.spawn(empty_world)
+    assert isinstance(drawer, Drawer)
+    assert isinstance(drawer.handle, Handle)
+    assert len(drawer.root.collision.shapes) > 0

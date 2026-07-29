@@ -34,8 +34,8 @@ from semantic_digital_twin.semantic_annotations.semantic_annotations import (
     Handle,
     Slider,
 )
-from semantic_digital_twin.semantic_annotations.mixins import (
-    _wrapped_part_whole_relationship_fields,
+from semantic_digital_twin.semantic_annotations.part_whole import (
+    wrapped_part_whole_relationship_fields,
     IsPartWholeRelationship,
 )
 from semantic_digital_twin.orm.ormatic_interface import *
@@ -213,7 +213,7 @@ def test_part_whole_relationship_field_survives_deepcopy():
         # The marked-field discovery still resolves the same part-whole relationship fields.
         discovered = {
             spec.field.name
-            for spec in _wrapped_part_whole_relationship_fields(type(copied_drawer))
+            for spec in wrapped_part_whole_relationship_fields(type(copied_drawer))
         }
         assert {"handle", "mechanical_joint"} <= discovered
 
@@ -300,7 +300,7 @@ def test_part_whole_relationship_field_metadata_survives_orm_round_trip(session)
     # The marked-field discovery still resolves the same part-whole relationship fields.
     discovered = {
         spec.field.name
-        for spec in _wrapped_part_whole_relationship_fields(type(reconstructed_drawer))
+        for spec in wrapped_part_whole_relationship_fields(type(reconstructed_drawer))
     }
     assert {"handle", "mechanical_joint"} <= discovered
 

@@ -4,18 +4,17 @@ from abc import ABC, abstractmethod
 from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import (
-    Iterable,
     TYPE_CHECKING,
     cast,
     Type,
     Any,
     Generic,
-    List,
 )
 
 from typing_extensions import Self, TypeVar
 
 from krrood.class_diagrams.attribute_introspector import DataclassOnlyIntrospector
+from krrood.class_diagrams.wrapped_field import WrappedField
 from krrood.patterns.subclass_safe_generic import SubClassSafeGeneric
 from krrood.utils import get_generic_type_parameters
 from random_events.product_algebra import Event
@@ -24,11 +23,13 @@ from semantic_digital_twin.datastructures.prefixed_name import (
     PrefixedName,
 )
 from semantic_digital_twin.exceptions import (
-    MissingConnectionChildError,
     PartWholeCardinalityError,
     PartWholeFieldInAnnotationKwargs,
     UnknownPartWholeRelationshipField,
     MissingConnectionParentError,
+)
+from semantic_digital_twin.semantic_annotations.part_whole import (
+    wrapped_part_whole_relationship_fields,
 )
 from semantic_digital_twin.spatial_types import (
     HomogeneousTransformationMatrix,
@@ -154,22 +155,6 @@ class SpawnSpecification(NamedSpecification, Generic[TWorldEntity], ABC):
         :return: The materialized world entity.
         """
 
-    def _spawn_children(
-        self,
-        world: World,
-        parent: KinematicStructureEntity,
-        children: Iterable[SpawnSpecification],
-    ) -> None:
-        """
-        Spawn each child specification as a kinematic child of ``parent``.
-
-        :param world: The world the children are added to.
-        :param parent: The entity the children are attached to.
-        :param children: The specifications to materialize.
-        """
-        for child in children:
-            child.spawn(world, parent=parent)
-
 
 # %% connection specifications
 
@@ -229,8 +214,8 @@ class ConnectionSpecification(
     def connect(
         self,
         world: World,
+        child: KinematicStructureEntity,
         parent: KinematicStructureEntity | None = None,
-        child: KinematicStructureEntity | None = None,
         parent_T_connection: HomogeneousTransformationMatrix | None = None,
         name: str | None = None,
     ) -> Connection:
@@ -238,27 +223,22 @@ class ConnectionSpecification(
         Materialize the connection between ``parent`` and ``child`` and add it to the
         world.
 
-        A connection joins two pre-existing entities, so the child it connects must be
-        supplied explicitly via ``child``. If ``parent`` is omitted, ``world.root`` is
-        used.
+        A connection joins two pre-existing entities, so the child it connects is
+        mandatory. If ``parent`` is omitted, ``world.root`` is used.
 
         :param world: The world the connection is added to.
-        :param parent: The kinematic structure entity that becomes the connection's
-            parent. If None, ``world.root`` is used.
         :param child: The kinematic structure entity that becomes the connection's
             child.
+        :param parent: The kinematic structure entity that becomes the connection's
+            parent. If None, ``world.root`` is used.
         :param parent_T_connection: Placement of the connection in the parent frame.
             Identity if None.
         :param name: Overrides the specification's own name. If None, the spec's name is
             used.
         :return: The materialized connection.
-        :raises MissingConnectionChildError: If ``child`` is not provided.
         :raises MissingConnectionParentError: If no parent is given and the world has no
             root.
         """
-        if child is None:
-            raise MissingConnectionChildError(connection_name=self.name)
-
         parent = parent or world.root
         if parent is None:
             raise MissingConnectionParentError(connection_name=self.name)
@@ -414,6 +394,18 @@ class KinematicStructureEntitySpecification(
     ``None`` means :meth:`spawn` uses a fixed connection.
     """
 
+    @property
+    def scale(self) -> Scale:
+        """
+        The extents of this specification's geometry.
+
+        This is the world-independent counterpart of
+        :attr:`~semantic_digital_twin.semantic_annotations.mixins.HasRootKinematicStructureEntity.scale`,
+        so a specification can be measured before anything is spawned.
+        """
+        bounds = self.shapes.combined_mesh.bounds
+        return Scale(*(bounds[1] - bounds[0]))
+
     def to_domain_object(self, name: str | None = None) -> TKinematicStructureEntity:
         """
         Materialize a new, world-independent kinematic structure entity from this spec.
@@ -431,6 +423,41 @@ class KinematicStructureEntitySpecification(
             self._resolved_name(name),
             self.shapes.copy_without_reference_frame(),
         )
+
+    def attach_and_spawn_children(
+        self,
+        world: World,
+        entity: KinematicStructureEntity,
+        connection_specification: ConnectionSpecification,
+        parent: KinematicStructureEntity | None = None,
+        parent_T_self: HomogeneousTransformationMatrix | None = None,
+    ) -> None:
+        """
+        Attach an already materialized ``entity`` to ``parent`` via
+        ``connection_specification`` and spawn this specification's children below it.
+
+        This is the shared tail of every spawn: entity specifications call it on
+        themselves, and annotation specifications call it on their root specification, so
+        the attach-and-descend sequence exists only once.
+
+        :param world: The world the connection and the children are added to.
+        :param entity: The materialized entity to attach.
+        :param connection_specification: How the entity attaches to its parent.
+        :param parent: The entity to attach to. If None, ``world.root`` is used.
+        :param parent_T_self: Overrides the specification's stored default pose. If
+            None, the stored default is used.
+        """
+        with world.modify_world():
+            connection_specification.connect(
+                world,
+                child=entity,
+                parent=parent,
+                parent_T_connection=(
+                    parent_T_self if parent_T_self is not None else self.parent_T_self
+                ),
+            )
+            for child in self.child_specifications:
+                child.spawn(world, parent=entity)
 
     def _spawn_attached(
         self,
@@ -454,15 +481,9 @@ class KinematicStructureEntitySpecification(
         :return: The materialized kinematic structure entity.
         """
         entity = self.to_domain_object(name)
-        with world.modify_world():
-            connection_specification.connect(
-                world,
-                parent=parent,
-                child=entity,
-                parent_T_connection=parent_T_self or self.parent_T_self,
-            )
-            for child in self.child_specifications:
-                child.spawn(world, parent=entity)
+        self.attach_and_spawn_children(
+            world, entity, connection_specification, parent, parent_T_self
+        )
         return entity
 
     def spawn(
@@ -486,7 +507,9 @@ class KinematicStructureEntitySpecification(
         :return: The materialized kinematic structure entity.
         """
         connection_specification = (
-            self.connection_specification or FixedConnectionSpecification()
+            self.connection_specification
+            if self.connection_specification is not None
+            else FixedConnectionSpecification()
         )
         return self._spawn_attached(
             world, connection_specification, name, parent, parent_T_self
@@ -522,11 +545,19 @@ class KinematicStructureEntitySpecification(
             name,
             Box(
                 scale=scale,
-                origin=origin or HomogeneousTransformationMatrix(),
-                color=color or Color(),
+                origin=(
+                    origin if origin is not None else HomogeneousTransformationMatrix()
+                ),
+                color=color if color is not None else Color(),
             ).as_shape_collection(),
-            child_specifications=child_specifications or [],
-            parent_T_self=parent_T_self or HomogeneousTransformationMatrix(),
+            child_specifications=(
+                child_specifications if child_specifications is not None else []
+            ),
+            parent_T_self=(
+                parent_T_self
+                if parent_T_self is not None
+                else HomogeneousTransformationMatrix()
+            ),
             connection_specification=connection_specification,
         )
 
@@ -561,11 +592,19 @@ class KinematicStructureEntitySpecification(
             name,
             Sphere(
                 radius=radius,
-                origin=origin or HomogeneousTransformationMatrix(),
-                color=color or Color(),
+                origin=(
+                    origin if origin is not None else HomogeneousTransformationMatrix()
+                ),
+                color=color if color is not None else Color(),
             ).as_shape_collection(),
-            child_specifications=child_specifications or [],
-            parent_T_self=parent_T_self or HomogeneousTransformationMatrix(),
+            child_specifications=(
+                child_specifications if child_specifications is not None else []
+            ),
+            parent_T_self=(
+                parent_T_self
+                if parent_T_self is not None
+                else HomogeneousTransformationMatrix()
+            ),
             connection_specification=connection_specification,
         )
 
@@ -603,11 +642,19 @@ class KinematicStructureEntitySpecification(
             Cylinder(
                 width=width,
                 height=height,
-                origin=origin or HomogeneousTransformationMatrix(),
-                color=color or Color(),
+                origin=(
+                    origin if origin is not None else HomogeneousTransformationMatrix()
+                ),
+                color=color if color is not None else Color(),
             ).as_shape_collection(),
-            child_specifications=child_specifications or [],
-            parent_T_self=parent_T_self or HomogeneousTransformationMatrix(),
+            child_specifications=(
+                child_specifications if child_specifications is not None else []
+            ),
+            parent_T_self=(
+                parent_T_self
+                if parent_T_self is not None
+                else HomogeneousTransformationMatrix()
+            ),
             connection_specification=connection_specification,
         )
 
@@ -645,12 +692,20 @@ class KinematicStructureEntitySpecification(
             name,
             Mesh(
                 filename=filename,
-                origin=origin or HomogeneousTransformationMatrix(),
-                scale=scale or Scale(),
-                color=color or Color(),
+                origin=(
+                    origin if origin is not None else HomogeneousTransformationMatrix()
+                ),
+                scale=scale if scale is not None else Scale(),
+                color=color if color is not None else Color(),
             ).as_shape_collection(),
-            child_specifications=child_specifications or [],
-            parent_T_self=parent_T_self or HomogeneousTransformationMatrix(),
+            child_specifications=(
+                child_specifications if child_specifications is not None else []
+            ),
+            parent_T_self=(
+                parent_T_self
+                if parent_T_self is not None
+                else HomogeneousTransformationMatrix()
+            ),
             connection_specification=connection_specification,
         )
 
@@ -687,8 +742,14 @@ class KinematicStructureEntitySpecification(
             shapes=BoundingBoxCollection.from_event(anchor, event)
             .as_shapes()
             .copy_without_reference_frame(),
-            child_specifications=child_specifications or [],
-            parent_T_self=parent_T_self or HomogeneousTransformationMatrix(),
+            child_specifications=(
+                child_specifications if child_specifications is not None else []
+            ),
+            parent_T_self=(
+                parent_T_self
+                if parent_T_self is not None
+                else HomogeneousTransformationMatrix()
+            ),
             connection_specification=connection_specification,
         )
 
@@ -696,7 +757,7 @@ class KinematicStructureEntitySpecification(
     def from_3d_points(
         cls,
         name: str,
-        points_3d: List[Point3],
+        points_3d: list[Point3],
         minimum_thickness: float = 0.005,
         singular_value_ratio_tolerance: float = 1e-7,
         parent_T_self: HomogeneousTransformationMatrix | None = None,
@@ -730,8 +791,14 @@ class KinematicStructureEntitySpecification(
                     )
                 ]
             ).copy_without_reference_frame(),
-            child_specifications=child_specifications or [],
-            parent_T_self=parent_T_self or HomogeneousTransformationMatrix(),
+            child_specifications=(
+                child_specifications if child_specifications is not None else []
+            ),
+            parent_T_self=(
+                parent_T_self
+                if parent_T_self is not None
+                else HomogeneousTransformationMatrix()
+            ),
             connection_specification=connection_specification,
         )
 
@@ -798,6 +865,29 @@ class RegionSpecification(KinematicStructureEntitySpecification[Region]):
 
 
 @dataclass
+class PartSpecificationBinding:
+    """
+    Nested annotation parts together with the part-whole relationship field they fill.
+
+    Parts are held in a list of bindings rather than keyed by field name in a mapping,
+    so that the nesting is part of the persisted specification instead of being dropped
+    on the way to the database.
+    """
+
+    field_name: str
+    """
+    The name of the part-whole relationship field the parts are mounted onto.
+    """
+
+    specifications: list[SemanticAnnotationWithRootSpecification] = field(
+        default_factory=list
+    )
+    """
+    The part specifications spawned and mounted onto the field.
+    """
+
+
+@dataclass
 class SemanticAnnotationWithRootSpecification(SpawnSpecification[TSemanticAnnotation]):
     """
     World-independent description of a semantic annotation rooted in a single kinematic
@@ -831,29 +921,27 @@ class SemanticAnnotationWithRootSpecification(SpawnSpecification[TSemanticAnnota
     Inert keyword arguments passed straight to the annotation constructor, keyed by
     constructor field name.
 
-    Nested annotation parts do not belong here; use :attr:`part_specifications`.
+    Nested annotation parts do not belong here; use :attr:`part_bindings`.
+
+    .. note:: These values are of arbitrary type and are therefore not persisted with the
+        specification.
     """
 
-    part_specifications: dict[
-        str,
-        SemanticAnnotationWithRootSpecification
-        | list[SemanticAnnotationWithRootSpecification],
-    ] = field(default_factory=dict)
+    part_bindings: list[PartSpecificationBinding] = field(default_factory=list)
     """
-    Nested annotation parts keyed by the target part-whole relationship field name.
+    Nested annotation parts, each bound to the part-whole relationship field it fills.
 
     Each part is spawned during :meth:`spawn` and mounted via the annotation's
-    :meth:`PartWholeRelationship.add`. A list value mounts several parts onto a to-many
-    field; a single value mounts onto a singular field.
+    :meth:`PartWholeRelationship.add`.
     """
 
     def __post_init__(self):
         """
-        Validate the annotation kwargs and part specifications so misuse fails fast,
-        before any world mutation.
+        Validate the annotation kwargs and part bindings so misuse fails fast, before
+        any world mutation.
         """
         self._validate_annotation_kwargs()
-        self._validate_part_specifications(self.semantic_annotation_type)
+        self._validate_part_bindings(self.semantic_annotation_type)
 
     def spawn(
         self,
@@ -886,24 +974,17 @@ class SemanticAnnotationWithRootSpecification(SpawnSpecification[TSemanticAnnota
             name=self._resolved_name(name), root=root_entity, **self.annotation_kwargs
         )
 
-        used_parent_T_self = parent_T_self or self.root_specification.parent_T_self
-        children = self.root_specification.child_specifications
-
         connection_specification = (
             self.root_specification.connection_specification
-            or self.semantic_annotation_type.parent_connection_specification()
+            if self.root_specification.connection_specification is not None
+            else self.semantic_annotation_type.parent_connection_specification()
         )
 
         with world.modify_world():
-            connection_specification.connect(
-                world,
-                parent=parent,
-                child=root_entity,
-                parent_T_connection=used_parent_T_self,
+            self.root_specification.attach_and_spawn_children(
+                world, root_entity, connection_specification, parent, parent_T_self
             )
             world.add_semantic_annotation(instance)
-            for child in children:
-                child.spawn(world, parent=root_entity)
             self._mount_part_specifications(world, instance, root_entity)
 
         return instance
@@ -913,8 +994,8 @@ class SemanticAnnotationWithRootSpecification(SpawnSpecification[TSemanticAnnota
         Validate that :attr:`annotation_kwargs` carries no part-whole relationship
         field.
 
-        Such fields must be supplied via :attr:`part_specifications` so they are spawned
-        and mounted.
+        Such fields must be supplied via :attr:`part_bindings` so they are spawned and
+        mounted.
 
         :raises PartWholeFieldInAnnotationKwargs: If a key names a part-whole
             relationship field.
@@ -931,51 +1012,46 @@ class SemanticAnnotationWithRootSpecification(SpawnSpecification[TSemanticAnnota
                 field_names=misplaced_field_names,
             )
 
-    def _validate_part_specifications(
-        self, instance: type[TSemanticAnnotation]
+    def _validate_part_bindings(
+        self, annotation_type: type[TSemanticAnnotation]
     ) -> None:
         """
-        Validate that every :attr:`part_specifications` key names a part-whole
-        relationship field of the annotation and that list values target only to-many
-        fields.
+        Validate that every binding targets a part-whole relationship field of the
+        annotation and that only to-many fields are given more than one part.
 
-        :param instance: The annotation type whose part-whole fields are validated
-            against.
-        :raises UnknownPartWholeRelationshipField: If a key is not a part-whole
-            relationship field.
-        :raises PartWholeCardinalityError: If a list is given for a singular field.
+        :param annotation_type: The annotation type whose part-whole fields are
+            validated against.
+        :raises UnknownPartWholeRelationshipField: If a binding does not name a part-
+            whole relationship field.
+        :raises PartWholeCardinalityError: If several parts target a singular field.
         """
         part_whole_fields_by_name = self._part_whole_fields_by_name()
-        for field_name, value in self.part_specifications.items():
-            wrapped_field = part_whole_fields_by_name.get(field_name)
+        for binding in self.part_bindings:
+            wrapped_field = part_whole_fields_by_name.get(binding.field_name)
             if wrapped_field is None:
                 raise UnknownPartWholeRelationshipField(
-                    annotation=instance,
-                    field_name=field_name,
+                    annotation=annotation_type,
+                    field_name=binding.field_name,
                     available_fields=list(part_whole_fields_by_name),
                 )
             if (
-                isinstance(value, list)
+                len(binding.specifications) > 1
                 and not wrapped_field.is_many_to_many_relationship
             ):
                 raise PartWholeCardinalityError(
                     annotation_type_name=self.semantic_annotation_type.__name__,
-                    field_name=field_name,
+                    field_name=binding.field_name,
                 )
 
-    def _part_whole_fields_by_name(self) -> dict[str, Any]:
+    def _part_whole_fields_by_name(self) -> dict[str, WrappedField]:
         """
         The annotation type's part-whole relationship fields, keyed by field name.
 
         :return: The wrapped part-whole relationship fields, keyed by field name.
         """
-        from semantic_digital_twin.semantic_annotations.mixins import (
-            _wrapped_part_whole_relationship_fields,
-        )
-
         return {
             wrapped_field.name: wrapped_field
-            for wrapped_field in _wrapped_part_whole_relationship_fields(
+            for wrapped_field in wrapped_part_whole_relationship_fields(
                 self.semantic_annotation_type
             )
         }
@@ -988,19 +1064,18 @@ class SemanticAnnotationWithRootSpecification(SpawnSpecification[TSemanticAnnota
     ) -> None:
         """
         Spawn each nested part and mount it onto ``instance`` via the part-whole
-        :meth:`PartWholeRelationship.add`, keyed by the target field name.
+        :meth:`PartWholeRelationship.add`, into the field its binding names.
 
-        .. note:: Assumes :meth:`_validate_part_specifications` has already run.
+        .. note:: Assumes :meth:`_validate_part_bindings` has already run.
 
         :param world: The world the parts are added to.
         :param instance: The annotation the spawned parts are mounted onto.
         :param root_entity: The annotation's root, which the parts are attached to.
         """
-        for field_name, value in self.part_specifications.items():
-            part_specs = value if isinstance(value, list) else [value]
-            for part_spec in part_specs:
-                part = part_spec.spawn(world, parent=root_entity)
-                instance.add(part, field_name=field_name)
+        for binding in self.part_bindings:
+            for part_specification in binding.specifications:
+                part = part_specification.spawn(world, parent=root_entity)
+                instance.add(part, field_name=binding.field_name)
 
 
 # %% world specifications
@@ -1090,7 +1165,7 @@ class WorldSpecification:
             robot_semantic_annotation=robot_semantic_annotation,
             world_T_odom=world_T_odom,
             odom_T_robot_start=odom_T_robot_start,
-            objects=objects or [],
+            objects=objects if objects is not None else [],
         )
 
     @classmethod
@@ -1126,14 +1201,16 @@ class WorldSpecification:
         from semantic_digital_twin.adapters.mjcf import MJCFParser
 
         world = MJCFParser(
-            file_path=file_path, mimic_joints=mimic_joints or {}, prefix=prefix
+            file_path=file_path,
+            mimic_joints=mimic_joints if mimic_joints is not None else {},
+            prefix=prefix,
         ).parse()
         return cls(
             world=world,
             robot_semantic_annotation=robot_semantic_annotation,
             world_T_odom=world_T_odom,
             odom_T_robot_start=odom_T_robot_start,
-            objects=objects or [],
+            objects=objects if objects is not None else [],
         )
 
     def to_domain_object(self) -> World:

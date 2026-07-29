@@ -52,9 +52,6 @@ from semantic_digital_twin.world_description.geometry import Box, Scale, Color
 from semantic_digital_twin.world_description.geometry import Cylinder
 from semantic_digital_twin.world_description.shape_collection import ShapeCollection
 from semantic_digital_twin.world_description.world_entity import Body
-from semantic_digital_twin.api.specifications import (
-    SemanticAnnotationWithRootSpecification,
-)
 
 
 class KitchenEnvironment:
@@ -206,11 +203,10 @@ class KitchenEnvironment:
         """
         with world.modify_world():
             # --- TRASH CAN ---
-            trash_can = SemanticAnnotationWithRootSpecification(
-                name="trash_can",
-                semantic_annotation_type=TrashCan,
-                root_specification=TrashCan.get_default_body_specification(
-                    "trash_can", Scale(x=0.30, y=0.30, z=0.40), wall_thickness=0.02
+            trash_can = TrashCan.get_specification(
+                "trash_can",
+                TrashCan.get_default_root_specification(
+                    scale=Scale(x=0.30, y=0.30, z=0.40), wall_thickness=0.02
                 ),
             ).spawn(
                 world,
@@ -227,12 +223,10 @@ class KitchenEnvironment:
                 x=0.537, y=-2.181, z=fridge_height / 2, yaw=-np.pi / 2
             )
 
-            refrigerator = SemanticAnnotationWithRootSpecification(
-                name="refrigerator",
-                semantic_annotation_type=Fridge,
-                root_specification=Fridge.get_default_body_specification(
-                    "refrigerator",
-                    Scale(x=fridge_length, y=fridge_width, z=fridge_height),
+            refrigerator = Fridge.get_specification(
+                "refrigerator",
+                Fridge.get_default_root_specification(
+                    scale=Scale(x=fridge_length, y=fridge_width, z=fridge_height),
                     wall_thickness=0.02,
                 ),
             ).spawn(world, parent_T_self=fridge_pose)
@@ -312,12 +306,10 @@ class KitchenEnvironment:
                     x=-0.02, y=fridge_width / 2 - 0.03, roll=np.pi / 2
                 )
             )
-            fridge_door_handle = SemanticAnnotationWithRootSpecification(
-                name="fridge_door_handle",
-                semantic_annotation_type=Handle,
-                root_specification=Handle.get_default_body_specification(
-                    "fridge_door_handle",
-                    Scale(x=handle_depth, y=0.5, z=handle_thickness),
+            fridge_door_handle = Handle.get_specification(
+                "fridge_door_handle",
+                Handle.get_default_root_specification(
+                    scale=Scale(x=handle_depth, y=0.5, z=handle_thickness),
                     thickness=handle_thickness,
                 ),
             ).spawn(world, parent_T_self=door_handle_world_pose)
@@ -331,11 +323,10 @@ class KitchenEnvironment:
                     x=-0.26, z=drawer_height / 2 - 0.03
                 )
             )
-            fridge_drawer_handle = SemanticAnnotationWithRootSpecification(
-                name="fridge_drawer_handle",
-                semantic_annotation_type=Handle,
-                root_specification=Handle.get_default_body_specification(
-                    "fridge_drawer_handle", Scale(x=0.04, y=0.5, z=0.02), thickness=0.02
+            fridge_drawer_handle = Handle.get_specification(
+                "fridge_drawer_handle",
+                Handle.get_default_root_specification(
+                    scale=Scale(x=0.04, y=0.5, z=0.02), thickness=0.02
                 ),
             ).spawn(world, parent_T_self=drawer_handle_world_pose)
             for shape in fridge_drawer_handle.root.visual.shapes:
@@ -387,12 +378,12 @@ class KitchenEnvironment:
                     y=-counter_top_length / 2 + module_1_width / 2
                 )
             )
-            module_1_cabinet = SemanticAnnotationWithRootSpecification(
-                name="module_1_cabinet",
-                semantic_annotation_type=Cabinet,
-                root_specification=Cabinet.get_default_body_specification(
-                    "module_1_cabinet",
-                    Scale(x=counter_top_depth, y=module_1_width, z=counter_top_height),
+            module_1_cabinet = Cabinet.get_specification(
+                "module_1_cabinet",
+                Cabinet.get_default_root_specification(
+                    scale=Scale(
+                        x=counter_top_depth, y=module_1_width, z=counter_top_height
+                    ),
                     wall_thickness=0.02,
                 ),
             ).spawn(world, parent_T_self=module_1_pose)
@@ -429,12 +420,10 @@ class KitchenEnvironment:
             module_1_door.add(module_1_hinge)
             module_1_cabinet.add(module_1_door)
 
-            module_1_handle = SemanticAnnotationWithRootSpecification(
-                name="module_1_handle",
-                semantic_annotation_type=Handle,
-                root_specification=Handle.get_default_body_specification(
-                    "module_1_handle",
-                    Scale(x=0.04, y=module_1_width - 0.06, z=0.02),
+            module_1_handle = Handle.get_specification(
+                "module_1_handle",
+                Handle.get_default_root_specification(
+                    scale=Scale(x=0.04, y=module_1_width - 0.06, z=0.02),
                     thickness=0.02,
                 ),
             ).spawn(
@@ -455,12 +444,12 @@ class KitchenEnvironment:
                     y=-counter_top_length / 2 + module_1_width + module_2_width / 2
                 )
             )
-            dishwasher = SemanticAnnotationWithRootSpecification(
-                name="dishwasher",
-                semantic_annotation_type=Dishwasher,
-                root_specification=Dishwasher.get_default_body_specification(
-                    "dishwasher",
-                    Scale(x=counter_top_depth, y=module_2_width, z=counter_top_height),
+            dishwasher = Dishwasher.get_specification(
+                "dishwasher",
+                Dishwasher.get_default_root_specification(
+                    scale=Scale(
+                        x=counter_top_depth, y=module_2_width, z=counter_top_height
+                    ),
                     wall_thickness=0.02,
                 ),
             ).spawn(world, parent_T_self=module_2_pose)
@@ -499,12 +488,10 @@ class KitchenEnvironment:
             module_2_door.add(module_2_hinge)
             dishwasher.add(module_2_door)
 
-            module_2_handle = SemanticAnnotationWithRootSpecification(
-                name="dishwasher_handle",
-                semantic_annotation_type=Handle,
-                root_specification=Handle.get_default_body_specification(
-                    "dishwasher_handle",
-                    Scale(x=0.04, y=module_2_width - 0.06, z=0.02),
+            module_2_handle = Handle.get_specification(
+                "dishwasher_handle",
+                Handle.get_default_root_specification(
+                    scale=Scale(x=0.04, y=module_2_width - 0.06, z=0.02),
                     thickness=0.02,
                 ),
             ).spawn(
@@ -525,12 +512,12 @@ class KitchenEnvironment:
                     y=counter_top_length / 2 - module_3_width / 2
                 )
             )
-            module_3_cabinet = SemanticAnnotationWithRootSpecification(
-                name="module_3_cabinet",
-                semantic_annotation_type=Cabinet,
-                root_specification=Cabinet.get_default_body_specification(
-                    "module_3_cabinet",
-                    Scale(x=counter_top_depth, y=module_3_width, z=counter_top_height),
+            module_3_cabinet = Cabinet.get_specification(
+                "module_3_cabinet",
+                Cabinet.get_default_root_specification(
+                    scale=Scale(
+                        x=counter_top_depth, y=module_3_width, z=counter_top_height
+                    ),
                     wall_thickness=0.02,
                 ),
             ).spawn(world, parent_T_self=module_3_pose)
@@ -584,12 +571,10 @@ class KitchenEnvironment:
                         x=-0.16, z=height / 2 - 0.03
                     )
                 )
-                handle = SemanticAnnotationWithRootSpecification(
-                    name=f"counter_drawer_{i}_handle",
-                    semantic_annotation_type=Handle,
-                    root_specification=Handle.get_default_body_specification(
-                        f"counter_drawer_{i}_handle",
-                        Scale(x=0.04, y=module_3_width - 0.06, z=0.02),
+                handle = Handle.get_specification(
+                    f"counter_drawer_{i}_handle",
+                    Handle.get_default_root_specification(
+                        scale=Scale(x=0.04, y=module_3_width - 0.06, z=0.02),
                         thickness=0.02,
                     ),
                 ).spawn(world, parent_T_self=handle_pose)
@@ -602,12 +587,10 @@ class KitchenEnvironment:
             tower_pose = HomogeneousTransformationMatrix.from_xyz_rpy(
                 x=3.51, y=-2.181, z=oven_height / 2, yaw=-np.pi / 2
             )
-            tower = SemanticAnnotationWithRootSpecification(
-                name="oven_tower",
-                semantic_annotation_type=Cupboard,
-                root_specification=Cupboard.get_default_body_specification(
-                    "oven_tower",
-                    Scale(x=oven_depth, y=oven_width, z=oven_height),
+            tower = Cupboard.get_specification(
+                "oven_tower",
+                Cupboard.get_default_root_specification(
+                    scale=Scale(x=oven_depth, y=oven_width, z=oven_height),
                     wall_thickness=0.02,
                 ),
             ).spawn(world, parent_T_self=tower_pose)
@@ -651,12 +634,10 @@ class KitchenEnvironment:
                         x=-oven_depth / 2, roll=np.pi / 2
                     )
                 )
-                handle = SemanticAnnotationWithRootSpecification(
-                    name=f"oven_side_handle_{side_name}",
-                    semantic_annotation_type=Handle,
-                    root_specification=Handle.get_default_body_specification(
-                        f"oven_side_handle_{side_name}",
-                        Scale(x=0.04, y=oven_height - 0.08, z=0.02),
+                handle = Handle.get_specification(
+                    f"oven_side_handle_{side_name}",
+                    Handle.get_default_root_specification(
+                        scale=Scale(x=0.04, y=oven_height - 0.08, z=0.02),
                         thickness=0.02,
                     ),
                 ).spawn(world, parent_T_self=handle_pose)
@@ -698,12 +679,10 @@ class KitchenEnvironment:
             oven_cabinet_door.add(oven_cabinet_hinge)
             tower.add(oven_cabinet_door)
 
-            oven_cabinet_handle = SemanticAnnotationWithRootSpecification(
-                name="oven_cabinet_handle",
-                semantic_annotation_type=Handle,
-                root_specification=Handle.get_default_body_specification(
-                    "oven_cabinet_handle",
-                    Scale(x=0.04, y=center_width - 0.06, z=0.02),
+            oven_cabinet_handle = Handle.get_specification(
+                "oven_cabinet_handle",
+                Handle.get_default_root_specification(
+                    scale=Scale(x=0.04, y=center_width - 0.06, z=0.02),
                     thickness=0.02,
                 ),
             ).spawn(
@@ -794,12 +773,10 @@ class KitchenEnvironment:
             oven_door.add(oven_hinge)
             oven.add(oven_door)
 
-            oven_handle = SemanticAnnotationWithRootSpecification(
-                name="oven_handle",
-                semantic_annotation_type=Handle,
-                root_specification=Handle.get_default_body_specification(
-                    "oven_handle",
-                    Scale(x=0.04, y=center_width - 0.06, z=0.02),
+            oven_handle = Handle.get_specification(
+                "oven_handle",
+                Handle.get_default_root_specification(
+                    scale=Scale(x=0.04, y=center_width - 0.06, z=0.02),
                     thickness=0.02,
                 ),
             ).spawn(
@@ -832,12 +809,10 @@ class KitchenEnvironment:
             for shape in sideboard.root.visual.shapes:
                 shape.color = Color.WHITE()
 
-            sideboard_cabinet = SemanticAnnotationWithRootSpecification(
-                name="sideboard_cabinet",
-                semantic_annotation_type=Cabinet,
-                root_specification=Cabinet.get_default_body_specification(
-                    "sideboard_cabinet",
-                    Scale(sideboard_width, sideboard_length, sideboard_height),
+            sideboard_cabinet = Cabinet.get_specification(
+                "sideboard_cabinet",
+                Cabinet.get_default_root_specification(
+                    scale=Scale(sideboard_width, sideboard_length, sideboard_height),
                     wall_thickness=0.02,
                 ),
             ).spawn(world, parent_T_self=sideboard_pose)
@@ -915,12 +890,10 @@ class KitchenEnvironment:
                             x=-0.2, z=sideboard_drawer_height / 2 - 0.05
                         )
                     )
-                    handle = SemanticAnnotationWithRootSpecification(
-                        name=f"{drawer_id}_handle",
-                        semantic_annotation_type=Handle,
-                        root_specification=Handle.get_default_body_specification(
-                            f"{drawer_id}_handle",
-                            Scale(0.04, width - 0.1, 0.02),
+                    handle = Handle.get_specification(
+                        f"{drawer_id}_handle",
+                        Handle.get_default_root_specification(
+                            scale=Scale(0.04, width - 0.1, 0.02),
                             thickness=0.02,
                         ),
                     ).spawn(world, parent_T_self=handle_pose)
@@ -948,11 +921,10 @@ class KitchenEnvironment:
             cupboard_pose = HomogeneousTransformationMatrix.from_xyz_rpy(
                 x=4.55, y=4.72, z=1.01
             )
-            cupboard = SemanticAnnotationWithRootSpecification(
-                name="cupboard",
-                semantic_annotation_type=Cupboard,
-                root_specification=Cupboard.get_default_body_specification(
-                    "cupboard", cupboard_scale, wall_thickness=0.02
+            cupboard = Cupboard.get_specification(
+                "cupboard",
+                Cupboard.get_default_root_specification(
+                    scale=cupboard_scale, wall_thickness=0.02
                 ),
             ).spawn(world, parent_T_self=cupboard_pose)
 
@@ -1011,12 +983,10 @@ class KitchenEnvironment:
                 door.add(hinge)
                 cupboard.add(door)
 
-                handle = SemanticAnnotationWithRootSpecification(
-                    name=f"cupboard_handle_{side}",
-                    semantic_annotation_type=Handle,
-                    root_specification=Handle.get_default_body_specification(
-                        f"cupboard_handle_{side}",
-                        Scale(0.04, 0.04, 0.04),
+                handle = Handle.get_specification(
+                    f"cupboard_handle_{side}",
+                    Handle.get_default_root_specification(
+                        scale=Scale(0.04, 0.04, 0.04),
                         thickness=0.02,
                     ),
                 ).spawn(
@@ -1174,12 +1144,10 @@ class KitchenEnvironment:
                         x=-module_width / 2 + 0.02
                     )
                 )
-                handle = SemanticAnnotationWithRootSpecification(
-                    name=f"cooking_drawer_handle_{side_name}",
-                    semantic_annotation_type=Handle,
-                    root_specification=Handle.get_default_body_specification(
-                        f"cooking_drawer_handle_{side_name}",
-                        Scale(0.04, module_width / 3, 0.04),
+                handle = Handle.get_specification(
+                    f"cooking_drawer_handle_{side_name}",
+                    Handle.get_default_root_specification(
+                        scale=Scale(0.04, module_width / 3, 0.04),
                         thickness=0.02,
                     ),
                 ).spawn(world, parent_T_self=handle_pose)

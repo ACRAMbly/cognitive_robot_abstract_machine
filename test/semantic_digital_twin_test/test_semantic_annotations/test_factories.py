@@ -27,6 +27,8 @@ from semantic_digital_twin.semantic_annotations.mixins import (
 )
 from semantic_digital_twin.semantic_annotations.mixins import (
     HasCaseAsRootBody,
+)
+from semantic_digital_twin.semantic_annotations.part_whole import (
     IsPartWholeRelationship,
 )
 from semantic_digital_twin.semantic_annotations.semantic_annotations import (
@@ -84,11 +86,10 @@ class TestFactories(unittest.TestCase):
     def test_handle_factory(self):
         world = World.create_with_root_body(PrefixedName("root"))
         with world.modify_world():
-            returned_handle = SemanticAnnotationWithRootSpecification(
-                name="handle",
-                semantic_annotation_type=Handle,
-                root_specification=Handle.get_default_body_specification(
-                    "handle", Scale(0.1, 0.2, 0.03), thickness=0.03
+            returned_handle = Handle.get_specification(
+                "handle",
+                Handle.get_default_root_specification(
+                    scale=Scale(0.1, 0.2, 0.03), thickness=0.03
                 ),
             ).spawn(world)
         semantic_handle_annotations = world.get_semantic_annotations_by_type(Handle)
@@ -748,12 +749,9 @@ class TestFactories(unittest.TestCase):
     def test_handle_with_thickness(self):
         world = World.create_with_root_body(PrefixedName("root"))
         with world.modify_world():
-            handle = SemanticAnnotationWithRootSpecification(
-                name="handle",
-                semantic_annotation_type=Handle,
-                root_specification=Handle.get_default_body_specification(
-                    "handle", thickness=0.005
-                ),
+            handle = Handle.get_specification(
+                "handle",
+                Handle.get_default_root_specification(thickness=0.005),
             ).spawn(world)
         self.assertTrue(len(handle.root.collision) > 1)
 
@@ -885,8 +883,8 @@ class TestFactories(unittest.TestCase):
     #################################################################
     # Characterization of the scale -> geometry generation.
     # These pin the geometry that create_with_new_body_in_world(scale=...)
-    # currently produces, so the get_default_body_specification /
-    # get_default_region_specification extraction (and the later factory
+    # currently produces, so the get_default_root_specification /
+    # get_default_root_specification extraction (and the later factory
     # rewire) provably preserves it.
     #################################################################
 
@@ -929,11 +927,10 @@ class TestFactories(unittest.TestCase):
     def test_characterize_handle_geometry(self):
         world = self._world_with_root()
         with world.modify_world():
-            handle = SemanticAnnotationWithRootSpecification(
-                name="handle",
-                semantic_annotation_type=Handle,
-                root_specification=Handle.get_default_body_specification(
-                    "handle", Scale(0.1, 0.05, 0.05), thickness=0.01
+            handle = Handle.get_specification(
+                "handle",
+                Handle.get_default_root_specification(
+                    scale=Scale(0.1, 0.05, 0.05), thickness=0.01
                 ),
             ).spawn(world)
         collision = handle.root.collision

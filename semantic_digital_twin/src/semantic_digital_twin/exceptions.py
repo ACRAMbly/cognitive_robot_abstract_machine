@@ -346,24 +346,6 @@ class InvalidConnectionLimits(UsageError):
 
 
 @dataclass
-class MissingConnectionChildError(UsageError):
-    """
-    Raised when a connection is spawned without a child kinematic structure entity.
-    """
-
-    connection_name: Optional[str]
-    """
-    The name of the connection specification that was spawned without a child.
-    """
-
-    def error_message(self) -> str:
-        return f"Connecting the connection '{self.connection_name}' requires a child kinematic structure entity."
-
-    def suggest_correction(self) -> str:
-        return "pass the child entity via the 'child' keyword argument of connect."
-
-
-@dataclass
 class MissingConnectionParentError(UsageError):
     """
     Raised when a connection is spawned without a parent kinematic structure entity.
@@ -586,8 +568,9 @@ class PartWholeFieldInAnnotationKwargs(UsageError):
     Raised when ``annotation_kwargs`` contains a key that names a part-whole
     relationship field.
 
-    Such fields must be supplied via ``part_specifications`` so they are spawned and
-    mounted, not passed straight to the annotation constructor.
+    Such fields must be supplied via ``part_specifications`` on the annotation
+    specification factory so they are spawned and mounted, not passed straight to the
+    annotation constructor.
     """
 
     annotation_type_name: str

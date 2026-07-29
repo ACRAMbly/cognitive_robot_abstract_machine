@@ -219,6 +219,7 @@ import semantic_digital_twin.robots.tracy
 import semantic_digital_twin.robots.unitree_g1
 import semantic_digital_twin.semantic_annotations.mixins
 import semantic_digital_twin.semantic_annotations.natural_language
+import semantic_digital_twin.semantic_annotations.part_whole
 import semantic_digital_twin.semantic_annotations.position_descriptions
 import semantic_digital_twin.semantic_annotations.semantic_annotations
 import semantic_digital_twin.spatial_computations.ik_solver
@@ -941,6 +942,27 @@ class Sage10kSceneDAO_rooms_association(Base, AssociationDataAccessObject):
 
     target: Mapped[Sage10kRoomDAO] = relationship(
         "Sage10kRoomDAO", foreign_keys=[target_sage10kroomdao_id], lazy="selectin"
+    )
+
+
+class SemanticAnnotationWithRootSpecificationDAO_part_bindings_association(
+    Base, AssociationDataAccessObject
+):
+    __tablename__ = "_10023009090191933943654567544679922467180744225675147921971578"
+
+    database_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+
+    source_semanticannotationwithrootspecificationdao_id: Mapped[int] = mapped_column(
+        ForeignKey("SemanticAnnotationWithRootSpecificationDAO.database_id")
+    )
+    target_partspecificationbindingdao_id: Mapped[int] = mapped_column(
+        ForeignKey("PartSpecificationBindingDAO.database_id")
+    )
+
+    target: Mapped[PartSpecificationBindingDAO] = relationship(
+        "PartSpecificationBindingDAO",
+        foreign_keys=[target_partspecificationbindingdao_id],
+        lazy="selectin",
     )
 
 
@@ -18091,6 +18113,21 @@ class FixedConnectionSpecificationDAO(
     }
 
 
+class PartSpecificationBindingDAO(
+    Base,
+    DataAccessObject[semantic_digital_twin.api.specifications.PartSpecificationBinding],
+):
+    __tablename__ = "PartSpecificationBindingDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
+
+    field_name: Mapped[builtins.str] = mapped_column(
+        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
+    )
+
+
 class PrismaticConnectionSpecificationDAO(
     ActiveConnection1DOFSpecificationDAO,
     DataAccessObject[
@@ -18275,6 +18312,18 @@ class SemanticAnnotationWithRootSpecificationDAO(
 
     semantic_annotation_type: Mapped[TypeType] = mapped_column(
         TypeType, nullable=False, use_existing_column=True
+    )
+
+    part_bindings: Mapped[
+        builtins.list[
+            SemanticAnnotationWithRootSpecificationDAO_part_bindings_association
+        ]
+    ] = relationship(
+        "SemanticAnnotationWithRootSpecificationDAO_part_bindings_association",
+        collection_class=builtins.list,
+        cascade="all, delete-orphan",
+        foreign_keys="[SemanticAnnotationWithRootSpecificationDAO_part_bindings_association.source_semanticannotationwithrootspecificationdao_id]",
+        lazy="selectin",
     )
 
     __mapper_args__ = {
@@ -20381,29 +20430,6 @@ class MissingConnectionAxisErrorDAO(
 
     __mapper_args__ = {
         "polymorphic_identity": "MissingConnectionAxisErrorDAO",
-        "inherit_condition": database_id == UsageErrorDAO.database_id,
-        "polymorphic_load": "selectin",
-    }
-
-
-class MissingConnectionChildErrorDAO(
-    UsageErrorDAO,
-    DataAccessObject[semantic_digital_twin.exceptions.MissingConnectionChildError],
-):
-    __tablename__ = "MissingConnectionChildErrorDAO"
-
-    database_id: Mapped[builtins.int] = mapped_column(
-        ForeignKey(UsageErrorDAO.database_id),
-        primary_key=True,
-        use_existing_column=True,
-    )
-
-    connection_name: Mapped[typing.Optional[builtins.str]] = mapped_column(
-        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
-    )
-
-    __mapper_args__ = {
-        "polymorphic_identity": "MissingConnectionChildErrorDAO",
         "inherit_condition": database_id == UsageErrorDAO.database_id,
         "polymorphic_load": "selectin",
     }
@@ -22538,23 +22564,6 @@ class HasRobotPartsDAO(
     }
 
 
-class IsPartWholeRelationshipDAO(
-    Base,
-    DataAccessObject[
-        semantic_digital_twin.semantic_annotations.mixins.IsPartWholeRelationship
-    ],
-):
-    __tablename__ = "IsPartWholeRelationshipDAO"
-
-    database_id: Mapped[builtins.int] = mapped_column(
-        Integer, primary_key=True, use_existing_column=True
-    )
-
-    removes_part_geometry_from_whole: Mapped[builtins.bool] = mapped_column(
-        use_existing_column=True
-    )
-
-
 class IsPerceivableDAO(
     Base,
     DataAccessObject[semantic_digital_twin.semantic_annotations.mixins.IsPerceivable],
@@ -22577,6 +22586,23 @@ class IsPerceivableDAO(
         "polymorphic_on": "polymorphic_type",
         "polymorphic_identity": "IsPerceivableDAO",
     }
+
+
+class IsPartWholeRelationshipDAO(
+    Base,
+    DataAccessObject[
+        semantic_digital_twin.semantic_annotations.part_whole.IsPartWholeRelationship
+    ],
+):
+    __tablename__ = "IsPartWholeRelationshipDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
+
+    removes_part_geometry_from_whole: Mapped[builtins.bool] = mapped_column(
+        use_existing_column=True
+    )
 
 
 class SemanticPositionDescriptionDAO(
