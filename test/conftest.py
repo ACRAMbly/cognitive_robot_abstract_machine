@@ -592,7 +592,7 @@ def _elevator_world_setup():
 
         wall_thickness = 0.05
         scale = Scale(1, 1, 1)
-        name = PrefixedName("elevaotr")
+        name = PrefixedName("elevator")
         elevator = Elevator.create_with_new_body_in_world(
             name=PrefixedName("Elevator"),
             world=world,

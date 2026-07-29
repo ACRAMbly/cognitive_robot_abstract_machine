@@ -1,19 +1,17 @@
 from __future__ import annotations
 
-import math
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import ClassVar, Iterable, Optional, Self, Tuple, TYPE_CHECKING, Union
+from typing import Iterable, Optional, Self, Tuple, TYPE_CHECKING, Union
 
 import numpy as np
-from typing_extensions import List, Type, Dict
+from typing_extensions import List, Type
 
 from krrood.ormatic.utils import classproperty
-from probabilistic_model.bayesian_network.bayesian_network import Node
-from semantic_digital_twin.datastructures.alignment import AlignmentPair
 from krrood.symbolic_math import symbolic_math
 from random_events.interval import closed
 from random_events.product_algebra import SimpleEvent
+from semantic_digital_twin.datastructures.alignment import AlignmentPair
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 from semantic_digital_twin.datastructures.variables import SpatialVariables
 from semantic_digital_twin.exceptions import (
@@ -42,9 +40,7 @@ from semantic_digital_twin.spatial_types import (
     Point3,
     HomogeneousTransformationMatrix,
     Vector3,
-    RotationMatrix,
 )
-from semantic_digital_twin.spatial_types.derivatives import DerivativeMap
 from semantic_digital_twin.spatial_types.spatial_types import Pose
 from semantic_digital_twin.world_description.connections import (
     RevoluteConnection,
@@ -473,7 +469,9 @@ class Elevator(HasCaseAsRootBody, HasDoors, HasMechanicalJoint):
         Closes the elevator doors
         """
         for door in self.doors:
-            door.mechanical_joint.position = 0.0
+            door.mechanical_joint.position = door.mechanical_joint.position = (
+                door.mechanical_joint.root.parent_connection.dof.limits.lower.position
+            )
 
     def drive_to_floor(self, floor: Level):
         """
