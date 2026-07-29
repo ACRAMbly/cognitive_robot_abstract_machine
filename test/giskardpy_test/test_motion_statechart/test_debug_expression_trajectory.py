@@ -88,6 +88,18 @@ class TestDebugExpressionRecording:
         assert output.exists()
         assert output.stat().st_size > 0
 
+    def test_plot_creates_missing_output_directory(
+        self, cylinder_bot_world: World, tmp_path
+    ):
+        executor = _build_executor(cylinder_bot_world)
+        executor.tick_until_end()
+
+        output = tmp_path / "debug_expressions" / "debug_expressions.pdf"
+        executor.plot_debug_expressions(str(output))
+
+        assert output.exists()
+        assert output.stat().st_size > 0
+
     def test_plot_raises_when_plotter_not_configured(
         self, cylinder_bot_world: World, tmp_path
     ):

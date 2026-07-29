@@ -11,7 +11,7 @@ import krrood.symbolic_math.symbolic_math as sm
 from giskardpy.motion_statechart.plotters.gantt_chart_plotter import (
     HistoryGanttChartPlotter,
 )
-from krrood.adapters.json_serializer import SubclassJSONSerializer
+from krrood.adapters.json_serializer import SubclassJSONSerializer, from_json, to_json
 from krrood.symbolic_math.symbolic_math import VariableParameters
 from giskardpy.motion_statechart.context import MotionStatechartContext
 from giskardpy.motion_statechart.data_types import (
@@ -454,6 +454,28 @@ class MotionStatechart(SubclassJSONSerializer):
     The history of how the state of the motion statechart changed over time.
     """
 
+    _nodes: List[MotionStatechartNode] = field(
+        default_factory=list, init=False, repr=False
+    )
+    """
+    Cache of all nodes in index order, appended to in :meth:`add_node`. Reading this instead of
+    rebuilding the list from `rx_graph` on every access is what keeps :meth:`tick` cheap.
+    """
+
+    _cancel_motion_nodes: List[CancelMotion] = field(
+        default_factory=list, init=False, repr=False
+    )
+    """
+    Cache of all :class:`CancelMotion` nodes, checked every tick in :meth:`_raise_if_cancel_motion`.
+    """
+
+    _end_motion_nodes: List[EndMotion] = field(
+        default_factory=list, init=False, repr=False
+    )
+    """
+    Cache of all :class:`EndMotion` nodes, checked every tick in :meth:`is_end_motion`.
+    """
+
     def __post_init__(self):
         """
         Creates the (initially empty) life cycle and observation states for this motion
@@ -508,7 +530,7 @@ class MotionStatechart(SubclassJSONSerializer):
         """
         :return: All nodes of the motion statechart.
         """
-        return list(self.rx_graph.nodes())
+        return list(self._nodes)
 
     def collect_debug_expressions(self) -> List[DebugExpression]:
         """
@@ -552,6 +574,11 @@ class MotionStatechart(SubclassJSONSerializer):
         node.index = self.rx_graph.add_node(node)
         self.life_cycle_state.grow()
         self.observation_state.grow()
+        self._nodes.append(node)
+        if isinstance(node, CancelMotion):
+            self._cancel_motion_nodes.append(node)
+        if isinstance(node, EndMotion):
+            self._end_motion_nodes.append(node)
 
     def add_nodes(self, nodes: List[MotionStatechartNode]):
         """
@@ -721,11 +748,14 @@ class MotionStatechart(SubclassJSONSerializer):
         its own observation via :meth:`~MotionStatechartNode.on_tick`.
         """
         self.observation_state.update_state()
-        for node in self.nodes:
-            if self.life_cycle_state[node] == LifeCycleValues.RUNNING:
-                observation_overwrite = node.on_tick(context=context)
-                if observation_overwrite is not None:
-                    self.observation_state[node] = observation_overwrite
+        running_indices = np.flatnonzero(
+            self.life_cycle_state.data == float(LifeCycleValues.RUNNING)
+        )
+        for index in running_indices:
+            node = self._nodes[index]
+            observation_overwrite = node.on_tick(context=context)
+            if observation_overwrite is not None:
+                self.observation_state[node] = observation_overwrite
 
     def _update_life_cycle_state(self, context: MotionStatechartContext):
         """
@@ -751,12 +781,11 @@ class MotionStatechart(SubclassJSONSerializer):
 
         Transitions with no dedicated callback are ignored.
         """
-        for node in self.nodes:
-            prev = LifeCycleValues(int(previous_state[node.index]))
-            curr = LifeCycleValues(int(current_state[node.index]))
-
-            if prev == curr:
-                continue
+        changed_indices = np.flatnonzero(previous_state != current_state)
+        for index in changed_indices:
+            node = self._nodes[index]
+            prev = LifeCycleValues(int(previous_state[index]))
+            curr = LifeCycleValues(int(current_state[index]))
 
             match (prev, curr):
                 case (_, LifeCycleValues.NOT_STARTED):
@@ -808,7 +837,7 @@ class MotionStatechart(SubclassJSONSerializer):
         """
         return any(
             self.observation_state[node] == ObservationStateValues.TRUE
-            for node in self.get_nodes_by_type(EndMotion)
+            for node in self._end_motion_nodes
         )
 
     def _raise_if_cancel_motion(self):
@@ -816,7 +845,7 @@ class MotionStatechart(SubclassJSONSerializer):
         Raises the exception of the first :class:`CancelMotion` node whose observation
         state is True.
         """
-        for node in self.get_nodes_by_type(CancelMotion):
+        for node in self._cancel_motion_nodes:
             if self.observation_state[node] == ObservationStateValues.TRUE:
                 raise node.exception
 
@@ -859,7 +888,7 @@ class MotionStatechart(SubclassJSONSerializer):
         self._add_transitions()
         result = super().to_json()
         result["nodes"] = [
-            node.to_json() for node in sorted(self.nodes, key=lambda n: n.index)
+            to_json(node) for node in sorted(self.nodes, key=lambda n: n.index)
         ]
         result["unique_edges"] = [edge.to_json() for edge in self.unique_edges]
         return result
@@ -876,7 +905,7 @@ class MotionStatechart(SubclassJSONSerializer):
         """
         motion_statechart = cls()
         for json_data in data["nodes"]:
-            node = MotionStatechartNode.from_json(json_data, **kwargs)
+            node = from_json(json_data, **kwargs)
             motion_statechart.add_node(node)
         for json_data in data["unique_edges"]:
             transition = TrinaryCondition.from_json(

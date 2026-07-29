@@ -411,10 +411,12 @@ def _wrapped_part_whole_relationship_fields(
 
 @dataclass
 class IsPartWholeRelationship(FieldMetadata):
-    """Marks a field as holding a structural *part* of its owner (the part-whole relation).
+    """
+    Marks a field as holding a structural *part* of its owner (the part-whole relation).
 
-    The relation is signalled by the mere presence of an instance of this class in a field's
-    :attr:`~FieldMetadata.other_metadata`; it carries no further data.
+    The relation is signalled by the mere presence of an instance of this class in the
+    field's ``metadata`` mapping (attach it with :meth:`~FieldMetadata.as_dict`); it carries
+    no further data.
     """
 
 
@@ -492,7 +494,7 @@ class HasApertures(HasRootBody, PartWholeRelationship, ABC):
         default_factory=list,
         hash=False,
         kw_only=True,
-        metadata=FieldMetadata(other_metadata=[IsPartWholeRelationship()]).as_dict(),
+        metadata=IsPartWholeRelationship().as_dict(),
     )
     """
     The apertures of the semantic annotation.
@@ -507,7 +509,7 @@ class HasMechanicalJoint(HasRootBody, PartWholeRelationship, ABC):
 
     mechanical_joint: Optional[MechanicalJoint] = field(
         default=None,
-        metadata=FieldMetadata(other_metadata=[IsPartWholeRelationship()]).as_dict(),
+        metadata=IsPartWholeRelationship().as_dict(),
     )
     """
     The mechanical joint of the semantic annotation.
@@ -537,7 +539,7 @@ class HasDrawers(PartWholeRelationship, ABC):
         default_factory=list,
         hash=False,
         kw_only=True,
-        metadata=FieldMetadata(other_metadata=[IsPartWholeRelationship()]).as_dict(),
+        metadata=IsPartWholeRelationship().as_dict(),
     )
     """
     The drawers of the semantic annotation.
@@ -554,7 +556,7 @@ class HasDoors(PartWholeRelationship, ABC):
         default_factory=list,
         hash=False,
         kw_only=True,
-        metadata=FieldMetadata(other_metadata=[IsPartWholeRelationship()]).as_dict(),
+        metadata=IsPartWholeRelationship().as_dict(),
     )
     """
     The doors of the semantic annotation.
@@ -569,7 +571,7 @@ class HasHandle(HasRootBody, PartWholeRelationship, ABC):
 
     handle: Optional[Handle] = field(
         default=None,
-        metadata=FieldMetadata(other_metadata=[IsPartWholeRelationship()]).as_dict(),
+        metadata=IsPartWholeRelationship().as_dict(),
     )
     """
     The handle of the semantic annotation.
@@ -592,7 +594,7 @@ class HasLegs(PartWholeRelationship, ABC):
         default_factory=list,
         hash=False,
         kw_only=True,
-        metadata=FieldMetadata(other_metadata=[IsPartWholeRelationship()]).as_dict(),
+        metadata=IsPartWholeRelationship().as_dict(),
     )
     """
     The legs of the semantic annotation.
@@ -607,7 +609,7 @@ class HasSink(PartWholeRelationship, ABC):
 
     sink: Optional[Sink] = field(
         default=None,
-        metadata=FieldMetadata(other_metadata=[IsPartWholeRelationship()]).as_dict(),
+        metadata=IsPartWholeRelationship().as_dict(),
     )
     """
     The sink of the semantic annotation.

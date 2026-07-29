@@ -9394,6 +9394,9 @@ class MotionStatechartNodeDAO(
     name: Mapped[builtins.str] = mapped_column(
         sqlalchemy.sql.sqltypes.Text, use_existing_column=True
     )
+    parent_node_index: Mapped[typing.Optional[builtins.int]] = mapped_column(
+        use_existing_column=True
+    )
 
     polymorphic_type: Mapped[str] = mapped_column(
         String(255), nullable=False, use_existing_column=True
