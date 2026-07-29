@@ -226,8 +226,8 @@ class TestFactories(unittest.TestCase):
             )
         connection = screw_joint.root.parent_connection
         assert isinstance(connection, ScrewConnection)
-        assert connection.pitch == pitch
-        assert screw_joint.pitch == pitch
+        assert connection.screw_pitch == pitch
+        assert screw_joint.screw_pitch == pitch
         assert root == screw_joint.root.parent_kinematic_structure_entity
 
     def test_bottle_cap_mount_screw_joint(self):
@@ -254,7 +254,7 @@ class TestFactories(unittest.TestCase):
         connection = screw_joint.root.parent_connection
         assert isinstance(connection, ScrewConnection)
         # The mount re-parents the joint; pitch must survive the connection copy.
-        assert connection.pitch == pitch
+        assert connection.screw_pitch == pitch
         assert bottle_cap.root.parent_kinematic_structure_entity == screw_joint.root
         assert isinstance(bottle_cap.root.parent_connection, FixedConnection)
         assert bottle_cap.mechanical_joint == screw_joint

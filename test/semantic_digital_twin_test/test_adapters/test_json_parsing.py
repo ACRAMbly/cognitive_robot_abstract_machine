@@ -290,7 +290,7 @@ def test_screw_connection_json_serialization_with_world():
         json_data, **tracker.create_kwargs()
     )
     assert connection == restored_connection
-    assert restored_connection.pitch == pitch
+    assert restored_connection.screw_pitch == pitch
     assert restored_connection.multiplier == connection.multiplier
     assert restored_connection.offset == connection.offset
     assert np.allclose(restored_connection.axis.to_np(), connection.axis.to_np())

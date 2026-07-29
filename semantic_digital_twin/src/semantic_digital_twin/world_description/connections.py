@@ -399,11 +399,12 @@ class ScrewConnection(ActiveConnection1DOF):
     limit unscrews the child.
     """
 
-    pitch: float = field(kw_only=True)
+    screw_pitch: float = field(kw_only=True)
     """
-    Translation of the child along ``axis`` in meters per radian of rotation.
+    Screw pitch is the distance between adjacent threads on a screw, measured parallel to its axis in meters.
+    See this online ressource for more info: https://wellfastener.com/blog/what-is-screw-pitch%EF%BC%9Fscrew-pitch-vs-lead/
 
-    A thread is usually specified by its *lead*: the distance the child advances along
+    A thread can also be specified by its *lead*: the distance the child advances along
     ``axis`` during one full revolution (for common single-start threads this equals the
     distance between neighbouring thread crests). Convert it via ``pitch = lead / (2 *
     math.pi)``. Negative values model left-handed threads.
@@ -413,7 +414,7 @@ class ScrewConnection(ActiveConnection1DOF):
         super().add_to_world(world)
 
         angle = self.dof.variables.position
-        translation_axis = self.axis * (self.pitch * angle)
+        translation_axis = self.axis * (self.screw_pitch * angle)
         self._kinematics = HomogeneousTransformationMatrix.from_xyz_axis_angle(
             x=translation_axis[0],
             y=translation_axis[1],
@@ -434,7 +435,7 @@ class ScrewConnection(ActiveConnection1DOF):
         :param travel_distance: Signed translation along ``axis`` in meters.
         :return: The signed rotation angle in radians.
         """
-        return travel_distance / self.pitch
+        return travel_distance / self.screw_pitch
 
     @classmethod
     def create_with_dofs(
@@ -475,13 +476,13 @@ class ScrewConnection(ActiveConnection1DOF):
             multiplier=multiplier,
             offset=offset,
             raw_dof=dof,
-            pitch=pitch,
+            screw_pitch=pitch,
         )
         return connection
 
     def to_json(self) -> Dict[str, Any]:
         result = super().to_json()
-        result["pitch"] = self.pitch
+        result["pitch"] = self.screw_pitch
         return result
 
     @classmethod
@@ -504,7 +505,7 @@ class ScrewConnection(ActiveConnection1DOF):
             multiplier=data["multiplier"],
             offset=data["offset"],
             raw_dof=raw_dof,
-            pitch=data["pitch"],
+            screw_pitch=data["pitch"],
         )
 
     def copy_for_world(self, world: World):
@@ -525,7 +526,7 @@ class ScrewConnection(ActiveConnection1DOF):
             multiplier=self.multiplier,
             offset=self.offset,
             raw_dof=world.get_degree_of_freedom_by_id(self.raw_dof.id),
-            pitch=self.pitch,
+            pitch=self.screw_pitch,
         )
 
     def copy_with_new_parent(
@@ -544,7 +545,7 @@ class ScrewConnection(ActiveConnection1DOF):
             offset=self.offset,
             raw_dof=self.raw_dof,
             dynamics=self.dynamics,
-            pitch=self.pitch,
+            pitch=self.screw_pitch,
         )
 
 

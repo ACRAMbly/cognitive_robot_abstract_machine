@@ -287,7 +287,7 @@ def test_screw_connection_copy_with_new_parent_preserves_pitch(world_with_two_bo
         new_parent, HomogeneousTransformationMatrix.from_xyz_rpy(x=0.1)
     )
 
-    assert copied_connection.pitch == pitch
+    assert copied_connection.screw_pitch == pitch
     assert copied_connection.raw_dof is connection.raw_dof
     assert copied_connection.axis == connection.axis
     assert copied_connection.parent is new_parent

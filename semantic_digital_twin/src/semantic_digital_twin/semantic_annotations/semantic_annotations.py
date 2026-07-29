@@ -303,7 +303,7 @@ class ScrewJoint(MechanicalJoint):
     like the thread between a bottle and its cap.
     """
 
-    pitch: float = field(kw_only=True)
+    screw_pitch: float = field(kw_only=True)
     """
     Translation along the screw axis in meters per radian of rotation.
 
@@ -332,7 +332,7 @@ class ScrewJoint(MechanicalJoint):
             offset=connection_offset,
             axis=active_axis,
             dof_limits=connection_limits,
-            pitch=self.pitch,
+            pitch=self.screw_pitch,
         )
 
     @classmethod
@@ -359,7 +359,7 @@ class ScrewJoint(MechanicalJoint):
             rotation.
         """
         return cls(
-            name=name, root=cls._create_body(name, scale), pitch=pitch
+            name=name, root=cls._create_body(name, scale), screw_pitch=pitch
         )._connect_and_add_to_world(
             world=world,
             world_root_T_self=world_root_T_self,

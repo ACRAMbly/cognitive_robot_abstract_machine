@@ -2,6 +2,7 @@ from math import radians
 
 import numpy as np
 
+from adapters.ros.visualization.viz_marker import VizMarkerPublisher
 from giskardpy.executor import Executor
 from giskardpy.motion_statechart.context import MotionStatechartContext
 from giskardpy.motion_statechart.data_types import (
@@ -853,9 +854,10 @@ class TestOpenClose:
         assert opened.observation_state == ObservationStateValues.TRUE
         assert closed.observation_state == ObservationStateValues.TRUE
 
-    def test_unscrew_and_tighten_bottle_cap(self, pr2_world_copy):
+    def test_unscrew_and_tighten_bottle_cap(self, pr2_world_copy, rclpy_node):
         pitch = 0.005
         unscrew_goal = 2 * np.pi
+        VizMarkerPublisher(_world=pr2_world_copy, node=rclpy_node).with_tf_publisher()
         with pr2_world_copy.modify_world():
             # The bottle lies on its side, its thread axis pointing towards the robot.
             Bottle.create_with_new_body_in_world(
@@ -924,15 +926,10 @@ class TestOpenClose:
                         ),
                         Parallel(
                             [
-                                Open(
+                                open := Open(
                                     tip_link=r_tip,
                                     environment_link=cap_body,
                                     goal_joint_state=unscrew_goal,
-                                ),
-                                unscrewed := JointPositionReached(
-                                    connection=root_C_screw,
-                                    position=unscrew_goal,
-                                    name="unscrewed",
                                 ),
                             ]
                         ),
@@ -950,7 +947,7 @@ class TestOpenClose:
         kin_sim.compile(motion_statechart=unscrew_statechart)
         kin_sim.tick_until_end()
 
-        assert unscrewed.observation_state == ObservationStateValues.TRUE
+        assert open.observation_state == ObservationStateValues.TRUE
 
         # The unscrewed cap must have travelled pitch * angle along the screw axis,
         # away from the bottle (towards the robot, -x).
@@ -975,15 +972,10 @@ class TestOpenClose:
             [
                 Parallel(
                     [
-                        Close(
+                        close := Close(
                             tip_link=r_tip,
                             environment_link=cap_body,
                             goal_joint_state=tightened_goal_joint_state,
-                        ),
-                        tightened := JointPositionReached(
-                            connection=root_C_screw,
-                            position=tightened_goal_joint_state,
-                            name="tightened",
                         ),
                     ]
                 ),
@@ -999,7 +991,7 @@ class TestOpenClose:
         kin_sim.compile(motion_statechart=tighten_statechart)
         kin_sim.tick_until_end()
 
-        assert tightened.observation_state == ObservationStateValues.TRUE
+        assert close.observation_state == ObservationStateValues.TRUE
 
         # The tightened cap must be back at its initial pose.
         world_T_cap_tightened = pr2_world_copy.compute_forward_kinematics_np(
