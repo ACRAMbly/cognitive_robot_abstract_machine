@@ -2,28 +2,14 @@
 Exhaustive verbalization-result verification for any package, and the first-order
 (value-agnostic) rendering it builds on.
 
-Point a :class:`VerbalizationResultsOfPackage` at a package and a committed list of
-:class:`VerbalizationResult` entries. Its three ``assert_*`` methods, used as the bodies of three
-tests, check that every concrete symbolic callable the package defines (1) implements its own
-verbalization fragment, (2) has a declared result, and (3) renders exactly its declared sentence —
-so a new predicate or function, or a changed shared result builder, cannot slip through unreviewed.
+:class:`VerbalizationResultsOfPackage` discovers every concrete
+:class:`~krrood.entity_query_language.predicate.SymbolicCallable` a package defines, renders each
+with placeholder operands, and checks the rendering against a committed list of
+:class:`VerbalizationResult` entries — its three ``assert_*`` methods are the bodies of three
+tests.
 
-The same three-line test works for any package that defines
-:class:`~krrood.entity_query_language.predicate.SymbolicCallable` subclasses (krrood itself,
-``semantic_digital_twin``, ``coraplex``, …): the discovery, placeholder operands, and rendering all
-live here.
-
-The snapshot's per-class rendering is itself a reusable capability, not a test-only trick:
-:func:`first_order_form` verbalizes a symbolic callable *value-agnostically* — from its declared
-field types alone, with no constructed instance or bound literal in hand — the sibling of the
-ordinary *value-using* form :func:`~…pipeline.verbalize_expression` already produces for a real,
-bound expression. It takes nothing but the class itself, needs nothing external, and never
-consults a class's own :meth:`~krrood.entity_query_language.predicate.SymbolicCallable.
-_example_operands_` override — that hook exists purely to make a committed :class:`VerbalizationResult`
-snapshot read more realistically and is consulted only by :class:`VerbalizationResultsOfPackage`,
-never by ordinary rendering. That snapshot also layers its own
-:attr:`~VerbalizationResultsOfPackage.operand_overrides` on top — an example value scoped to one
-snapshot (a test-only mimic class, say) rather than a class-level truth.
+:func:`placeholder_operands`/:func:`first_order_form` verbalize a symbolic callable
+value-agnostically, from its declared field types alone, and take nothing but the class itself.
 """
 
 from __future__ import annotations
@@ -160,10 +146,11 @@ class VerbalizationResultsOfPackage:
         :param cls: The symbolic callable to build operands for.
         :return: :func:`placeholder_operands` for *cls*, with *cls*'s own
             :meth:`~krrood.entity_query_language.predicate.SymbolicCallable._example_operands_`
-            applied, then this snapshot's registered :attr:`operand_overrides` overwriting the
-            fields they name.
+            overwriting the fields they name, then this snapshot's registered
+            :attr:`operand_overrides` overwriting them again.
         """
-        operands = cls._example_operands_(placeholder_operands(cls))
+        operands = placeholder_operands(cls)
+        operands.update(cls._example_operands_())
         operands.update(self.operand_overrides.get(cls, {}))
         return operands
 

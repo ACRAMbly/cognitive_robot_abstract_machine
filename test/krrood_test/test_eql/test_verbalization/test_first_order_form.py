@@ -133,8 +133,8 @@ class Gauge(Predicate):
         )
 
     @classmethod
-    def _example_operands_(cls, operands):
-        return {**operands, "unit": "kPa"}
+    def _example_operands_(cls):
+        return {"unit": "kPa"}
 
 
 # %% placeholder_operands and first_order_form take nothing but the class itself

@@ -272,19 +272,18 @@ class SymbolicCallable(Symbol, Verbalizable, HasBoundValue, ABC):
         """
 
     @classmethod
-    def _example_operands_(cls, operands: Dict[str, Any]) -> Dict[str, Any]:
+    def _example_operands_(cls) -> Dict[str, Any]:
         """
-        Replace a placeholder operand with a literal example value, for a field that is
-        never bound to a symbolic operand in real usage -- only ever a literal (e.g.
-        ``HasType.types_``, since ``isinstance`` needs a concrete type at evaluation
-        time). Consulted only when generating or verifying a committed verbalization
-        result, never during ordinary rendering.
+        A literal example value for each field that is never bound to a symbolic operand
+        in real usage -- only ever a literal (e.g. ``HasType.types_``, since
+        ``isinstance`` needs a concrete type at evaluation time). Consulted only when
+        generating or verifying a committed verbalization result, never during ordinary
+        rendering.
 
-        :param operands: One placeholder operand per init field, keyed by field name.
-        :return: *operands*, with any field this class always renders literally replaced
-            by its example value. Unmodified by default.
+        :return: The example value to substitute for each such field, keyed by field
+            name. Empty by default.
         """
-        return operands
+        return {}
 
 
 @dataclass(eq=False)
@@ -454,8 +453,8 @@ class HasType(Triple):
         )
 
     @classmethod
-    def _example_operands_(cls, operands: Dict[str, Any]) -> Dict[str, Any]:
-        return {**operands, "types_": int}
+    def _example_operands_(cls) -> Dict[str, Any]:
+        return {"types_": int}
 
 
 @dataclass(eq=False)
@@ -476,8 +475,8 @@ class HasTypes(HasType):
     """
 
     @classmethod
-    def _example_operands_(cls, operands: Dict[str, Any]) -> Dict[str, Any]:
-        return {**operands, "types_": (int, str)}
+    def _example_operands_(cls) -> Dict[str, Any]:
+        return {"types_": (int, str)}
 
 
 @dataclass(eq=False)
