@@ -666,7 +666,7 @@ class SymbolicExpression(ABC):
         """
         yield from self._iter_descendants_(set())
 
-    def _expressions_with_ids_(
+    def _subtree_expressions_with_ids_(
         self, ids: Collection[uuid.UUID]
     ) -> Set[SymbolicExpression]:
         """

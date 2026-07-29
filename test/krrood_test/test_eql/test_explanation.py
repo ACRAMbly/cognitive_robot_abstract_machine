@@ -274,7 +274,8 @@ def _get_satisfied_names(ids, condition_root):
     Get expression names from satisfied condition IDs by traversing the condition tree.
     """
     return {
-        expression._name_ for expression in condition_root._expressions_with_ids_(ids)
+        expression._name_
+        for expression in condition_root._subtree_expressions_with_ids_(ids)
     }
 
 
@@ -361,7 +362,7 @@ def test_satisfied_conditions_exclude_a_short_circuited_operator():
     true_results = _get_true_results(query)
     assert len(true_results) == 1
 
-    satisfied = val._conditions_root_._expressions_with_ids_(
+    satisfied = val._conditions_root_._subtree_expressions_with_ids_(
         true_results[0].satisfied_condition_ids
     )
     assert any(isinstance(expression, OR) for expression in satisfied)

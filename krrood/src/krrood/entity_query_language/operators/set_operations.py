@@ -30,9 +30,10 @@ class EvaluatesChildrenInSequence(MultiArityExpression, ABC):
     """
     An expression that yields the results of each of its children in turn.
 
-    Binds the truth of every child result it passes on. A subclass that selects a value
-    instead overwrites that binding with the value, and is then not a
-    :class:`~krrood.entity_query_language.core.base_expressions.TruthValuedExpression`.
+    A result it yields is its own, and a result's truth is read from the binding of the
+    expression that produced it, so each child result's truth is recorded under this
+    expression's identifier before the result is passed on. A subclass that selects a
+    value overwrites that binding with the value.
     """
 
     def _evaluate__(
@@ -63,6 +64,9 @@ class Union(TruthValuedExpression, EvaluatesChildrenInSequence):
     """
     A symbolic union operation that can be used to evaluate multiple symbolic
     expressions in a sequence.
+
+    Keeps the truth its base records, so its binding is always the truth of the child
+    result it yields and never a value a caller selects.
     """
 
 
