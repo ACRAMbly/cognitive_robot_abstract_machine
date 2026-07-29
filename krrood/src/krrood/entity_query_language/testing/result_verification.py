@@ -170,12 +170,11 @@ class VerbalizationResultsOfPackage:
     The committed expected results, one per covered class.
     """
 
-    operand_overrides: Dict[PlaceholderExampleField, Any] = field(
-        default_factory=dict
-    )
+    operand_overrides: Dict[PlaceholderExampleField, Any] = field(default_factory=dict)
     """
-    Example values scoped to this snapshot alone, keyed like :data:`PLACEHOLDER_EXAMPLE_VALUES`
-    but consulted only here rather than shared across every package.
+    Example values scoped to this snapshot alone, keyed like
+    :data:`PLACEHOLDER_EXAMPLE_VALUES` but consulted only here rather than shared across
+    every package.
     """
 
     def discovered_callables(self) -> Tuple[Type[SymbolicCallable], ...]:
