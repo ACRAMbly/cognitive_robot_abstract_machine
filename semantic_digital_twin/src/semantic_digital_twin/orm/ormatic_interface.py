@@ -11278,6 +11278,7 @@ class VizMarkerPublisherDAO(
         sqlalchemy.sql.sqltypes.Text, use_existing_column=True
     )
     alpha: Mapped[builtins.float] = mapped_column(use_existing_column=True)
+    region_alpha: Mapped[builtins.float] = mapped_column(use_existing_column=True)
 
     shape_source: Mapped[
         semantic_digital_twin.adapters.ros.visualization.viz_marker.ShapeSource

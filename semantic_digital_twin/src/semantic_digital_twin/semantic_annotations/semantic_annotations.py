@@ -479,7 +479,7 @@ class Elevator(HasCaseAsRootBody, HasDoors, HasMechanicalJoint):
         """
         Drives the elevator to the floor given
         """
-        floor_plane_height = (floor.floor_plane.z + floor.floor_plane.z) / 2
+        floor_plane_height = (floor.floor_plane[0].z + floor.floor_plane[1].z) / 2
         drive_height = floor_plane_height + (self.scale.z / 2)
         self.mechanical_joint.position = drive_height
 
@@ -624,8 +624,25 @@ class Level(SemanticAnnotation):
     """
 
     @property
-    def floor_plane(self) -> Scale:
-        return self.root.area.scale.xy
+    def floor_plane(self) -> Tuple[Point3, Point3]:
+        """
+        The floor plane of a level, expressed as two points
+
+        :return: The floor plane of the level
+        """
+        min_point_global = self._world.transform(
+            self.root.area.min_point, self._world.root
+        )
+        max_point_global = self._world.transform(
+            self.root.area.max_point, self._world.root
+        )
+        min_z = min_point_global.z
+        return min_point_global, Point3(
+            max_point_global.x,
+            max_point_global.y,
+            min_z,
+            reference_frame=self._world.root,
+        )
 
 
 @dataclass(eq=False)
