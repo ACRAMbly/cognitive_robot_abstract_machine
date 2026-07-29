@@ -112,8 +112,9 @@ class Fastened(Predicate):
 class Gauge(Predicate):
     """
     A two-operand predicate whose ``unit`` field is never bound to a symbolic operand in
-    real usage -- only ever a literal -- so its class declares an ``_example_operands_``
-    override, the same way ``HasType``/``HasTypes`` do for ``types_``.
+    real usage -- only ever a literal -- so its class declares an
+    ``_example_operand_values_`` override, the same way ``HasType``/``HasTypes`` do for
+    ``types_``.
     """
 
     sensor: object
@@ -133,7 +134,7 @@ class Gauge(Predicate):
         )
 
     @classmethod
-    def _example_operands_(cls):
+    def _example_operand_values_(cls):
         return {"unit": "kPa"}
 
 
@@ -177,25 +178,25 @@ def test_first_order_form_and_value_using_form_agree_when_types_match():
     assert first_order_form(Kindled) == verbalize_expression(bound_instance)
 
 
-# %% SymbolicCallable._example_operands_ -- a class-level "this field is never a real
+# %% SymbolicCallable._example_operand_values_ -- a class-level "this field is never a real
 # %% operand" declaration, consulted only when generating/verifying a committed result
 
 
-def test_first_order_form_ignores_a_class_example_operands_override():
+def test_first_order_form_ignores_a_class_example_operand_values_override():
     """
     A truly value-agnostic rendering needs nothing external, so `first_order_form` keeps
-    the placeholder variable even for a class that declares `_example_operands_` -- that
-    hook is for `VerbalizationResultsOfPackage` alone.
+    the placeholder variable even for a class that declares `_example_operand_values_`
+    -- that hook is for `VerbalizationResultsOfPackage` alone.
     """
     assert first_order_form(Gauge) == "a sensor is calibrated in a unit"
 
 
-def test_snapshot_placeholder_operands_applies_a_class_example_operands_override():
+def test_snapshot_placeholder_operands_applies_a_class_example_operand_values_override():
     snapshot = VerbalizationResultsOfPackage(package=krrood, results=())
     assert snapshot.placeholder_operands(Gauge)["unit"] == "kPa"
 
 
-def test_snapshot_rendered_result_applies_a_class_example_operands_override():
+def test_snapshot_rendered_result_applies_a_class_example_operand_values_override():
     snapshot = VerbalizationResultsOfPackage(package=krrood, results=())
     assert snapshot.rendered_result(Gauge) == "a sensor is calibrated in 'kPa'"
 

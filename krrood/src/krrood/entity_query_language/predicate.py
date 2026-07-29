@@ -272,7 +272,7 @@ class SymbolicCallable(Symbol, Verbalizable, HasBoundValue, ABC):
         """
 
     @classmethod
-    def _example_operands_(cls) -> Dict[str, Any]:
+    def _example_operand_values_(cls) -> Dict[str, Any]:
         """
         A literal example value for each field that is never bound to a symbolic operand
         in real usage -- only ever a literal (e.g. ``HasType.types_``, since
@@ -453,7 +453,7 @@ class HasType(Triple):
         )
 
     @classmethod
-    def _example_operands_(cls) -> Dict[str, Any]:
+    def _example_operand_values_(cls) -> Dict[str, Any]:
         return {"types_": int}
 
 
@@ -475,7 +475,7 @@ class HasTypes(HasType):
     """
 
     @classmethod
-    def _example_operands_(cls) -> Dict[str, Any]:
+    def _example_operand_values_(cls) -> Dict[str, Any]:
         return {"types_": (int, str)}
 
 

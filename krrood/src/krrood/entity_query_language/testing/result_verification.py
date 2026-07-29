@@ -1,15 +1,6 @@
 """
 Exhaustive verbalization-result verification for any package, and the first-order
 (value-agnostic) rendering it builds on.
-
-:class:`VerbalizationResultsOfPackage` discovers every concrete
-:class:`~krrood.entity_query_language.predicate.SymbolicCallable` a package defines, renders each
-with placeholder operands, and checks the rendering against a committed list of
-:class:`VerbalizationResult` entries — its three ``assert_*`` methods are the bodies of three
-tests.
-
-:func:`placeholder_operands`/:func:`first_order_form` verbalize a symbolic callable
-value-agnostically, from its declared field types alone, and take nothing but the class itself.
 """
 
 from __future__ import annotations
@@ -114,9 +105,9 @@ class VerbalizationResultsOfPackage:
     )
     """
     Example values scoped to this snapshot alone, keyed by the class and then the field
-    name, consulted after each class's own ``_example_operands_`` -- for an example
-    specific to this snapshot (a test-only mimic class, say) rather than a class-level
-    truth.
+    name, consulted after each class's own ``_example_operand_values_`` -- for an
+    example specific to this snapshot (a test-only mimic class, say) rather than a
+    class-level truth.
     """
 
     def discovered_callables(self) -> Tuple[Type[SymbolicCallable], ...]:
@@ -145,12 +136,12 @@ class VerbalizationResultsOfPackage:
         """
         :param cls: The symbolic callable to build operands for.
         :return: :func:`placeholder_operands` for *cls*, with *cls*'s own
-            :meth:`~krrood.entity_query_language.predicate.SymbolicCallable._example_operands_`
+            :meth:`~krrood.entity_query_language.predicate.SymbolicCallable._example_operand_values_`
             overwriting the fields they name, then this snapshot's registered
             :attr:`operand_overrides` overwriting them again.
         """
         operands = placeholder_operands(cls)
-        operands.update(cls._example_operands_())
+        operands.update(cls._example_operand_values_())
         operands.update(self.operand_overrides.get(cls, {}))
         return operands
 
