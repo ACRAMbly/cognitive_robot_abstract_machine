@@ -305,9 +305,9 @@ class ScrewJoint(MechanicalJoint):
 
     screw_pitch: float = field(kw_only=True)
     """
-    Translation along the screw axis in meters per radian of rotation.
+    The distance between adjacent threads along the screw axis in meters.
 
-    See :attr:`~semantic_digital_twin.world_description.connections.ScrewConnection.pitch`.
+    See :attr:`~semantic_digital_twin.world_description.connections.ScrewConnection.screw_pitch`.
     """
 
     @classproperty
@@ -332,7 +332,7 @@ class ScrewJoint(MechanicalJoint):
             offset=connection_offset,
             axis=active_axis,
             dof_limits=connection_limits,
-            pitch=self.screw_pitch,
+            screw_pitch=self.screw_pitch,
         )
 
     @classmethod
@@ -347,19 +347,19 @@ class ScrewJoint(MechanicalJoint):
         connection_offset: float = 0.0,
         scale: Scale = None,
         *,
-        pitch: float,
+        screw_pitch: float,
     ) -> Self:
         """
         Create a screw joint with a new body in the given world.
 
         See :meth:`HasRootBody.create_with_new_body_in_world`; additionally requires the
-        screw's ``pitch``.
+        screw's ``screw_pitch``.
 
-        :param pitch: Translation along ``active_axis`` in meters per radian of
-            rotation.
+        :param screw_pitch: The distance between adjacent threads along ``active_axis``
+            in meters.
         """
         return cls(
-            name=name, root=cls._create_body(name, scale), screw_pitch=pitch
+            name=name, root=cls._create_body(name, scale), screw_pitch=screw_pitch
         )._connect_and_add_to_world(
             world=world,
             world_root_T_self=world_root_T_self,

@@ -124,7 +124,7 @@ def test_has_hardware_interface_reflects_any_active_dof(
 
 def _add_screw_connection(
     world_with_two_bodies,
-    pitch: float,
+    screw_pitch: float,
     multiplier: float = 1.0,
     parent_T_connection_expression: HomogeneousTransformationMatrix | None = None,
 ) -> ScrewConnection:
@@ -138,7 +138,7 @@ def _add_screw_connection(
             parent,
             child,
             axis=Vector3.Z(),
-            pitch=pitch,
+            screw_pitch=screw_pitch,
             multiplier=multiplier,
             parent_T_connection_expression=parent_T_connection_expression,
         )
@@ -146,17 +146,17 @@ def _add_screw_connection(
     return connection
 
 
-def _expected_screw_transform(angle: float, pitch: float) -> np.ndarray:
+def _expected_screw_transform(angle: float, screw_pitch: float) -> np.ndarray:
     """
     The analytic parent_T_child matrix of a screw pair about the z-axis: rotation by
-    ``angle`` coupled with translation ``pitch * angle`` along z.
+    ``angle`` coupled with translation ``screw_pitch * angle / (2 * pi)`` along z.
     """
     expected = np.eye(4)
     expected[0, 0] = math.cos(angle)
     expected[0, 1] = -math.sin(angle)
     expected[1, 0] = math.sin(angle)
     expected[1, 1] = math.cos(angle)
-    expected[2, 3] = pitch * angle
+    expected[2, 3] = screw_pitch * angle / (2.0 * math.pi)
     return expected
 
 
@@ -164,10 +164,10 @@ def test_screw_connection_origin_couples_rotation_and_translation(
     world_with_two_bodies,
 ):
     world, parent, child = world_with_two_bodies
-    pitch = 0.01
+    screw_pitch = 0.01
     connection = _add_screw_connection(
         world_with_two_bodies,
-        pitch=pitch,
+        screw_pitch=screw_pitch,
         parent_T_connection_expression=HomogeneousTransformationMatrix.from_xyz_rpy(
             x=0.3, y=0.4
         ),
@@ -184,7 +184,7 @@ def test_screw_connection_origin_couples_rotation_and_translation(
     expected_origin = [
         0.3,
         0.4,
-        pitch * joint_position,
+        screw_pitch * joint_position / (2.0 * math.pi),
         0.0,
         0.0,
         math.sin(joint_position / 2.0),
@@ -205,22 +205,24 @@ def test_screw_connection_numeric_forward_kinematics(
     world_with_two_bodies, joint_position
 ):
     world, parent, child = world_with_two_bodies
-    pitch = 0.01
-    connection = _add_screw_connection(world_with_two_bodies, pitch=pitch)
+    screw_pitch = 0.01
+    connection = _add_screw_connection(world_with_two_bodies, screw_pitch=screw_pitch)
 
     with world.modify_world():
         world.state[connection.active_dofs[0].id].position = joint_position
 
     parent_T_child = world.compute_forward_kinematics_np(parent, child)
     assert_allclose(
-        parent_T_child, _expected_screw_transform(joint_position, pitch), atol=1e-9
+        parent_T_child,
+        _expected_screw_transform(joint_position, screw_pitch),
+        atol=1e-9,
     )
 
 
-def test_screw_connection_negative_pitch(world_with_two_bodies):
+def test_screw_connection_negative_screw_pitch(world_with_two_bodies):
     world, parent, child = world_with_two_bodies
-    pitch = -0.01
-    connection = _add_screw_connection(world_with_two_bodies, pitch=pitch)
+    screw_pitch = -0.01
+    connection = _add_screw_connection(world_with_two_bodies, screw_pitch=screw_pitch)
 
     joint_position = 0.5
     with world.modify_world():
@@ -229,15 +231,17 @@ def test_screw_connection_negative_pitch(world_with_two_bodies):
     # A left-handed thread rotates the same way but translates in the opposite direction.
     parent_T_child = world.compute_forward_kinematics_np(parent, child)
     assert_allclose(
-        parent_T_child, _expected_screw_transform(joint_position, pitch), atol=1e-9
+        parent_T_child,
+        _expected_screw_transform(joint_position, screw_pitch),
+        atol=1e-9,
     )
 
 
 def test_screw_connection_multiplier_mirrors_motion(world_with_two_bodies):
     world, parent, child = world_with_two_bodies
-    pitch = 0.01
+    screw_pitch = 0.01
     connection = _add_screw_connection(
-        world_with_two_bodies, pitch=pitch, multiplier=-1.0
+        world_with_two_bodies, screw_pitch=screw_pitch, multiplier=-1.0
     )
 
     raw_position = 0.5
@@ -247,47 +251,54 @@ def test_screw_connection_multiplier_mirrors_motion(world_with_two_bodies):
     # The connection moves by multiplier * raw position.
     parent_T_child = world.compute_forward_kinematics_np(parent, child)
     assert_allclose(
-        parent_T_child, _expected_screw_transform(-raw_position, pitch), atol=1e-9
+        parent_T_child,
+        _expected_screw_transform(-raw_position, screw_pitch),
+        atol=1e-9,
     )
 
 
 def test_screw_connection_rotation_angle_for_travel_distance(world_with_two_bodies):
-    pitch = 0.005
-    connection = _add_screw_connection(world_with_two_bodies, pitch=pitch)
+    screw_pitch = 0.005
+    connection = _add_screw_connection(world_with_two_bodies, screw_pitch=screw_pitch)
 
-    # One full turn of a 0.005 m/rad thread travels 2 * pi * 0.005 meters.
+    # One full turn advances the child by one screw pitch.
     assert_allclose(
-        connection.rotation_angle_for_travel_distance(pitch * 2.0 * math.pi),
+        connection.rotation_angle_for_travel_distance(screw_pitch),
         2.0 * math.pi,
     )
     # Travelling against the axis requires rotating in the opposite direction.
-    assert_allclose(connection.rotation_angle_for_travel_distance(-pitch), -1.0)
+    assert_allclose(
+        connection.rotation_angle_for_travel_distance(-screw_pitch),
+        -2.0 * math.pi,
+    )
 
 
 def test_screw_connection_rotation_angle_for_travel_distance_left_handed_thread(
     world_with_two_bodies,
 ):
-    pitch = -0.005
-    connection = _add_screw_connection(world_with_two_bodies, pitch=pitch)
+    screw_pitch = -0.005
+    connection = _add_screw_connection(world_with_two_bodies, screw_pitch=screw_pitch)
 
     # A left-handed thread rotates the other way for the same travel.
     assert_allclose(
-        connection.rotation_angle_for_travel_distance(0.005 * 2.0 * math.pi),
+        connection.rotation_angle_for_travel_distance(0.005),
         -2.0 * math.pi,
     )
 
 
-def test_screw_connection_copy_with_new_parent_preserves_pitch(world_with_two_bodies):
+def test_screw_connection_copy_with_new_parent_preserves_screw_pitch(
+    world_with_two_bodies,
+):
     world, parent, child = world_with_two_bodies
-    pitch = 0.01
-    connection = _add_screw_connection(world_with_two_bodies, pitch=pitch)
+    screw_pitch = 0.01
+    connection = _add_screw_connection(world_with_two_bodies, screw_pitch=screw_pitch)
 
     new_parent = Body(name=PrefixedName("new_parent"))
     copied_connection = connection.copy_with_new_parent(
         new_parent, HomogeneousTransformationMatrix.from_xyz_rpy(x=0.1)
     )
 
-    assert copied_connection.screw_pitch == pitch
+    assert copied_connection.screw_pitch == screw_pitch
     assert copied_connection.raw_dof is connection.raw_dof
     assert copied_connection.axis == connection.axis
     assert copied_connection.parent is new_parent

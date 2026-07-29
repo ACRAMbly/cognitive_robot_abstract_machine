@@ -11437,7 +11437,7 @@ class ScrewConnectionDAO(
         use_existing_column=True,
     )
 
-    pitch: Mapped[builtins.float] = mapped_column(use_existing_column=True)
+    screw_pitch: Mapped[builtins.float] = mapped_column(use_existing_column=True)
 
     __mapper_args__ = {
         "polymorphic_identity": "ScrewConnectionDAO",
@@ -21458,7 +21458,7 @@ class ScrewJointDAO(
         use_existing_column=True,
     )
 
-    pitch: Mapped[builtins.float] = mapped_column(use_existing_column=True)
+    screw_pitch: Mapped[builtins.float] = mapped_column(use_existing_column=True)
 
     __mapper_args__ = {
         "polymorphic_identity": "ScrewJointDAO",

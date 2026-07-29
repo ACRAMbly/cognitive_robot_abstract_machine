@@ -2,7 +2,9 @@ from math import radians
 
 import numpy as np
 
-from adapters.ros.visualization.viz_marker import VizMarkerPublisher
+from semantic_digital_twin.adapters.ros.visualization.viz_marker import (
+    VizMarkerPublisher,
+)
 from giskardpy.executor import Executor
 from giskardpy.motion_statechart.context import MotionStatechartContext
 from giskardpy.motion_statechart.data_types import (
@@ -855,7 +857,7 @@ class TestOpenClose:
         assert closed.observation_state == ObservationStateValues.TRUE
 
     def test_unscrew_and_tighten_bottle_cap(self, pr2_world_copy, rclpy_node):
-        pitch = 0.005
+        screw_pitch = 0.03
         unscrew_goal = 2 * np.pi
         VizMarkerPublisher(_world=pr2_world_copy, node=rclpy_node).with_tf_publisher()
         with pr2_world_copy.modify_world():
@@ -897,7 +899,7 @@ class TestOpenClose:
                     lower=lower_limits, upper=upper_limits
                 ),
                 active_axis=Vector3(-1, 0, 0),
-                pitch=pitch,
+                screw_pitch=screw_pitch,
             )
 
             bottle_cap.add(screw_joint)
@@ -949,15 +951,13 @@ class TestOpenClose:
 
         assert open.observation_state == ObservationStateValues.TRUE
 
-        # The unscrewed cap must have travelled pitch * angle along the screw axis,
+        # One full turn must have moved the cap one screw pitch along the screw axis,
         # away from the bottle (towards the robot, -x).
         world_T_cap_unscrewed = pr2_world_copy.compute_forward_kinematics_np(
             pr2_world_copy.root, cap_body
         )
         cap_translation = world_T_cap_unscrewed[:3, 3] - world_T_cap_before[:3, 3]
-        np.testing.assert_allclose(
-            cap_translation, [-pitch * unscrew_goal, 0.0, 0.0], atol=1e-2
-        )
+        np.testing.assert_allclose(cap_translation, [-screw_pitch, 0.0, 0.0], atol=1e-3)
 
         # Tighten again, this time commanding how far the cap must travel back down
         # the thread instead of how far it must rotate.
@@ -998,5 +998,5 @@ class TestOpenClose:
             pr2_world_copy.root, cap_body
         )
         np.testing.assert_allclose(
-            world_T_cap_tightened[:3, 3], world_T_cap_before[:3, 3], atol=1e-2
+            world_T_cap_tightened[:3, 3], world_T_cap_before[:3, 3], atol=1e-3
         )

@@ -267,7 +267,7 @@ def test_screw_connection_json_serialization_with_world():
     world = World()
     body = Body(name=PrefixedName("body"))
     body2 = Body(name=PrefixedName("body2"))
-    pitch = 0.005
+    screw_pitch = 0.005
     with world.modify_world():
         world.add_kinematic_structure_entity(body)
         world.add_kinematic_structure_entity(body2)
@@ -276,7 +276,7 @@ def test_screw_connection_json_serialization_with_world():
             body,
             body2,
             axis=Vector3.Z(),
-            pitch=pitch,
+            screw_pitch=screw_pitch,
             multiplier=2.0,
             offset=0.1,
             parent_T_connection_expression=HomogeneousTransformationMatrix.from_xyz_rpy(
@@ -290,7 +290,7 @@ def test_screw_connection_json_serialization_with_world():
         json_data, **tracker.create_kwargs()
     )
     assert connection == restored_connection
-    assert restored_connection.screw_pitch == pitch
+    assert restored_connection.screw_pitch == screw_pitch
     assert restored_connection.multiplier == connection.multiplier
     assert restored_connection.offset == connection.offset
     assert np.allclose(restored_connection.axis.to_np(), connection.axis.to_np())
