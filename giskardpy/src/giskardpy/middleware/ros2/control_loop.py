@@ -8,8 +8,10 @@ from giskardpy.middleware.ros2.action_server import ActionServerHandler
 from giskardpy.middleware.ros2.command_publishing import CommandPublisher
 from giskardpy.middleware.ros2.exceptions import ExecutionCanceledException
 from giskardpy.middleware.ros2.feedback_publisher import ActionFeedbackPublisher
+from giskardpy.middleware.ros2.heartbeat import Heartbeat
 from giskardpy.middleware.ros2.input_synchronization import WorldStateInputs
 from giskardpy.middleware.ros2.qp_data_publisher import QPDataPublisher
+from semantic_digital_twin.adapters.ros.world_synchronizer import WorldSynchronizer
 from semantic_digital_twin.world import World
 
 
@@ -40,6 +42,19 @@ class ControlLoop:
     inputs: WorldStateInputs
     """
     Writes the state of the robot into the world at the start of every cycle.
+    """
+
+    heartbeat: Heartbeat
+    """
+    Ticked at the end of every cycle, shared with the idle loop of the motion server.
+    """
+
+    world_synchronizer: WorldSynchronizer
+    """
+    Acknowledges world updates of other processes at the end of every cycle.
+
+    Only their receipt is acknowledged; applying them would invalidate the compiled
+    motion statechart, so the idle loop applies them once the goal is over.
     """
 
     command_publishers: List[CommandPublisher] = field(default_factory=list)
@@ -80,6 +95,8 @@ class ControlLoop:
         self.publish_commands()
         self.publish_qp_data()
         self.feedback_publisher.publish_if_changed()
+        self.world_synchronizer.acknowledge_missed_messages()
+        self.heartbeat.tick()
 
     def publish_qp_data(self) -> None:
         """

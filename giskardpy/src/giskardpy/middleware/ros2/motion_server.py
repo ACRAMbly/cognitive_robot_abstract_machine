@@ -15,6 +15,7 @@ from giskardpy.middleware.ros2.action_server import ActionServerHandler
 from giskardpy.middleware.ros2.control_loop import ControlLoop
 from giskardpy.middleware.ros2.exceptions import ExecutionCanceledException
 from giskardpy.middleware.ros2.feedback_publisher import ActionFeedbackPublisher
+from giskardpy.middleware.ros2.heartbeat import Heartbeat
 from giskardpy.middleware.ros2.input_synchronization import WorldStateInputs
 from giskardpy.middleware.ros2.post_goal_plotters import PostGoalPlotter
 from giskardpy.motion_statechart.motion_statechart import MotionStatechart
@@ -65,6 +66,11 @@ class MotionServer:
     Writes the state of the robot into the world while waiting for a goal.
     """
 
+    heartbeat: Heartbeat
+    """
+    Ticked once per idle cycle and, through the control loop, once per control cycle.
+    """
+
     publish_world_state: bool = True
     """
     Whether the world state is published while waiting for a goal.
@@ -78,11 +84,6 @@ class MotionServer:
     post_goal_plotters: List[PostGoalPlotter] = field(default_factory=list)
     """
     Debug plots that are written once a goal is finished.
-    """
-
-    cycle_count: int = field(init=False, default=0)
-    """
-    Number of completed idle cycles, monotonically increasing.
     """
 
     idle_pacer: SimulationPacer = field(init=False)
@@ -118,7 +119,7 @@ class MotionServer:
             return
         self.world_synchronizer.apply_missed_messages()
         self.synchronize_inputs()
-        self.cycle_count += 1
+        self.heartbeat.tick()
         if not self.action_server.has_goal():
             return
         self.action_server.accept_goal()

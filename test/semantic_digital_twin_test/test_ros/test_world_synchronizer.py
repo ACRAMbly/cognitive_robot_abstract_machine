@@ -9,7 +9,7 @@ import uuid
 from dataclasses import dataclass, field
 from multiprocessing.synchronize import RLock
 from time import sleep
-from typing import Optional, Set, Tuple, List
+from typing import Callable, Optional, Set, Tuple, List
 from uuid import uuid4
 
 import numpy as np
@@ -18,6 +18,7 @@ import rclpy
 import sqlalchemy
 import std_msgs.msg
 from rclpy.executors import SingleThreadedExecutor
+from rclpy.node import Node
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -997,9 +998,9 @@ def test_synchronous_publish_settles_promptly_with_multiple_real_subscribers(
     """
     Regression test against real ROS discovery (no fakes): with several concurrently
     created real subscribers and no graph churn, the highest-observed-count fallback in
-    :meth:`Synchronizer._snapshot_subscribers_after_discovery_settles` must settle on the
-    true, stable subscriber count, so synchronous publication returns promptly instead of
-    paying the ``wait_for_synchronization_timeout`` wait.
+    :meth:`Synchronizer._snapshot_subscribers_after_discovery_settles` must settle on
+    the true, stable subscriber count, so synchronous publication returns promptly
+    instead of paying the ``wait_for_synchronization_timeout`` wait.
     """
     w1 = create_dummy_world()
     synchronizer_1 = WorldSynchronizer(
@@ -1156,13 +1157,15 @@ def test_subscriber_disconnecting_during_discovery_grace_period_does_not_hang_fo
 ):
     """
     Exercises real ROS graph churn (no fakes): a subscriber that appears and then
-    disconnects again while :meth:`Synchronizer._snapshot_subscribers_after_discovery_settles`
-    is still polling can make the settled count reflect a subscriber that is no longer
-    actually there by the time :meth:`Synchronizer.publish` sends the message. Whether
-    this particular run manages to trigger an over-count depends on ROS discovery timing
-    and is intentionally not asserted directly; what must always hold is that publish is
-    bounded by ``wait_for_synchronization_timeout``, never blocks forever, and recovers
-    on the next publish once the graph has settled.
+    disconnects again while
+    :meth:`Synchronizer._snapshot_subscribers_after_discovery_settles` is still polling
+    can make the settled count reflect a subscriber that is no longer actually there by
+    the time :meth:`Synchronizer.publish` sends the message.
+
+    Whether this particular run manages to trigger an over-count depends on ROS
+    discovery timing and is intentionally not asserted directly; what must always hold
+    is that publish is bounded by ``wait_for_synchronization_timeout``, never blocks
+    forever, and recovers on the next publish once the graph has settled.
     """
     w1 = create_dummy_world()
     synchronizer_1 = WorldSynchronizer(
@@ -1186,7 +1189,9 @@ def test_subscriber_disconnecting_during_discovery_grace_period_does_not_hang_fo
         time.sleep(0.05)
         flapping_node.destroy_subscription(flapping_subscription)
 
-    flap_thread = threading.Thread(target=disconnect_shortly_after_appearing, daemon=True)
+    flap_thread = threading.Thread(
+        target=disconnect_shortly_after_appearing, daemon=True
+    )
     flap_thread.start()
 
     try:
@@ -3126,6 +3131,247 @@ def test_combined_update_model_and_state_applied_atomically(rclpy_node):
         "_world_lock was released between applying the model block and the state update; "
         "a combined WorldUpdate must be applied atomically under a single lock."
     )
+
+
+# %% acknowledging buffered messages
+
+
+@dataclass
+class BackgroundPublication:
+    """
+    Runs a blocking publication on its own thread and records how long it blocked.
+    """
+
+    publish: Callable[[], None]
+    """
+    The publication that blocks until every subscriber acknowledged or it timed out.
+    """
+
+    seconds_until_finished: Optional[float] = field(init=False, default=None)
+    """
+    How long the publication blocked, or ``None`` while it is still blocked.
+    """
+
+    thread: threading.Thread = field(init=False)
+    """
+    The thread the publication runs on.
+    """
+
+    def start(self) -> None:
+        """
+        Begin the publication.
+        """
+        self.thread = threading.Thread(
+            target=self.run, daemon=True, name="background publication"
+        )
+        self.thread.start()
+
+    def run(self) -> None:
+        """
+        Publish and remember how long that took.
+        """
+        started_at = time.monotonic()
+        self.publish()
+        self.seconds_until_finished = time.monotonic() - started_at
+
+    def wait(self, timeout: float) -> None:
+        """
+        Wait for the publication to finish.
+        """
+        self.thread.join(timeout=timeout)
+
+
+@dataclass
+class BufferedUpdateExchange:
+    """
+    A synchronous publisher and a paused receiver that buffers instead of applying,
+    standing in for a process that postpones world updates while it is busy.
+
+    Both use a private pair of topics, so the expected number of acknowledgments cannot
+    be inflated by the synchronizers of other tests.
+    """
+
+    publisher_world: World
+    """
+    The world whose updates are published.
+    """
+
+    publisher_synchronizer: WorldSynchronizer
+    """
+    The synchronous synchronizer that blocks until its updates are acknowledged.
+    """
+
+    receiver_node: Node
+    """
+    The node the buffered updates are received on.
+    """
+
+    receiver_executor: SingleThreadedExecutor
+    """
+    The executor that delivers the incoming messages.
+    """
+
+    receiver_spin_thread: threading.Thread
+    """
+    The thread the receiving executor spins on.
+    """
+
+    receiver_world: World
+    """
+    The world the buffered updates would be applied to.
+    """
+
+    receiver_synchronizer: WorldSynchronizer
+    """
+    The paused synchronizer that buffers the incoming updates.
+    """
+
+    def wait_until_discovered(self) -> bool:
+        """
+        Wait until updates and acknowledgments can reach the other node.
+
+        Both directions have to be discovered: a message published before the remote
+        endpoint is known is dropped, which would make the publication wait out its
+        whole timeout.
+        """
+        return wait_for_condition(
+            lambda: self.publisher_synchronizer.publisher.get_subscription_count() >= 2
+            and self.receiver_synchronizer.acknowledge_publisher.get_subscription_count()
+            >= 2
+        )
+
+    def publish_position(self, position: float) -> BackgroundPublication:
+        """
+        Publish a new position of the first degree of freedom on its own thread.
+        """
+        self.publisher_world.state._data[0, 0] = position
+        publication = BackgroundPublication(
+            publish=self.publisher_world.notify_state_change
+        )
+        publication.start()
+        return publication
+
+    def wait_until_buffered(self) -> bool:
+        """
+        Wait until the receiver buffered exactly one update.
+        """
+        return wait_for_condition(
+            lambda: len(self.receiver_synchronizer.missed_messages) == 1
+        )
+
+    def close(self) -> None:
+        """
+        Shut down both synchronizers, the receiving executor, thread and node.
+        """
+        self.publisher_synchronizer.close()
+        self.receiver_synchronizer.close()
+        self.receiver_executor.shutdown()
+        self.receiver_spin_thread.join(timeout=2.0)
+        self.receiver_node.destroy_node()
+
+
+def create_buffered_update_exchange(publisher_node: Node) -> BufferedUpdateExchange:
+    """
+    Build a synchronous publisher on the given node and a paused receiver on a node of
+    its own, connected by a private pair of topics.
+    """
+    topic_suffix = uuid4().hex
+    receiver_node = rclpy.create_node(f"buffering_receiver_{topic_suffix[:8]}")
+    receiver_executor = SingleThreadedExecutor()
+    receiver_executor.add_node(receiver_node)
+    receiver_spin_thread = threading.Thread(
+        target=receiver_executor.spin, daemon=True, name="buffering-receiver"
+    )
+    receiver_spin_thread.start()
+
+    publisher_world = create_dummy_world()
+    receiver_world = create_dummy_world()
+    topic_name = f"/buffered_update_exchange_{topic_suffix}"
+    acknowledge_topic_name = f"{topic_name}/acknowledge"
+    publisher_synchronizer = WorldSynchronizer(
+        node=publisher_node,
+        _world=publisher_world,
+        synchronous=True,
+        topic_name=topic_name,
+        acknowledge_topic_name=acknowledge_topic_name,
+    )
+    publisher_synchronizer.wait_for_synchronization_timeout = 5.0
+    receiver_synchronizer = WorldSynchronizer(
+        node=receiver_node,
+        _world=receiver_world,
+        topic_name=topic_name,
+        acknowledge_topic_name=acknowledge_topic_name,
+    )
+    receiver_synchronizer.pause()
+    return BufferedUpdateExchange(
+        publisher_world=publisher_world,
+        publisher_synchronizer=publisher_synchronizer,
+        receiver_node=receiver_node,
+        receiver_executor=receiver_executor,
+        receiver_spin_thread=receiver_spin_thread,
+        receiver_world=receiver_world,
+        receiver_synchronizer=receiver_synchronizer,
+    )
+
+
+def test_paused_synchronizer_acknowledges_buffered_messages(rclpy_node):
+    """
+    Buffering a message is receipt, so acknowledging it must not require the receiver to
+    apply it first; otherwise a synchronous publisher waits out its whole timeout.
+    """
+    exchange = create_buffered_update_exchange(rclpy_node)
+    try:
+        assert exchange.wait_until_discovered()
+
+        publication = exchange.publish_position(1.0)
+        assert exchange.wait_until_buffered()
+        exchange.receiver_synchronizer.acknowledge_missed_messages()
+
+        publication.wait(timeout=2.0)
+        assert publication.seconds_until_finished is not None, (
+            "acknowledging the buffered message did not unblock the synchronous "
+            "publication"
+        )
+        assert (
+            publication.seconds_until_finished
+            < exchange.publisher_synchronizer.wait_for_synchronization_timeout
+        )
+        assert exchange.receiver_world.state._data[0, 0] == 0
+    finally:
+        exchange.close()
+
+
+def test_acknowledging_buffered_messages_does_not_skip_later_ones(rclpy_node):
+    """
+    Applying the buffered messages empties the buffer, so a message that arrives
+    afterwards must be acknowledged again instead of being mistaken for an already
+    acknowledged one.
+    """
+    exchange = create_buffered_update_exchange(rclpy_node)
+    try:
+        assert exchange.wait_until_discovered()
+
+        first_publication = exchange.publish_position(1.0)
+        assert exchange.wait_until_buffered()
+        exchange.receiver_synchronizer.acknowledge_missed_messages()
+        first_publication.wait(timeout=2.0)
+        exchange.receiver_synchronizer.apply_missed_messages()
+        assert exchange.receiver_world.state._data[0, 0] == 1.0
+
+        second_publication = exchange.publish_position(2.0)
+        assert exchange.wait_until_buffered()
+        exchange.receiver_synchronizer.acknowledge_missed_messages()
+
+        second_publication.wait(timeout=2.0)
+        assert (
+            second_publication.seconds_until_finished is not None
+        ), "the message received after the buffer was emptied was never acknowledged"
+        assert (
+            second_publication.seconds_until_finished
+            < exchange.publisher_synchronizer.wait_for_synchronization_timeout
+        )
+    finally:
+        exchange.close()
 
 
 if __name__ == "__main__":

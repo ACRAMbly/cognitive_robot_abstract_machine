@@ -179,11 +179,13 @@ class GiskardTester(ABC):
 
     def wait_heartbeats(self, number=5):
         """
-        Block until the motion server completed ``number`` more idle cycles.
+        Block until the motion server completed ``number`` more cycles.
+
+        Control cycles count too, so this also returns while a goal is being executed.
         """
-        motion_server = self.giskard.motion_server
-        first_cycle = motion_server.cycle_count
-        while motion_server.cycle_count < first_cycle + number:
+        heartbeat = self.giskard.motion_server.heartbeat
+        first_cycle = heartbeat.count
+        while heartbeat.count < first_cycle + number:
             sleep(0.001)
 
     def print_stats(self):

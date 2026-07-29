@@ -22,6 +22,7 @@ from giskardpy.ros_executor import Ros2Executor
 from giskardpy.middleware.ros2.action_server import ActionServerHandler
 from giskardpy.middleware.ros2.control_loop import ControlLoop
 from giskardpy.middleware.ros2.feedback_publisher import ActionFeedbackPublisher
+from giskardpy.middleware.ros2.heartbeat import Heartbeat
 from giskardpy.middleware.ros2.input_synchronization import WorldStateInputs
 from giskardpy.middleware.ros2.motion_server import MotionServer
 from giskardpy.middleware.ros2.post_goal_plotters import (
@@ -125,11 +126,14 @@ class Giskard:
         feedback_publisher = ActionFeedbackPublisher(
             executor=self.executor, action_server=action_server
         )
+        heartbeat = Heartbeat()
         control_loop = ControlLoop(
             executor=self.executor,
             action_server=action_server,
             feedback_publisher=feedback_publisher,
             inputs=WorldStateInputs(world=world),
+            heartbeat=heartbeat,
+            world_synchronizer=self.world_synchronizer,
             qp_data_publisher=self.create_qp_data_publisher(),
         )
         return MotionServer(
@@ -139,6 +143,7 @@ class Giskard:
             world_synchronizer=self.world_synchronizer,
             feedback_publisher=feedback_publisher,
             inputs=WorldStateInputs(world=world),
+            heartbeat=heartbeat,
             publish_world_state=self.server_config.publish_world_state,
             idle_frequency=self.server_config.idle_frequency,
             post_goal_plotters=self.create_post_goal_plotters(),

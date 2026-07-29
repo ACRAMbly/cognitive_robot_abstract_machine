@@ -493,6 +493,11 @@ class WorldSynchronizer(Synchronizer, ModelChangeCallback, StateChangeCallback):
     These messages can be applied later by calling ``apply_missed_messages()``.
     """
 
+    _acknowledged_missed_message_count: int = field(default=0, init=False, repr=False)
+    """
+    Number of leading entries of ``missed_messages`` whose receipt was acknowledged.
+    """
+
     def __post_init__(self):
         Synchronizer.__post_init__(self)
         if self.synchronize_model:
@@ -642,6 +647,19 @@ class WorldSynchronizer(Synchronizer, ModelChangeCallback, StateChangeCallback):
             self.update_previous_world_state()
         self._world.notify_state_change(publish_changes=False)
 
+    def acknowledge_missed_messages(self):
+        """
+        Acknowledge the receipt of the buffered messages that were not acknowledged yet.
+
+        Buffering a message is receipt, so a publisher waiting for acknowledgments may
+        continue while this world postpones applying the update. Use this when the
+        buffer cannot be applied for a while, for example because a controller is
+        running on the world.
+        """
+        for message in self.missed_messages[self._acknowledged_missed_message_count :]:
+            self.acknowledge_message(message)
+        self._acknowledged_missed_message_count = len(self.missed_messages)
+
     def apply_missed_messages(self):
         """
         Apply buffered messages accumulated while the synchronizer was paused.
@@ -659,13 +677,15 @@ class WorldSynchronizer(Synchronizer, ModelChangeCallback, StateChangeCallback):
         if not self.missed_messages:
             return
         pending_messages = self.missed_messages
+        already_acknowledged_count = self._acknowledged_missed_message_count
         self.missed_messages = []
+        self._acknowledged_missed_message_count = 0
         # Hold the world lock across the whole batch so the buffered messages apply atomically: a
         # concurrent modify_world on another thread serializes behind it instead of interleaving.
         with self._world._world_lock:
             for message in pending_messages:
                 self.apply_message(message)
-        for message in pending_messages:
+        for message in pending_messages[already_acknowledged_count:]:
             self.acknowledge_message(message)
 
     def resume(self):

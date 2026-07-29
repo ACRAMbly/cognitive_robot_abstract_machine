@@ -8,6 +8,7 @@ from giskardpy.executor import Executor, SimulationPacer
 from giskardpy.middleware.ros2.command_publishing import CommandPublisher
 from giskardpy.middleware.ros2.control_loop import ControlLoop
 from giskardpy.middleware.ros2.feedback_publisher import ActionFeedbackPublisher
+from giskardpy.middleware.ros2.heartbeat import Heartbeat
 from giskardpy.middleware.ros2.input_synchronization import (
     InputSynchronizer,
     WorldStateInputs,
@@ -130,6 +131,11 @@ class WorldSyncMimic:
     How often buffered messages of other processes were applied.
     """
 
+    acknowledged_message_batches: int = 0
+    """
+    How often the receipt of buffered messages was acknowledged.
+    """
+
     published_states: int = 0
     """
     How often the world state was published.
@@ -137,6 +143,9 @@ class WorldSyncMimic:
 
     def apply_missed_messages(self) -> None:
         self.applied_message_batches += 1
+
+    def acknowledge_missed_messages(self) -> None:
+        self.acknowledged_message_batches += 1
 
     def on_state_change(self, **kwargs) -> None:
         self.published_states += 1
@@ -207,6 +216,39 @@ class BrokenInputError(Exception):
 
 
 @dataclass
+class HeartbeatWatcher(InputSynchronizer):
+    """
+    Watches the heartbeat from inside the control loop and cancels the goal once it
+    ticked often enough, standing in for a client that cancels a never-ending motion.
+    """
+
+    heartbeat: Heartbeat = None
+    """
+    The heartbeat that is watched.
+    """
+
+    action_server: Optional[GoalQueueMimic] = None
+    """
+    The action server the cancel request is written to.
+    """
+
+    ticks_until_cancel: int = 5
+    """
+    How many ticks to observe before requesting the cancel.
+    """
+
+    observed_ticks: int = 0
+    """
+    How many ticks were observed while the goal was running.
+    """
+
+    def apply(self) -> None:
+        self.observed_ticks = self.heartbeat.count
+        if self.observed_ticks >= self.ticks_until_cancel:
+            self.action_server.cancel_requested = True
+
+
+@dataclass
 class RecordingPlotter(PostGoalPlotter):
     """
     Records for which goals debug plots were requested.
@@ -262,6 +304,7 @@ class MotionServerFixture:
     idle_input: RecordingInputSynchronizer
     control_input: RecordingInputSynchronizer
     plotter: RecordingPlotter
+    heartbeat: Heartbeat
 
 
 @pytest.fixture()
@@ -275,11 +318,14 @@ def motion_server(init_rospy) -> MotionServerFixture:
     )
     command_publisher = RecordingCommandPublisher(world=world)
     control_input = RecordingInputSynchronizer(world=world, executor=executor)
+    heartbeat = Heartbeat()
     control_loop = ControlLoop(
         executor=executor,
         action_server=action_server,
         feedback_publisher=feedback_publisher,
         inputs=WorldStateInputs(world=world, synchronizers=[control_input]),
+        heartbeat=heartbeat,
+        world_synchronizer=world_synchronizer,
         command_publishers=[command_publisher],
     )
     idle_input = RecordingInputSynchronizer(world=world, executor=executor)
@@ -291,6 +337,7 @@ def motion_server(init_rospy) -> MotionServerFixture:
         world_synchronizer=world_synchronizer,
         feedback_publisher=feedback_publisher,
         inputs=WorldStateInputs(world=world, synchronizers=[idle_input]),
+        heartbeat=heartbeat,
         post_goal_plotters=[plotter],
     )
     return MotionServerFixture(
@@ -303,6 +350,7 @@ def motion_server(init_rospy) -> MotionServerFixture:
         idle_input=idle_input,
         control_input=control_input,
         plotter=plotter,
+        heartbeat=heartbeat,
     )
 
 
@@ -489,11 +537,13 @@ class TestIdleLoop:
 
         assert len(motion_server.idle_input.applied_at_control_cycles) == 1
 
-    def test_cycle_count_increases(self, motion_server: MotionServerFixture):
+    def test_heartbeat_ticks_once_per_idle_cycle(
+        self, motion_server: MotionServerFixture
+    ):
         motion_server.motion_server.run_idle_cycle()
         motion_server.motion_server.run_idle_cycle()
 
-        assert motion_server.motion_server.cycle_count == 2
+        assert motion_server.heartbeat.count == 2
 
     def test_nothing_happens_while_the_world_is_being_modified(
         self, motion_server: MotionServerFixture
@@ -501,5 +551,76 @@ class TestIdleLoop:
         with motion_server.executor.context.world.modify_world():
             motion_server.motion_server.run_idle_cycle()
 
-        assert motion_server.motion_server.cycle_count == 0
+        assert motion_server.heartbeat.count == 0
         assert motion_server.world_synchronizer.applied_message_batches == 0
+
+
+class TestHeartbeatDuringGoals:
+    """
+    The heartbeat keeps ticking while a goal is running, so an observer waiting for the
+    server to make progress is never blocked by a motion that only ends on cancel.
+    """
+
+    def test_heartbeat_ticks_during_a_goal(self, motion_server: MotionServerFixture):
+        motion_server.action_server.goal_json = create_goal_json()
+        heartbeat_before_goal = motion_server.heartbeat.count
+
+        motion_server.motion_server.run_idle_cycle()
+
+        control_cycles = len(motion_server.control_input.applied_at_control_cycles)
+        assert control_cycles > 1
+        assert (
+            motion_server.heartbeat.count == heartbeat_before_goal + 1 + control_cycles
+        )
+
+    def test_heartbeat_ticks_while_a_goal_never_ends_on_its_own(
+        self, motion_server: MotionServerFixture
+    ):
+        """
+        A goal without an end motion only stops on cancel; an observer must still see
+        progress while it runs.
+        """
+        cancel_after = HeartbeatWatcher(
+            world=motion_server.executor.context.world,
+            heartbeat=motion_server.heartbeat,
+            action_server=motion_server.action_server,
+            ticks_until_cancel=5,
+        )
+        motion_server.control_loop.inputs.synchronizers.append(cancel_after)
+        motion_server.action_server.goal_json = create_goal_json(seconds=1000.0)
+
+        motion_server.motion_server.run_idle_cycle()
+
+        assert cancel_after.observed_ticks >= 5
+        assert motion_server.action_server.outcome == "canceled"
+
+
+class TestWorldUpdatesDuringGoals:
+    """
+    World updates of other processes are only applied while the server is idle, but
+    their receipt is acknowledged during a goal as well, so a process that modifies the
+    world synchronously is not blocked until the motion is over.
+    """
+
+    def test_receipt_is_acknowledged_once_per_control_cycle(
+        self, motion_server: MotionServerFixture
+    ):
+        motion_server.action_server.goal_json = create_goal_json()
+
+        motion_server.motion_server.run_idle_cycle()
+
+        control_cycles = len(motion_server.control_input.applied_at_control_cycles)
+        assert control_cycles > 1
+        assert (
+            motion_server.world_synchronizer.acknowledged_message_batches
+            == control_cycles
+        )
+
+    def test_updates_are_not_applied_while_a_goal_runs(
+        self, motion_server: MotionServerFixture
+    ):
+        motion_server.action_server.goal_json = create_goal_json()
+
+        motion_server.motion_server.run_idle_cycle()
+
+        assert motion_server.world_synchronizer.applied_message_batches == 1

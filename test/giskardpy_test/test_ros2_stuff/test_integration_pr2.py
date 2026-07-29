@@ -1926,23 +1926,24 @@ class TestActionServerEvents:
             ),
             parent_link=giskard.r_tip,
         )
+
         # worlds should be out of sync until the motion is done
         assert giskard.api.world.get_kinematic_structure_entity_by_name("box")
         with pytest.raises(WorldEntityNotFoundError):
-            self.giskard.executor.context.world.get_kinematic_structure_entity_by_name(
+            giskard.giskard.executor.context.world.get_kinematic_structure_entity_by_name(
                 "box"
             )
+
         wait_for_future_to_complete(giskard.api.cancel_goal_async())
         with pytest.raises(ExecutionCanceledException):
             await giskard.api.get_result()
 
         await asyncio.sleep(1)
+
         # they should be in sync after its over
         assert giskard.api.world.get_kinematic_structure_entity_by_name("box")
-        assert (
-            self.giskard.executor.context.world.get_kinematic_structure_entity_by_name(
-                "box"
-            )
+        assert giskard.giskard.executor.context.world.get_kinematic_structure_entity_by_name(
+            "box"
         )
 
 
