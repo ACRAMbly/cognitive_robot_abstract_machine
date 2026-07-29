@@ -477,8 +477,7 @@ class Elevator(HasCaseAsRootBody, HasDoors, HasMechanicalJoint):
         """
         Drives the elevator to the floor given
         """
-        floor_plane_height = (floor.floor_plane[0].z + floor.floor_plane[1].z) / 2
-        drive_height = floor_plane_height + (self.scale.z / 2)
+        drive_height = floor.floor_plane[0].z + (self.scale.z / 2)
         self.mechanical_joint.position = drive_height
 
 
@@ -611,14 +610,9 @@ class LivingRoom(Room): ...
 
 
 @dataclass(eq=False)
-class Level(SemanticAnnotation):
+class Level(HasRootRegion):
     """
     A level of a building
-    """
-
-    root: Region = field(kw_only=True)
-    """
-    The region in space which makes up the level
     """
 
     @property
