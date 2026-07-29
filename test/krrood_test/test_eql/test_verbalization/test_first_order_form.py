@@ -21,7 +21,6 @@ from krrood.entity_query_language.factories import variable
 from krrood.entity_query_language.predicate import Predicate
 from krrood.entity_query_language.testing.result_verification import (
     first_order_form,
-    PlaceholderExampleField,
     placeholder_operands,
     VerbalizationResultsOfPackage,
 )
@@ -109,6 +108,35 @@ class Fastened(Predicate):
         return clause(Noun(fields["item"]), Copula(), Adjective("secure"))
 
 
+@dataclass(eq=False)
+class Gauge(Predicate):
+    """
+    A two-operand predicate whose ``unit`` field is never bound to a symbolic operand in
+    real usage -- only ever a literal -- so its class declares an ``_example_operands_``
+    override, the same way ``HasType``/``HasTypes`` do for ``types_``.
+    """
+
+    sensor: object
+    unit: object
+
+    def __call__(self) -> bool:
+        return True
+
+    @classmethod
+    def _verbalization_fragment_(cls, fields):
+        return clause(
+            Noun(fields["sensor"]),
+            Copula(),
+            Adjective("calibrated"),
+            Prepositions.IN,
+            Noun(fields["unit"]),
+        )
+
+    @classmethod
+    def _example_operands_(cls, operands):
+        return {**operands, "unit": "kPa"}
+
+
 # %% placeholder_operands and first_order_form take nothing but the class itself
 
 
@@ -149,6 +177,29 @@ def test_first_order_form_and_value_using_form_agree_when_types_match():
     assert first_order_form(Kindled) == verbalize_expression(bound_instance)
 
 
+# %% SymbolicCallable._example_operands_ -- a class-level "this field is never a real
+# %% operand" declaration, consulted only when generating/verifying a committed result
+
+
+def test_first_order_form_ignores_a_class_example_operands_override():
+    """
+    A truly value-agnostic rendering needs nothing external, so `first_order_form` keeps
+    the placeholder variable even for a class that declares `_example_operands_` -- that
+    hook is for `VerbalizationResultsOfPackage` alone.
+    """
+    assert first_order_form(Gauge) == "a sensor is calibrated in a unit"
+
+
+def test_snapshot_placeholder_operands_applies_a_class_example_operands_override():
+    snapshot = VerbalizationResultsOfPackage(package=krrood, results=())
+    assert snapshot.placeholder_operands(Gauge)["unit"] == "kPa"
+
+
+def test_snapshot_rendered_result_applies_a_class_example_operands_override():
+    snapshot = VerbalizationResultsOfPackage(package=krrood, results=())
+    assert snapshot.rendered_result(Gauge) == "a sensor is calibrated in 'kPa'"
+
+
 # %% VerbalizationResultsOfPackage layers operand_overrides on top -- a snapshot-testing
 # %% concern, not a first_order_form one, since a value-agnostic rendering needs nothing external
 
@@ -157,7 +208,7 @@ def test_snapshot_placeholder_operands_lets_a_registered_override_overwrite_a_fi
     snapshot = VerbalizationResultsOfPackage(
         package=krrood,
         results=(),
-        operand_overrides={PlaceholderExampleField(Kindled, "catalyst"): "ash"},
+        operand_overrides={Kindled: {"catalyst": "ash"}},
     )
     assert snapshot.placeholder_operands(Kindled)["catalyst"] == "ash"
 
@@ -171,7 +222,7 @@ def test_snapshot_rendered_result_respects_a_registered_override():
     snapshot = VerbalizationResultsOfPackage(
         package=krrood,
         results=(),
-        operand_overrides={PlaceholderExampleField(Kindled, "catalyst"): "ash"},
+        operand_overrides={Kindled: {"catalyst": "ash"}},
     )
     assert snapshot.rendered_result(Kindled) == "an Igniter is lit with 'ash'"
     assert snapshot.rendered_result(Kindled) != first_order_form(Kindled)
