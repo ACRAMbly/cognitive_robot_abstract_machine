@@ -155,4 +155,4 @@ def test_doctest_discovery_covers_the_testing_support_package():
     ``verbalization`` but reuses the same rendering pipeline, so its doctests must be
     scanned too.
     """
-    assert "krrood.entity_query_language.testing.surface_verification" in _MODULE_NAMES
+    assert "krrood.entity_query_language.testing.result_verification" in _MODULE_NAMES

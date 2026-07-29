@@ -1,5 +1,5 @@
 """
-Tests for the first-order (value-agnostic) rendering `surface_verification.py` provides,
+Tests for the first-order (value-agnostic) rendering `result_verification.py` provides,
 and how it pairs with the ordinary value-using form a bound expression already renders
 through `verbalize_expression`.
 
@@ -19,11 +19,11 @@ from dataclasses import dataclass
 import krrood
 from krrood.entity_query_language.factories import variable
 from krrood.entity_query_language.predicate import Predicate
-from krrood.entity_query_language.testing.surface_verification import (
+from krrood.entity_query_language.testing.result_verification import (
     first_order_form,
-    OverriddenOperand,
+    PlaceholderExampleField,
     placeholder_operands,
-    SymbolicSurfaceSnapshot,
+    VerbalizationResultsOfPackage,
 )
 from krrood.entity_query_language.verbalization.pipeline import verbalize_expression
 from krrood.entity_query_language.verbalization.vocabulary.english import Prepositions
@@ -149,29 +149,29 @@ def test_first_order_form_and_value_using_form_agree_when_types_match():
     assert first_order_form(Kindled) == verbalize_expression(bound_instance)
 
 
-# %% SymbolicSurfaceSnapshot layers operand_overrides on top -- a snapshot-testing concern,
-# %% not a first_order_form one, since a value-agnostic rendering needs nothing external
+# %% VerbalizationResultsOfPackage layers operand_overrides on top -- a snapshot-testing
+# %% concern, not a first_order_form one, since a value-agnostic rendering needs nothing external
 
 
 def test_snapshot_placeholder_operands_lets_a_registered_override_overwrite_a_field():
-    snapshot = SymbolicSurfaceSnapshot(
+    snapshot = VerbalizationResultsOfPackage(
         package=krrood,
-        surfaces=(),
-        operand_overrides={Kindled: [OverriddenOperand("catalyst", "ash")]},
+        results=(),
+        operand_overrides={PlaceholderExampleField(Kindled, "catalyst"): "ash"},
     )
     assert snapshot.placeholder_operands(Kindled)["catalyst"] == "ash"
 
 
-def test_snapshot_rendered_surface_respects_a_registered_override():
+def test_snapshot_rendered_result_respects_a_registered_override():
     """
     The overridden value appears in the rendered sentence in place of the un-overridden
     default's field-name fallback ("a catalyst") -- the whole point of an override, made
     directly observable rather than merely asserted.
     """
-    snapshot = SymbolicSurfaceSnapshot(
+    snapshot = VerbalizationResultsOfPackage(
         package=krrood,
-        surfaces=(),
-        operand_overrides={Kindled: [OverriddenOperand("catalyst", "ash")]},
+        results=(),
+        operand_overrides={PlaceholderExampleField(Kindled, "catalyst"): "ash"},
     )
-    assert snapshot.rendered_surface(Kindled) == "an Igniter is lit with 'ash'"
-    assert snapshot.rendered_surface(Kindled) != first_order_form(Kindled)
+    assert snapshot.rendered_result(Kindled) == "an Igniter is lit with 'ash'"
+    assert snapshot.rendered_result(Kindled) != first_order_form(Kindled)
