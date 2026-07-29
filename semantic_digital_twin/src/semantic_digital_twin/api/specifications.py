@@ -117,7 +117,7 @@ class NamedSpecification(ABC):
             used.
         :return: The normalized name, or None when neither name is set.
         """
-        used_name = name if name is not None else self.name
+        used_name = name or self.name
         if used_name is None:
             return None
         return PrefixedName(name=used_name)
