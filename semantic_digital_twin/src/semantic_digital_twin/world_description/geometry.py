@@ -414,16 +414,6 @@ class Shape(ABC, SubclassJSONSerializer, HasSimulatorProperties):
 
         return True
 
-    def copy_for_world(self, world: World) -> Self:
-        """
-        Creates a reference-frame-free copy of this shape for use in another world.
-
-        :param world: Accepted for interface consistency with other ``copy_for_world``
-            methods; ignored here.
-        :return: A copy of this shape without a reference frame.
-        """
-        return self.copy_without_reference_frame()
-
     def copy_without_reference_frame(self) -> Self:
         """
         Creates a copy of this shape without the reference frame.

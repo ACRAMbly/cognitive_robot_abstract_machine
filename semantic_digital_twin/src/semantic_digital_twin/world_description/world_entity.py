@@ -536,8 +536,8 @@ class Body(KinematicStructureEntity):
         return Body(
             name=self.name,
             id=self.id,
-            visual=self.visual.copy_for_world(new_world),
-            collision=self.collision.copy_for_world(new_world),
+            visual=self.visual.copy_without_reference_frame(),
+            collision=self.collision.copy_without_reference_frame(),
             inertial=deepcopy(self.inertial),
         )
 
@@ -589,7 +589,7 @@ class Region(KinematicStructureEntity):
         return Region(
             name=self.name,
             id=self.id,
-            area=self.area.copy_for_world(new_world),
+            area=self.area.copy_without_reference_frame(),
         )
 
 

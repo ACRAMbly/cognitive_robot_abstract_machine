@@ -29,15 +29,11 @@ from semantic_digital_twin.world_description.degree_of_freedom import (
     DegreeOfFreedomLimits,
 )
 from semantic_digital_twin.world_description.geometry import Color, Scale
-from semantic_digital_twin.world_description.world_entity import Body
 
 
 @pytest.fixture
 def wall_door_handle_world():
-    world = World()
-    root = Body(name=PrefixedName("map"))
-    with world.modify_world():
-        world.add_body(root)
+    world = World.create_with_root_body(PrefixedName("map"))
 
     with world.modify_world():
         wall = Wall.create_with_new_body_in_world(

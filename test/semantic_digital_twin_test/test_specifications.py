@@ -44,6 +44,8 @@ from semantic_digital_twin.semantic_annotations.semantic_annotations import (
     Aperture,
     Drawer,
     Table,
+    DoorWithType,
+    EntryWay,
 )
 from semantic_digital_twin.spatial_types import (
     HomogeneousTransformationMatrix,
@@ -51,8 +53,10 @@ from semantic_digital_twin.spatial_types import (
     Vector3,
 )
 from semantic_digital_twin.semantic_annotations.mixins import (
+    HasApertures,
     HasRootBody,
     HasRootRegion,
+    IsPartWholeRelationship,
 )
 from semantic_digital_twin.world import World
 from semantic_digital_twin.world_description.connections import (
@@ -66,7 +70,7 @@ from semantic_digital_twin.world_description.degree_of_freedom import (
     DegreeOfFreedomLimits,
 )
 from semantic_digital_twin.spatial_types.derivatives import DerivativeMap
-from semantic_digital_twin.world_description.geometry import Scale, Box
+from semantic_digital_twin.world_description.geometry import Color, Scale, Box
 from semantic_digital_twin.world_description.inertial_properties import Inertial
 from semantic_digital_twin.world_description.shape_collection import ShapeCollection
 from semantic_digital_twin.world_description.world_entity import Body, Region
@@ -76,12 +80,19 @@ RESOURCES = (
 )
 
 
+# %% spawning entities, connections and annotations
+
+
+def _fresh_world() -> World:
+    """
+    A world holding nothing but its root body.
+    """
+    return World.create_with_root_body(PrefixedName("root", "world"))
+
+
 @pytest.fixture
 def empty_world() -> World:
-    world = World()
-    with world.modify_world():
-        world.add_body(Body(name=PrefixedName("root", "world")))
-    return world
+    return _fresh_world()
 
 
 def test_body_specification_spawns_fixed(empty_world):
@@ -223,6 +234,9 @@ def test_nested_annotation_on_non_part_whole_field_raises():
         )
 
 
+# %% world specifications
+
+
 RESOURCE_DIR = os.path.join(
     os.path.dirname(os.path.abspath(__file__)),
     "..",
@@ -271,6 +285,9 @@ def test_world_specification_from_mjcf_environment():
     ).to_domain_object()
     assert not world.is_empty()
     assert world.root is not None
+
+
+# %% shape constructors
 
 
 @pytest.mark.parametrize(
@@ -503,10 +520,9 @@ def test_world_specification_annotation_starting_object(empty_world):
     assert len(milks) == 1
 
 
-#####################################################################
+# %% connection specification parameters
 # ConnectionSpecification captures a connection type and the keyword
 # arguments forwarded to its create_with_dofs.
-#####################################################################
 
 
 def test_fixed_connection_spec_binds_type_without_params():
@@ -568,7 +584,9 @@ def _connection_specification_types() -> list[type[ConnectionSpecification]]:
 def _build_connection_specification(
     specification_type: type[ConnectionSpecification],
 ) -> ConnectionSpecification:
-    """Build a specification, supplying the parameters its own family requires."""
+    """
+    Build a specification, supplying the parameters its own family requires.
+    """
     if issubclass(specification_type, ActiveConnection1DOFSpecification):
         return specification_type(axis=Vector3.Z())
     return specification_type()
@@ -682,12 +700,11 @@ def test_parent_connection_specification_is_built_per_call():
     assert first.axis is not second.axis
 
 
-#####################################################################
+# %% default geometry specifications match the factories
 # get_default_body_specification / get_default_region_specification
 # reproduce the geometry that create_with_new_body_in_world(scale=...)
 # (and Aperture's region factory) generate, for every class that
 # implements its own geometry-generating factory override.
-#####################################################################
 
 
 def _assert_same_geometry(
@@ -819,18 +836,10 @@ def test_default_spec_robot_part_raises():
         AbstractRobotPart.get_default_body_specification("part", Scale(1, 1, 1))
 
 
-#####################################################################
+# %% default annotation specifications
 # get_default_annotation_specification wraps the geometry spec into a
 # SemanticAnnotationWithRootSpecification that spawns an annotation
 # equivalent to create_with_new_body_in_world.
-#####################################################################
-
-
-def _fresh_world() -> World:
-    world = World()
-    with world.modify_world():
-        world.add_body(Body(name=PrefixedName("root", "world")))
-    return world
 
 
 def test_annotation_spec_base_body(empty_world):
@@ -895,10 +904,9 @@ def test_annotation_spec_robot_part_raises():
         AbstractRobotPart.get_default_annotation_specification("part", Scale(1, 1, 1))
 
 
-#####################################################################
+# %% nested annotation parts
 # Nested annotations: part_specifications entries are spawned and
 # mounted via the part-whole `add`, keyed by the target field name.
-#####################################################################
 
 
 def _spawn_with_parts(world, whole_type, whole_scale, parts):
@@ -1187,11 +1195,10 @@ def test_nested_composite_matches_manual_construction(empty_world):
     _assert_same_geometry(drawer.handle.root.collision, manual_handle.root.collision)
 
 
-#####################################################################
+# %% factory defaults are not shared mutable state
 # Factory overrides must not carry shared mutable spatial defaults:
 # a Vector3 default is constructed once at definition time and would
 # be aliased by every caller that mutates it.
-#####################################################################
 
 
 def _factory_overrides():
@@ -1222,10 +1229,9 @@ def test_factories_have_no_shared_mutable_spatial_defaults():
     assert not offenders, f"shared mutable defaults: {offenders}"
 
 
-#####################################################################
+# %% zero-argument parent connection resolution
 # Spawning resolves an annotation's parent connection through the
 # zero-argument form, so every override must keep that form working.
-#####################################################################
 
 
 def _annotation_types_declaring_a_parent_connection():
@@ -1253,10 +1259,9 @@ def test_parent_connection_specification_overrides_stay_zero_argument():
     assert not offenders, f"required parameters break the spawn fallback: {offenders}"
 
 
-#####################################################################
+# %% default geometry builders take a connection
 # The per-class default geometry builders take a connection just like
 # BodySpecification's own builders do.
-#####################################################################
 
 
 @pytest.mark.parametrize(
@@ -1292,3 +1297,136 @@ def test_custom_geometry_and_connection_build_in_one_expression(empty_world):
         ),
     ).spawn(empty_world)
     assert isinstance(annotation.root.parent_connection, Connection6DoF)
+
+
+# %% door entry way as a nested part
+# A door's entry way is declared on the door's default specification and mounted
+# through the part-whole `add`. It is coextensive with the door leaf, so mounting it
+# must not cut the door; mounting the same instance onto a wall must still cut.
+
+
+def test_door_keeps_geometry_when_entry_way_is_mounted(empty_world):
+    scale = Scale(0.03, 1, 2)
+    with empty_world.modify_world():
+        door = Door.create_with_new_body_in_world(
+            name="door", world=empty_world, scale=scale
+        )
+    assert len(door.root.collision.shapes) > 0
+    expected = Door.get_default_body_specification("door", scale).to_domain_object()
+    _assert_same_geometry(expected.collision, door.root.collision)
+
+
+def test_entry_way_still_cuts_a_wall(empty_world):
+    with empty_world.modify_world():
+        wall = Wall.create_with_new_body_in_world(
+            name="wall", world=empty_world, scale=Scale(0.1, 4, 3)
+        )
+        door = Door.create_with_new_body_in_world(
+            name="door", world=empty_world, scale=Scale(0.03, 1, 2)
+        )
+    shape_count_before = len(wall.root.collision.shapes)
+
+    with empty_world.modify_world():
+        wall.add(door.entry_way)
+
+    assert door.entry_way in wall.apertures
+    assert len(wall.root.collision.shapes) != shape_count_before
+    assert door.entry_way.root.parent_connection.parent is wall.root
+
+
+def test_door_spawns_its_entry_way_as_a_part(empty_world):
+    with empty_world.modify_world():
+        door = Door.create_with_new_body_in_world(name="door", world=empty_world)
+    assert isinstance(door.entry_way, EntryWay)
+    assert door.entry_way.root.parent_connection.parent is door.root
+    assert isinstance(door.entry_way.root.parent_connection, FixedConnection)
+    assert door.entry_way in empty_world.get_semantic_annotations_by_type(EntryWay)
+
+
+def test_entry_way_is_coextensive_with_the_door_leaf(empty_world):
+    with empty_world.modify_world():
+        door = Door.create_with_new_body_in_world(
+            name="door", world=empty_world, scale=Scale(0.03, 1, 2)
+        )
+    np.testing.assert_allclose(
+        door.entry_way.root.area.combined_mesh.bounds,
+        door.root.collision.combined_mesh.bounds,
+    )
+
+
+def test_entry_way_geometry_is_translucent_white(empty_world):
+    with empty_world.modify_world():
+        door = Door.create_with_new_body_in_world(name="door", world=empty_world)
+    assert door.entry_way.root.area[0].color == Color(R=1.0, G=1.0, B=1.0, A=0.2)
+
+
+def test_entry_way_is_named_after_the_door(empty_world):
+    with empty_world.modify_world():
+        door = Door.create_with_new_body_in_world(name="door", world=empty_world)
+    assert door.entry_way.name == PrefixedName("door_entry_way")
+
+
+def test_door_default_specification_declares_the_entry_way_part():
+    specification = Door.get_default_annotation_specification("door")
+    entry_way_specification = specification.part_specifications["entry_way"]
+    assert entry_way_specification.semantic_annotation_type is EntryWay
+
+
+def test_caller_supplied_entry_way_specification_replaces_the_default(empty_world):
+    custom = EntryWay.get_default_annotation_specification(
+        "custom", Scale(0.03, 0.5, 1)
+    )
+    door = Door.get_default_annotation_specification(
+        "door", part_specifications={"entry_way": custom}
+    ).spawn(empty_world)
+    assert door.entry_way.name == PrefixedName("custom")
+    assert len(empty_world.get_semantic_annotations_by_type(EntryWay)) == 1
+
+
+def test_caller_supplied_parts_survive_entry_way_injection(empty_world):
+    handle_part = Handle.get_default_annotation_specification(
+        "handle", Scale(0.1, 0.05, 0.05)
+    )
+    door = Door.get_default_annotation_specification(
+        "door", part_specifications={"handle": handle_part}
+    ).spawn(empty_world)
+    assert isinstance(door.handle, Handle)
+    assert isinstance(door.entry_way, EntryWay)
+
+
+def test_entry_way_in_annotation_kwargs_raises():
+    with pytest.raises(PartWholeFieldInAnnotationKwargs):
+        Door.get_default_annotation_specification(
+            "door", annotation_kwargs={"entry_way": None}
+        )
+
+
+def test_door_with_type_spawns_an_entry_way(empty_world):
+    with empty_world.modify_world():
+        door = DoorWithType.create_with_new_body_in_world(
+            name="typed_door", world=empty_world
+        )
+    assert isinstance(door.entry_way, EntryWay)
+
+
+def test_only_aperture_fields_remove_geometry_from_the_whole():
+    # The cut is declared by the relationship, not by the part's type: the same EntryWay
+    # cuts a wall it is mounted into but not the door it belongs to.
+    apertures = IsPartWholeRelationship.of_field(HasApertures, "apertures")
+    entry_way = IsPartWholeRelationship.of_field(Door, "entry_way")
+    assert apertures.removes_part_geometry_from_whole
+    assert not entry_way.removes_part_geometry_from_whole
+
+
+def test_aperture_default_annotation_specification_without_scale_uses_default_scale(
+    empty_world,
+):
+    # Aperture overrides get_default_region_specification to fall back to Scale() where
+    # the base yields a geometry-less spec; dispatch must reach that override.
+    annotation = Aperture.get_default_annotation_specification("aperture").spawn(
+        empty_world
+    )
+    expected = Aperture.get_default_region_specification(
+        "aperture", Scale()
+    ).to_domain_object()
+    _assert_same_geometry(expected.area, annotation.root.area)

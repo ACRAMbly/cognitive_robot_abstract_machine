@@ -207,10 +207,6 @@ class ShapeCollection(SubclassJSONSerializer):
         )
         return self.world.transform(com, self.world.root)
 
-    def copy_for_world(self, world: World) -> ShapeCollection:
-        new_shapes = [s.copy_for_world(world) for s in self.shapes]
-        return ShapeCollection(new_shapes)
-
     @property
     def scale(self):
         return (

@@ -5,8 +5,6 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import (
     Iterable,
-    Union,
-    Optional,
     TYPE_CHECKING,
     cast,
     Type,
@@ -78,6 +76,7 @@ if TYPE_CHECKING:
     from semantic_digital_twin.adapters.package_resolver import PathResolver
 
 
+# %% specification type parameters
 TWorldEntity = TypeVar("TWorldEntity", bound=WorldEntity)
 TKinematicStructureEntity = TypeVar(
     "TKinematicStructureEntity", bound=KinematicStructureEntity
@@ -86,6 +85,9 @@ TConnection = TypeVar("TConnection", bound=Connection)
 TSemanticAnnotation = TypeVar(
     "TSemanticAnnotation", bound="HasRootKinematicStructureEntity"
 )
+
+
+# %% specification base classes
 
 
 @dataclass
@@ -98,14 +100,14 @@ class NamedSpecification(ABC):
     masquerading as the other.
     """
 
-    name: Optional[str]
+    name: str | None
     """
     The name of entities created from this specification, as a plain string.
 
     ``None`` defers naming to materialization.
     """
 
-    def _resolved_name(self, name: Optional[str] = None) -> Optional[PrefixedName]:
+    def _resolved_name(self, name: str | None = None) -> PrefixedName | None:
         """
         Normalize the spawn-time name override, or the spec's own name, into a
         :class:`PrefixedName`.
@@ -136,7 +138,7 @@ class SpawnSpecification(NamedSpecification, Generic[TWorldEntity], ABC):
     def spawn(
         self,
         world: World,
-        name: Optional[str] = None,
+        name: str | None = None,
         parent: KinematicStructureEntity | None = None,
         parent_T_self: HomogeneousTransformationMatrix | None = None,
     ) -> TWorldEntity:
@@ -169,6 +171,9 @@ class SpawnSpecification(NamedSpecification, Generic[TWorldEntity], ABC):
             child.spawn(world, parent=parent)
 
 
+# %% connection specifications
+
+
 @dataclass
 class ConnectionSpecification(
     NamedSpecification, Generic[TConnection], SubClassSafeGeneric, ABC
@@ -186,7 +191,7 @@ class ConnectionSpecification(
     :meth:`~semantic_digital_twin.world_description.world_entity.Connection.create_with_dofs`.
     """
 
-    name: Optional[str] = field(default=None, kw_only=True)
+    name: str | None = field(default=None, kw_only=True)
     """
     Optional connection name as a plain string.
 
@@ -227,7 +232,7 @@ class ConnectionSpecification(
         parent: KinematicStructureEntity | None = None,
         child: KinematicStructureEntity | None = None,
         parent_T_connection: HomogeneousTransformationMatrix | None = None,
-        name: Optional[str] = None,
+        name: str | None = None,
     ) -> Connection:
         """
         Materialize the connection between ``parent`` and ``child`` and add it to the
@@ -328,7 +333,7 @@ class ActiveConnection1DOFSpecification(ConnectionSpecification[TConnection], AB
     Constant offset applied to the degree of freedom's motion.
     """
 
-    dof_limits: Optional[DegreeOfFreedomLimits] = None
+    dof_limits: DegreeOfFreedomLimits | None = None
     """
     Limits for the generated degree of freedom.
     """
@@ -358,6 +363,9 @@ class RevoluteConnectionSpecification(
     Use this for a single rotational degree of freedom about the connection axis, such
     as a door swinging on its hinge.
     """
+
+
+# %% kinematic structure entity specifications
 
 
 @dataclass
@@ -399,14 +407,14 @@ class KinematicStructureEntitySpecification(
     Identity by default.
     """
 
-    connection_specification: Optional[ConnectionSpecification] = None
+    connection_specification: ConnectionSpecification | None = None
     """
     How the spawned entity attaches to its parent.
 
     ``None`` means :meth:`spawn` uses a fixed connection.
     """
 
-    def to_domain_object(self, name: Optional[str] = None) -> TKinematicStructureEntity:
+    def to_domain_object(self, name: str | None = None) -> TKinematicStructureEntity:
         """
         Materialize a new, world-independent kinematic structure entity from this spec.
 
@@ -428,7 +436,7 @@ class KinematicStructureEntitySpecification(
         self,
         world: World,
         connection_specification: ConnectionSpecification,
-        name: Optional[str] = None,
+        name: str | None = None,
         parent: KinematicStructureEntity | None = None,
         parent_T_self: HomogeneousTransformationMatrix | None = None,
     ) -> TKinematicStructureEntity:
@@ -460,7 +468,7 @@ class KinematicStructureEntitySpecification(
     def spawn(
         self,
         world: World,
-        name: Optional[str] = None,
+        name: str | None = None,
         parent: KinematicStructureEntity | None = None,
         parent_T_self: HomogeneousTransformationMatrix | None = None,
     ) -> TKinematicStructureEntity:
@@ -489,11 +497,11 @@ class KinematicStructureEntitySpecification(
         cls,
         name: str,
         scale: Scale,
-        color: Optional[Color] = None,
-        origin: Optional[HomogeneousTransformationMatrix] = None,
-        parent_T_self: Optional[HomogeneousTransformationMatrix] = None,
+        color: Color | None = None,
+        origin: HomogeneousTransformationMatrix | None = None,
+        parent_T_self: HomogeneousTransformationMatrix | None = None,
         child_specifications: list[KinematicStructureEntitySpecification] | None = None,
-        connection_specification: Optional[ConnectionSpecification] = None,
+        connection_specification: ConnectionSpecification | None = None,
     ) -> Self:
         """
         Specification for a kinematic structure entity with a single box shape.
@@ -527,11 +535,11 @@ class KinematicStructureEntitySpecification(
         cls,
         name: str,
         radius: float,
-        color: Optional[Color] = None,
-        origin: Optional[HomogeneousTransformationMatrix] = None,
-        parent_T_self: Optional[HomogeneousTransformationMatrix] = None,
+        color: Color | None = None,
+        origin: HomogeneousTransformationMatrix | None = None,
+        parent_T_self: HomogeneousTransformationMatrix | None = None,
         child_specifications: list[KinematicStructureEntitySpecification] | None = None,
-        connection_specification: Optional[ConnectionSpecification] = None,
+        connection_specification: ConnectionSpecification | None = None,
     ) -> Self:
         """
         Specification for a kinematic structure entity with a single sphere shape.
@@ -567,11 +575,11 @@ class KinematicStructureEntitySpecification(
         name: str,
         width: float,
         height: float,
-        color: Optional[Color] = None,
-        origin: Optional[HomogeneousTransformationMatrix] = None,
-        parent_T_self: Optional[HomogeneousTransformationMatrix] = None,
+        color: Color | None = None,
+        origin: HomogeneousTransformationMatrix | None = None,
+        parent_T_self: HomogeneousTransformationMatrix | None = None,
         child_specifications: list[KinematicStructureEntitySpecification] | None = None,
-        connection_specification: Optional[ConnectionSpecification] = None,
+        connection_specification: ConnectionSpecification | None = None,
     ) -> Self:
         """
         Specification for a kinematic structure entity with a single cylinder shape.
@@ -608,12 +616,12 @@ class KinematicStructureEntitySpecification(
         cls,
         name: str,
         filename: str,
-        scale: Optional[Scale] = None,
-        color: Optional[Color] = None,
-        origin: Optional[HomogeneousTransformationMatrix] = None,
-        parent_T_self: Optional[HomogeneousTransformationMatrix] = None,
+        scale: Scale | None = None,
+        color: Color | None = None,
+        origin: HomogeneousTransformationMatrix | None = None,
+        parent_T_self: HomogeneousTransformationMatrix | None = None,
         child_specifications: list[KinematicStructureEntitySpecification] | None = None,
-        connection_specification: Optional[ConnectionSpecification] = None,
+        connection_specification: ConnectionSpecification | None = None,
     ) -> Self:
         """
         Specification for a kinematic structure entity with a single mesh shape loaded
@@ -651,9 +659,9 @@ class KinematicStructureEntitySpecification(
         cls,
         name: str,
         event: Event,
-        parent_T_self: Optional[HomogeneousTransformationMatrix] = None,
+        parent_T_self: HomogeneousTransformationMatrix | None = None,
         child_specifications: list[KinematicStructureEntitySpecification] | None = None,
-        connection_specification: Optional[ConnectionSpecification] = None,
+        connection_specification: ConnectionSpecification | None = None,
     ) -> Self:
         """
         Specification whose shapes are the bounding boxes of a random event.
@@ -691,9 +699,9 @@ class KinematicStructureEntitySpecification(
         points_3d: List[Point3],
         minimum_thickness: float = 0.005,
         singular_value_ratio_tolerance: float = 1e-7,
-        parent_T_self: Optional[HomogeneousTransformationMatrix] = None,
+        parent_T_self: HomogeneousTransformationMatrix | None = None,
         child_specifications: list[KinematicStructureEntitySpecification] | None = None,
-        connection_specification: Optional[ConnectionSpecification] = None,
+        connection_specification: ConnectionSpecification | None = None,
     ) -> Self:
         """
         Specification whose geometry is the convex hull of a point cloud.
@@ -738,14 +746,14 @@ class BodySpecification(KinematicStructureEntitySpecification[Body]):
     parameters and a separate visual shape collection.
     """
 
-    inertial: Optional[Inertial] = None
+    inertial: Inertial | None = None
     """
     Inertia properties of created bodies.
 
     None means the Body default.
     """
 
-    visual_shapes: Optional[ShapeCollection] = None
+    visual_shapes: ShapeCollection | None = None
     """
     Visual shapes when they differ from `shapes`.
 
@@ -753,7 +761,7 @@ class BodySpecification(KinematicStructureEntitySpecification[Body]):
     means no visual geometry.
     """
 
-    def to_domain_object(self, name: Optional[str] = None) -> Body:
+    def to_domain_object(self, name: str | None = None) -> Body:
         """
         Create a new, world-independent body from this specification.
 
@@ -784,6 +792,9 @@ class RegionSpecification(KinematicStructureEntitySpecification[Region]):
     Carries no fields beyond the base kinematic-structure-entity specification; it only
     binds the materialized domain-object type to :class:`Region`.
     """
+
+
+# %% semantic annotation specifications
 
 
 @dataclass
@@ -825,10 +836,8 @@ class SemanticAnnotationWithRootSpecification(SpawnSpecification[TSemanticAnnota
 
     part_specifications: dict[
         str,
-        Union[
-            SemanticAnnotationWithRootSpecification,
-            list[SemanticAnnotationWithRootSpecification],
-        ],
+        SemanticAnnotationWithRootSpecification
+        | list[SemanticAnnotationWithRootSpecification],
     ] = field(default_factory=dict)
     """
     Nested annotation parts keyed by the target part-whole relationship field name.
@@ -849,7 +858,7 @@ class SemanticAnnotationWithRootSpecification(SpawnSpecification[TSemanticAnnota
     def spawn(
         self,
         world: World,
-        name: Optional[str] = None,
+        name: str | None = None,
         parent: KinematicStructureEntity | None = None,
         parent_T_self: HomogeneousTransformationMatrix | None = None,
     ) -> TSemanticAnnotation:
@@ -859,7 +868,9 @@ class SemanticAnnotationWithRootSpecification(SpawnSpecification[TSemanticAnnota
         part specifications.
 
         The root's connection is the root specification's
-        :attr:`connection_specification`, which construction guarantees is set.
+        :attr:`connection_specification`, falling back to the annotation type's own
+        :meth:`~semantic_digital_twin.semantic_annotations.mixins.HasRootKinematicStructureEntity.parent_connection_specification`
+        when it is unset.
 
         :param world: The world the annotation, its root and its parts are added to.
         :param name: Overrides the specification's own name. If None, the spec's name is
@@ -992,6 +1003,9 @@ class SemanticAnnotationWithRootSpecification(SpawnSpecification[TSemanticAnnota
                 instance.add(part, field_name=field_name)
 
 
+# %% world specifications
+
+
 @dataclass
 class WorldSpecification:
     """
@@ -1012,7 +1026,7 @@ class WorldSpecification:
     Its root is ``world.root``.
     """
 
-    robot_semantic_annotation: Optional[Type[AbstractRobot]] = None
+    robot_semantic_annotation: Type[AbstractRobot] | None = None
     """
     The robot to merge into the environment.
 
@@ -1044,12 +1058,12 @@ class WorldSpecification:
         cls,
         file_path: str,
         *,
-        prefix: Optional[str] = None,
-        path_resolver: Optional[PathResolver] = None,
-        robot_semantic_annotation: Optional[Type[AbstractRobot]] = None,
-        world_T_odom: Optional[HomogeneousTransformationMatrix] = None,
-        odom_T_robot_start: Optional[HomogeneousTransformationMatrix] = None,
-        objects: Optional[list[SpawnSpecification]] = None,
+        prefix: str | None = None,
+        path_resolver: PathResolver | None = None,
+        robot_semantic_annotation: Type[AbstractRobot] | None = None,
+        world_T_odom: HomogeneousTransformationMatrix | None = None,
+        odom_T_robot_start: HomogeneousTransformationMatrix | None = None,
+        objects: list[SpawnSpecification] | None = None,
     ) -> Self:
         """
         Build a specification whose environment is parsed from a URDF file.
@@ -1084,12 +1098,12 @@ class WorldSpecification:
         cls,
         file_path: str,
         *,
-        prefix: Optional[str] = None,
-        mimic_joints: Optional[dict[str, str]] = None,
-        robot_semantic_annotation: Optional[Type[AbstractRobot]] = None,
-        world_T_odom: Optional[HomogeneousTransformationMatrix] = None,
-        odom_T_robot_start: Optional[HomogeneousTransformationMatrix] = None,
-        objects: Optional[list[SpawnSpecification]] = None,
+        prefix: str | None = None,
+        mimic_joints: dict[str, str] | None = None,
+        robot_semantic_annotation: Type[AbstractRobot] | None = None,
+        world_T_odom: HomogeneousTransformationMatrix | None = None,
+        odom_T_robot_start: HomogeneousTransformationMatrix | None = None,
+        objects: list[SpawnSpecification] | None = None,
     ) -> Self:
         """
         Build a specification whose environment is parsed from an MJCF (MuJoCo XML)

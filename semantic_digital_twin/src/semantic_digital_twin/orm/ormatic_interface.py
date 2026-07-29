@@ -5240,6 +5240,9 @@ class SpatialTypeVisualizationDAO(
         sqlalchemy.sql.sqltypes.Text, use_existing_column=True
     )
     marker_id_offset: Mapped[builtins.int] = mapped_column(use_existing_column=True)
+    label: Mapped[typing.Optional[builtins.str]] = mapped_column(
+        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
+    )
     lifetime_seconds: Mapped[builtins.float] = mapped_column(use_existing_column=True)
     arrow_length: Mapped[builtins.float] = mapped_column(use_existing_column=True)
     sphere_diameter: Mapped[builtins.float] = mapped_column(use_existing_column=True)
@@ -6156,9 +6159,37 @@ class WorldSpecificationDAO(
         nullable=True,
         use_existing_column=True,
     )
+    world_T_odom_id: Mapped[typing.Optional[builtins.int]] = mapped_column(
+        ForeignKey(
+            "HomogeneousTransformationMatrixMappingDAO.database_id", use_alter=True
+        ),
+        nullable=True,
+        use_existing_column=True,
+    )
+    odom_T_robot_start_id: Mapped[typing.Optional[builtins.int]] = mapped_column(
+        ForeignKey(
+            "HomogeneousTransformationMatrixMappingDAO.database_id", use_alter=True
+        ),
+        nullable=True,
+        use_existing_column=True,
+    )
 
     world: Mapped[WorldMappingDAO] = relationship(
         "WorldMappingDAO", uselist=False, foreign_keys=[world_id], post_update=True
+    )
+    world_T_odom: Mapped[HomogeneousTransformationMatrixMappingDAO] = relationship(
+        "HomogeneousTransformationMatrixMappingDAO",
+        uselist=False,
+        foreign_keys=[world_T_odom_id],
+        post_update=True,
+    )
+    odom_T_robot_start: Mapped[HomogeneousTransformationMatrixMappingDAO] = (
+        relationship(
+            "HomogeneousTransformationMatrixMappingDAO",
+            uselist=False,
+            foreign_keys=[odom_T_robot_start_id],
+            post_update=True,
+        )
     )
 
 
@@ -6341,6 +6372,10 @@ class CollisionCheckDAO(
 
     database_id: Mapped[builtins.int] = mapped_column(
         Integer, primary_key=True, use_existing_column=True
+    )
+
+    distance: Mapped[typing.Optional[builtins.float]] = mapped_column(
+        use_existing_column=True
     )
 
     body_a_id: Mapped[int] = mapped_column(
@@ -10364,6 +10399,10 @@ class IsPartWholeRelationshipDAO(
 
     database_id: Mapped[builtins.int] = mapped_column(
         Integer, primary_key=True, use_existing_column=True
+    )
+
+    removes_part_geometry_from_whole: Mapped[builtins.bool] = mapped_column(
+        use_existing_column=True
     )
 
 
