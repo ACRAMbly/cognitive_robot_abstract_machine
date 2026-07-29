@@ -26,10 +26,13 @@ from krrood.entity_query_language.utils import (
 
 
 @dataclass(eq=False, repr=False)
-class Union(TruthValuedExpression, MultiArityExpression):
+class EvaluatesChildrenInSequence(MultiArityExpression, ABC):
     """
-    A symbolic union operation that can be used to evaluate multiple symbolic
-    expressions in a sequence.
+    An expression that yields the results of each of its children in turn.
+
+    Binds the truth of every child result it passes on. A subclass that selects a value
+    instead overwrites that binding with the value, and is then not a
+    :class:`~krrood.entity_query_language.core.base_expressions.TruthValuedExpression`.
     """
 
     def _evaluate__(
@@ -47,12 +50,20 @@ class Union(TruthValuedExpression, MultiArityExpression):
 
     def add_child(self, child: SymbolicExpression) -> None:
         """
-        Adds a child operand to the union operator.
+        Adds a child operand to this expression.
 
         :param child: The child operand to add.
         """
         self._operation_children_ = self._operation_children_ + (child,)
         child._parent_ = self
+
+
+@dataclass(eq=False, repr=False)
+class Union(TruthValuedExpression, EvaluatesChildrenInSequence):
+    """
+    A symbolic union operation that can be used to evaluate multiple symbolic
+    expressions in a sequence.
+    """
 
 
 @dataclass(eq=False, repr=False)

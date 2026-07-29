@@ -17,6 +17,7 @@ from krrood.entity_query_language.core.base_expressions import (
 )
 from krrood.entity_query_language.factories import (
     and_,
+    concatenation,
     entity,
     evaluate_condition,
     exists,
@@ -164,6 +165,22 @@ def test_union_reports_the_truth_value_of_each_child_result():
     other_value = variable_from([3])
 
     assert truth_values(Union((value > 5, other_value > 5))) == [True, False]
+
+
+# %% concatenation
+
+
+def test_concatenation_evaluated_on_its_own_yields_the_values_it_selected():
+    """
+    A concatenation chains its children the way a union does, but binds the value each
+    child selected rather than that child's truth, so it is not a truth-valued
+    expression: its results are neither filtered by the truthiness of the value nor
+    withheld from the mapping an evaluation yields.
+    """
+    values = variable_from([0, 1])
+    other_values = variable_from([2])
+
+    assert list(concatenation(values, other_values).evaluate()) == [0, 1, 2]
 
 
 # %% cost of reading a result's truth

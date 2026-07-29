@@ -273,8 +273,9 @@ def _get_satisfied_names(ids, condition_root):
     """
     Get expression names from satisfied condition IDs by traversing the condition tree.
     """
-    all_cond = [condition_root] + list(condition_root._descendants_)
-    return {e._name_ for e in all_cond if e._id_ in ids}
+    return {
+        expression._name_ for expression in condition_root._expressions_with_ids_(ids)
+    }
 
 
 def test_satisfied_conditions_simple():
@@ -346,14 +347,6 @@ def test_satisfied_conditions_or_first_true():
     assert "<" not in expressions
 
 
-def _get_satisfied_expressions(ids, condition_root):
-    """
-    Get the expressions of satisfied condition IDs by traversing the condition tree.
-    """
-    all_cond = [condition_root] + list(condition_root._descendants_)
-    return {e for e in all_cond if e._id_ in ids}
-
-
 def test_satisfied_conditions_exclude_a_short_circuited_operator():
     """
     A whole operator skipped by a short-circuit is not satisfied.
@@ -368,8 +361,8 @@ def test_satisfied_conditions_exclude_a_short_circuited_operator():
     true_results = _get_true_results(query)
     assert len(true_results) == 1
 
-    satisfied = _get_satisfied_expressions(
-        true_results[0].satisfied_condition_ids, val._conditions_root_
+    satisfied = val._conditions_root_._expressions_with_ids_(
+        true_results[0].satisfied_condition_ids
     )
     assert any(isinstance(expression, OR) for expression in satisfied)
     assert not any(isinstance(expression, AND) for expression in satisfied)

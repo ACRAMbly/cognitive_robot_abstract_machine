@@ -20,6 +20,7 @@ from uuid import UUID
 
 from ordered_set import OrderedSet
 from typing_extensions import (
+    Collection,
     Dict,
     Any,
     Optional,
@@ -664,6 +665,19 @@ class SymbolicExpression(ABC):
         ``_descendants_`` override).
         """
         yield from self._iter_descendants_(set())
+
+    def _expressions_with_ids_(
+        self, ids: Collection[uuid.UUID]
+    ) -> Set[SymbolicExpression]:
+        """
+        :param ids: The identifiers to look for.
+        :return: This expression and its descendants whose identifier is in *ids*.
+        """
+        return {
+            expression
+            for expression in itertools.chain([self], self._descendants_)
+            if expression._id_ in ids
+        }
 
     def _iter_descendants_(
         self, visited_ids: Set[uuid.UUID]
