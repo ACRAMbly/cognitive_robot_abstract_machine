@@ -115,16 +115,6 @@ class Executor:
     Optional quadratic programming controller used for motion control.
     """
 
-    _control_cycle_index: int = field(init=False)
-    """
-    Tracks the index of the current control cycle.
-    """
-
-    _time_variable: FloatVariable = field(init=False)
-    """
-    Auxiliary variable representing the current time in seconds since the start of the
-    simulation.
-    """
 
     @property
     def time(self) -> float:
