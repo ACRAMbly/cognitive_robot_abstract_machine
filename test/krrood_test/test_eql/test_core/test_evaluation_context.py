@@ -57,7 +57,7 @@ def test_active_conditions_root_has_condition_when_claimed_with_a_genuine_filter
 
     tracking.claim(filter_condition, has_condition=True)
 
-    assert tracking.has_condition()
+    assert tracking.has_condition
 
 
 def test_active_conditions_root_has_no_condition_when_claimed_without_a_filter():
@@ -70,13 +70,13 @@ def test_active_conditions_root_has_no_condition_when_claimed_without_a_filter()
 
     tracking.claim(node, has_condition=False)
 
-    assert not tracking.has_condition()
+    assert not tracking.has_condition
 
 
 def test_active_conditions_root_has_condition_defaults_false_before_any_claim():
     tracking = ActiveConditionsRoot()
 
-    assert not tracking.has_condition()
+    assert not tracking.has_condition
 
 
 def test_evaluated_expression_ids_records_and_iterates():

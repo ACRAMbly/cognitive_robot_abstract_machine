@@ -107,7 +107,7 @@ class ActiveConditionsRoot:
     pass.
     """
 
-    _has_condition: bool = field(default=False, init=False)
+    has_condition: bool = field(default=False, init=False)
     """
     Whether the claimed root came from a genuine ``Filter``, rather than the Filter-less
     fallback to the evaluation's own starting expression.
@@ -120,22 +120,17 @@ class ActiveConditionsRoot:
 
         :param root: The node to claim, normally
             ``originating_expression._conditions_root_``.
-        :param has_condition: Whether *root* came from a genuine ``Filter``, so that
-            :meth:`has_condition` can answer "was this pass actually gated by a
-            ``Filter``" without recomputing it later in the pass from a node that may
-            itself be shared and structurally ambiguous.
+        :param has_condition: Whether *root* came from a genuine ``Filter``, recorded so
+            that it need not be recomputed later in the pass from a node that may itself
+            be shared and structurally ambiguous.
         """
         if self._root_id is None:
             self._root_id = root._id_
-            self._has_condition = has_condition
+            self.has_condition = has_condition
 
     def is_active_root(self, node: SymbolicExpression) -> bool:
         """:return: ``True`` if *node* is the active conditions root for this pass."""
         return self._root_id == node._id_
-
-    def has_condition(self) -> bool:
-        """:return: ``True`` if this pass's active root came from a genuine ``Filter``."""
-        return self._has_condition
 
 
 @dataclass
