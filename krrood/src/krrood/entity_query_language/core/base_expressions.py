@@ -83,12 +83,6 @@ class SymbolicExpression(ABC):
     statement.
     """
 
-    _records_truth_: ClassVar[bool] = False
-    """
-    Whether this expression's own binding holds the truth of an operation, which is what
-    makes its results worth filtering by truth. See :class:`TruthValuedExpression`.
-    """
-
     _children_: List[SymbolicExpression] = field(
         init=False, repr=False, default_factory=list
     )
@@ -229,7 +223,7 @@ class SymbolicExpression(ABC):
         results = (
             self._process_result_(res)
             for res in self._evaluate_()
-            if not self._records_truth_ or res.is_true
+            if not isinstance(self, TruthValuedExpression) or res.is_true
         )
         yield from itertools.islice(results, self._limit_)
 
@@ -378,7 +372,7 @@ class SymbolicExpression(ABC):
             {
                 expression: value
                 for expression, value in bound_expressions
-                if not expression._records_truth_
+                if not isinstance(expression, TruthValuedExpression)
             }
         )
 
@@ -894,11 +888,6 @@ class TruthValuedExpression(SymbolicExpression, ABC):
     truth (a logical operator, a quantifier, a rule-tree selector) has no separate value
     to report, and one that produces a value (a variable, an aggregator, a query) makes
     no truth claim of its own outside a condition.
-    """
-
-    _records_truth_: ClassVar[bool] = True
-    """
-    Whether this expression's own binding holds the truth of an operation.
     """
 
     def _process_result_(self, result: OperationResult) -> UnificationDict:

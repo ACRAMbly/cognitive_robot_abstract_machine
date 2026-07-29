@@ -25,6 +25,7 @@ from krrood.entity_query_language.factories import (
     an,
 )
 from krrood.entity_query_language.operators.comparator import Comparator
+from krrood.entity_query_language.operators.core_logical_operators import AND, OR
 from krrood.entity_query_language.query.query import Query
 from krrood.entity_query_language.query_graph import QueryGraph
 from krrood.symbol_graph.symbol_graph import Symbol
@@ -345,6 +346,14 @@ def test_satisfied_conditions_or_first_true():
     assert "<" not in expressions
 
 
+def _get_satisfied_expressions(ids, condition_root):
+    """
+    Get the expressions of satisfied condition IDs by traversing the condition tree.
+    """
+    all_cond = [condition_root] + list(condition_root._descendants_)
+    return {e for e in all_cond if e._id_ in ids}
+
+
 def test_satisfied_conditions_exclude_a_short_circuited_operator():
     """
     A whole operator skipped by a short-circuit is not satisfied.
@@ -359,11 +368,11 @@ def test_satisfied_conditions_exclude_a_short_circuited_operator():
     true_results = _get_true_results(query)
     assert len(true_results) == 1
 
-    expressions = _get_satisfied_names(
+    satisfied = _get_satisfied_expressions(
         true_results[0].satisfied_condition_ids, val._conditions_root_
     )
-    assert "OR" in expressions
-    assert "AND" not in expressions
+    assert any(isinstance(expression, OR) for expression in satisfied)
+    assert not any(isinstance(expression, AND) for expression in satisfied)
 
 
 def test_satisfied_conditions_or_fallback():

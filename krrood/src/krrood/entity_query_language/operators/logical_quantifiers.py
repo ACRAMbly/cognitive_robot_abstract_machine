@@ -62,15 +62,15 @@ class ForAll(QuantifiedConditional):
     ) -> Iterable[OperationResult]:
         solution_set = None
 
-        for var_val in self.variable._evaluate_(sources):
+        for variable_result in self.variable._evaluate_(sources):
             if solution_set is None:
-                solution_set = self.get_all_candidate_solutions(var_val)
+                solution_set = self.get_all_candidate_solutions(variable_result)
             else:
                 solution_set = [
-                    sol
-                    for sol in solution_set
+                    solution
+                    for solution in solution_set
                     if self.evaluate_condition(
-                        OperationResult({**sol, **var_val.bindings})
+                        OperationResult({**solution, **variable_result.bindings})
                     )
                 ]
             if not solution_set:
@@ -79,31 +79,31 @@ class ForAll(QuantifiedConditional):
 
         # Yield the remaining bindings (non-universal) merged with the incoming sources
         yield from [
-            self._build_operation_result_with_truth_(True, sources.bindings | sol)
-            for sol in solution_set
+            self._build_operation_result_with_truth_(True, sources.bindings | solution)
+            for solution in solution_set
         ]
 
-    def get_all_candidate_solutions(self, var_val: OperationResult):
+    def get_all_candidate_solutions(self, variable_result: OperationResult):
         values_that_satisfy_condition = []
         # Evaluate the condition under this particular universal value
-        for condition_val in self._evaluate_child_as_condition_(
-            self.condition, var_val
+        for condition_result in self._evaluate_child_as_condition_(
+            self.condition, variable_result
         ):
-            if condition_val.is_false:
+            if condition_result.is_false:
                 continue
-            condition_val_bindings = {
+            condition_bindings = {
                 k: v
-                for k, v in condition_val.bindings.items()
+                for k, v in condition_result.bindings.items()
                 if k in self.condition_unique_variable_ids
             }
-            values_that_satisfy_condition.append(condition_val_bindings)
+            values_that_satisfy_condition.append(condition_bindings)
         return values_that_satisfy_condition
 
     def evaluate_condition(self, sources: OperationResult) -> bool:
-        for condition_val in self._evaluate_child_as_condition_(
+        for condition_result in self._evaluate_child_as_condition_(
             self.condition, sources
         ):
-            return condition_val.is_true
+            return condition_result.is_true
         return False
 
     def _invert_(self):
@@ -123,21 +123,28 @@ class Exists(QuantifiedConditional):
         self,
         sources: OperationResult,
     ) -> Iterable[OperationResult]:
-        for val in self._evaluate_child_as_condition_(self.variable, sources):
-            if val.is_false or self.variable._id_ not in val.bindings:
+        for variable_result in self._evaluate_child_as_condition_(
+            self.variable, sources
+        ):
+            if (
+                variable_result.is_false
+                or self.variable._id_ not in variable_result.bindings
+            ):
                 continue
-            val = val.update(sources.bindings)
-            for cond_val in self._evaluate_child_as_condition_(self.condition, val):
-                if cond_val.is_true:
+            variable_result = variable_result.update(sources.bindings)
+            for condition_result in self._evaluate_child_as_condition_(
+                self.condition, variable_result
+            ):
+                if condition_result.is_true:
                     yield self._build_operation_result_with_truth_(
                         True,
                         sources.bindings
                         | {
-                            id_: val.bindings[id_]
+                            id_: variable_result.bindings[id_]
                             for id_ in self._ids_of_variables_to_add_to_sources_
-                            if id_ in val.bindings
+                            if id_ in variable_result.bindings
                         },
-                        val,
+                        variable_result,
                     )
                     return
 
