@@ -7,6 +7,7 @@ import pytest
 from giskardpy.executor import Executor, SimulationPacer
 from giskardpy.middleware.ros2.command_publishing import CommandPublisher
 from giskardpy.middleware.ros2.control_loop import ControlLoop
+from giskardpy.middleware.ros2.exceptions import WorldModelModifiedDuringMotionError
 from giskardpy.middleware.ros2.feedback_publisher import ActionFeedbackPublisher
 from giskardpy.middleware.ros2.heartbeat import Heartbeat
 from giskardpy.middleware.ros2.input_synchronization import (
@@ -22,6 +23,7 @@ from giskardpy.motion_statechart.monitors.payload_monitors import (
 )
 from giskardpy.motion_statechart.motion_statechart import MotionStatechart
 from giskardpy.qp.qp_controller_config import QPControllerConfig
+from semantic_digital_twin.callbacks.callback import StateChangeCallback
 from semantic_digital_twin.world import World
 
 # %% mimics of the ros facing collaborators
@@ -121,34 +123,44 @@ class GoalMessageMimic:
 
 
 @dataclass
-class WorldSyncMimic:
+class WorldUpdatesMimic:
     """
-    Stands in for the world synchronizer of the idle loop.
-    """
-
-    applied_message_batches: int = 0
-    """
-    How often buffered messages of other processes were applied.
+    Stands in for the incoming world updates, counting how they are drained.
     """
 
-    acknowledged_message_batches: int = 0
+    applied_batches: int = 0
     """
-    How often the receipt of buffered messages was acknowledged.
-    """
-
-    published_states: int = 0
-    """
-    How often the world state was published.
+    How often everything that was received was applied.
     """
 
-    def apply_missed_messages(self) -> None:
-        self.applied_message_batches += 1
+    applied_state_update_batches: int = 0
+    """
+    How often the state up to the next model change was applied.
+    """
 
-    def acknowledge_missed_messages(self) -> None:
-        self.acknowledged_message_batches += 1
+    acknowledged_batches: int = 0
+    """
+    How often the receipt of the pending updates was acknowledged.
+    """
 
-    def on_state_change(self, **kwargs) -> None:
-        self.published_states += 1
+    pending_model_change: bool = False
+    """
+    Whether a model change is waiting to be applied.
+    """
+
+    def apply_all(self) -> None:
+        self.applied_batches += 1
+        self.pending_model_change = False
+
+    def apply_state_updates(self) -> None:
+        self.applied_state_update_batches += 1
+
+    def acknowledge_receipt(self) -> None:
+        self.acknowledged_batches += 1
+
+    @property
+    def has_pending_model_change(self) -> bool:
+        return self.pending_model_change
 
 
 @dataclass
@@ -248,6 +260,50 @@ class HeartbeatWatcher(InputSynchronizer):
             self.action_server.cancel_requested = True
 
 
+@dataclass(eq=False)
+class StateChangeRecorder(StateChangeCallback):
+    """
+    Records every announced state change, standing in for the publishers that observe
+    the world through its callbacks.
+    """
+
+    announced_changes: int = 0
+    """
+    How often a state change was announced to the observers of the world.
+    """
+
+    def on_state_change(self, **kwargs) -> None:
+        self.announced_changes += 1
+
+
+@dataclass
+class PendingModelChangeInjector(InputSynchronizer):
+    """
+    Announces a pending model change after a few control cycles, standing in for another
+    process that changes the world model mid-motion.
+    """
+
+    world_updates: Optional[WorldUpdatesMimic] = None
+    """
+    The incoming updates the model change is announced on.
+    """
+
+    cycles_until_model_change: int = 5
+    """
+    How many control cycles to run before the model change is announced.
+    """
+
+    observed_cycles: int = 0
+    """
+    How many control cycles were observed so far.
+    """
+
+    def apply(self) -> None:
+        self.observed_cycles += 1
+        if self.observed_cycles >= self.cycles_until_model_change:
+            self.world_updates.pending_model_change = True
+
+
 @dataclass
 class RecordingPlotter(PostGoalPlotter):
     """
@@ -297,7 +353,7 @@ class MotionServerFixture:
 
     executor: Executor
     action_server: GoalQueueMimic
-    world_synchronizer: WorldSyncMimic
+    world_updates: WorldUpdatesMimic
     motion_server: MotionServer
     control_loop: ControlLoop
     command_publisher: RecordingCommandPublisher
@@ -312,7 +368,7 @@ def motion_server(init_rospy) -> MotionServerFixture:
     executor = create_executor()
     world = executor.context.world
     action_server = GoalQueueMimic()
-    world_synchronizer = WorldSyncMimic()
+    world_updates = WorldUpdatesMimic()
     feedback_publisher = ActionFeedbackPublisher(
         executor=executor, action_server=action_server
     )
@@ -325,7 +381,7 @@ def motion_server(init_rospy) -> MotionServerFixture:
         feedback_publisher=feedback_publisher,
         inputs=WorldStateInputs(world=world, synchronizers=[control_input]),
         heartbeat=heartbeat,
-        world_synchronizer=world_synchronizer,
+        world_updates=world_updates,
         command_publishers=[command_publisher],
     )
     idle_input = RecordingInputSynchronizer(world=world, executor=executor)
@@ -334,7 +390,7 @@ def motion_server(init_rospy) -> MotionServerFixture:
         executor=executor,
         action_server=action_server,
         control_loop=control_loop,
-        world_synchronizer=world_synchronizer,
+        world_updates=world_updates,
         feedback_publisher=feedback_publisher,
         inputs=WorldStateInputs(world=world, synchronizers=[idle_input]),
         heartbeat=heartbeat,
@@ -343,7 +399,7 @@ def motion_server(init_rospy) -> MotionServerFixture:
     return MotionServerFixture(
         executor=executor,
         action_server=action_server,
-        world_synchronizer=world_synchronizer,
+        world_updates=world_updates,
         motion_server=server,
         control_loop=control_loop,
         command_publisher=command_publisher,
@@ -390,6 +446,36 @@ class TestGoalResult:
 
         assert motion_server.action_server.outcome == "aborted"
         assert len(motion_server.action_server.sent_results) == 1
+
+    def test_the_reason_of_a_failure_is_reported(
+        self, motion_server: MotionServerFixture
+    ):
+        """
+        A motion terminated by a world model modification can be sent again, so the
+        client has to be able to tell it apart from a real failure.
+        """
+        inject_modification = PendingModelChangeInjector(
+            world=motion_server.executor.context.world,
+            world_updates=motion_server.world_updates,
+            cycles_until_model_change=5,
+        )
+        motion_server.control_loop.inputs.synchronizers.append(inject_modification)
+        motion_server.action_server.goal_json = create_goal_json(seconds=1000.0)
+
+        motion_server.motion_server.run_idle_cycle()
+
+        result = json.loads(motion_server.action_server.sent_results[0].result)
+        assert result["error"] == WorldModelModifiedDuringMotionError.__name__
+
+    def test_a_successful_goal_reports_no_failure(
+        self, motion_server: MotionServerFixture
+    ):
+        motion_server.action_server.goal_json = create_goal_json()
+
+        motion_server.motion_server.run_idle_cycle()
+
+        result = json.loads(motion_server.action_server.sent_results[0].result)
+        assert "error" not in result
 
     def test_result_contains_the_final_states(self, motion_server: MotionServerFixture):
         motion_server.action_server.goal_json = create_goal_json()
@@ -516,21 +602,20 @@ class TestIdleLoop:
     ):
         motion_server.motion_server.run_idle_cycle()
 
-        assert motion_server.world_synchronizer.applied_message_batches == 1
+        assert motion_server.world_updates.applied_batches == 1
 
-    def test_world_state_is_published(self, motion_server: MotionServerFixture):
-        motion_server.motion_server.run_idle_cycle()
-
-        assert motion_server.world_synchronizer.published_states == 1
-
-    def test_world_state_is_not_published_when_disabled(
+    def test_the_state_change_is_announced_to_the_observers_of_the_world(
         self, motion_server: MotionServerFixture
     ):
-        motion_server.motion_server.publish_world_state = False
+        """
+        The idle loop hands the published state to the world callbacks instead of
+        calling a publisher itself, so every observer of the world sees it.
+        """
+        recorder = StateChangeRecorder(_world=motion_server.executor.context.world)
 
         motion_server.motion_server.run_idle_cycle()
 
-        assert motion_server.world_synchronizer.published_states == 0
+        assert recorder.announced_changes == 1
 
     def test_inputs_are_read(self, motion_server: MotionServerFixture):
         motion_server.motion_server.run_idle_cycle()
@@ -552,7 +637,7 @@ class TestIdleLoop:
             motion_server.motion_server.run_idle_cycle()
 
         assert motion_server.heartbeat.count == 0
-        assert motion_server.world_synchronizer.applied_message_batches == 0
+        assert motion_server.world_updates.applied_batches == 0
 
 
 class TestHeartbeatDuringGoals:
@@ -597,9 +682,12 @@ class TestHeartbeatDuringGoals:
 
 class TestWorldUpdatesDuringGoals:
     """
-    World updates of other processes are only applied while the server is idle, but
-    their receipt is acknowledged during a goal as well, so a process that modifies the
-    world synchronously is not blocked until the motion is over.
+    State updates of other processes are applied while a goal runs, but a model
+    modification invalidates the compiled motion statechart, so it terminates the motion
+    instead of being applied under it.
+
+    Receipt is acknowledged either way, so a process that modifies the world
+    synchronously is never blocked until the motion is over.
     """
 
     def test_receipt_is_acknowledged_once_per_control_cycle(
@@ -611,16 +699,60 @@ class TestWorldUpdatesDuringGoals:
 
         control_cycles = len(motion_server.control_input.applied_at_control_cycles)
         assert control_cycles > 1
-        assert (
-            motion_server.world_synchronizer.acknowledged_message_batches
-            == control_cycles
-        )
+        assert motion_server.world_updates.acknowledged_batches == control_cycles
 
-    def test_updates_are_not_applied_while_a_goal_runs(
+    def test_state_updates_are_applied_once_per_control_cycle(
         self, motion_server: MotionServerFixture
     ):
         motion_server.action_server.goal_json = create_goal_json()
 
         motion_server.motion_server.run_idle_cycle()
 
-        assert motion_server.world_synchronizer.applied_message_batches == 1
+        control_cycles = len(motion_server.control_input.applied_at_control_cycles)
+        assert control_cycles > 1
+        assert (
+            motion_server.world_updates.applied_state_update_batches == control_cycles
+        )
+
+    def test_the_whole_buffer_is_not_applied_while_a_goal_runs(
+        self, motion_server: MotionServerFixture
+    ):
+        motion_server.action_server.goal_json = create_goal_json()
+
+        motion_server.motion_server.run_idle_cycle()
+
+        assert motion_server.world_updates.applied_batches == 1
+
+    def test_a_pending_model_change_terminates_the_goal(
+        self, motion_server: MotionServerFixture
+    ):
+        inject_modification = PendingModelChangeInjector(
+            world=motion_server.executor.context.world,
+            world_updates=motion_server.world_updates,
+            cycles_until_model_change=5,
+        )
+        motion_server.control_loop.inputs.synchronizers.append(inject_modification)
+        motion_server.action_server.goal_json = create_goal_json(seconds=1000.0)
+
+        motion_server.motion_server.run_idle_cycle()
+
+        assert motion_server.action_server.outcome == "aborted"
+        control_cycles = len(motion_server.control_input.applied_at_control_cycles)
+        assert control_cycles < 10, "the goal ran on instead of terminating promptly"
+
+    def test_the_buffered_modification_is_applied_by_the_next_idle_cycle(
+        self, motion_server: MotionServerFixture
+    ):
+        inject_modification = PendingModelChangeInjector(
+            world=motion_server.executor.context.world,
+            world_updates=motion_server.world_updates,
+            cycles_until_model_change=5,
+        )
+        motion_server.control_loop.inputs.synchronizers.append(inject_modification)
+        motion_server.action_server.goal_json = create_goal_json(seconds=1000.0)
+        motion_server.motion_server.run_idle_cycle()
+        assert motion_server.world_updates.has_pending_model_change
+
+        motion_server.motion_server.run_idle_cycle()
+
+        assert not motion_server.world_updates.has_pending_model_change

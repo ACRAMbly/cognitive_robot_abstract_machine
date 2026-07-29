@@ -402,8 +402,33 @@ class ModelReloadSynchronizer(Synchronizer):
 
     topic_name: str = "/semantic_digital_twin/reload_model"
 
+    defer_incoming_reloads: bool = False
+    """
+    If ``True``, an incoming reload is remembered instead of applied on the receiving
+    thread.
+
+    Use this when another thread owns the world and has to decide itself when it may be
+    replaced, for example a controller that must not have the world changed under a
+    running motion.
+    """
+
+    pending_reload: Optional[LoadModel] = field(default=None, init=False, repr=False)
+    """
+    The reload that was received but not applied yet.
+
+    Only the most recent one is kept, because a reload replaces the whole world model
+    and therefore makes every earlier request obsolete.
+    """
+
     def __post_init__(self):
         super().__post_init__()
+
+    @property
+    def has_pending_reload(self) -> bool:
+        """
+        Whether a reload is waiting to be applied.
+        """
+        return self.pending_reload is not None
 
     def publish_reload_model(self):
         """
@@ -420,6 +445,22 @@ class ModelReloadSynchronizer(Synchronizer):
         self.publish(message)
 
     def _subscription_callback(self, msg: LoadModel):
+        if self.defer_incoming_reloads:
+            self.pending_reload = msg
+            return
+        self.apply_reload(msg)
+
+    def apply_pending_reload(self):
+        """
+        Apply the reload that was deferred, if there is one.
+        """
+        if self.pending_reload is None:
+            return
+        message = self.pending_reload
+        self.pending_reload = None
+        self.apply_reload(message)
+
+    def apply_reload(self, msg: LoadModel):
         """
         Update the world with the new model by fetching it from the database.
 
@@ -484,18 +525,40 @@ class WorldSynchronizer(Synchronizer, ModelChangeCallback, StateChangeCallback):
     changes.
     """
 
+    defer_incoming_updates: bool = False
+    """
+    If ``True``, incoming messages are buffered instead of applied on the subscription
+    thread.
+
+    Outgoing publishing is unaffected, unlike with ``pause()``. Use this when another
+    thread owns the world and has to decide itself when an update may be applied, for
+    example a controller that must not have the world changed under a running motion.
+    """
+
     missed_messages: List[WorldUpdate] = field(
         default_factory=list, init=False, repr=False
     )
     """
-    Buffer for messages received while the synchronizer is paused.
+    Buffer for messages that were received but not applied yet.
 
-    These messages can be applied later by calling ``apply_missed_messages()``.
+    These messages can be applied later by calling ``apply_missed_messages()`` or, up to
+    the next model modification, ``apply_missed_state_updates()``.
     """
 
     _acknowledged_missed_message_count: int = field(default=0, init=False, repr=False)
     """
     Number of leading entries of ``missed_messages`` whose receipt was acknowledged.
+    """
+
+    _missed_message_lock: threading.Lock = field(
+        default_factory=threading.Lock, init=False, repr=False
+    )
+    """
+    Guards ``missed_messages`` and its acknowledgment watermark.
+
+    The subscription thread appends while the owning thread drains, and the two have to
+    agree on how many leading entries left the buffer. Deliberately not ``_world_lock``:
+    receiving a message must never wait for the world.
     """
 
     def __post_init__(self):
@@ -591,11 +654,27 @@ class WorldSynchronizer(Synchronizer, ModelChangeCallback, StateChangeCallback):
         }
 
     def _subscription_callback(self, message: WorldUpdate):
-        if self._is_paused:
-            self.missed_messages.append(message)
-        else:
-            self.apply_message(message)
-            self.acknowledge_message(message)
+        if self._is_paused or self.defer_incoming_updates:
+            with self._missed_message_lock:
+                self.missed_messages.append(message)
+            return
+        self.apply_message(message)
+        self.acknowledge_message(message)
+
+    @property
+    def has_buffered_model_modification(self) -> bool:
+        """
+        Whether any buffered message carries a model modification.
+
+        A model modification invalidates anything compiled against the current world
+        structure, so an owner of the world uses this to decide whether it can keep
+        going.
+        """
+        with self._missed_message_lock:
+            return any(
+                message.modification_block is not None
+                for message in self.missed_messages
+            )
 
     def apply_message(self, message: WorldUpdate):
         """
@@ -656,13 +735,49 @@ class WorldSynchronizer(Synchronizer, ModelChangeCallback, StateChangeCallback):
         buffer cannot be applied for a while, for example because a controller is
         running on the world.
         """
-        for message in self.missed_messages[self._acknowledged_missed_message_count :]:
+        with self._missed_message_lock:
+            unacknowledged_messages = self.missed_messages[
+                self._acknowledged_missed_message_count :
+            ]
+            self._acknowledged_missed_message_count += len(unacknowledged_messages)
+        for message in unacknowledged_messages:
             self.acknowledge_message(message)
-        self._acknowledged_missed_message_count = len(self.missed_messages)
 
     def apply_missed_messages(self):
         """
-        Apply buffered messages accumulated while the synchronizer was paused.
+        Apply every buffered message.
+
+        :raises ApplyMissedMessagesWhileWorldIsBeingModifiedError: If called while a
+            ``modify_world`` context is active on this synchronizer's world.
+        """
+        self._apply_leading_messages(len(self.missed_messages))
+
+    def apply_missed_state_updates(self):
+        """
+        Apply the buffered messages up to the next model modification.
+
+        Everything from that modification onwards stays buffered, so the order in which
+        the messages were published survives. Use this to keep consuming state while a
+        model modification cannot be applied yet.
+
+        :raises ApplyMissedMessagesWhileWorldIsBeingModifiedError: If called while a
+            ``modify_world`` context is active on this synchronizer's world.
+        """
+        self._apply_leading_messages(self._count_leading_state_only_messages())
+
+    def _count_leading_state_only_messages(self) -> int:
+        """
+        Number of buffered messages before the first one carrying a model modification.
+        """
+        with self._missed_message_lock:
+            for position, message in enumerate(self.missed_messages):
+                if message.modification_block is not None:
+                    return position
+            return len(self.missed_messages)
+
+    def _apply_leading_messages(self, count: int):
+        """
+        Apply and acknowledge the first ``count`` buffered messages.
 
         Each message is applied independently so that model-change notifications fire
         between messages, which is required for state messages that follow model
@@ -674,12 +789,19 @@ class WorldSynchronizer(Synchronizer, ModelChangeCallback, StateChangeCallback):
         """
         if self._world.world_is_being_modified:
             raise ApplyMissedMessagesWhileWorldIsBeingModifiedError()
-        if not self.missed_messages:
-            return
-        pending_messages = self.missed_messages
-        already_acknowledged_count = self._acknowledged_missed_message_count
-        self.missed_messages = []
-        self._acknowledged_missed_message_count = 0
+        with self._missed_message_lock:
+            pending_messages = self.missed_messages[:count]
+            if not pending_messages:
+                return
+            already_acknowledged_count = min(
+                self._acknowledged_missed_message_count, len(pending_messages)
+            )
+            # Mutate in place instead of rebinding: the subscription thread appends to
+            # the same list and its message must survive the drain.
+            del self.missed_messages[: len(pending_messages)]
+            self._acknowledged_missed_message_count = max(
+                0, self._acknowledged_missed_message_count - len(pending_messages)
+            )
         # Hold the world lock across the whole batch so the buffered messages apply atomically: a
         # concurrent modify_world on another thread serializes behind it instead of interleaving.
         with self._world._world_lock:

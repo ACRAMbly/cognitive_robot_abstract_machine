@@ -102,6 +102,7 @@ def robot():
     finally:
         print("tear down")
         c.print_stats()
+        c.close()
 
 
 @pytest.fixture()

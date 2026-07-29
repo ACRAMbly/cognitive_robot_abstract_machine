@@ -18,8 +18,8 @@ from giskardpy.middleware.ros2.feedback_publisher import ActionFeedbackPublisher
 from giskardpy.middleware.ros2.heartbeat import Heartbeat
 from giskardpy.middleware.ros2.input_synchronization import WorldStateInputs
 from giskardpy.middleware.ros2.post_goal_plotters import PostGoalPlotter
+from giskardpy.middleware.ros2.world_updates import IncomingWorldUpdates
 from giskardpy.motion_statechart.motion_statechart import MotionStatechart
-from semantic_digital_twin.adapters.ros.world_synchronizer import WorldSynchronizer
 from semantic_digital_twin.adapters.world_entity_kwargs_tracker import (
     WorldEntityWithIDKwargsTracker,
 )
@@ -51,9 +51,9 @@ class MotionServer:
     Executes a compiled motion statechart.
     """
 
-    world_synchronizer: WorldSynchronizer
+    world_updates: IncomingWorldUpdates
     """
-    Applies world updates of other processes and publishes this world's state.
+    Applies the world updates of other processes that the control loop could not.
     """
 
     feedback_publisher: ActionFeedbackPublisher
@@ -69,11 +69,6 @@ class MotionServer:
     heartbeat: Heartbeat
     """
     Ticked once per idle cycle and, through the control loop, once per control cycle.
-    """
-
-    publish_world_state: bool = True
-    """
-    Whether the world state is published while waiting for a goal.
     """
 
     idle_frequency: float = 20.0
@@ -117,21 +112,13 @@ class MotionServer:
         """
         if self.world.world_is_being_modified:
             return
-        self.world_synchronizer.apply_missed_messages()
-        self.synchronize_inputs()
+        self.world_updates.apply_all()
+        self.inputs.synchronize()
         self.heartbeat.tick()
         if not self.action_server.has_goal():
             return
         self.action_server.accept_goal()
         self.execute_goal()
-
-    def synchronize_inputs(self) -> None:
-        """
-        Write the state of the robot into the world and publish the result.
-        """
-        self.inputs.synchronize()
-        if self.publish_world_state:
-            self.world_synchronizer.on_state_change(publish_changes=True)
 
     # %% executing goals
 
@@ -190,6 +177,9 @@ class MotionServer:
     def create_result(self, error: Optional[Exception]) -> JsonAction.Result:
         """
         Mark the goal as canceled, aborted or succeeded and describe its final state.
+
+        A failed goal also reports what went wrong, because the ROS action status alone
+        cannot tell a client whether sending the goal again would help.
         """
         match error:
             case ExecutionCanceledException():
@@ -201,8 +191,11 @@ class MotionServer:
             case _:
                 self.action_server.set_aborted()
                 rospy.node.get_logger().error(f"Goal aborted: {error}")
+        states = self.create_states()
+        if error is not None:
+            states["error"] = type(error).__name__
         result = JsonAction.Result()
-        result.result = json.dumps(self.create_states())
+        result.result = json.dumps(states)
         return result
 
     def create_states(self) -> Dict[str, Any]:

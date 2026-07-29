@@ -188,6 +188,15 @@ class GiskardTester(ABC):
         while heartbeat.count < first_cycle + number:
             sleep(0.001)
 
+    def close(self):
+        """
+        Detach Giskard from the world so nothing of this test reacts to the next one.
+
+        The ros node is destroyed between tests while worlds are kept alive, so a
+        callback left registered here would publish on a node that is already gone.
+        """
+        self.giskard.close_world_model_ros_interface()
+
     def print_stats(self):
         giskarding_time = self.total_time_spend_giskarding
         if not self.giskard.server_config.is_standalone:

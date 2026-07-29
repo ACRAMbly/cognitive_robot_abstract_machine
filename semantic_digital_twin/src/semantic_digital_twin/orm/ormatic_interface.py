@@ -11561,6 +11561,10 @@ class ModelReloadSynchronizerDAO(
         use_existing_column=True,
     )
 
+    defer_incoming_reloads: Mapped[builtins.bool] = mapped_column(
+        use_existing_column=True
+    )
+
     __mapper_args__ = {
         "polymorphic_identity": "ModelReloadSynchronizerDAO",
         "inherit_condition": database_id == SynchronizerDAO.database_id,
@@ -11878,6 +11882,9 @@ class WorldSynchronizerDAO(
 
     synchronize_model: Mapped[builtins.bool] = mapped_column(use_existing_column=True)
     synchronize_state: Mapped[builtins.bool] = mapped_column(use_existing_column=True)
+    defer_incoming_updates: Mapped[builtins.bool] = mapped_column(
+        use_existing_column=True
+    )
 
     __mapper_args__ = {
         "polymorphic_identity": "WorldSynchronizerDAO",

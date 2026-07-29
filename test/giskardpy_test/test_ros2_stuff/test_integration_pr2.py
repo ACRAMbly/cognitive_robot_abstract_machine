@@ -75,13 +75,13 @@ from giskardpy.utils.math import (
 from giskardpy.middleware.ros2.exceptions import (
     ExecutionCanceledException,
     ExecutionAbortedException,
+    WorldModelModifiedDuringMotionError,
 )
 from krrood.symbolic_math import symbolic_math as sm
 from semantic_digital_twin.collision_checking.collision_rules import (
     AvoidExternalCollisions,
     AvoidCollisionBetweenGroups,
 )
-from semantic_digital_twin.exceptions import WorldEntityNotFoundError
 from semantic_digital_twin.robots.robot_parts import EndEffector, AbstractRobot
 from semantic_digital_twin.spatial_types import (
     HomogeneousTransformationMatrix,
@@ -228,6 +228,7 @@ def robot():
     finally:
         print("tear down")
         c.print_stats()
+        c.close()
 
 
 @pytest.fixture()
@@ -1901,7 +1902,13 @@ class TestActionServerEvents:
             giskard.api.execute(MotionStatechart())
 
     @pytest.mark.asyncio
-    async def test_world_updats_during_execution(self, giskard: PR2Tester):
+    async def test_world_model_modification_terminates_the_motion(
+        self, giskard: PR2Tester
+    ):
+        """
+        The running motion was compiled against the structure of the world, so a body
+        added by another process ends it instead of being applied underneath it.
+        """
         msc = MotionStatechart()
         msc.add_node(
             CartesianPose(
@@ -1927,20 +1934,12 @@ class TestActionServerEvents:
             parent_link=giskard.r_tip,
         )
 
-        # worlds should be out of sync until the motion is done
-        assert giskard.api.world.get_kinematic_structure_entity_by_name("box")
-        with pytest.raises(WorldEntityNotFoundError):
-            giskard.giskard.executor.context.world.get_kinematic_structure_entity_by_name(
-                "box"
-            )
-
-        wait_for_future_to_complete(giskard.api.cancel_goal_async())
-        with pytest.raises(ExecutionCanceledException):
+        with pytest.raises(WorldModelModifiedDuringMotionError):
             await giskard.api.get_result()
 
         await asyncio.sleep(1)
 
-        # they should be in sync after its over
+        # the modification is applied once the motion is over
         assert giskard.api.world.get_kinematic_structure_entity_by_name("box")
         assert giskard.giskard.executor.context.world.get_kinematic_structure_entity_by_name(
             "box"

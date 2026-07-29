@@ -75,9 +75,24 @@ class GiskardWrapper:
     def execute(self, motion_statechart: MotionStatechart):
         """
         Executes a MotionStatechart and syncs its state with the result of Giskard.
+
+        :raises WorldModelModifiedDuringMotionError: If another process modified the
+            world model while the motion was running. The goal can be sent again, since
+            the modification is applied by then.
         """
         motion_statechart.sanity_check()
         result = self._send_action_goal(motion_statechart)
+        self._take_over_result(result, motion_statechart)
+
+    def _take_over_result(
+        self, result: JsonAction_Result, motion_statechart: MotionStatechart
+    ) -> None:
+        """
+        Copy the final states of a finished goal into the given motion statechart.
+
+        Only reached for a goal that succeeded; a failed one raises while its result is
+        awaited.
+        """
         result_json = json.loads(result.result.result)
         parsed_life_cycle_state = LifeCycleState.from_json(
             result_json["life_cycle_state"], motion_statechart=motion_statechart
@@ -112,18 +127,15 @@ class GiskardWrapper:
         return future
 
     async def get_result(self):
-        result = await self._client.get_result()
+        """
+        Wait for the goal sent with :func:`execute_async` and sync its final states.
 
-        result_json = json.loads(result.result.result)
-        parsed_life_cycle_state = LifeCycleState.from_json(
-            result_json["life_cycle_state"], motion_statechart=self._motion_statechart
-        )
-        parsed_observation_state = ObservationState.from_json(
-            result_json["observation_state"], motion_statechart=self._motion_statechart
-        )
-        self._motion_statechart.life_cycle_state.data = parsed_life_cycle_state.data
-        self._motion_statechart.observation_state.data = parsed_observation_state.data
-        assert self._motion_statechart.is_end_motion()
+        :raises WorldModelModifiedDuringMotionError: If another process modified the
+            world model while the motion was running. The goal can be sent again, since
+            the modification is applied by then.
+        """
+        result = await self._client.get_result()
+        self._take_over_result(result, self._motion_statechart)
 
     def get_end_motion_reason(
         self, move_result: Optional[JsonAction_Result] = None, show_all: bool = False

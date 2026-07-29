@@ -3374,5 +3374,274 @@ def test_acknowledging_buffered_messages_does_not_skip_later_ones(rclpy_node):
         exchange.close()
 
 
+# %% deferring incoming updates without silencing outgoing ones
+
+
+@dataclass(eq=False)
+class DelayedApplyWorldSynchronizer(WorldSynchronizer):
+    """
+    A synchronizer that applies a single message slowly, so another thread can append to
+    the buffer while a drain is still running.
+    """
+
+    apply_delay: float = 0.3
+    """
+    Seconds spent in every ``apply_message`` before the message is really applied.
+    """
+
+    def apply_message(self, message: WorldUpdate):
+        time.sleep(self.apply_delay)
+        super().apply_message(message)
+
+
+def create_connected_worlds(
+    rclpy_node: Node, name: str
+) -> Tuple[World, World, WorldSynchronizer, WorldSynchronizer]:
+    """
+    Build a publishing world and a receiving world that share one prismatic connection.
+
+    The receiver applies inline while it is being set up; the caller switches it to
+    deferring afterwards.
+    """
+    publisher_world = World(name=f"{name}_publisher")
+    receiver_world = World(name=f"{name}_receiver")
+    publisher_synchronizer = WorldSynchronizer(node=rclpy_node, _world=publisher_world)
+    receiver_synchronizer = WorldSynchronizer(node=rclpy_node, _world=receiver_world)
+    time.sleep(0.2)
+
+    with publisher_world.modify_world():
+        parent_body = Body(name=PrefixedName(f"{name}_parent"))
+        child_body = Body(name=PrefixedName(f"{name}_child"))
+        publisher_world.add_body(parent_body)
+        publisher_world.add_body(child_body)
+        publisher_world.add_connection(
+            PrismaticConnection.create_with_dofs(
+                world=publisher_world,
+                parent=parent_body,
+                child=child_body,
+                axis=Vector3.X(),
+            )
+        )
+    assert wait_for_condition(
+        lambda: len(receiver_world.kinematic_structure_entities) == 2
+    ), "the receiver never picked up the initial model"
+    return (
+        publisher_world,
+        receiver_world,
+        publisher_synchronizer,
+        receiver_synchronizer,
+    )
+
+
+def publish_position(world: World, position: float) -> None:
+    """
+    Move the prismatic connection of the given world and announce the change.
+    """
+    connection = world.get_connections_by_type(PrismaticConnection)[0]
+    world.state[connection.dof.id].position = position
+    world.notify_state_change()
+
+
+def test_deferring_incoming_updates_keeps_outgoing_publishing_alive(rclpy_node):
+    """
+    Deferring is one-directional: a synchronizer that queues incoming updates must still
+    publish its own model and state changes, so an owner of the world does not have to
+    reach around the callbacks to publish.
+    """
+    world_1 = World(name="one_directional_deferring_1")
+    world_2 = World(name="one_directional_deferring_2")
+    synchronizer_1 = WorldSynchronizer(
+        node=rclpy_node, _world=world_1, defer_incoming_updates=True
+    )
+    synchronizer_2 = WorldSynchronizer(node=rclpy_node, _world=world_2)
+    time.sleep(0.2)
+
+    try:
+        with world_1.modify_world():
+            parent_body = Body(name=PrefixedName("one_directional_parent"))
+            child_body = Body(name=PrefixedName("one_directional_child"))
+            world_1.add_body(parent_body)
+            world_1.add_body(child_body)
+            world_1.add_connection(
+                PrismaticConnection.create_with_dofs(
+                    world=world_1,
+                    parent=parent_body,
+                    child=child_body,
+                    axis=Vector3.X(),
+                )
+            )
+        assert wait_for_condition(
+            lambda: len(world_2.kinematic_structure_entities) == 2
+        ), "the model modification of the deferring synchronizer was not published"
+
+        publish_position(world_1, 1.25)
+        assert wait_for_condition(
+            lambda: world_2.get_connections_by_type(PrismaticConnection)[0].position
+            == pytest.approx(1.25, abs=1e-9)
+        ), "the state change of the deferring synchronizer was not published"
+    finally:
+        synchronizer_1.close()
+        synchronizer_2.close()
+
+
+def test_state_updates_are_applied_up_to_the_next_model_modification(rclpy_node):
+    """
+    Draining stops at the first buffered model modification, so state that was published
+    before it can be consumed while the modification itself keeps waiting in order.
+    """
+    (
+        publisher_world,
+        receiver_world,
+        publisher_synchronizer,
+        receiver_synchronizer,
+    ) = create_connected_worlds(rclpy_node, "partial_drain")
+    receiver_synchronizer.defer_incoming_updates = True
+
+    try:
+        publish_position(publisher_world, 1.5)
+        # A fixed connection carries no degree of freedom, so this modification does not
+        # publish a state message of its own and the buffer stays predictable.
+        with publisher_world.modify_world():
+            late_body = Body(name=PrefixedName("partial_drain_late_body"))
+            publisher_world.add_body(late_body)
+            publisher_world.add_connection(
+                FixedConnection(parent=publisher_world.root, child=late_body)
+            )
+        publish_position(publisher_world, 2.5)
+        assert wait_for_condition(
+            lambda: len(receiver_synchronizer.missed_messages) == 3
+        ), "expected a state, a model and a second state message to be buffered"
+
+        receiver_synchronizer.apply_missed_state_updates()
+
+        assert receiver_world.get_connections_by_type(PrismaticConnection)[
+            0
+        ].position == pytest.approx(1.5, abs=1e-9)
+        assert len(receiver_world.kinematic_structure_entities) == 2
+        assert len(receiver_synchronizer.missed_messages) == 2
+        assert receiver_synchronizer.has_buffered_model_modification
+
+        receiver_synchronizer.apply_missed_messages()
+
+        assert len(receiver_world.kinematic_structure_entities) == 3
+        assert receiver_world.get_connections_by_type(PrismaticConnection)[
+            0
+        ].position == pytest.approx(2.5, abs=1e-9)
+        assert not receiver_synchronizer.has_buffered_model_modification
+    finally:
+        publisher_synchronizer.close()
+        receiver_synchronizer.close()
+
+
+def test_draining_state_updates_leaves_nothing_behind_without_model_modifications(
+    rclpy_node,
+):
+    """
+    Without a buffered model modification the drain consumes the whole buffer, so a
+    caller draining every cycle never accumulates a backlog.
+    """
+    (
+        publisher_world,
+        receiver_world,
+        publisher_synchronizer,
+        receiver_synchronizer,
+    ) = create_connected_worlds(rclpy_node, "full_state_drain")
+    receiver_synchronizer.defer_incoming_updates = True
+
+    try:
+        publish_position(publisher_world, 0.5)
+        publish_position(publisher_world, 1.5)
+        assert wait_for_condition(
+            lambda: len(receiver_synchronizer.missed_messages) == 2
+        )
+
+        receiver_synchronizer.apply_missed_state_updates()
+
+        assert receiver_synchronizer.missed_messages == []
+        assert receiver_world.get_connections_by_type(PrismaticConnection)[
+            0
+        ].position == pytest.approx(1.5, abs=1e-9)
+    finally:
+        publisher_synchronizer.close()
+        receiver_synchronizer.close()
+
+
+def test_deferred_model_reload_is_only_applied_on_demand(rclpy_node):
+    """
+    A reload replaces the whole world, so a process controlling that world has to be
+    able to postpone it instead of having it applied on the receiving thread.
+    """
+    engine = create_engine(
+        "sqlite+pysqlite:///file::memory:?cache=shared",
+        connect_args={"check_same_thread": False, "uri": True},
+    )
+    drop_database(engine)
+    Base.metadata.create_all(engine)
+    session_maker = sqlalchemy.orm.sessionmaker(bind=engine)
+
+    publisher_world = create_dummy_world()
+    receiver_world = World()
+    publisher_synchronizer = ModelReloadSynchronizer(
+        node=rclpy_node, _world=publisher_world, session=session_maker()
+    )
+    receiver_synchronizer = ModelReloadSynchronizer(
+        node=rclpy_node,
+        _world=receiver_world,
+        session=session_maker(),
+        defer_incoming_reloads=True,
+    )
+
+    try:
+        publisher_synchronizer.publish_reload_model()
+        assert wait_for_condition(lambda: receiver_synchronizer.has_pending_reload)
+        assert len(receiver_world.kinematic_structure_entities) == 0
+
+        receiver_synchronizer.apply_pending_reload()
+
+        assert len(receiver_world.kinematic_structure_entities) == 2
+        assert not receiver_synchronizer.has_pending_reload
+    finally:
+        publisher_synchronizer.close()
+        receiver_synchronizer.close()
+
+
+def test_message_arriving_during_a_drain_stays_buffered(rclpy_node):
+    """
+    The buffer is appended to on the subscription thread while its owner drains it, so
+    the drain must remove exactly the messages it applied and keep the rest.
+    """
+    world = World(name="drain_race")
+    synchronizer = DelayedApplyWorldSynchronizer(
+        node=rclpy_node,
+        _world=world,
+        defer_incoming_updates=True,
+        topic_name=f"/drain_race_{uuid4().hex}",
+    )
+    try:
+        empty_state_update = WorldStateUpdate(
+            meta_data=synchronizer.meta_data, ids=[], states=[]
+        )
+        synchronizer.missed_messages.append(
+            WorldUpdate(
+                meta_data=synchronizer.meta_data, state_update=empty_state_update
+            )
+        )
+        drain = threading.Thread(
+            target=synchronizer.apply_missed_messages, name="drain-race"
+        )
+        drain.start()
+        time.sleep(0.1)
+        late_message = WorldUpdate(
+            meta_data=synchronizer.meta_data, state_update=empty_state_update
+        )
+        synchronizer._subscription_callback(late_message)
+        drain.join(timeout=5.0)
+
+        assert not drain.is_alive()
+        assert synchronizer.missed_messages == [late_message]
+    finally:
+        synchronizer.close()
+
+
 if __name__ == "__main__":
     unittest.main()

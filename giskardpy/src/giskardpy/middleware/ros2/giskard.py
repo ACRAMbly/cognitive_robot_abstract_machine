@@ -34,6 +34,7 @@ from giskardpy.middleware.ros2.post_goal_plotters import (
 from giskardpy.middleware.ros2.qp_data_publisher import QPDataPublisher
 from giskardpy.middleware.ros2.robot_interface_config import RobotInterfaceConfig
 from giskardpy.middleware.ros2.server_config import GiskardServerConfig
+from giskardpy.middleware.ros2.world_updates import IncomingWorldUpdates
 from giskardpy.middleware.ros2 import rospy
 from krrood.ormatic.utils import create_engine
 from krrood.utils import clear_memoization_cache
@@ -127,24 +128,27 @@ class Giskard:
             executor=self.executor, action_server=action_server
         )
         heartbeat = Heartbeat()
+        world_updates = IncomingWorldUpdates(
+            world_synchronizer=self.world_synchronizer,
+            model_reload_synchronizer=self.model_reload_synchronizer,
+        )
         control_loop = ControlLoop(
             executor=self.executor,
             action_server=action_server,
             feedback_publisher=feedback_publisher,
             inputs=WorldStateInputs(world=world),
             heartbeat=heartbeat,
-            world_synchronizer=self.world_synchronizer,
+            world_updates=world_updates,
             qp_data_publisher=self.create_qp_data_publisher(),
         )
         return MotionServer(
             executor=self.executor,
             action_server=action_server,
             control_loop=control_loop,
-            world_synchronizer=self.world_synchronizer,
+            world_updates=world_updates,
             feedback_publisher=feedback_publisher,
             inputs=WorldStateInputs(world=world),
             heartbeat=heartbeat,
-            publish_world_state=self.server_config.publish_world_state,
             idle_frequency=self.server_config.idle_frequency,
             post_goal_plotters=self.create_post_goal_plotters(),
         )
@@ -190,6 +194,7 @@ class Giskard:
                 node=rospy.node,
                 _world=self.world_config.world,
                 session=session,
+                defer_incoming_reloads=True,
             )
         except AssertionError as e:
             logger.warning(
@@ -197,10 +202,15 @@ class Giskard:
             )
             self.model_reload_synchronizer = None
 
+        # Deferring only the incoming direction: the control loop decides when a foreign
+        # update may touch the world it is controlling, while this world's own changes
+        # keep being published through the normal callbacks.
         self.world_synchronizer = WorldSynchronizer(
-            _world=self.world_config.world, node=rospy.node
+            _world=self.world_config.world,
+            node=rospy.node,
+            defer_incoming_updates=True,
+            synchronize_state=self.server_config.publish_world_state,
         )
-        self.world_synchronizer.pause()
         self.world_fetcher = FetchWorldServer(
             node=rospy.node, world=self.world_config.world
         )
@@ -213,6 +223,22 @@ class Giskard:
         self.collision_marker_publisher = CollisionVisualizationMarkerPublisher(
             node=rospy.node, throttle=5, world=self.world_config.world
         )
+
+    def close_world_model_ros_interface(self):
+        """
+        Deregister everything Giskard attached to the world and destroy its ros
+        entities.
+
+        The world outlives the ros node whenever Giskard is torn down while the world is
+        kept, and a callback that publishes on a destroyed node fails. Nothing may
+        therefore stay registered on the world.
+        """
+        self.world_synchronizer.close()
+        if self.model_reload_synchronizer is not None:
+            self.model_reload_synchronizer.close()
+        self.world_fetcher.close()
+        self.tf_publisher.stop()
+        self.viz_marker_publisher.stop()
 
     def sanity_check(self):
         self._controlled_joints_sanity_check()
@@ -249,5 +275,6 @@ class Giskard:
         except Exception:
             traceback.print_exc()
         finally:
+            self.close_world_model_ros_interface()
             if rclpy.ok():
                 rclpy.try_shutdown()

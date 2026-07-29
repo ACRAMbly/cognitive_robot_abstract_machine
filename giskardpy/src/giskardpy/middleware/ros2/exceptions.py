@@ -6,7 +6,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from giskardpy.data_types.exceptions import GiskardException, SetupException
+from giskardpy.data_types.exceptions import (
+    DontPrintStackTrace,
+    GiskardException,
+    SetupException,
+)
 
 
 @dataclass
@@ -50,6 +54,24 @@ class ExecutionCanceledException(ExecutionException):
 
     def suggest_correction(self) -> str:
         return ""
+
+
+@dataclass
+class WorldModelModifiedDuringMotionError(ExecutionException, DontPrintStackTrace):
+    """
+    Raised when another process modified the world model while a motion was running.
+
+    The motion statechart and the quadratic program are compiled against the structure
+    of the world, so the modification cannot be applied under a running motion. The
+    motion is terminated instead and the modification is applied once Giskard is idle
+    again.
+    """
+
+    def error_message(self) -> str:
+        return "The world model was modified by another process during the motion."
+
+    def suggest_correction(self) -> str:
+        return "Send the goal again; the modification is applied by then."
 
 
 @dataclass

@@ -6,12 +6,15 @@ from typing import List, Optional
 from giskardpy.executor import Executor
 from giskardpy.middleware.ros2.action_server import ActionServerHandler
 from giskardpy.middleware.ros2.command_publishing import CommandPublisher
-from giskardpy.middleware.ros2.exceptions import ExecutionCanceledException
+from giskardpy.middleware.ros2.exceptions import (
+    ExecutionCanceledException,
+    WorldModelModifiedDuringMotionError,
+)
 from giskardpy.middleware.ros2.feedback_publisher import ActionFeedbackPublisher
 from giskardpy.middleware.ros2.heartbeat import Heartbeat
 from giskardpy.middleware.ros2.input_synchronization import WorldStateInputs
 from giskardpy.middleware.ros2.qp_data_publisher import QPDataPublisher
-from semantic_digital_twin.adapters.ros.world_synchronizer import WorldSynchronizer
+from giskardpy.middleware.ros2.world_updates import IncomingWorldUpdates
 from semantic_digital_twin.world import World
 
 
@@ -49,12 +52,13 @@ class ControlLoop:
     Ticked at the end of every cycle, shared with the idle loop of the motion server.
     """
 
-    world_synchronizer: WorldSynchronizer
+    world_updates: IncomingWorldUpdates
     """
-    Acknowledges world updates of other processes at the end of every cycle.
+    Delivers the world updates of other processes at the start of every cycle.
 
-    Only their receipt is acknowledged; applying them would invalidate the compiled
-    motion statechart, so the idle loop applies them once the goal is over.
+    State updates are applied right away; a model change would invalidate the compiled
+    motion statechart, so it terminates the motion and is applied by the idle loop
+    instead.
     """
 
     command_publishers: List[CommandPublisher] = field(default_factory=list)
@@ -88,15 +92,34 @@ class ControlLoop:
         Synchronize the inputs, compute the next command and publish it.
 
         :raises ExecutionCanceledException: If the goal was canceled.
+        :raises WorldModelModifiedDuringMotionError: If another process modified the
+            world model.
         """
+        self.apply_world_updates()
         self.inputs.synchronize()
         self.raise_if_canceled()
         self.executor.tick()
         self.publish_commands()
         self.publish_qp_data()
         self.feedback_publisher.publish_if_changed()
-        self.world_synchronizer.acknowledge_missed_messages()
         self.heartbeat.tick()
+
+    def apply_world_updates(self) -> None:
+        """
+        Take over the state of other processes and stop on a model change.
+
+        Receipt is acknowledged even for the change that terminates the motion, so a
+        process publishing synchronously is not blocked by it.
+
+        :raises WorldModelModifiedDuringMotionError: If another process modified the
+            world model, or is in the middle of doing so.
+        """
+        if self.world.world_is_being_modified:
+            raise WorldModelModifiedDuringMotionError()
+        self.world_updates.apply_state_updates()
+        self.world_updates.acknowledge_receipt()
+        if self.world_updates.has_pending_model_change:
+            raise WorldModelModifiedDuringMotionError()
 
     def publish_qp_data(self) -> None:
         """

@@ -1,3 +1,4 @@
+import json
 import threading
 from typing import List, Optional, Tuple, Union, Any
 
@@ -18,6 +19,8 @@ from giskardpy.middleware.ros2.utils.asynio_utils import wait_until_not_none
 from giskardpy.middleware.ros2.exceptions import (
     ExecutionAbortedException,
     ExecutionCanceledException,
+    ExecutionException,
+    WorldModelModifiedDuringMotionError,
 )
 from giskardpy.middleware.ros2 import rospy
 from giskardpy.middleware.ros2.event_loop_manager import get_event_loop
@@ -195,13 +198,25 @@ class MyActionClient:
         self.result = None
         match result.status:
             case GoalStatus.STATUS_ABORTED:
-                raise ExecutionAbortedException()
+                raise self.create_abort_exception(result)
             case GoalStatus.STATUS_SUCCEEDED:
                 return result
             case GoalStatus.STATUS_CANCELED:
                 raise ExecutionCanceledException(self._client._action_name, goal_id)
             case _:
                 raise Exception(f"Unexpected status {result.status}")
+
+    def create_abort_exception(self, result: Any) -> ExecutionException:
+        """
+        Build the exception of an aborted goal from the reason the server reported.
+
+        The action status alone cannot tell a caller whether sending the goal again
+        would help, so the reason travels in the result payload.
+        """
+        payload = json.loads(result.result.result)
+        if payload.get("error") == WorldModelModifiedDuringMotionError.__name__:
+            return WorldModelModifiedDuringMotionError()
+        return ExecutionAbortedException()
 
     def __goal_accepted_cb(self, future: Future):
         goal_handle = future.result()
