@@ -603,16 +603,6 @@ class SymbolicExpression(ABC):
         """
         yield from self._iter_descendants_(set())
 
-    def _get_expressions_by_their_ids_(
-        self, ids: OrderedSet[uuid.UUID]
-    ) -> List[SymbolicExpression]:
-        """
-        :param ids: Expression identifiers to resolve, typically an
-            :attr:`OperationResult.satisfied_condition_ids`.
-        :return: The expression for each id in *ids*.
-        """
-        return [self._get_expression_by_id_(id_) for id_ in ids]
-
     def _iter_descendants_(
         self, visited_ids: Set[uuid.UUID]
     ) -> Iterator[SymbolicExpression]:

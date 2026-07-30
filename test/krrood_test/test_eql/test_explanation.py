@@ -327,10 +327,11 @@ def test_satisfied_conditions_and_both_true():
     assert len(true_results) == 1
     result = true_results[0]
 
-    expressions = val._conditions_root_._get_expressions_by_their_ids_(
-        result.satisfied_condition_ids
-    )
-    assert set(expressions) == {condition, greater, less}
+    assert set(result.satisfied_condition_ids) == {
+        condition._id_,
+        greater._id_,
+        less._id_,
+    }
 
 
 def test_satisfied_conditions_and_short_circuit():
@@ -359,11 +360,8 @@ def test_satisfied_conditions_or_first_true():
     assert len(true_results) == 1
     result = true_results[0]
 
-    expressions = val._conditions_root_._get_expressions_by_their_ids_(
-        result.satisfied_condition_ids
-    )
     # Exact set: the short-circuited right side is absent rather than satisfied.
-    assert set(expressions) == {condition, greater}
+    assert set(result.satisfied_condition_ids) == {condition._id_, greater._id_}
 
 
 def test_satisfied_conditions_or_fallback():
@@ -380,11 +378,8 @@ def test_satisfied_conditions_or_fallback():
     assert len(true_results) == 1
     result = true_results[0]
 
-    expressions = val._conditions_root_._get_expressions_by_their_ids_(
-        result.satisfied_condition_ids
-    )
     # Exact set: the evaluated-but-false left side is absent rather than satisfied.
-    assert set(expressions) == {condition, true_side}
+    assert set(result.satisfied_condition_ids) == {condition._id_, true_side._id_}
 
 
 def test_satisfied_conditions_not():
@@ -400,11 +395,8 @@ def test_satisfied_conditions_not():
     assert len(true_results) == 1
     result = true_results[0]
 
-    expressions = val._conditions_root_._get_expressions_by_their_ids_(
-        result.satisfied_condition_ids
-    )
     # Exact set: Not is satisfied, its false inner comparator is not.
-    assert set(expressions) == {condition}
+    assert set(result.satisfied_condition_ids) == {condition._id_}
 
 
 def test_satisfied_conditions_nested_and_or():
@@ -435,11 +427,13 @@ def test_satisfied_conditions_nested_and_or_satisfied():
     assert len(true_results) == 1
     result = true_results[0]
 
-    expressions = val._conditions_root_._get_expressions_by_their_ids_(
-        result.satisfied_condition_ids
-    )
     # Exact set: the equality short-circuited by OR is absent rather than satisfied.
-    assert set(expressions) == {condition, inner_or, greater, less}
+    assert set(result.satisfied_condition_ids) == {
+        condition._id_,
+        inner_or._id_,
+        greater._id_,
+        less._id_,
+    }
 
 
 def test_satisfied_conditions_no_where():
