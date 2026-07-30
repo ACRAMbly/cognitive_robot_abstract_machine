@@ -1125,7 +1125,7 @@ class TestCollisionAvoidanceGoals:
         fake_table_setup.check_cpi_geq(fake_table_setup.get_l_gripper_links(), 0.05)
         fake_table_setup.check_cpi_geq(
             [
-                self.giskard.executor.context.world.get_kinematic_structure_entity_by_name(
+                fake_table_setup.giskard.executor.context.world.get_kinematic_structure_entity_by_name(
                     "r_gripper_l_finger_tip_link"
                 )
             ],
@@ -1133,7 +1133,7 @@ class TestCollisionAvoidanceGoals:
         )
         fake_table_setup.check_cpi_geq(
             [
-                self.giskard.executor.context.world.get_kinematic_structure_entity_by_name(
+                fake_table_setup.giskard.executor.context.world.get_kinematic_structure_entity_by_name(
                     "r_gripper_r_finger_tip_link"
                 )
             ],
