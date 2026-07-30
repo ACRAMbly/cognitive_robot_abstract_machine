@@ -53,14 +53,24 @@ class MoveJointsMotion(BaseMotion):
     (optional).
     """
 
+    max_velocity: Optional[float] = None
+    """
+    Joint velocity (in rad/s or m/s, per joint) to command. ``None`` keeps the default
+    velocity.
+    """
+
     def perform(self):
         return
 
     @property
     def _motion_chart(self):
         dofs = [self.world.get_connection_by_name(name) for name in self.names]
+        keyword_arguments = {}
+        if self.max_velocity is not None:
+            keyword_arguments["max_velocity"] = self.max_velocity
         return JointPositionList(
-            goal_state=JointState.from_mapping(dict(zip(dofs, self.positions)))
+            goal_state=JointState.from_mapping(dict(zip(dofs, self.positions))),
+            **keyword_arguments,
         )
 
 

@@ -10,16 +10,19 @@ from coraplex.datastructures.enums import (
     ApproachDirection,
     VerticalAlignment,
     Arms,
+    MovementType,
 )
 from coraplex.datastructures.grasp import GraspDescription
 from coraplex.execution_environment import simulated_robot, real_robot
 from coraplex.plans.factories import sequential, execute_single
 from coraplex.plans.plan_node import MotionNode, ActionNode
-from coraplex.robot_plans import MoveMotion
+from coraplex.robot_plans import MoveMotion, MoveToolCenterPointMotion
 from coraplex.robot_plans.actions.core.navigation import NavigateAction
-from coraplex.robot_plans.actions.core.pick_up import PickUpAction
+from coraplex.robot_plans.actions.core.pick_up import PickUpAction, ReachAction
+from coraplex.robot_plans.actions.core.placing import PlaceAction
 from coraplex.robot_plans.actions.core.robot_body import MoveTorsoAction
-from semantic_digital_twin.datastructures.definitions import TorsoState
+from coraplex.robot_plans.motions.gripper import MoveGripperMotion
+from semantic_digital_twin.datastructures.definitions import GripperState, TorsoState
 from semantic_digital_twin.robots.pr2 import PR2
 from semantic_digital_twin.spatial_types import Point3, Quaternion
 from semantic_digital_twin.spatial_types.spatial_types import Pose
@@ -97,6 +100,210 @@ def test_move_motion_chart(immutable_model_world):
 
     assert msc
     np.testing.assert_equal(msc.goal_pose.to_position().to_np(), np.array([1, 1, 1, 1]))
+
+
+def test_move_tool_center_point_motion_uses_tight_threshold(immutable_model_world):
+    """
+    MoveToolCenterPointMotion drives grasp approaches, so it must not fall back to
+    Giskard's loose default CartesianPose/CartesianPosition threshold (0.01m): that
+    tolerance is wide enough to let the gripper stop a centimeter away from a small
+    object, e.g. missing or off-center grasps.
+    """
+    world, view, context = immutable_model_world
+    target = Pose(Point3.from_iterable([1, 1, 1]), reference_frame=world.root)
+
+    cartesian_motion = MoveToolCenterPointMotion(
+        target, Arms.LEFT, movement_type=MovementType.CARTESIAN
+    )
+    execute_single(cartesian_motion, context=context)
+    assert isinstance(cartesian_motion.motion_chart, CartesianPose)
+    assert cartesian_motion.motion_chart.threshold == 0.005
+
+    translation_motion = MoveToolCenterPointMotion(
+        target, Arms.LEFT, movement_type=MovementType.TRANSLATION
+    )
+    execute_single(translation_motion, context=context)
+    assert translation_motion.motion_chart.threshold == 0.005
+
+
+def test_move_gripper_motion_tolerate_stall_defaults_to_false(immutable_model_world):
+    """
+    MoveGripperMotion must not tolerate a stall by default, for either OPEN or CLOSE --
+    stalling before reaching the target is a real failure that should be surfaced,
+    unless a caller (e.g. PickUpAction, grasping a real object) explicitly opts in via
+    ``tolerate_stall=True``. A caller that never mentions this field must keep relying
+    on the original, unmodified default behaviour.
+    """
+    world, view, context = immutable_model_world
+
+    close_motion = MoveGripperMotion(motion=GripperState.CLOSE, gripper=Arms.LEFT)
+    execute_single(close_motion, context=context)
+    assert close_motion.motion_chart.tolerate_stall is False
+
+    open_motion = MoveGripperMotion(motion=GripperState.OPEN, gripper=Arms.LEFT)
+    execute_single(open_motion, context=context)
+    assert open_motion.motion_chart.tolerate_stall is False
+
+
+def test_move_gripper_motion_tolerate_stall_can_be_explicitly_enabled(
+    immutable_model_world,
+):
+    """
+    An explicit ``tolerate_stall=True`` must reach the underlying
+    JointPositionList task, so a caller that does want stall tolerance (e.g.
+    PickUpAction's own grasp-closing motion) can opt into it without affecting any
+    other MoveGripperMotion's default behaviour.
+    """
+    world, view, context = immutable_model_world
+
+    close_motion = MoveGripperMotion(
+        motion=GripperState.CLOSE, gripper=Arms.LEFT, tolerate_stall=True
+    )
+    execute_single(close_motion, context=context)
+    assert close_motion.motion_chart.tolerate_stall is True
+
+
+def test_pick_up_action_close_motion_tolerates_stall(immutable_model_world):
+    """
+    PickUpAction's own grasp-closing motion must opt into stall tolerance, so a grasped
+    object's fingers physically stopping before the nominal fully-closed target is
+    correctly treated as a real grasp, not a failed motion.
+    """
+    world, view, context = immutable_model_world
+    grasp_description = GraspDescription(
+        ApproachDirection.FRONT,
+        VerticalAlignment.NoAlignment,
+        view.left_arm.end_effector,
+    )
+    pick_up = PickUpAction(
+        world.get_body_by_name("milk.stl"), Arms.LEFT, grasp_description
+    )
+    sequential([pick_up], context=context)
+
+    close_motion_nodes = pick_up._action_plan.plan.get_nodes_by_designator_type(
+        MoveGripperMotion
+    )
+    assert len(close_motion_nodes) == 1
+    assert close_motion_nodes[0].designator.tolerate_stall is True
+
+
+def test_move_gripper_motion_target_opening_overrides_state_position(
+    immutable_model_world,
+):
+    """
+    An explicit ``target_opening`` must override the finger positions the GripperState
+    would otherwise command, so a grasp can close to a specific squeeze without changing
+    the robot's shared CLOSE state -- while the same fingers are still targeted, so the
+    sim synchronizer maps it to the actuator control the same way.
+    """
+    world, view, context = immutable_model_world
+
+    custom_opening = 0.015
+    custom_motion = MoveGripperMotion(
+        motion=GripperState.CLOSE, gripper=Arms.LEFT, target_opening=custom_opening
+    )
+    execute_single(custom_motion, context=context)
+
+    default_motion = MoveGripperMotion(motion=GripperState.CLOSE, gripper=Arms.LEFT)
+    execute_single(default_motion, context=context)
+
+    assert set(custom_motion.motion_chart.goal_state.connections) == set(
+        default_motion.motion_chart.goal_state.connections
+    )
+    assert all(
+        value == custom_opening
+        for value in custom_motion.motion_chart.goal_state.target_values
+    )
+    assert all(
+        value == 0.0 for value in default_motion.motion_chart.goal_state.target_values
+    )
+
+
+def test_pick_up_action_threads_grasp_opening_to_close_motion(immutable_model_world):
+    """
+    PickUpAction's ``grasp_opening`` must reach the grasp's CLOSE motion (and only that
+    motion), so a caller can pick with a specific squeeze while the OPEN motion -- issued
+    by the nested ReachAction, before the final approach -- and the robot's shared
+    gripper states stay untouched.
+
+    The OPEN motion lives inside ReachAction's own plan, which PickUpAction's static
+    plan does not expand (that only happens once ReachAction is actually performed), so
+    it is inspected by building ReachAction's plan directly.
+    """
+    world, view, context = immutable_model_world
+    grasp_description = GraspDescription(
+        ApproachDirection.FRONT,
+        VerticalAlignment.NoAlignment,
+        view.left_arm.end_effector,
+    )
+    custom_opening = 0.012
+
+    pick_up = PickUpAction(
+        world.get_body_by_name("milk.stl"),
+        Arms.LEFT,
+        grasp_description,
+        grasp_opening=custom_opening,
+    )
+    sequential([pick_up], context=context)
+    top_level_plan = pick_up._action_plan.plan
+    close_motion_nodes = top_level_plan.get_nodes_by_designator_type(MoveGripperMotion)
+    assert len(close_motion_nodes) == 1
+    assert close_motion_nodes[0].designator.motion == GripperState.CLOSE
+    assert close_motion_nodes[0].designator.target_opening == custom_opening
+
+    reach_action = top_level_plan.get_nodes_by_designator_type(ReachAction)[
+        0
+    ].designator
+    reach_plan = reach_action._action_plan.plan
+    open_motion_nodes = reach_plan.get_nodes_by_designator_type(MoveGripperMotion)
+    assert len(open_motion_nodes) == 1
+    assert open_motion_nodes[0].designator.motion == GripperState.OPEN
+    assert open_motion_nodes[0].designator.target_opening is None
+
+
+def test_pick_up_action_velocity_fields_default_to_none(immutable_model_world):
+    """
+    PickUpAction's velocity/timing/friction fields must all default to ``None`` when not
+    explicitly set, so an existing caller that never mentions them keeps relying on
+    Giskard's own task defaults instead of a new, silently-injected value -- these
+    physics fields are opt-in additions, not a change to the action's default behaviour.
+    """
+    world, view, context = immutable_model_world
+    grasp_description = GraspDescription(
+        ApproachDirection.FRONT,
+        VerticalAlignment.NoAlignment,
+        view.left_arm.end_effector,
+    )
+
+    pick_up = PickUpAction(
+        world.get_body_by_name("milk.stl"), Arms.LEFT, grasp_description
+    )
+
+    assert pick_up.pre_approach_linear_velocity is None
+    assert pick_up.grasp_linear_velocity is None
+    assert pick_up.grasp_closing_velocity is None
+    assert pick_up.lift_linear_velocity is None
+    assert pick_up.grasp_stall_minimum_time is None
+    assert pick_up.object_friction is None
+    assert pick_up.max_grasp_attempts is None
+
+
+def test_place_action_velocity_fields_default_to_none(immutable_model_world):
+    """
+    PlaceAction's velocity/timing fields must all default to ``None`` when not
+    explicitly set, matching PickUpAction's own opt-in design: an existing caller that
+    never mentions them keeps relying on Giskard's own task defaults.
+    """
+    world, view, context = immutable_model_world
+    target_location = Pose(Point3.from_iterable([1, 1, 1]), reference_frame=world.root)
+
+    place = PlaceAction(world.get_body_by_name("milk.stl"), target_location, Arms.LEFT)
+
+    assert place.placing_linear_velocity is None
+    assert place.transport_linear_velocity is None
+    assert place.release_opening_velocity is None
+    assert place.retract_linear_velocity is None
+    assert place.max_release_attempts is None
 
 
 @pytest.mark.skipif(skip_tests, reason="Alternative motion mappings not available")

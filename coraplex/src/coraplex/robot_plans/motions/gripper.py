@@ -24,10 +24,24 @@ from coraplex.datastructures.grasp import GraspDescription
 from coraplex.view_manager import ViewManager
 from coraplex.utils import translate_pose_along_local_axis
 
+TOOL_ORIENTATION_THRESHOLD = 0.02
+"""
+Orientation tolerance in rad (~1.1 degrees) for tool-center-point poses.
+
+The position ``threshold`` of 0.005 doubles as a rotation tolerance in
+:class:`~giskardpy.motion_statechart.tasks.cartesian_tasks.CartesianPose` unless
+overridden -- 0.005 rad (0.29 degrees) is unreachable for a physically simulated arm,
+whose PD-tracked joints settle with a residual orientation error of ~0.008 rad, so such
+a task never registers as done and stalls the rest of the plan behind it.
+"""
+
 
 @dataclass
 class ReachMotion(BaseMotion):
-    """ """
+    """
+    Moves the tool center point through the grasp description's pre-grasp and grasp
+    poses for an object.
+    """
 
     object_designator: Body
     """
@@ -85,6 +99,7 @@ class ReachMotion(BaseMotion):
                 tip_link=tip,
                 goal_pose=pose,
                 threshold=0.005,
+                orientation_threshold=TOOL_ORIENTATION_THRESHOLD,
                 name="Reach",
             )
             for pose in self._calculate_pose_sequence()
@@ -111,18 +126,67 @@ class MoveGripperMotion(BaseMotion):
     If the gripper is allowed to collide with something
     """
 
+    target_opening: Optional[float] = None
+    """
+    Explicit finger opening (in meters) to command instead of the position the
+    GripperState would resolve to. ``None`` keeps the GripperState's own position.
+    """
+
+    finger_velocity: Optional[float] = None
+    """
+    Finger joint velocity (in m/s) to command. ``None`` keeps the default velocity.
+    """
+
+    stall_minimum_time: Optional[float] = None
+    """
+    Minimum stall dwell time (in seconds, see
+    :attr:`~giskardpy.motion_statechart.tasks.joint_tasks.JointPositionList.stall_minimum_time`)
+    to command. Only meaningful when :attr:`tolerate_stall` is True. ``None`` keeps the
+    default.
+    """
+
+    tolerate_stall: bool = False
+    """
+    Whether the motion is considered done once the fingers' velocities settle near
+    zero, even without reaching their nominal target position (see
+    :attr:`~giskardpy.motion_statechart.tasks.joint_tasks.JointPositionList.tolerate_stall`).
+    """
+
     def perform(self):
         return
+
+    def _goal_state(self, end_effector: EndEffector) -> JointState:
+        """
+        The finger joint state this motion commands: the GripperState's own state, or --
+        when ``target_opening`` is set -- the same finger connections remapped to that
+        explicit opening.
+        """
+        goal_state = end_effector.get_joint_state_by_type(self.motion)
+        if self.target_opening is None:
+            return goal_state
+        return JointState.from_mapping(
+            mapping={
+                connection: self.target_opening for connection in goal_state.connections
+            },
+        )
 
     @property
     def _motion_chart(self):
         arm = ViewManager().get_end_effector_view(self.gripper, self.robot)
 
+        keyword_arguments = {}
+        if self.finger_velocity is not None:
+            keyword_arguments["max_velocity"] = self.finger_velocity
+        if self.stall_minimum_time is not None:
+            keyword_arguments["stall_minimum_time"] = self.stall_minimum_time
+
         return JointPositionList(
-            goal_state=arm.get_joint_state_by_type(self.motion),
+            goal_state=self._goal_state(arm),
             name=(
                 "OpenGripper" if self.motion == GripperState.OPEN else "CloseGripper"
             ),
+            tolerate_stall=self.tolerate_stall,
+            **keyword_arguments,
         )
 
 
@@ -149,6 +213,18 @@ class MoveToolCenterPointMotion(BaseMotion):
     The type of movement that should be performed.
     """
 
+    reference_linear_velocity: Optional[float] = None
+    """
+    Linear reference velocity (in m/s) to command. ``None`` keeps the default velocity.
+    """
+
+    reference_angular_velocity: Optional[float] = None
+    """
+    Angular reference velocity (in rad/s) to command, used only for
+    :class:`~giskardpy.motion_statechart.tasks.cartesian_tasks.CartesianPose`. ``None``
+    keeps the default velocity.
+    """
+
     def perform(self):
         return
 
@@ -163,20 +239,37 @@ class MoveToolCenterPointMotion(BaseMotion):
         )
         task = None
         if self.movement_type == MovementType.TRANSLATION:
+            keyword_arguments = {}
+            if self.reference_linear_velocity is not None:
+                keyword_arguments["reference_velocity"] = self.reference_linear_velocity
             task = CartesianPosition(
                 root_link=root,
                 tip_link=tip,
                 goal_point=self.target.to_position(),
                 name="MoveTCP",
                 weight=DefaultWeights.WEIGHT_BELOW_CA,
+                threshold=0.005,
+                **keyword_arguments,
             )
         else:
+            keyword_arguments = {}
+            if self.reference_linear_velocity is not None:
+                keyword_arguments["reference_linear_velocity"] = (
+                    self.reference_linear_velocity
+                )
+            if self.reference_angular_velocity is not None:
+                keyword_arguments["reference_angular_velocity"] = (
+                    self.reference_angular_velocity
+                )
             task = CartesianPose(
                 root_link=root,
                 tip_link=tip,
                 goal_pose=self.target,
                 name="MoveTCP",
                 weight=DefaultWeights.WEIGHT_BELOW_CA,
+                threshold=0.005,
+                orientation_threshold=TOOL_ORIENTATION_THRESHOLD,
+                **keyword_arguments,
             )
         return task
 
@@ -265,6 +358,7 @@ class MoveManipulatorMotion(BaseMotion):
             tip_link=self.end_effector.tool_frame,
             goal_pose=self.target,
             threshold=0.005,
+            orientation_threshold=TOOL_ORIENTATION_THRESHOLD,
             binding_policy=GoalBindingPolicy.Bind_on_start,
             name=self.__class__.__name__,
         )

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import field, dataclass
+from typing_extensions import Optional
 
 import krrood.symbolic_math.symbolic_math as sm
 from giskardpy.motion_statechart.context import MotionStatechartContext
@@ -8,6 +9,8 @@ from giskardpy.motion_statechart.data_types import DefaultWeights
 from giskardpy.motion_statechart.exceptions import NodeInitializationError
 from giskardpy.motion_statechart.graph_node import NodeArtifacts
 from giskardpy.motion_statechart.graph_node import Task
+from giskardpy.motion_statechart.monitors.monitors import build_local_minimum_expression
+from krrood.symbolic_math.symbolic_math import FloatVariable
 from semantic_digital_twin.datastructures.joint_state import JointState
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 from semantic_digital_twin.spatial_types.derivatives import Derivatives
@@ -46,6 +49,43 @@ class JointPositionList(Task):
     The maximum velocity of the joints.
     """
 
+    tolerate_stall: bool = field(default=False, kw_only=True)
+    """
+    If True, the task is also considered done once the commanded joints' velocities
+    settle near zero for ``stall_minimum_time`` seconds, even if the position error
+    has not converged below ``threshold``.
+    """
+
+    stall_minimum_time: float = field(default=1.0, kw_only=True)
+    """
+    Minimum elapsed control time before a stall can count as "done" (see
+    ``tolerate_stall``).
+    """
+
+    stall_velocity_threshold: float = field(default=0.01, kw_only=True)
+    """
+    Fraction of each joint's max velocity below which it counts as stalled (see
+    ``tolerate_stall``); forwarded as
+    :func:`~giskardpy.motion_statechart.monitors.monitors.build_local_minimum_expression`'s
+    ``joint_convergence_threshold``.
+    """
+
+    _start_cycle_variable: Optional[FloatVariable] = field(
+        init=False, default=None, repr=False
+    )
+    """
+    Control-cycle count at which this task actually started running, set in
+    ``on_start`` so stall detection measures elapsed time from there instead of from
+    the start of the whole motion chart.
+    """
+
+    def on_start(self, context: MotionStatechartContext):
+        if self._start_cycle_variable is not None:
+            context.float_variable_data.set_value(
+                self._start_cycle_variable,
+                context.control_cycle_variable.evaluate()[0],
+            )
+
     def build(self, context: MotionStatechartContext) -> NodeArtifacts:
         if len(self.goal_state) == 0:
             raise NodeInitializationError(node=self, reason="empty goal_state")
@@ -72,7 +112,25 @@ class JointPositionList(Task):
                 task_expression=current,
             )
             errors.append(sm.abs(error) < self.threshold)
-        artifacts.observation = sm.logic_all(sm.Vector(errors))
+        position_reached = sm.logic_all(sm.Vector(errors))
+
+        if not self.tolerate_stall:
+            artifacts.observation = position_reached
+            return artifacts
+
+        self._start_cycle_variable = FloatVariable(f"{self.name}_start_cycle")
+        context.float_variable_data.register_expression(self._start_cycle_variable)
+
+        stalled = build_local_minimum_expression(
+            degrees_of_freedom=[
+                connection.raw_dof for connection in self.goal_state.connections
+            ],
+            context=context,
+            joint_convergence_threshold=self.stall_velocity_threshold,
+            minimum_time=self.stall_minimum_time,
+            reference_cycle_variable=self._start_cycle_variable,
+        )
+        artifacts.observation = sm.trinary_logic_or(position_reached, stalled)
         return artifacts
 
     def apply_limits_to_target(
