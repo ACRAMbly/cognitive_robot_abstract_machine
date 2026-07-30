@@ -637,22 +637,53 @@ print("MJCF table world has", len(mjcf_world.bodies), "bodies")
 
 ### Adding a robot
 
-A world specification can also merge a robot into the environment. Supply the robot's
-[semantic annotation class](adding-robots) through `robot_semantic_annotation`; the robot is
-parsed from its own description and inserted as `world.root -> odom -> connection -> robot`.
-The connection attaching the robot to `odom` is the drive determined by the robot's mobile
-base, or a fixed connection when the robot has no mobile base. `world_T_odom` sets the
-localization pose, and `odom_T_robot_start` the robot's start pose.
+A world specification can also merge robots into the environment. Each one is described by a
+`RobotSpecification`, which bundles a robot's [semantic annotation class](adding-robots) with
+the poses that place it: `world_T_odom` sets the localization pose, and `odom_T_robot_start`
+the robot's start pose. The robot is parsed from its own description and inserted as
+`world.root -> odom -> connection -> robot`. The connection attaching the robot to its `odom`
+is the drive determined by the robot's mobile base, or a fixed connection when the robot has
+no mobile base.
 
 ```{code-cell} ipython3
+from semantic_digital_twin.api.specifications import RobotSpecification
 from semantic_digital_twin.robots.pr2 import PR2
 
 world = WorldSpecification.from_urdf(
     file_path=table_urdf,
-    robot_semantic_annotation=PR2,
-    world_T_odom=HomogeneousTransformationMatrix.from_xyz_rpy(x=1.0),
-    odom_T_robot_start=HomogeneousTransformationMatrix.from_xyz_rpy(y=2.0),
+    robots=[
+        RobotSpecification(
+            semantic_annotation_type=PR2,
+            world_T_odom=HomogeneousTransformationMatrix.from_xyz_rpy(x=1.0),
+            odom_T_robot_start=HomogeneousTransformationMatrix.from_xyz_rpy(y=2.0),
+        )
+    ],
 ).to_domain_object()
+```
+
+Because `robots` is a list, a world can hold several of them, each with its own localization —
+including several instances of the same robot. Names are not unique in a world, so two PR2s
+contribute two joints called `pr2/torso_lift_joint`. Each robot is therefore annotated while it
+still owns the world it was parsed into, and its `odom` body carries its own identifier as a
+name prefix, so the localization frames stay distinguishable.
+
+```{code-cell} ipython3
+two_robot_world = WorldSpecification.from_urdf(
+    file_path=table_urdf,
+    robots=[
+        RobotSpecification(
+            semantic_annotation_type=PR2,
+            world_T_odom=HomogeneousTransformationMatrix.from_xyz_rpy(x=1.0),
+        ),
+        RobotSpecification(
+            semantic_annotation_type=PR2,
+            world_T_odom=HomogeneousTransformationMatrix.from_xyz_rpy(x=-1.0),
+        ),
+    ],
+).to_domain_object()
+
+assert len(two_robot_world.get_semantic_annotations_by_type(PR2)) == 2
+print("Two independently localized PR2s share one world")
 ```
 
 ## Putting it together

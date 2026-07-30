@@ -93,6 +93,36 @@ questions = [
         {"answer": "A new world that shares bodies with the previous one", "correct": False},
         {"answer": "It fails on the second call because the environment was consumed", "correct": False}
       ],
+    },
+    {
+      "question": "What does a RobotSpecification bundle?",
+      "type": "multiple_choice",
+      "answers": [
+        {"answer": "A robot's semantic annotation class together with its localization and start poses", "correct": True},
+        {"answer": "A parsed robot world that is merged as-is into the environment", "correct": False},
+        {"answer": "The robot's joint limits and controller configuration", "correct": False},
+        {"answer": "The list of objects a robot is allowed to manipulate", "correct": False}
+      ],
+    },
+    {
+      "question": "Where does a robot end up in the world a WorldSpecification materializes?",
+      "type": "multiple_choice",
+      "answers": [
+        {"answer": "Under world.root via an odom body, attached by the drive its mobile base declares", "correct": True},
+        {"answer": "Directly at world.root, replacing the previous root body", "correct": False},
+        {"answer": "As a detached branch that must be connected manually afterwards", "correct": False},
+        {"answer": "Under the first object in the objects list", "correct": False}
+      ],
+    },
+    {
+      "question": "WorldSpecification.robots is a list rather than a single robot. What does that buy you?",
+      "type": "multiple_choice",
+      "answers": [
+        {"answer": "Several robots can be described in one scene, each with its own localization", "correct": True},
+        {"answer": "The same robot can be retried if its description fails to parse", "correct": False},
+        {"answer": "The robots are spawned in parallel to speed up materialization", "correct": False},
+        {"answer": "Nothing; the list may only ever hold one entry", "correct": False}
+      ],
     }
 ]
 

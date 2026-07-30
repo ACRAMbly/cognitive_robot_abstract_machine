@@ -1476,3 +1476,33 @@ class InvalidVideoRecordingRateError(VideoRecordingError):
 
     def suggest_correction(self) -> str:
         return "use a positive integer."
+
+
+@dataclass
+class MergedRobotAnnotationNotFound(UsageError):
+    """
+    Raised when merging a robot into a world produced no semantic annotation for the
+    branch the robot was annotated on.
+    """
+
+    annotation_type_name: str
+    """
+    The name of the robot annotation type that was expected in the merged world.
+    """
+
+    annotation_root_id: UUID
+    """
+    The identifier of the annotated robot's root entity.
+    """
+
+    def error_message(self) -> str:
+        return (
+            f"The merged world holds no '{self.annotation_type_name}' annotation rooted "
+            f"at the entity '{self.annotation_root_id}'."
+        )
+
+    def suggest_correction(self) -> str:
+        return (
+            "check that merging the robot world replays its semantic annotations into "
+            "the target world."
+        )

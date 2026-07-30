@@ -22,6 +22,7 @@ You will:
 - Give a body a degree of freedom through a connection specification
 - Build an annotation specification with a nested part
 - Describe a whole scene with a `WorldSpecification` and materialize it twice
+- Place a robot into a scene with a `RobotSpecification`
 
 ## 0. Setup
 
@@ -35,9 +36,11 @@ from pathlib import Path
 from semantic_digital_twin.api.specifications import (
     BodySpecification,
     PrismaticConnectionSpecification,
+    RobotSpecification,
     SemanticAnnotationWithRootSpecification,
     WorldSpecification,
 )
+from semantic_digital_twin.robots.pr2 import PR2
 from semantic_digital_twin.semantic_annotations.semantic_annotations import Drawer, Handle, Milk
 from semantic_digital_twin.spatial_types.spatial_types import HomogeneousTransformationMatrix, Vector3
 from semantic_digital_twin.world import World
@@ -201,4 +204,46 @@ assert first_world is not second_world, "Each materialization should yield an in
 assert len(first_world.get_semantic_annotations_by_type(Milk)) == 1
 assert len(second_world.get_semantic_annotations_by_type(Milk)) == 1
 assert first_world.get_body_by_name("cup") is not None
+```
+
+## 5. Place a robot into the scene
+A robot is described by a `RobotSpecification`, which bundles the robot's semantic annotation
+class with the poses that place it. `WorldSpecification.robots` takes a list of them.
+
+Your goal:
+- Build a `WorldSpecification` from `table_urdf` whose `robots` hold a single `RobotSpecification`
+  for `PR2`, localized at `world_T_odom = HomogeneousTransformationMatrix.from_xyz_rpy(x=1.0)`
+- Store it in a variable named `robot_specification` and materialize it into `robot_world`
+
+```{code-cell} ipython3
+:tags: [exercise]
+# TODO: describe a scene that contains a robot
+# robot_specification = WorldSpecification.from_urdf(
+#     table_urdf,
+#     robots=[RobotSpecification(semantic_annotation_type=..., world_T_odom=...)],
+# )
+# robot_world = robot_specification.to_domain_object()
+```
+
+```{code-cell} ipython3
+:tags: [example-solution]
+robot_specification = WorldSpecification.from_urdf(
+    table_urdf,
+    robots=[
+        RobotSpecification(
+            semantic_annotation_type=PR2,
+            world_T_odom=HomogeneousTransformationMatrix.from_xyz_rpy(x=1.0),
+        )
+    ],
+)
+robot_world = robot_specification.to_domain_object()
+```
+
+```{code-cell} ipython3
+:tags: [verify-solution, remove-input]
+assert len(robot_world.get_semantic_annotations_by_type(PR2)) == 1, "The robot should be annotated."
+odom_body = robot_world.get_body_by_name("odom")
+assert odom_body.parent_connection.parent is robot_world.root, "odom hangs off the world root."
+root_T_odom = robot_world.compute_forward_kinematics(robot_world.root, odom_body)
+assert abs(root_T_odom.to_position().to_np()[0] - 1.0) < 1e-6, "The localization pose should apply."
 ```

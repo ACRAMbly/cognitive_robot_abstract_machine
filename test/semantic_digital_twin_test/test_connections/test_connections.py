@@ -143,9 +143,9 @@ def test_create_with_dofs_accepts_the_shared_parameters(connection_type):
     """
     Every implementation must accept the parameters a polymorphic caller supplies.
 
-    ``ConnectionSpecification.connect`` and ``WorldSpecification._setup_robot`` dispatch
-    on a connection type they do not know statically, so these parameters are the
-    interface every connection family has to honour.
+    ``ConnectionSpecification.connect`` and ``RobotSpecification.spawn`` dispatch on a
+    connection type they do not know statically, so these parameters are the interface
+    every connection family has to honour.
     """
     parameters = inspect.signature(connection_type.create_with_dofs).parameters
     assert {

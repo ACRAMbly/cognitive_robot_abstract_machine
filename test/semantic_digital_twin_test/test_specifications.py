@@ -1,6 +1,7 @@
 import copy
 import inspect
 import os
+from uuid import uuid4
 from pathlib import Path
 
 import numpy as np
@@ -17,6 +18,7 @@ from semantic_digital_twin.api.specifications import (
     PrismaticConnectionSpecification,
     RevoluteConnectionSpecification,
     SemanticAnnotationWithRootSpecification,
+    RobotSpecification,
     WorldSpecification,
     SpawnSpecification,
 )
@@ -25,6 +27,7 @@ from krrood.ormatic.data_access_objects.helper import to_dao
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 from semantic_digital_twin.exceptions import (
     InvalidPlaneDimensions,
+    MergedRobotAnnotationNotFound,
     MissingConnectionAxisError,
     ParsingError,
     PartWholeCardinalityError,
@@ -455,13 +458,29 @@ def test_spawn_positional_name(empty_world):
     assert body.name == PrefixedName("renamed")
 
 
+# %% robot specifications
+
+
+def _odom_bodies(world: World) -> list[Body]:
+    """
+    Every odom body of a world, regardless of the prefix disambiguating it.
+    """
+    return [body for body in world.bodies if body.name.name == "odom"]
+
+
 def test_world_specification_with_robot(empty_world):
     try:
         world = WorldSpecification(
             world=empty_world,
-            robot_semantic_annotation=PR2,
-            world_T_odom=HomogeneousTransformationMatrix.from_xyz_rpy(x=1.0),
-            odom_T_robot_start=HomogeneousTransformationMatrix.from_xyz_rpy(y=2.0),
+            robots=[
+                RobotSpecification(
+                    semantic_annotation_type=PR2,
+                    world_T_odom=HomogeneousTransformationMatrix.from_xyz_rpy(x=1.0),
+                    odom_T_robot_start=HomogeneousTransformationMatrix.from_xyz_rpy(
+                        y=2.0
+                    ),
+                )
+            ],
         ).to_domain_object()
     except ParsingError as error:
         pytest.skip(f"PR2 URDF not available: {error}")
@@ -482,7 +501,7 @@ def test_world_specification_from_urdf_with_robot():
     try:
         world = WorldSpecification.from_urdf(
             os.path.join(RESOURCES, "urdf", "table.urdf"),
-            robot_semantic_annotation=PR2,
+            robots=[RobotSpecification(semantic_annotation_type=PR2)],
         ).to_domain_object()
     except ParsingError as error:
         pytest.skip(f"PR2 URDF not available: {error}")
@@ -492,6 +511,53 @@ def test_world_specification_from_urdf_with_robot():
     assert odom_body.parent_connection.parent is world.root
     drive = world.get_body_by_name("base_footprint").parent_connection
     assert isinstance(drive, OmniDrive)
+
+
+def test_robot_specification_returns_spawned_annotation(empty_world):
+    try:
+        robot = RobotSpecification(semantic_annotation_type=PR2).spawn(empty_world)
+    except ParsingError as error:
+        pytest.skip(f"PR2 URDF not available: {error}")
+
+    assert isinstance(robot, PR2)
+    assert robot in empty_world.get_semantic_annotations_by_type(PR2)
+
+
+def test_world_specification_with_several_robots(empty_world):
+    try:
+        world = WorldSpecification(
+            world=empty_world,
+            robots=[
+                RobotSpecification(
+                    semantic_annotation_type=PR2,
+                    world_T_odom=HomogeneousTransformationMatrix.from_xyz_rpy(x=1.0),
+                ),
+                RobotSpecification(
+                    semantic_annotation_type=PR2,
+                    world_T_odom=HomogeneousTransformationMatrix.from_xyz_rpy(x=-1.0),
+                ),
+            ],
+        ).to_domain_object()
+    except ParsingError as error:
+        pytest.skip(f"PR2 URDF not available: {error}")
+
+    assert len(world.get_semantic_annotations_by_type(PR2)) == 2
+
+    odom_bodies = _odom_bodies(world)
+    assert len(odom_bodies) == 2
+    assert odom_bodies[0].name != odom_bodies[1].name
+    for odom_body in odom_bodies:
+        assert isinstance(odom_body.parent_connection, Connection6DoF)
+        assert odom_body.parent_connection.parent is world.root
+
+    odom_positions = sorted(
+        world.compute_forward_kinematics(world.root, odom_body).to_position().to_np()[0]
+        for odom_body in odom_bodies
+    )
+    np.testing.assert_allclose(odom_positions, [-1.0, 1.0])
+
+
+# %% world specifications with starting objects
 
 
 def test_world_specification_annotation_starting_object(empty_world):

@@ -275,6 +275,25 @@ class SemanticAnnotationWithRootSpecificationDAO_part_bindings_association(
     )
 
 
+class WorldSpecificationDAO_robots_association(Base, AssociationDataAccessObject):
+    __tablename__ = "_87280681859398005675156448247262471525318103287456570203411514"
+
+    database_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+
+    source_worldspecificationdao_id: Mapped[int] = mapped_column(
+        ForeignKey("WorldSpecificationDAO.database_id")
+    )
+    target_robotspecificationdao_id: Mapped[int] = mapped_column(
+        ForeignKey("RobotSpecificationDAO.database_id")
+    )
+
+    target: Mapped[RobotSpecificationDAO] = relationship(
+        "RobotSpecificationDAO",
+        foreign_keys=[target_robotspecificationdao_id],
+        lazy="selectin",
+    )
+
+
 class CollisionCheckingResultDAO_contacts_association(
     Base, AssociationDataAccessObject
 ):
@@ -6033,6 +6052,50 @@ class RevoluteConnectionSpecificationDAO(
     }
 
 
+class RobotSpecificationDAO(
+    Base, DataAccessObject[semantic_digital_twin.api.specifications.RobotSpecification]
+):
+    __tablename__ = "RobotSpecificationDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
+
+    semantic_annotation_type: Mapped[TypeType] = mapped_column(
+        TypeType, nullable=False, use_existing_column=True
+    )
+
+    world_T_odom_id: Mapped[typing.Optional[builtins.int]] = mapped_column(
+        ForeignKey(
+            "HomogeneousTransformationMatrixMappingDAO.database_id", use_alter=True
+        ),
+        nullable=True,
+        use_existing_column=True,
+    )
+    odom_T_robot_start_id: Mapped[typing.Optional[builtins.int]] = mapped_column(
+        ForeignKey(
+            "HomogeneousTransformationMatrixMappingDAO.database_id", use_alter=True
+        ),
+        nullable=True,
+        use_existing_column=True,
+    )
+
+    world_T_odom: Mapped[HomogeneousTransformationMatrixMappingDAO] = relationship(
+        "HomogeneousTransformationMatrixMappingDAO",
+        uselist=False,
+        foreign_keys=[world_T_odom_id],
+        post_update=True,
+    )
+    odom_T_robot_start: Mapped[HomogeneousTransformationMatrixMappingDAO] = (
+        relationship(
+            "HomogeneousTransformationMatrixMappingDAO",
+            uselist=False,
+            foreign_keys=[odom_T_robot_start_id],
+            post_update=True,
+        )
+    )
+
+
 class SpawnSpecificationDAO(
     NamedSpecificationDAO,
     DataAccessObject[semantic_digital_twin.api.specifications.SpawnSpecification],
@@ -6208,36 +6271,17 @@ class WorldSpecificationDAO(
         nullable=True,
         use_existing_column=True,
     )
-    world_T_odom_id: Mapped[typing.Optional[builtins.int]] = mapped_column(
-        ForeignKey(
-            "HomogeneousTransformationMatrixMappingDAO.database_id", use_alter=True
-        ),
-        nullable=True,
-        use_existing_column=True,
-    )
-    odom_T_robot_start_id: Mapped[typing.Optional[builtins.int]] = mapped_column(
-        ForeignKey(
-            "HomogeneousTransformationMatrixMappingDAO.database_id", use_alter=True
-        ),
-        nullable=True,
-        use_existing_column=True,
-    )
 
     world: Mapped[WorldMappingDAO] = relationship(
         "WorldMappingDAO", uselist=False, foreign_keys=[world_id], post_update=True
     )
-    world_T_odom: Mapped[HomogeneousTransformationMatrixMappingDAO] = relationship(
-        "HomogeneousTransformationMatrixMappingDAO",
-        uselist=False,
-        foreign_keys=[world_T_odom_id],
-        post_update=True,
-    )
-    odom_T_robot_start: Mapped[HomogeneousTransformationMatrixMappingDAO] = (
+    robots: Mapped[builtins.list[WorldSpecificationDAO_robots_association]] = (
         relationship(
-            "HomogeneousTransformationMatrixMappingDAO",
-            uselist=False,
-            foreign_keys=[odom_T_robot_start_id],
-            post_update=True,
+            "WorldSpecificationDAO_robots_association",
+            collection_class=builtins.list,
+            cascade="all, delete-orphan",
+            foreign_keys="[WorldSpecificationDAO_robots_association.source_worldspecificationdao_id]",
+            lazy="selectin",
         )
     )
 
@@ -8159,6 +8203,33 @@ class MechanicalJointAlreadyMountedDAO(
 
     __mapper_args__ = {
         "polymorphic_identity": "MechanicalJointAlreadyMountedDAO",
+        "inherit_condition": database_id == UsageErrorDAO.database_id,
+        "polymorphic_load": "selectin",
+    }
+
+
+class MergedRobotAnnotationNotFoundDAO(
+    UsageErrorDAO,
+    DataAccessObject[semantic_digital_twin.exceptions.MergedRobotAnnotationNotFound],
+):
+    __tablename__ = "MergedRobotAnnotationNotFoundDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(UsageErrorDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
+    )
+
+    annotation_type_name: Mapped[builtins.str] = mapped_column(
+        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
+    )
+
+    annotation_root_id: Mapped[uuid.UUID] = mapped_column(
+        sqlalchemy.sql.sqltypes.UUID, nullable=False, use_existing_column=True
+    )
+
+    __mapper_args__ = {
+        "polymorphic_identity": "MergedRobotAnnotationNotFoundDAO",
         "inherit_condition": database_id == UsageErrorDAO.database_id,
         "polymorphic_load": "selectin",
     }

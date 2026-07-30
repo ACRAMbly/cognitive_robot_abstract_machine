@@ -10,6 +10,7 @@ from typing import (
     Any,
     Generic,
 )
+from uuid import UUID, uuid4
 
 from typing_extensions import Self, TypeVar
 
@@ -23,6 +24,7 @@ from semantic_digital_twin.datastructures.prefixed_name import (
     PrefixedName,
 )
 from semantic_digital_twin.exceptions import (
+    MergedRobotAnnotationNotFound,
     PartWholeCardinalityError,
     PartWholeFieldInAnnotationKwargs,
     UnknownPartWholeRelationshipField,
@@ -1078,187 +1080,69 @@ class SemanticAnnotationWithRootSpecification(SpawnSpecification[TSemanticAnnota
                 instance.add(part, field_name=binding.field_name)
 
 
-# %% world specifications
+# %% robot specifications
 
 
 @dataclass
-class WorldSpecification:
+class RobotSpecification:
     """
-    World-independent description of a world: an environment, an optional robot, and
-    objects around them.
+    World-independent description of a robot placed into a world: which robot, where its
+    localization frame sits, and where the robot starts within it.
 
-    The environment is supplied as a concrete :class:`World` (build one from a model
-    file with :meth:`from_urdf` or :meth:`from_mjcf`). Applying it
-    (:meth:`to_domain_object`) optionally parses and merges a robot as ``world.root ->
-    odom -> drive -> robot``, then spawns all starting objects, and returns the
-    augmented environment world.
+    Materialized via :meth:`spawn`, which merges the robot as ``world.root -> odom ->
+    drive -> robot``.
     """
 
-    world: World
+    semantic_annotation_type: Type[AbstractRobot]
     """
-    The environment world that the robot and starting objects are added to.
-
-    Its root is ``world.root``.
-    """
-
-    robot_semantic_annotation: Type[AbstractRobot] | None = None
-    """
-    The robot to merge into the environment.
-
-    If None, no robot is added.
+    The robot to merge into the world.
     """
 
     world_T_odom: HomogeneousTransformationMatrix | None = None
     """
-    The localization pose of ``odom`` in the ``world.root`` frame.
+    The localization pose of the robot's ``odom`` in the ``world.root`` frame.
 
     If None, identity is used.
     """
 
     odom_T_robot_start: HomogeneousTransformationMatrix | None = None
     """
-    The start pose of the robot in the ``odom`` frame.
+    The start pose of the robot in its ``odom`` frame.
 
     If None, identity is used.
     """
 
-    objects: list[SpawnSpecification] = field(default_factory=list)
-    """
-    Specifications spawned relative to the world root once the robot (if any) is in
-    place.
-    """
-
-    @classmethod
-    def from_urdf(
-        cls,
-        file_path: str,
-        *,
-        prefix: str | None = None,
-        path_resolver: PathResolver | None = None,
-        robot_semantic_annotation: Type[AbstractRobot] | None = None,
-        world_T_odom: HomogeneousTransformationMatrix | None = None,
-        odom_T_robot_start: HomogeneousTransformationMatrix | None = None,
-        objects: list[SpawnSpecification] | None = None,
-    ) -> Self:
+    def spawn(self, world: World) -> AbstractRobot:
         """
-        Build a specification whose environment is parsed from a URDF file.
+        Parse the robot from its own description and merge it into ``world`` as
+        ``world.root -> odom -> connection -> robot``.
 
-        :param file_path: Path to the environment URDF. This is never a robot
-            description; the robot, if any, is supplied through
-            ``robot_semantic_annotation``.
-        :param prefix: Optional name prefix for the parsed environment.
-        :param path_resolver: Resolver for mesh/package paths referenced by the URDF.
-        :param robot_semantic_annotation: The robot to merge into the environment. If
-            None, no robot is added.
-        :param world_T_odom: The localization pose of ``odom`` in the ``world.root``
-            frame. Identity if None.
-        :param odom_T_robot_start: The start pose of the robot in the ``odom`` frame.
-            Identity if None.
-        :param objects: Specifications spawned once the robot is in place.
-        :return: The created specification.
-        """
-        world = URDFParser.from_file(
-            file_path, prefix=prefix, path_resolver=path_resolver
-        ).parse()
-        return cls(
-            world=world,
-            robot_semantic_annotation=robot_semantic_annotation,
-            world_T_odom=world_T_odom,
-            odom_T_robot_start=odom_T_robot_start,
-            objects=objects if objects is not None else [],
-        )
-
-    @classmethod
-    def from_mjcf(
-        cls,
-        file_path: str,
-        *,
-        prefix: str | None = None,
-        mimic_joints: dict[str, str] | None = None,
-        robot_semantic_annotation: Type[AbstractRobot] | None = None,
-        world_T_odom: HomogeneousTransformationMatrix | None = None,
-        odom_T_robot_start: HomogeneousTransformationMatrix | None = None,
-        objects: list[SpawnSpecification] | None = None,
-    ) -> Self:
-        """
-        Build a specification whose environment is parsed from an MJCF (MuJoCo XML)
-        file.
-
-        :param file_path: Path to the environment MJCF. This is never a robot
-            description; the robot, if any, is supplied through
-            ``robot_semantic_annotation``.
-        :param prefix: Optional name prefix for the parsed environment.
-        :param mimic_joints: Mapping of joint names to the joints they mimic.
-        :param robot_semantic_annotation: The robot to merge into the environment. If
-            None, no robot is added.
-        :param world_T_odom: The localization pose of ``odom`` in the ``world.root``
-            frame. Identity if None.
-        :param odom_T_robot_start: The start pose of the robot in the ``odom`` frame.
-            Identity if None.
-        :param objects: Specifications spawned once the robot is in place.
-        :return: The created specification.
-        """
-        from semantic_digital_twin.adapters.mjcf import MJCFParser
-
-        world = MJCFParser(
-            file_path=file_path,
-            mimic_joints=mimic_joints if mimic_joints is not None else {},
-            prefix=prefix,
-        ).parse()
-        return cls(
-            world=world,
-            robot_semantic_annotation=robot_semantic_annotation,
-            world_T_odom=world_T_odom,
-            odom_T_robot_start=odom_T_robot_start,
-            objects=objects if objects is not None else [],
-        )
-
-    def to_domain_object(self) -> World:
-        """
-        Materialize a new World from this specification.
-
-        A deep copy of :attr:`world` is augmented and returned, so the specification's
-        stored world is never mutated and the method can be applied repeatedly. When
-        ``robot_semantic_annotation`` is set, the robot is parsed from its own
-        description and merged into the world, with the localization and start poses
-        applied. Finally all ``objects`` are spawned relative to the world root.
-
-        :return: The augmented environment world.
-        """
-        world = deepcopy(self.world)
-        if self.robot_semantic_annotation is not None:
-            self._setup_robot(world)
-
-        for object_specification in self.objects:
-            object_specification.spawn(world)
-
-        return world
-
-    def _setup_robot(self, world: World) -> None:
-        """
-        Set up the robot in ``world`` as ``world.root -> odom -> connection -> robot``.
-
-        The connection attaching the robot to ``odom`` is the drive declared by the
+        The connection attaching the robot to its ``odom`` is the drive declared by the
         robot's mobile base, or a fixed connection when the robot has no mobile base. An
         active drive is marked as controlled; the localization and start poses are
         applied afterwards.
 
+        The robot is annotated while it still owns the world it was parsed into, so that
+        the annotation's name-based lookups cannot be confused by an equally named joint
+        of a robot already present in ``world``.
+
         :param world: The world the robot is merged into.
+        :return: The semantic annotation of the merged robot.
         """
-        connection_type = self.robot_semantic_annotation.get_drive_connection_type()
+        connection_type = self.semantic_annotation_type.get_drive_connection_type()
         is_active = issubclass(connection_type, ActiveConnection)
 
+        robot_world = URDFParser.from_file(
+            self.semantic_annotation_type.get_ros_file_path()
+        ).parse()
+        robot_id = self.semantic_annotation_type.from_world(robot_world).id
+
         with world.modify_world():
-            odom_body = Body(name=PrefixedName("odom"))
+            odom_body = self._create_odom_body()
             root_C_odom = Connection6DoF.create_with_dofs(
                 world=world, parent=cast(Body, world.root), child=odom_body
             )
             world.add_connection(root_C_odom)
-
-            robot_world = URDFParser.from_file(
-                self.robot_semantic_annotation.get_ros_file_path()
-            ).parse()
-            robot_root_id = robot_world.root.id
 
             # A fixed connection has no DoFs, so its start pose must be set at creation;
             # an active drive carries it as DoF state applied after the block.
@@ -1274,12 +1158,145 @@ class WorldSpecification:
             if is_active:
                 odom_C_robot.has_hardware_interface = True
 
-        self.robot_semantic_annotation.from_branch_in_world(
-            cast(Body, world.get_world_entity_with_id_by_id(robot_root_id))
-        )
-
         # Poses touch DoF state, so they are set after the modification block.
         if self.world_T_odom is not None:
             root_C_odom.origin = self.world_T_odom
         if is_active and self.odom_T_robot_start is not None:
             odom_C_robot.origin = self.odom_T_robot_start
+
+        return cast(AbstractRobot, world.get_semantic_annotation_by_id(robot_id))
+
+    @staticmethod
+    def _create_odom_body() -> Body:
+        """
+        Create the localization body of a single robot.
+
+        Body names are not unique across a world, so the body's own identifier prefixes
+        its name. Identifiers are unique even across processes, which keeps the odom
+        bodies of several robots distinguishable.
+
+        :return: The created odom body.
+        """
+        identifier = uuid4()
+        return Body(
+            name=PrefixedName(name="odom", prefix=str(identifier)), id=identifier
+        )
+
+
+# %% world specifications
+
+
+@dataclass
+class WorldSpecification:
+    """
+    World-independent description of a world: an environment, the robots in it, and
+    objects around them.
+
+    The environment is supplied as a concrete :class:`World` (build one from a model
+    file with :meth:`from_urdf` or :meth:`from_mjcf`). Applying it
+    (:meth:`to_domain_object`) merges every robot into the environment, then spawns all
+    starting objects, and returns the augmented environment world.
+    """
+
+    world: World
+    """
+    The environment world that the robots and starting objects are added to.
+
+    Its root is ``world.root``.
+    """
+
+    robots: list[RobotSpecification] = field(default_factory=list)
+    """
+    The robots merged into the environment, each with its own localization and start
+    pose.
+    """
+
+    objects: list[SpawnSpecification] = field(default_factory=list)
+    """
+    Specifications spawned relative to the world root once the robots are in place.
+    """
+
+    @classmethod
+    def from_urdf(
+        cls,
+        file_path: str,
+        *,
+        prefix: str | None = None,
+        path_resolver: PathResolver | None = None,
+        robots: list[RobotSpecification] | None = None,
+        objects: list[SpawnSpecification] | None = None,
+    ) -> Self:
+        """
+        Build a specification whose environment is parsed from a URDF file.
+
+        :param file_path: Path to the environment URDF. This is never a robot
+            description; robots are supplied through ``robots``.
+        :param prefix: Optional name prefix for the parsed environment.
+        :param path_resolver: Resolver for mesh/package paths referenced by the URDF.
+        :param robots: The robots merged into the environment.
+        :param objects: Specifications spawned once the robots are in place.
+        :return: The created specification.
+        """
+        world = URDFParser.from_file(
+            file_path, prefix=prefix, path_resolver=path_resolver
+        ).parse()
+        return cls(
+            world=world,
+            robots=robots if robots is not None else [],
+            objects=objects if objects is not None else [],
+        )
+
+    @classmethod
+    def from_mjcf(
+        cls,
+        file_path: str,
+        *,
+        prefix: str | None = None,
+        mimic_joints: dict[str, str] | None = None,
+        robots: list[RobotSpecification] | None = None,
+        objects: list[SpawnSpecification] | None = None,
+    ) -> Self:
+        """
+        Build a specification whose environment is parsed from an MJCF (MuJoCo XML)
+        file.
+
+        :param file_path: Path to the environment MJCF. This is never a robot
+            description; robots are supplied through ``robots``.
+        :param prefix: Optional name prefix for the parsed environment.
+        :param mimic_joints: Mapping of joint names to the joints they mimic.
+        :param robots: The robots merged into the environment.
+        :param objects: Specifications spawned once the robots are in place.
+        :return: The created specification.
+        """
+        from semantic_digital_twin.adapters.mjcf import MJCFParser
+
+        world = MJCFParser(
+            file_path=file_path,
+            mimic_joints=mimic_joints if mimic_joints is not None else {},
+            prefix=prefix,
+        ).parse()
+        return cls(
+            world=world,
+            robots=robots if robots is not None else [],
+            objects=objects if objects is not None else [],
+        )
+
+    def to_domain_object(self) -> World:
+        """
+        Materialize a new World from this specification.
+
+        A deep copy of :attr:`world` is augmented and returned, so the specification's
+        stored world is never mutated and the method can be applied repeatedly. Every
+        robot is merged into the world first, then all ``objects`` are spawned relative
+        to the world root.
+
+        :return: The augmented environment world.
+        """
+        world = deepcopy(self.world)
+        for robot_specification in self.robots:
+            robot_specification.spawn(world)
+
+        for object_specification in self.objects:
+            object_specification.spawn(world)
+
+        return world
