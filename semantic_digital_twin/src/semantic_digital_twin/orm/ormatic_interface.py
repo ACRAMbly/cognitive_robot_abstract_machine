@@ -21560,13 +21560,13 @@ class SaltPepperShakerDAO(
     }
 
 
-class ScrewJointDAO(
+class ScrewMechanismDAO(
     MechanicalJointDAO,
     DataAccessObject[
         semantic_digital_twin.semantic_annotations.semantic_annotations.ScrewMechanism
     ],
 ):
-    __tablename__ = "ScrewJointDAO"
+    __tablename__ = "ScrewMechanismDAO"
 
     database_id: Mapped[builtins.int] = mapped_column(
         ForeignKey(MechanicalJointDAO.database_id),
@@ -21577,7 +21577,7 @@ class ScrewJointDAO(
     screw_pitch: Mapped[builtins.float] = mapped_column(use_existing_column=True)
 
     __mapper_args__ = {
-        "polymorphic_identity": "ScrewJointDAO",
+        "polymorphic_identity": "ScrewMechanismDAO",
         "inherit_condition": database_id == MechanicalJointDAO.database_id,
         "polymorphic_load": "selectin",
     }

@@ -2,9 +2,6 @@ from math import radians
 
 import numpy as np
 
-from semantic_digital_twin.adapters.ros.visualization.viz_marker import (
-    VizMarkerPublisher,
-)
 from giskardpy.executor import Executor
 from giskardpy.motion_statechart.context import MotionStatechartContext
 from giskardpy.motion_statechart.data_types import (
@@ -856,10 +853,9 @@ class TestOpenClose:
         assert opened.observation_state == ObservationStateValues.TRUE
         assert closed.observation_state == ObservationStateValues.TRUE
 
-    def test_unscrew_and_tighten_bottle_cap(self, pr2_world_copy, rclpy_node):
+    def test_unscrew_and_tighten_bottle_cap(self, pr2_world_copy):
         screw_pitch = 0.03
         unscrew_goal = 2 * np.pi
-        VizMarkerPublisher(_world=pr2_world_copy, node=rclpy_node).with_tf_publisher()
         with pr2_world_copy.modify_world():
             # The bottle lies on its side, its thread axis pointing towards the robot.
             Bottle.create_with_new_body_in_world(
@@ -915,7 +911,7 @@ class TestOpenClose:
         unscrew_statechart = MotionStatechart()
         unscrew_statechart.add_nodes(
             [
-                Sequence(
+                sequence := Sequence(
                     [
                         # Grasp with the roll axis of the gripper collinear with the
                         # screw axis, so the wrist can follow the cap's rotation.
@@ -926,20 +922,16 @@ class TestOpenClose:
                                 reference_frame=cap_body
                             ),
                         ),
-                        Parallel(
-                            [
-                                open := Open(
-                                    tip_link=r_tip,
-                                    environment_link=cap_body,
-                                    goal_joint_state=unscrew_goal,
-                                ),
-                            ]
+                        open := Open(
+                            tip_link=r_tip,
+                            environment_link=cap_body,
+                            goal_joint_state=unscrew_goal,
                         ),
                     ]
                 ),
             ]
         )
-        unscrew_statechart.add_node(EndMotion.when_true(unscrew_statechart.nodes[0]))
+        unscrew_statechart.add_node(EndMotion.when_true(sequence))
 
         kin_sim = Executor(
             MotionStatechartContext(
@@ -970,18 +962,14 @@ class TestOpenClose:
         tighten_statechart = MotionStatechart()
         tighten_statechart.add_nodes(
             [
-                Parallel(
-                    [
-                        close := Close(
-                            tip_link=r_tip,
-                            environment_link=cap_body,
-                            goal_joint_state=tightened_goal_joint_state,
-                        ),
-                    ]
+                close := Close(
+                    tip_link=r_tip,
+                    environment_link=cap_body,
+                    goal_joint_state=tightened_goal_joint_state,
                 ),
             ]
         )
-        tighten_statechart.add_node(EndMotion.when_true(tighten_statechart.nodes[0]))
+        tighten_statechart.add_node(EndMotion.when_true(close))
 
         kin_sim = Executor(
             MotionStatechartContext(
