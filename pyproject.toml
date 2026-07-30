@@ -60,6 +60,7 @@ doc = [
     "ortools",
     "cvxopt",
     "treon",
+    "jupytext",
 ]
 
 [tool.uv.workspace]
