@@ -246,9 +246,15 @@ class ConnectionSpecification(
         if parent is None:
             raise MissingConnectionParentError(connection_name=self.name)
 
-        parent_T_connection = parent_T_connection.copy_with_new_reference_frames(
-            new_reference_frame=parent, new_child_frame=child
-        ) or HomogeneousTransformationMatrix(reference_frame=parent, child_frame=child)
+        parent_T_connection = (
+            parent_T_connection.copy_with_new_reference_frames(
+                new_reference_frame=parent, new_child_frame=child
+            )
+            if parent_T_connection is not None
+            else HomogeneousTransformationMatrix(
+                reference_frame=parent, child_frame=child
+            )
+        )
 
         with world.modify_world():
             connection = self.connection_type.create_with_dofs(
@@ -791,7 +797,9 @@ class BodySpecification(KinematicStructureEntitySpecification[Body]):
             self._resolved_name(name),
             self.shapes.copy_without_reference_frame(),
             visuals_shape_collection=(
-                self.visual_shapes.copy_without_reference_frame() or None
+                self.visual_shapes.copy_without_reference_frame()
+                if self.visual_shapes is not None
+                else None
             ),
         )
         if self.inertial is not None:

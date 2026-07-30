@@ -73,6 +73,16 @@ from semantic_digital_twin.world_description.world_state_trajectory_plotter impo
 from semantic_digital_twin.orm.ormatic_interface import *
 
 
+def test_create_with_root_body_names_the_root_from_a_plain_string():
+    world = World.create_with_root_body("kitchen")
+    assert world.root.name == PrefixedName("kitchen")
+
+
+def test_create_with_root_body_defaults_the_root_name_to_map():
+    world = World.create_with_root_body()
+    assert world.root.name == PrefixedName("map")
+
+
 def test_set_state(world_setup):
     world, l1, l2, bf, r1, r2 = world_setup
     c1: PrismaticConnection = world.get_connection(l1, l2)

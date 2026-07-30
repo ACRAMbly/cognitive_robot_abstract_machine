@@ -91,7 +91,7 @@ def _fresh_world() -> World:
     """
     A world holding nothing but its root body.
     """
-    return World.create_with_root_body(PrefixedName("root", "world"))
+    return World.create_with_root_body("root")
 
 
 @pytest.fixture
@@ -349,6 +349,34 @@ def test_body_specification_from_3d_points_matches_direct_construction():
     assert (
         len(materialized.collision.shapes) == len(directly_built.collision.shapes) == 1
     )
+
+
+# %% visual shapes fall back to the collision shapes only when unset
+
+
+def test_unset_visual_shapes_are_shared_with_the_collision_shapes():
+    """
+    A ``None`` visual collection makes the body reuse `shapes` for both purposes.
+    """
+    specification = BodySpecification.box("box", Scale(1, 1, 1))
+    assert specification.visual_shapes is None
+
+    body = specification.to_domain_object()
+
+    assert len(body.visual.shapes) == len(body.collision.shapes) == 1
+
+
+def test_empty_visual_shapes_leave_the_body_without_visual_geometry():
+    """
+    An empty visual collection means no visual geometry, unlike an unset one.
+    """
+    specification = BodySpecification.box("box", Scale(1, 1, 1))
+    specification.visual_shapes = ShapeCollection(shapes=[])
+
+    body = specification.to_domain_object()
+
+    assert len(body.collision.shapes) == 1
+    assert len(body.visual.shapes) == 0
 
 
 def test_has_root_body_default_specification_without_scale_is_geometryless(empty_world):
@@ -703,6 +731,20 @@ def test_connection_spec_connect_applies_pose(empty_world):
     )
     root_T_child = empty_world.compute_forward_kinematics(empty_world.root, child)
     np.testing.assert_allclose(root_T_child.to_position().to_np()[:3], [1, 2, 3])
+
+
+def test_connection_spec_connect_without_pose_places_the_child_at_the_parent(
+    empty_world,
+):
+    """
+    An omitted ``parent_T_connection`` places the connection at the parent's origin.
+    """
+    child = BodySpecification.box("child", Scale(1, 1, 1)).to_domain_object()
+    FixedConnectionSpecification().connect(
+        empty_world, parent_T_connection=None, child=child
+    )
+    root_T_child = empty_world.compute_forward_kinematics(empty_world.root, child)
+    np.testing.assert_allclose(root_T_child.to_position().to_np()[:3], [0, 0, 0])
 
 
 def test_connection_spec_connect_requires_child(empty_world):
