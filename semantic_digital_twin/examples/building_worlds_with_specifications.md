@@ -48,7 +48,7 @@ it describes:
 - **`spawn(world, ...)`** — used by specifications that describe an *entity together with the
   connection that attaches it to a parent*. Spawning materializes the entity, attaches it, and
   recursively materializes its children, all inside one modification block.
-- **`connect(world, parent=, child=)`** — used by [connection
+- **`connect(world, child, parent=)`** — used by [connection
   specifications](connecting-existing-entities), which join two *already existing* entities. A
   connection is not a kinematic structure entity — it *is* the attachment between two of them —
   so there is nothing to spawn and no parent to attach it to.
@@ -175,14 +175,52 @@ print("book and ball are both children of the shelf")
 Beyond primitive shapes, a body specification can describe composite geometry. These mirror the
 corresponding `Body` constructors:
 
+- `BodySpecification.mesh(name, filename, ...)` loads the geometry from a mesh file.
 - `BodySpecification.from_event(name, event)` builds the geometry from the bounding boxes of a
   [random event](https://random-events.readthedocs.io/) — the construction used by semantic
   annotations with hollow or carved geometry.
 - `BodySpecification.from_3d_points(name, points_3d)` builds the convex hull of a point cloud.
 
+```{code-cell} ipython3
+from importlib.resources import files
+from pathlib import Path
+
+from semantic_digital_twin.spatial_types import Point3
+
+resources = Path(files("semantic_digital_twin")).parent.parent / "resources"
+
+world = World.create_with_root_body()
+
+# A mesh body, loaded from file.
+milk_mesh = BodySpecification.mesh(
+    name="milk_mesh", filename=str(resources / "stl" / "milk.stl")
+).spawn(world)
+
+# A hollow crate: the outer box minus the carved-out interior, expressed as one event.
+outer = Scale(0.3, 0.3, 0.3).to_simple_event().as_composite_set()
+inner = Scale(0.26, 0.26, 0.3).to_simple_event().as_composite_set()
+crate = BodySpecification.from_event("crate", outer - inner).spawn(world)
+
+# The convex hull of a point cloud.
+hull = BodySpecification.from_3d_points(
+    "hull",
+    [Point3(0, 0, 0), Point3(0.2, 0, 0), Point3(0, 0.2, 0), Point3(0, 0, 0.2)],
+).spawn(world)
+
+assert len(milk_mesh.collision.shapes) == 1
+# Carving the interior out of the crate leaves a composite of boxes.
+assert len(crate.collision.shapes) > 1
+assert len(hull.collision.shapes) == 1
+print("Crate is a composite of", len(crate.collision.shapes), "boxes")
+```
+
 A body specification also exposes body-only fields that the shape constructors leave at their
 defaults: `inertial` for inertia properties and `visual_shapes` for a visual geometry that
 differs from the collision geometry.
+
+Because a specification carries its geometry, it can be measured before anything is spawned:
+`scale` returns the extents of the combined collision geometry — the world-independent
+counterpart of a spawned entity's `scale`.
 
 ```{code-cell} ipython3
 from semantic_digital_twin.world_description.shape_collection import ShapeCollection
@@ -201,6 +239,7 @@ detailed = BodySpecification(
 assert detailed.visual is not detailed.collision
 assert len(detailed.visual.shapes) == 1
 assert detailed.inertial.mass == 2.0
+assert BodySpecification.box("probe", Scale(1.2, 0.8, 0.05)).scale == Scale(1.2, 0.8, 0.05)
 print("Distinct visual/collision geometry, mass =", detailed.inertial.mass)
 ```
 
@@ -358,48 +397,51 @@ assert isinstance(slider.root.parent_connection, PrismaticConnection)
 print("Slider root is attached by a", type(slider.root.parent_connection).__name__)
 ```
 
-### Default annotation specifications and nested parts
+### Default root specifications and nested parts
 
-Most annotation classes can build their own geometry from a `Scale`. `get_default_annotation_specification`
-returns a ready-made `SemanticAnnotationWithRootSpecification` with that geometry filled in. This
-is the easy path: it hides the geometry construction — which for many annotations is a composite
-shape built from [random events](https://random-events.readthedocs.io/) (a hollow handle, a
-carved container case, a wall minus its apertures) — behind a single scale. Reach for it when a
-default shape is good enough, and build the specification directly (previous section) when you
-need a custom root shape.
+Most annotation classes can build their own geometry from a `Scale`. `get_default_root_specification`
+returns a ready-made `BodySpecification` (or `RegionSpecification`) with that geometry filled
+in. This is the easy path: it hides the geometry construction — which for many annotations is a
+composite shape built from [random events](https://random-events.readthedocs.io/) (a hollow
+handle, a carved container case, a wall minus its apertures) — behind a single scale. Reach for
+it when a default shape is good enough, and build the root specification directly (previous
+section) when you need a custom root shape.
 
-Some geometries take more than a scale: a handle has a `thickness`, a container case a
-`wall_thickness`. Those are not *default* geometry, so they do not belong on
-`get_default_annotation_specification`. Build the root through the type's own
-`get_default_body_specification` (or `get_default_region_specification`), whose signature names
-them, and hand it to the specification directly:
+`get_specification` then wraps any root specification into the type's
+`SemanticAnnotationWithRootSpecification`, so building an annotation specification is two
+composed calls. Geometry parameters beyond the scale — a handle's `thickness`, a container
+case's `wall_thickness` — live on `get_default_root_specification`, whose signature names them,
+so geometry is described in exactly one place:
 
 ```python
-SemanticAnnotationWithRootSpecification(
-    name="drawer",
-    semantic_annotation_type=Drawer,
-    root_specification=Drawer.get_default_body_specification(
-        "drawer", Scale(0.4, 0.5, 0.6), wall_thickness=0.05
+Drawer.get_specification(
+    "drawer",
+    Drawer.get_default_root_specification(
+        scale=Scale(0.4, 0.5, 0.6), wall_thickness=0.05
     ),
 )
 ```
 
-Those builders also take a `connection_specification`, exactly as `BodySpecification.box(...)`
-does, so custom geometry and a custom attachment stay a single expression.
+That builder also takes a `connection_specification`, exactly as `BodySpecification.box(...)`
+does, so custom geometry and a custom attachment stay a single expression. Neither call needs a
+name for the root: a root specification built without one defers naming, and the annotation
+stamps its own name onto the root entity at spawn time.
 
-Its `part_specifications` argument mounts nested annotations onto part-whole relationship fields,
-keyed by the field name — spelled out before anything touches a world.
+`get_specification`'s `part_specifications` argument mounts nested annotations onto part-whole
+relationship fields, keyed by the field name — spelled out before anything touches a world.
 
 ```{code-cell} ipython3
 from semantic_digital_twin.semantic_annotations.semantic_annotations import Drawer, Handle
 
 world = World.create_with_root_body()
 
-drawer = Drawer.get_default_annotation_specification(
-    name="drawer",
-    scale=Scale(0.4, 0.5, 0.6),
+drawer = Drawer.get_specification(
+    "drawer",
+    Drawer.get_default_root_specification(scale=Scale(0.4, 0.5, 0.6)),
     part_specifications={
-        "handle": Handle.get_default_annotation_specification("handle", Scale(0.1, 0.05, 0.05)),
+        "handle": Handle.get_specification(
+            "handle", Handle.get_default_root_specification(scale=Scale(0.1, 0.05, 0.05))
+        ),
     },
 ).spawn(world)
 
@@ -408,11 +450,136 @@ assert drawer.handle.root.parent_connection.parent is drawer.root
 print("Drawer has a", type(drawer.handle).__name__, "mounted on its root")
 ```
 
-A list value mounts several parts onto a to-many field (for example several apertures on a
-wall), while a single value mounts onto a singular field. The specification validates these keys
-*at construction time*, so misuse — a list on a singular field, a key that is not a part-whole
-field, or a part-whole field smuggled in through `annotation_kwargs` — fails fast, before any
-world is mutated.
+Annotation specifications take the same spawn-time overrides as entity specifications: `name`,
+`parent`, and `parent_T_self`. Because the annotation stamps its name onto its root, one
+specification can produce many identically shaped annotations under different names and poses.
+
+```{code-cell} ipython3
+handle_specification = Handle.get_specification(
+    "handle", Handle.get_default_root_specification(scale=Scale(0.1, 0.05, 0.05))
+)
+left = handle_specification.spawn(
+    world,
+    name="left_handle",
+    parent_T_self=HomogeneousTransformationMatrix.from_xyz_rpy(y=-0.2),
+)
+right = handle_specification.spawn(
+    world,
+    name="right_handle",
+    parent_T_self=HomogeneousTransformationMatrix.from_xyz_rpy(y=0.2),
+)
+
+assert left.name.name == "left_handle" and right.name.name == "right_handle"
+assert left.root.name.name == "left_handle"
+print("One specification, two handles:", left.name, "and", right.name)
+```
+
+### Inert constructor fields
+
+`annotation_kwargs` carries the annotation's *inert* constructor fields — plain dataclass fields
+that are neither geometry nor part-whole relationships. They are handed to the annotation
+constructor unchanged at spawn time. A `Table`, for example, references the region it supports
+objects on:
+
+```{code-cell} ipython3
+from semantic_digital_twin.semantic_annotations.semantic_annotations import Table
+
+world = World.create_with_root_body()
+
+surface = RegionSpecification.box("surface", Scale(1, 1, 0.01)).spawn(world)
+table = Table.get_specification(
+    "table",
+    Table.get_default_root_specification(scale=Scale(1, 1, 0.5)),
+    annotation_kwargs={"supporting_surface": surface},
+).spawn(world)
+
+assert table.supporting_surface is surface
+print("Table supports objects on", table.supporting_surface.name)
+```
+
+### To-many parts and geometry that reacts to them
+
+A list value mounts several parts onto a to-many field, while a single value mounts onto a
+singular field. The wall/aperture pair below shows two more behaviors at once: an `Aperture` is
+*region-rooted* — its root is a `Region`, not a `Body`, so its default root specification is a
+`RegionSpecification` — and a `Wall` cuts its collision geometry around the mounted apertures at
+spawn time. Each part's placement in the whole is its root specification's `parent_T_self`,
+which is a plain field you can set after building the specification.
+
+```{code-cell} ipython3
+from semantic_digital_twin.semantic_annotations.semantic_annotations import Aperture, Wall
+from semantic_digital_twin.world_description.world_entity import Region
+
+world = World.create_with_root_body()
+
+plain_wall = Wall.get_specification(
+    "plain_wall", Wall.get_default_root_specification(scale=Scale(0.1, 3, 3))
+).spawn(world)
+
+window_left = Aperture.get_specification(
+    "window_left", Aperture.get_default_root_specification(scale=Scale(0.1, 0.5, 0.5))
+)
+window_left.root_specification.parent_T_self = (
+    HomogeneousTransformationMatrix.from_xyz_rpy(y=-0.8)
+)
+window_right = Aperture.get_specification(
+    "window_right", Aperture.get_default_root_specification(scale=Scale(0.1, 0.5, 0.5))
+)
+window_right.root_specification.parent_T_self = (
+    HomogeneousTransformationMatrix.from_xyz_rpy(y=0.8)
+)
+
+wall = Wall.get_specification(
+    "wall",
+    Wall.get_default_root_specification(scale=Scale(0.1, 3, 3)),
+    part_specifications={"apertures": [window_left, window_right]},
+).spawn(world)
+
+assert len(wall.apertures) == 2
+assert all(isinstance(aperture.root, Region) for aperture in wall.apertures)
+# Cutting the windows out of the wall turns one box into a composite.
+assert len(wall.root.collision.shapes) > len(plain_wall.root.collision.shapes)
+print(
+    "Wall went from", len(plain_wall.root.collision.shapes),
+    "shape to", len(wall.root.collision.shapes), "shapes",
+)
+```
+
+### Parts that carry the whole
+
+Mounting a part onto a `mechanical_joint` field does more than attach a child: the joint is what
+the *whole* hangs from. Spawning rewires the tree to `parent -> joint -> whole`, with the
+joint's own parent connection (here a revolute connection about `z`) carrying the motion.
+
+```{code-cell} ipython3
+from semantic_digital_twin.semantic_annotations.semantic_annotations import Hinge
+from semantic_digital_twin.world_description.connections import RevoluteConnection
+
+world = World.create_with_root_body()
+
+hinge_part = Hinge.get_specification(
+    "hinge",
+    Hinge.get_default_root_specification(scale=Scale(0.05, 0.05, 0.05)),
+    parent_connection_specification=Hinge.parent_connection_specification(
+        axis=Vector3.Z()
+    ),
+)
+flap = Drawer.get_specification(
+    "flap",
+    Drawer.get_default_root_specification(scale=Scale(0.4, 0.5, 0.2)),
+    part_specifications={"mechanical_joint": hinge_part},
+).spawn(world)
+
+# world.root -(revolute)-> hinge -(fixed)-> flap
+assert flap.root.parent_connection.parent is flap.mechanical_joint.root
+assert flap.mechanical_joint.root.parent_connection.parent is world.root
+assert isinstance(flap.mechanical_joint.root.parent_connection, RevoluteConnection)
+print("The flap hangs from its", type(flap.mechanical_joint).__name__)
+```
+
+The specification validates part keys *at construction time*, so misuse — a list on a singular
+field, a key that is not a part-whole field, or a part-whole field smuggled in through
+`annotation_kwargs` — fails fast, before any world is mutated.
 
 ## World specifications
 
@@ -456,6 +623,18 @@ assert len(another_world.get_semantic_annotations_by_type(Milk)) == 1
 print("Materialized two independent worlds, each with one milk and one cup")
 ```
 
+`from_mjcf` is the MJCF twin of `from_urdf` and takes the same arguments:
+
+```{code-cell} ipython3
+mjcf_world = WorldSpecification.from_mjcf(
+    str(resources / "mjcf" / "table.xml"),
+    objects=[BodySpecification.box("cup", Scale(0.07, 0.07, 0.1))],
+).to_domain_object()
+
+assert mjcf_world.get_body_by_name("cup") is not None
+print("MJCF table world has", len(mjcf_world.bodies), "bodies")
+```
+
 ### Adding a robot
 
 A world specification can also merge a robot into the environment. Supply the robot's
@@ -486,12 +665,13 @@ result. The milk's pose is baked into its root body specification through `paren
 world = WorldSpecification.from_urdf(
     file_path=table_urdf,
     objects=[
-        Drawer.get_default_annotation_specification(
+        Drawer.get_specification(
             "drawer",
-            Scale(0.4, 0.5, 0.3),
+            Drawer.get_default_root_specification(scale=Scale(0.4, 0.5, 0.3)),
             part_specifications={
-                "handle": Handle.get_default_annotation_specification(
-                    "handle", Scale(0.1, 0.05, 0.05)
+                "handle": Handle.get_specification(
+                    "handle",
+                    Handle.get_default_root_specification(scale=Scale(0.1, 0.05, 0.05)),
                 ),
             },
         ),
@@ -521,3 +701,6 @@ rt.scene.show("jupyter")
 As with the other tutorials, visualizing a world directly in a notebook with the `RayTracer` is
 only meant for quick inspection. For proper visualization, see [](visualizing-worlds).
 ```
+
+If you think you have understood everything in this tutorial, you may try out
+[our self-assessment quiz for this user guide](building-worlds-with-specifications-quiz)
