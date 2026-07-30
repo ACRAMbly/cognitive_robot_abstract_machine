@@ -1,13 +1,14 @@
 from __future__ import annotations
 
+import math
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import List, Union
+from typing import Dict, List, Optional, Union
 
-import numpy as np
 from geometry_msgs.msg import Twist
 from rclpy.publisher import Publisher
 from std_msgs.msg import Float64, Float64MultiArray
+from typing_extensions import Self
 
 from giskardpy.middleware.ros2 import rospy
 from giskardpy.middleware.ros2.ros2_interface import get_parameters
@@ -16,8 +17,187 @@ from semantic_digital_twin.world_description.connections import (
     ActiveConnection1DOF,
     DifferentialDrive,
     OmniDrive,
-    PrismaticConnection,
 )
+from semantic_digital_twin.world_description.degree_of_freedom import DegreeOfFreedom
+
+# %% minimum velocities
+
+
+@dataclass
+class MinimumVelocity:
+    """
+    Smallest velocity magnitude a hardware interface still reacts to.
+    """
+
+    magnitude: float = 0.0
+    """
+    Velocities below this magnitude are raised to it. ``0.0`` disables raising.
+    """
+
+    def raise_vector(self, velocities: List[float]) -> List[float]:
+        """
+        Scale a velocity vector up to :attr:`magnitude`, keeping its direction.
+        """
+        norm = math.hypot(*velocities)
+        if not 0.0 < norm < self.magnitude:
+            return velocities
+        scale = self.magnitude / norm
+        return [velocity * scale for velocity in velocities]
+
+    def raise_scalar(self, velocity: float) -> float:
+        """
+        Raise a single velocity to :attr:`magnitude`, keeping its sign.
+        """
+        if 0.0 < velocity < self.magnitude:
+            return self.magnitude
+        if -self.magnitude < velocity < 0.0:
+            return -self.magnitude
+        return velocity
+
+
+@dataclass
+class JointMinimumVelocity(MinimumVelocity):
+    """
+    Minimum velocity of a single joint, overriding the default of its publisher.
+    """
+
+    joint_name: str = field(kw_only=True)
+    """
+    Name of the joint this minimum applies to.
+    """
+
+
+@dataclass
+class JointMinimumVelocities:
+    """
+    Minimum velocities of the joints a publisher commands.
+    """
+
+    default: MinimumVelocity = field(default_factory=MinimumVelocity)
+    """
+    Minimum applied to every joint without an override.
+    """
+
+    overrides: List[JointMinimumVelocity] = field(default_factory=list)
+    """
+    Minimums of individual joints, e.g. to exempt hardware without a velocity deadband.
+    """
+
+    @classmethod
+    def from_magnitudes(
+        cls, default: float = 0.0, overrides: Optional[Dict[str, float]] = None
+    ) -> Self:
+        """
+        Build minimum velocities from a default magnitude and per-joint magnitudes.
+        """
+        return cls(
+            default=MinimumVelocity(default),
+            overrides=[
+                JointMinimumVelocity(magnitude, joint_name=joint_name)
+                for joint_name, magnitude in (overrides or {}).items()
+            ],
+        )
+
+    def of(self, connection: ActiveConnection1DOF) -> MinimumVelocity:
+        """
+        Minimum velocity that applies to the given connection.
+        """
+        for override in self.overrides:
+            if override.joint_name == connection.name.name:
+                return override
+        return self.default
+
+
+# %% reading the commanded velocities
+
+
+@dataclass
+class StateVelocityReader:
+    """
+    Reads the velocities of a fixed set of degrees of freedom.
+
+    Where the degrees of freedom live in the state data is resolved once and refreshed
+    whenever the world model changes, so that a control cycle needs a single read of the
+    state instead of one lookup per degree of freedom.
+    """
+
+    world: World
+    """
+    The world holding the commanded velocities.
+    """
+
+    dofs: List[DegreeOfFreedom]
+    """
+    The degrees of freedom to read, in the order the velocities are returned in.
+    """
+
+    columns: List[int] = field(init=False, default_factory=list)
+    """
+    Column of every degree of freedom in the state data.
+    """
+
+    model_version: int = field(init=False, default=-1)
+    """
+    Model version the columns were resolved for.
+    """
+
+    def velocities(self) -> List[float]:
+        """
+        The current velocity of every degree of freedom.
+        """
+        if self.model_version != self.world.get_world_model_manager().version:
+            self.bind_to_state()
+        state_velocities = self.world.state.velocities.tolist()
+        return [state_velocities[column] for column in self.columns]
+
+    def bind_to_state(self) -> None:
+        """
+        Resolve where the degrees of freedom live in the state data.
+        """
+        self.columns = self.world.state.column_indices(self.dofs)
+        self.model_version = self.world.get_world_model_manager().version
+
+
+@dataclass
+class JointVelocityCommand:
+    """
+    The velocity to send for a single joint.
+    """
+
+    connection: ActiveConnection1DOF
+    """
+    The commanded connection.
+    """
+
+    minimum_velocity: MinimumVelocity
+    """
+    Minimum velocity of this joint.
+    """
+
+    def from_state_velocity(self, state_velocity: float) -> float:
+        """
+        Scale a raw state velocity to the joint and raise it to the minimum.
+        """
+        return self.minimum_velocity.raise_scalar(
+            state_velocity * self.connection.multiplier
+        )
+
+    @classmethod
+    def for_connections(
+        cls,
+        connections: List[ActiveConnection1DOF],
+        minimum_velocities: JointMinimumVelocities,
+    ) -> List[Self]:
+        """
+        Resolve the minimum velocity of every connection once.
+        """
+        return [
+            cls(connection, minimum_velocities.of(connection))
+            for connection in connections
+        ]
+
+
+# %% publishers
 
 
 @dataclass
@@ -56,6 +236,13 @@ class JointVelocityCommandPublisher(CommandPublisher):
     ``joint`` parameter.
     """
 
+    minimum_velocities: JointMinimumVelocities = field(
+        default_factory=JointMinimumVelocities
+    )
+    """
+    Minimum velocities of the commanded joints.
+    """
+
     connections: List[ActiveConnection1DOF] = field(init=False, default_factory=list)
     """
     The controlled connections, in the same order as ``namespaces``.
@@ -64,6 +251,21 @@ class JointVelocityCommandPublisher(CommandPublisher):
     publishers: List[Publisher] = field(init=False, default_factory=list)
     """
     The command publishers, in the same order as ``namespaces``.
+    """
+
+    commands: List[JointVelocityCommand] = field(init=False, default_factory=list)
+    """
+    What to send for every connection.
+    """
+
+    velocity_reader: StateVelocityReader = field(init=False)
+    """
+    Reads the commanded velocities from the world state.
+    """
+
+    message: Float64 = field(init=False, default_factory=Float64)
+    """
+    The message reused for every publication.
     """
 
     def __post_init__(self):
@@ -81,22 +283,37 @@ class JointVelocityCommandPublisher(CommandPublisher):
             )
             connection.has_hardware_interface = True
             self.connections.append(connection)
+        self.commands = JointVelocityCommand.for_connections(
+            self.connections, self.minimum_velocities
+        )
+        self.velocity_reader = StateVelocityReader(
+            world=self.world,
+            dofs=[connection.raw_dof for connection in self.connections],
+        )
 
     def publish(self) -> None:
-        for publisher, connection in zip(self.publishers, self.connections):
-            message = Float64()
-            message.data = self.world.state[connection.raw_dof.id].velocity
-            publisher.publish(message)
+        state_velocities = self.velocity_reader.velocities()
+        for publisher, command, state_velocity in zip(
+            self.publishers, self.commands, state_velocities
+        ):
+            self.message.data = command.from_state_velocity(state_velocity)
+            publisher.publish(self.message)
 
     def stop(self) -> None:
+        self.message.data = 0.0
         for publisher in self.publishers:
-            publisher.publish(Float64())
+            publisher.publish(self.message)
 
 
 @dataclass
 class JointGroupVelocityCommandPublisher(CommandPublisher):
     """
     Publishes the velocities of a group of joints as a single message.
+    """
+
+    world: World
+    """
+    The world holding the commanded velocities.
     """
 
     cmd_topic: str
@@ -109,12 +326,26 @@ class JointGroupVelocityCommandPublisher(CommandPublisher):
     The controlled connections, in the order expected by the controller.
     """
 
-    minimum_valid_velocity: float
+    minimum_velocities: JointMinimumVelocities = field(
+        default_factory=JointMinimumVelocities
+    )
     """
-    Minimum magnitude that small non-prismatic, non-finger joint velocities are raised
-    to so the hardware actually moves.
+    Minimum velocities of the commanded joints.
+    """
 
-    A value of ``0.0`` disables clamping.
+    commands: List[JointVelocityCommand] = field(init=False, default_factory=list)
+    """
+    What to send for every connection.
+    """
+
+    velocity_reader: StateVelocityReader = field(init=False)
+    """
+    Reads the commanded velocities from the world state.
+    """
+
+    message: Float64MultiArray = field(init=False, default_factory=Float64MultiArray)
+    """
+    The message reused for every publication.
     """
 
     cmd_pub: Publisher = field(init=False)
@@ -128,36 +359,30 @@ class JointGroupVelocityCommandPublisher(CommandPublisher):
         )
         for connection in self.connections:
             connection.has_hardware_interface = True
+        self.commands = JointVelocityCommand.for_connections(
+            self.connections, self.minimum_velocities
+        )
+        self.velocity_reader = StateVelocityReader(
+            world=self.world,
+            dofs=[connection.raw_dof for connection in self.connections],
+        )
         rospy.node.get_logger().info(
             f"Created publisher for {self.cmd_topic} for "
             f"{[connection.name.name for connection in self.connections]}"
         )
 
     def publish(self) -> None:
-        message = Float64MultiArray()
-        for connection in self.connections:
-            message.data.append(self.clamp_velocity(connection))
-        self.cmd_pub.publish(message)
-
-    def clamp_velocity(self, connection: ActiveConnection1DOF) -> float:
-        """
-        Raise velocities that are too small for the hardware to the minimum magnitude.
-        """
-        velocity = connection.velocity
-        absolute_velocity = abs(velocity)
-        if isinstance(connection, PrismaticConnection):
-            return velocity
-        if "finger" in connection.name.name:
-            return velocity
-        if 0.0 < absolute_velocity < self.minimum_valid_velocity:
-            return self.minimum_valid_velocity * np.sign(velocity)
-        return velocity
+        self.message.data = [
+            command.from_state_velocity(state_velocity)
+            for command, state_velocity in zip(
+                self.commands, self.velocity_reader.velocities()
+            )
+        ]
+        self.cmd_pub.publish(self.message)
 
     def stop(self) -> None:
-        message = Float64MultiArray()
-        for _ in self.connections:
-            message.data.append(0.0)
-        self.cmd_pub.publish(message)
+        self.message.data = [0.0] * len(self.commands)
+        self.cmd_pub.publish(self.message)
 
 
 @dataclass
@@ -181,6 +406,26 @@ class DriveVelocityCommandPublisher(CommandPublisher):
     The drive connection that is commanded.
     """
 
+    minimum_linear_velocity: MinimumVelocity = field(default_factory=MinimumVelocity)
+    """
+    Minimum magnitude of the commanded linear velocity.
+    """
+
+    minimum_angular_velocity: MinimumVelocity = field(default_factory=MinimumVelocity)
+    """
+    Minimum magnitude of the commanded rotational velocity.
+    """
+
+    velocity_reader: StateVelocityReader = field(init=False)
+    """
+    Reads the commanded velocities of the drivable axes, rotation last.
+    """
+
+    message: Twist = field(init=False, default_factory=Twist)
+    """
+    The message reused for every publication.
+    """
+
     vel_pub: Publisher = field(init=False)
     """
     The publisher for ``cmd_topic``.
@@ -189,15 +434,32 @@ class DriveVelocityCommandPublisher(CommandPublisher):
     def __post_init__(self):
         self.vel_pub = rospy.node.create_publisher(Twist, self.cmd_topic, 10)
         self.connection.has_hardware_interface = True
+        self.velocity_reader = StateVelocityReader(
+            world=self.world, dofs=self.translation_dofs() + [self.connection.yaw]
+        )
         rospy.node.get_logger().info(f"Created publisher for {self.cmd_topic}.")
 
-    def publish(self) -> None:
-        command = Twist()
-        command.linear.x = self.world.state[self.connection.x_velocity.id].velocity
+    def translation_dofs(self) -> List[DegreeOfFreedom]:
+        """
+        The degrees of freedom the drive can translate along.
+        """
         if isinstance(self.connection, OmniDrive):
-            command.linear.y = self.world.state[self.connection.y_velocity.id].velocity
-        command.angular.z = self.world.state[self.connection.yaw.id].velocity
-        self.vel_pub.publish(command)
+            return [self.connection.x_velocity, self.connection.y_velocity]
+        return [self.connection.x_velocity]
+
+    def publish(self) -> None:
+        velocities = self.velocity_reader.velocities()
+        linear_velocities = self.minimum_linear_velocity.raise_vector(velocities[:-1])
+        self.message.linear.x = linear_velocities[0]
+        if len(linear_velocities) > 1:
+            self.message.linear.y = linear_velocities[1]
+        self.message.angular.z = self.minimum_angular_velocity.raise_scalar(
+            velocities[-1]
+        )
+        self.vel_pub.publish(self.message)
 
     def stop(self) -> None:
-        self.vel_pub.publish(Twist())
+        self.message.linear.x = 0.0
+        self.message.linear.y = 0.0
+        self.message.angular.z = 0.0
+        self.vel_pub.publish(self.message)

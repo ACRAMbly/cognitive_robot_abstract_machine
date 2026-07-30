@@ -525,6 +525,46 @@ class JointGroupVelocityCommandPublisherDAO_connections_association(
     )
 
 
+class JointMinimumVelocitiesDAO_overrides_association(
+    Base, AssociationDataAccessObject
+):
+    __tablename__ = "_74090317792157171456988152349796871042594576914548512741606775"
+
+    database_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+
+    source_jointminimumvelocitiesdao_id: Mapped[int] = mapped_column(
+        ForeignKey("JointMinimumVelocitiesDAO.database_id")
+    )
+    target_jointminimumvelocitydao_id: Mapped[int] = mapped_column(
+        ForeignKey("JointMinimumVelocityDAO.database_id")
+    )
+
+    target: Mapped[JointMinimumVelocityDAO] = relationship(
+        "JointMinimumVelocityDAO",
+        foreign_keys=[target_jointminimumvelocitydao_id],
+        lazy="selectin",
+    )
+
+
+class StateVelocityReaderDAO_dofs_association(Base, AssociationDataAccessObject):
+    __tablename__ = "_65139406026654917612383338199281979718364972288928842454388694"
+
+    database_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+
+    source_statevelocityreaderdao_id: Mapped[int] = mapped_column(
+        ForeignKey("StateVelocityReaderDAO.database_id")
+    )
+    target_degreeoffreedomdao_id: Mapped[int] = mapped_column(
+        ForeignKey("DegreeOfFreedomDAO.database_id")
+    )
+
+    target: Mapped[DegreeOfFreedomDAO] = relationship(
+        "DegreeOfFreedomDAO",
+        foreign_keys=[target_degreeoffreedomdao_id],
+        lazy="selectin",
+    )
+
+
 class ControlLoopDAO_command_publishers_association(Base, AssociationDataAccessObject):
     __tablename__ = "_23548799840525417760750386734523854061653313853212419307149005"
 
@@ -6906,12 +6946,34 @@ class DriveVelocityCommandPublisherDAO(
         nullable=True,
         use_existing_column=True,
     )
+    minimum_linear_velocity_id: Mapped[int] = mapped_column(
+        ForeignKey("MinimumVelocityDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
+    )
+    minimum_angular_velocity_id: Mapped[int] = mapped_column(
+        ForeignKey("MinimumVelocityDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
+    )
 
     world: Mapped[WorldMappingDAO] = relationship(
         "WorldMappingDAO", uselist=False, foreign_keys=[world_id], post_update=True
     )
     connection: Mapped[WheeledDriveDAO] = relationship(
         "WheeledDriveDAO", uselist=False, foreign_keys=[connection_id], post_update=True
+    )
+    minimum_linear_velocity: Mapped[MinimumVelocityDAO] = relationship(
+        "MinimumVelocityDAO",
+        uselist=False,
+        foreign_keys=[minimum_linear_velocity_id],
+        post_update=True,
+    )
+    minimum_angular_velocity: Mapped[MinimumVelocityDAO] = relationship(
+        "MinimumVelocityDAO",
+        uselist=False,
+        foreign_keys=[minimum_angular_velocity_id],
+        post_update=True,
     )
 
     __mapper_args__ = {
@@ -6938,10 +7000,21 @@ class JointGroupVelocityCommandPublisherDAO(
     cmd_topic: Mapped[builtins.str] = mapped_column(
         sqlalchemy.sql.sqltypes.Text, use_existing_column=True
     )
-    minimum_valid_velocity: Mapped[builtins.float] = mapped_column(
-        use_existing_column=True
+
+    world_id: Mapped[int] = mapped_column(
+        ForeignKey("WorldMappingDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
+    )
+    minimum_velocities_id: Mapped[int] = mapped_column(
+        ForeignKey("JointMinimumVelocitiesDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
     )
 
+    world: Mapped[WorldMappingDAO] = relationship(
+        "WorldMappingDAO", uselist=False, foreign_keys=[world_id], post_update=True
+    )
     connections: Mapped[
         builtins.list[JointGroupVelocityCommandPublisherDAO_connections_association]
     ] = relationship(
@@ -6951,12 +7024,85 @@ class JointGroupVelocityCommandPublisherDAO(
         foreign_keys="[JointGroupVelocityCommandPublisherDAO_connections_association.source_jointgroupvelocitycommandpublisherdao_id]",
         lazy="selectin",
     )
+    minimum_velocities: Mapped[JointMinimumVelocitiesDAO] = relationship(
+        "JointMinimumVelocitiesDAO",
+        uselist=False,
+        foreign_keys=[minimum_velocities_id],
+        post_update=True,
+    )
 
     __mapper_args__ = {
         "polymorphic_identity": "JointGroupVelocityCommandPublisherDAO",
         "inherit_condition": database_id == CommandPublisherDAO.database_id,
         "polymorphic_load": "selectin",
     }
+
+
+class JointMinimumVelocitiesDAO(
+    Base,
+    DataAccessObject[
+        giskardpy.middleware.ros2.command_publishing.JointMinimumVelocities
+    ],
+):
+    __tablename__ = "JointMinimumVelocitiesDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
+
+    default_id: Mapped[int] = mapped_column(
+        ForeignKey("MinimumVelocityDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
+    )
+
+    default: Mapped[MinimumVelocityDAO] = relationship(
+        "MinimumVelocityDAO", uselist=False, foreign_keys=[default_id], post_update=True
+    )
+    overrides: Mapped[
+        builtins.list[JointMinimumVelocitiesDAO_overrides_association]
+    ] = relationship(
+        "JointMinimumVelocitiesDAO_overrides_association",
+        collection_class=builtins.list,
+        cascade="all, delete-orphan",
+        foreign_keys="[JointMinimumVelocitiesDAO_overrides_association.source_jointminimumvelocitiesdao_id]",
+        lazy="selectin",
+    )
+
+
+class JointVelocityCommandDAO(
+    Base,
+    DataAccessObject[giskardpy.middleware.ros2.command_publishing.JointVelocityCommand],
+):
+    __tablename__ = "JointVelocityCommandDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
+
+    connection_id: Mapped[int] = mapped_column(
+        ForeignKey("ActiveConnection1DOFDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
+    )
+    minimum_velocity_id: Mapped[int] = mapped_column(
+        ForeignKey("MinimumVelocityDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
+    )
+
+    connection: Mapped[ActiveConnection1DOFDAO] = relationship(
+        "ActiveConnection1DOFDAO",
+        uselist=False,
+        foreign_keys=[connection_id],
+        post_update=True,
+    )
+    minimum_velocity: Mapped[MinimumVelocityDAO] = relationship(
+        "MinimumVelocityDAO",
+        uselist=False,
+        foreign_keys=[minimum_velocity_id],
+        post_update=True,
+    )
 
 
 class JointVelocityCommandPublisherDAO(
@@ -6982,9 +7128,20 @@ class JointVelocityCommandPublisherDAO(
         nullable=True,
         use_existing_column=True,
     )
+    minimum_velocities_id: Mapped[int] = mapped_column(
+        ForeignKey("JointMinimumVelocitiesDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
+    )
 
     world: Mapped[WorldMappingDAO] = relationship(
         "WorldMappingDAO", uselist=False, foreign_keys=[world_id], post_update=True
+    )
+    minimum_velocities: Mapped[JointMinimumVelocitiesDAO] = relationship(
+        "JointMinimumVelocitiesDAO",
+        uselist=False,
+        foreign_keys=[minimum_velocities_id],
+        post_update=True,
     )
 
     __mapper_args__ = {
@@ -6992,6 +7149,78 @@ class JointVelocityCommandPublisherDAO(
         "inherit_condition": database_id == CommandPublisherDAO.database_id,
         "polymorphic_load": "selectin",
     }
+
+
+class MinimumVelocityDAO(
+    Base, DataAccessObject[giskardpy.middleware.ros2.command_publishing.MinimumVelocity]
+):
+    __tablename__ = "MinimumVelocityDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
+
+    magnitude: Mapped[builtins.float] = mapped_column(use_existing_column=True)
+
+    polymorphic_type: Mapped[str] = mapped_column(
+        String(255), nullable=False, use_existing_column=True
+    )
+
+    __mapper_args__ = {
+        "polymorphic_on": "polymorphic_type",
+        "polymorphic_identity": "MinimumVelocityDAO",
+    }
+
+
+class JointMinimumVelocityDAO(
+    MinimumVelocityDAO,
+    DataAccessObject[giskardpy.middleware.ros2.command_publishing.JointMinimumVelocity],
+):
+    __tablename__ = "JointMinimumVelocityDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(MinimumVelocityDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
+    )
+
+    joint_name: Mapped[builtins.str] = mapped_column(
+        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
+    )
+
+    __mapper_args__ = {
+        "polymorphic_identity": "JointMinimumVelocityDAO",
+        "inherit_condition": database_id == MinimumVelocityDAO.database_id,
+        "polymorphic_load": "selectin",
+    }
+
+
+class StateVelocityReaderDAO(
+    Base,
+    DataAccessObject[giskardpy.middleware.ros2.command_publishing.StateVelocityReader],
+):
+    __tablename__ = "StateVelocityReaderDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
+
+    world_id: Mapped[int] = mapped_column(
+        ForeignKey("WorldMappingDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
+    )
+
+    world: Mapped[WorldMappingDAO] = relationship(
+        "WorldMappingDAO", uselist=False, foreign_keys=[world_id], post_update=True
+    )
+    dofs: Mapped[builtins.list[StateVelocityReaderDAO_dofs_association]] = relationship(
+        "StateVelocityReaderDAO_dofs_association",
+        collection_class=builtins.list,
+        cascade="all, delete-orphan",
+        foreign_keys="[StateVelocityReaderDAO_dofs_association.source_statevelocityreaderdao_id]",
+        lazy="selectin",
+    )
 
 
 class ControlLoopDAO(

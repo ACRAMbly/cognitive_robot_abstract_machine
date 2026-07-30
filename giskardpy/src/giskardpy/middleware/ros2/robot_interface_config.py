@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, List, Optional, Union
+from typing import TYPE_CHECKING, Dict, List, Optional, Union
 
 from geometry_msgs.msg import Twist
 from nav_msgs.msg import Odometry
@@ -15,7 +15,9 @@ from giskardpy.middleware.ros2 import rospy
 from giskardpy.middleware.ros2.command_publishing import (
     DriveVelocityCommandPublisher,
     JointGroupVelocityCommandPublisher,
+    JointMinimumVelocities,
     JointVelocityCommandPublisher,
+    MinimumVelocity,
 )
 from giskardpy.middleware.ros2.control_loop import ControlLoop
 from giskardpy.middleware.ros2.input_synchronization import (
@@ -157,6 +159,8 @@ class RobotInterfaceConfig(ABC):
         self,
         cmd_vel_topic: Optional[str] = None,
         joint: Union[OmniDrive, DifferentialDrive] = None,
+        minimum_linear_velocity: float = 0.0,
+        minimum_angular_velocity: float = 0.0,
     ):
         """
         Tell Giskard how it can control an odom joint of the robot.
@@ -164,6 +168,11 @@ class RobotInterfaceConfig(ABC):
         :param cmd_vel_topic: a Twist topic
         :param joint: omni or diff drive joint. Doesn't need to be specified if there is
             only one.
+        :param minimum_linear_velocity: magnitude that smaller linear velocities are
+            raised to so the hardware moves, without changing the driving direction.
+            ``0.0`` disables raising.
+        :param minimum_angular_velocity: magnitude that smaller rotational velocities
+            are raised to. ``0.0`` disables raising.
         """
         if cmd_vel_topic is None:
             cmd_vel_topic = search_for_unique_subscriber_of_type(Twist)
@@ -171,20 +180,39 @@ class RobotInterfaceConfig(ABC):
             return
         self.control_loop.command_publishers.append(
             DriveVelocityCommandPublisher(
-                world=self.world, cmd_topic=cmd_vel_topic, connection=joint
+                world=self.world,
+                cmd_topic=cmd_vel_topic,
+                connection=joint,
+                minimum_linear_velocity=MinimumVelocity(minimum_linear_velocity),
+                minimum_angular_velocity=MinimumVelocity(minimum_angular_velocity),
             )
         )
 
-    def add_joint_velocity_controller(self, namespaces: List[str]):
+    def add_joint_velocity_controller(
+        self,
+        namespaces: List[str],
+        minimum_valid_velocity: float = 0.0,
+        minimum_velocity_overrides: Optional[Dict[str, float]] = None,
+    ):
         """
         For closed loop mode.
 
         Tell Giskard how it can send velocities to joints.
         :param namespaces: A list of namespaces where Giskard can find the topics and
             parameters.
+        :param minimum_valid_velocity: magnitude that smaller joint velocities are
+            raised to so the hardware moves. ``0.0`` disables raising.
+        :param minimum_velocity_overrides: minimum magnitude per joint name, overriding
+            ``minimum_valid_velocity``; ``0.0`` exempts a joint.
         """
         self.control_loop.command_publishers.append(
-            JointVelocityCommandPublisher(world=self.world, namespaces=namespaces)
+            JointVelocityCommandPublisher(
+                world=self.world,
+                namespaces=namespaces,
+                minimum_velocities=JointMinimumVelocities.from_magnitudes(
+                    minimum_valid_velocity, minimum_velocity_overrides
+                ),
+            )
         )
 
     def add_joint_velocity_group_controller(
@@ -192,14 +220,16 @@ class RobotInterfaceConfig(ABC):
         cmd_topic: str,
         connections: List[str],
         minimum_valid_velocity: float = 0.0,
+        minimum_velocity_overrides: Optional[Dict[str, float]] = None,
     ):
         """
         For closed loop mode.
 
         Tell Giskard how it can send velocities for a group of connections.
-        :param minimum_valid_velocity: minimum magnitude that small non-prismatic, non-
-            finger joint velocities are raised to so the hardware moves. ``0.0``
-            disables clamping.
+        :param minimum_valid_velocity: magnitude that smaller joint velocities are
+            raised to so the hardware moves. ``0.0`` disables raising.
+        :param minimum_velocity_overrides: minimum magnitude per joint name, overriding
+            ``minimum_valid_velocity``; ``0.0`` exempts a joint.
         """
         controlled_connections: List[ActiveConnection1DOF] = [
             self.world.get_connection_by_name(connection_name)
@@ -207,9 +237,12 @@ class RobotInterfaceConfig(ABC):
         ]
         self.control_loop.command_publishers.append(
             JointGroupVelocityCommandPublisher(
+                world=self.world,
                 cmd_topic=cmd_topic,
                 connections=controlled_connections,
-                minimum_valid_velocity=minimum_valid_velocity,
+                minimum_velocities=JointMinimumVelocities.from_magnitudes(
+                    minimum_valid_velocity, minimum_velocity_overrides
+                ),
             )
         )
 

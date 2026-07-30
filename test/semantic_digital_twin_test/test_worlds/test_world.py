@@ -1881,3 +1881,34 @@ def test_is_kinematic_structure_entity_in_world_by_name(world_setup):
     world, l1, *_ = world_setup
     assert world.is_kinematic_structure_entity_in_world_by_name("l1")
     assert not world.is_kinematic_structure_entity_in_world_by_name("nonexistent")
+
+
+def test_column_indices_locate_the_requested_degrees_of_freedom(world_setup):
+    world, *_ = world_setup
+    dofs = list(world.degrees_of_freedom)
+    for index, dof in enumerate(dofs):
+        world.state[dof.id].velocity = 0.1 * (index + 1)
+
+    columns = world.state.column_indices(dofs)
+
+    velocities = world.state.velocities
+    assert [velocities[column] for column in columns] == pytest.approx(
+        [0.1 * (index + 1) for index in range(len(dofs))]
+    )
+
+
+def test_column_indices_follow_the_requested_order(world_setup):
+    world, *_ = world_setup
+    dofs = list(world.degrees_of_freedom)
+
+    assert (
+        world.state.column_indices(list(reversed(dofs)))
+        == world.state.column_indices(dofs)[::-1]
+    )
+
+
+def test_column_indices_of_degree_of_freedom_outside_the_state(world_setup):
+    world, *_ = world_setup
+
+    with pytest.raises(DofNotInWorldStateError):
+        world.state.column_indices([DegreeOfFreedom(name=PrefixedName("new_dof"))])

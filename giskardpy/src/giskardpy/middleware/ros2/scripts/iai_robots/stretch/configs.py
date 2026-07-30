@@ -72,6 +72,11 @@ class StretchVelocityInterface(RobotInterfaceConfig):
             cmd_topic="/joint_velocity_cmd",
             connections=joints,
             minimum_valid_velocity=0.03,
+            minimum_velocity_overrides={
+                "joint_lift": 0.0,
+                "joint_arm_l0": 0.0,
+                "joint_gripper_finger_left": 0.0,
+            },
         )
 
 
