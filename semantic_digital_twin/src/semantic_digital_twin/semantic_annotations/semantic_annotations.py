@@ -304,7 +304,7 @@ class Slider(MechanicalJoint):
 
 
 @dataclass(eq=False)
-class ScrewJoint(MechanicalJoint):
+class ScrewMechanism(MechanicalJoint):
     """
     A screw joint is a physical entity that connects two bodies and couples rotation
     about a fixed axis with translation along that axis into a single degree of freedom,

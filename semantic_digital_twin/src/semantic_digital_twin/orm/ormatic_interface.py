@@ -21563,7 +21563,7 @@ class SaltPepperShakerDAO(
 class ScrewJointDAO(
     MechanicalJointDAO,
     DataAccessObject[
-        semantic_digital_twin.semantic_annotations.semantic_annotations.ScrewJoint
+        semantic_digital_twin.semantic_annotations.semantic_annotations.ScrewMechanism
     ],
 ):
     __tablename__ = "ScrewJointDAO"

@@ -38,7 +38,7 @@ from semantic_digital_twin.semantic_annotations.semantic_annotations import (
     Hinge,
     Bottle,
     BottleCap,
-    ScrewJoint,
+    ScrewMechanism,
 )
 from semantic_digital_twin.world_description.geometry import Scale
 from semantic_digital_twin.spatial_types import (
@@ -889,7 +889,7 @@ class TestOpenClose:
 
             # The thread axis points from the bottle out through the cap, here
             # towards the robot, so unscrewing moves the cap away from the bottle.
-            screw_joint = ScrewJoint.create_with_new_body_in_world(
+            screw_joint = ScrewMechanism.create_with_new_body_in_world(
                 name=PrefixedName("screw_joint"),
                 world=pr2_world_copy,
                 world_root_T_self=HomogeneousTransformationMatrix.from_xyz_rpy(

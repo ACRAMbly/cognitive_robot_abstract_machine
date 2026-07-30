@@ -45,7 +45,7 @@ from semantic_digital_twin.semantic_annotations.semantic_annotations import (
     Hinge,
     Fridge,
     Slider,
-    ScrewJoint,
+    ScrewMechanism,
     BottleCap,
     Aperture,
     MechanicalJoint,
@@ -219,7 +219,7 @@ class TestFactories(unittest.TestCase):
         with world.modify_world():
             world.add_body(root)
         with world.modify_world():
-            screw_joint = ScrewJoint.create_with_new_body_in_world(
+            screw_joint = ScrewMechanism.create_with_new_body_in_world(
                 name=PrefixedName("screw_joint"),
                 world=world,
                 active_axis=Vector3.Z(),
@@ -243,7 +243,7 @@ class TestFactories(unittest.TestCase):
                 world=world,
                 scale=Scale(0.03, 0.03, 0.02),
             )
-            screw_joint = ScrewJoint.create_with_new_body_in_world(
+            screw_joint = ScrewMechanism.create_with_new_body_in_world(
                 name=PrefixedName("screw_joint"),
                 world=world,
                 active_axis=Vector3.Z(),
