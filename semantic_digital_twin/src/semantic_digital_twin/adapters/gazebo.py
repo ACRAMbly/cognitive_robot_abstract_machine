@@ -5,7 +5,7 @@ import os
 import xml.etree.ElementTree as ElementTree
 from dataclasses import dataclass, field
 
-from typing_extensions import Dict, List, Optional, Tuple, Type
+from typing_extensions import ClassVar, Dict, List, Optional, Tuple, Type
 
 from semantic_digital_twin.adapters.package_resolver import (
     CompositePathResolver,
@@ -60,30 +60,6 @@ from semantic_digital_twin.world_description.shape_collection import ShapeCollec
 from semantic_digital_twin.world_description.world_entity import Body, Connection
 
 logger = logging.getLogger(__name__)
-
-connection_type_map: Dict[str, Type[Connection]] = {
-    "revolute": RevoluteConnection,
-    "continuous": RevoluteConnection,
-    "prismatic": PrismaticConnection,
-    "fixed": FixedConnection,
-}
-
-world_link_name = "world"
-"""
-The reserved link name that refers to the simulation world rather than a model link.
-"""
-
-truthy_values = frozenset({"1", "true"})
-"""
-The texts that SDF accepts for a boolean element that is set.
-"""
-
-interpreted_elements = frozenset(
-    {"model", "include", "link", "joint", "pose", "static"}
-)
-"""
-The child elements of a world or model that carry into the parsed world.
-"""
 
 
 @dataclass
@@ -144,7 +120,7 @@ class JointDescription:
 
 
 @dataclass
-class SDFParser:
+class GazeboParser:
     """
     Parses Gazebo SDF model and world descriptions into worlds.
 
@@ -157,6 +133,33 @@ class SDFParser:
 
     .. note:: A model declared ``static`` is attached rigidly, but joints inside it stay
         movable.
+    """
+
+    connection_type_map: ClassVar[Dict[str, Type[Connection]]] = {
+        "revolute": RevoluteConnection,
+        "continuous": RevoluteConnection,
+        "prismatic": PrismaticConnection,
+        "fixed": FixedConnection,
+    }
+    """
+    Maps a joint's declared type to the connection it becomes.
+    """
+
+    world_link_name: ClassVar[str] = "world"
+    """
+    The reserved link name that refers to the simulation world rather than a model link.
+    """
+
+    truthy_values: ClassVar[frozenset] = frozenset({"1", "true"})
+    """
+    The texts that SDF accepts for a boolean element that is set.
+    """
+
+    interpreted_elements: ClassVar[frozenset] = frozenset(
+        {"model", "include", "link", "joint", "pose", "static"}
+    )
+    """
+    The child elements of a world or model that carry into the parsed world.
     """
 
     sdf: str
@@ -187,7 +190,7 @@ class SDFParser:
         file_path: str,
         prefix: Optional[str] = None,
         path_resolver: Optional[PathResolver] = None,
-    ) -> SDFParser:
+    ) -> GazeboParser:
         """
         Creates a parser for a description file.
 
@@ -320,7 +323,7 @@ class SDFParser:
             )
 
         for skipped_element in container:
-            if skipped_element.tag in interpreted_elements:
+            if skipped_element.tag in self.interpreted_elements:
                 continue
             logger.debug("Skipping unsupported element <%s>.", skipped_element.tag)
 
@@ -581,7 +584,7 @@ class SDFParser:
             joint_element.findtext("parent", "").strip(),
             joint_element.findtext("child", "").strip(),
         )
-        if world_link_name not in endpoints:
+        if self.world_link_name not in endpoints:
             return True
 
         logger.debug(
@@ -761,12 +764,12 @@ class SDFParser:
         """
         joint_name = element.get("name")
         joint_type = element.get("type")
-        connection_type = connection_type_map.get(joint_type)
+        connection_type = self.connection_type_map.get(joint_type)
         if connection_type is None:
             raise UnsupportedJointType(
                 joint_name=joint_name,
                 joint_type=joint_type,
-                supported_types=list(connection_type_map),
+                supported_types=list(self.connection_type_map),
             )
 
         parent_name = element.findtext("parent").strip()
@@ -847,7 +850,7 @@ class SDFParser:
             return Vector3(0, 0, 1, reference_frame=parent_body)
 
         uses_model_frame = axis_element.findtext("use_parent_model_frame", "0")
-        if uses_model_frame.strip().lower() in truthy_values:
+        if uses_model_frame.strip().lower() in self.truthy_values:
             raise UnsupportedAxisReference(
                 joint_name=joint_name, reference="the parent model frame"
             )
@@ -961,15 +964,15 @@ class SDFParser:
         """
         return [float(value) for value in (text or "").split()]
 
-    @staticmethod
-    def parse_boolean(element: Optional[ElementTree.Element]) -> bool:
+    @classmethod
+    def parse_boolean(cls, element: Optional[ElementTree.Element]) -> bool:
         """
         :param element: The element holding the flag.
         :return: Whether the element is present and set.
         """
         if element is None:
             return False
-        return (element.text or "").strip().lower() in truthy_values
+        return (element.text or "").strip().lower() in cls.truthy_values
 
     @staticmethod
     def parse_float(

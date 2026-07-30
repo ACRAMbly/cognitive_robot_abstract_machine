@@ -23,6 +23,7 @@ import krrood.ormatic.data_access_objects.alternative_mappings
 import krrood.ormatic.type_dict
 import pathlib
 import semantic_digital_twin.adapters.fbx
+import semantic_digital_twin.adapters.gazebo
 import semantic_digital_twin.adapters.mesh
 import semantic_digital_twin.adapters.mjcf
 import semantic_digital_twin.adapters.mujoco_video_recording
@@ -53,7 +54,6 @@ import semantic_digital_twin.adapters.ros.world_fetcher
 import semantic_digital_twin.adapters.ros.world_synchronizer
 import semantic_digital_twin.adapters.sage_10k_dataset.loader
 import semantic_digital_twin.adapters.sage_10k_dataset.schema
-import semantic_digital_twin.adapters.sdf
 import semantic_digital_twin.adapters.urdf
 import semantic_digital_twin.adapters.world_entity_kwargs_tracker
 import semantic_digital_twin.callbacks.callback
@@ -2155,6 +2155,109 @@ class FBXGlobalSettingsDAO(
 
     database_id: Mapped[builtins.int] = mapped_column(
         Integer, primary_key=True, use_existing_column=True
+    )
+
+
+class GazeboParserDAO(
+    Base, DataAccessObject[semantic_digital_twin.adapters.gazebo.GazeboParser]
+):
+    __tablename__ = "GazeboParserDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
+
+    sdf: Mapped[builtins.str] = mapped_column(
+        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
+    )
+    prefix: Mapped[typing.Optional[builtins.str]] = mapped_column(
+        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
+    )
+
+
+class JointDescriptionDAO(
+    Base, DataAccessObject[semantic_digital_twin.adapters.gazebo.JointDescription]
+):
+    __tablename__ = "JointDescriptionDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
+
+    connection_type: Mapped[TypeType] = mapped_column(
+        TypeType, nullable=False, use_existing_column=True
+    )
+
+    name_id: Mapped[int] = mapped_column(
+        ForeignKey("PrefixedNameDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
+    )
+    parent_id: Mapped[int] = mapped_column(
+        ForeignKey("BodyDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
+    )
+    child_id: Mapped[int] = mapped_column(
+        ForeignKey("BodyDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
+    )
+    parent_T_connection_id: Mapped[int] = mapped_column(
+        ForeignKey(
+            "HomogeneousTransformationMatrixMappingDAO.database_id", use_alter=True
+        ),
+        nullable=True,
+        use_existing_column=True,
+    )
+    connection_T_child_id: Mapped[int] = mapped_column(
+        ForeignKey(
+            "HomogeneousTransformationMatrixMappingDAO.database_id", use_alter=True
+        ),
+        nullable=True,
+        use_existing_column=True,
+    )
+    axis_id: Mapped[typing.Optional[builtins.int]] = mapped_column(
+        ForeignKey("Vector3MappingDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
+    )
+    dynamics_id: Mapped[int] = mapped_column(
+        ForeignKey("JointDynamicsDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
+    )
+
+    name: Mapped[PrefixedNameDAO] = relationship(
+        "PrefixedNameDAO", uselist=False, foreign_keys=[name_id], post_update=True
+    )
+    parent: Mapped[BodyDAO] = relationship(
+        "BodyDAO", uselist=False, foreign_keys=[parent_id], post_update=True
+    )
+    child: Mapped[BodyDAO] = relationship(
+        "BodyDAO", uselist=False, foreign_keys=[child_id], post_update=True
+    )
+    parent_T_connection: Mapped[HomogeneousTransformationMatrixMappingDAO] = (
+        relationship(
+            "HomogeneousTransformationMatrixMappingDAO",
+            uselist=False,
+            foreign_keys=[parent_T_connection_id],
+            post_update=True,
+        )
+    )
+    connection_T_child: Mapped[HomogeneousTransformationMatrixMappingDAO] = (
+        relationship(
+            "HomogeneousTransformationMatrixMappingDAO",
+            uselist=False,
+            foreign_keys=[connection_T_child_id],
+            post_update=True,
+        )
+    )
+    axis: Mapped[Vector3MappingDAO] = relationship(
+        "Vector3MappingDAO", uselist=False, foreign_keys=[axis_id], post_update=True
+    )
+    dynamics: Mapped[JointDynamicsDAO] = relationship(
+        "JointDynamicsDAO", uselist=False, foreign_keys=[dynamics_id], post_update=True
     )
 
 
@@ -5896,109 +5999,6 @@ class Sage10kWallDAO(
         "inherit_condition": database_id == Sage10kWithIDDAO.database_id,
         "polymorphic_load": "selectin",
     }
-
-
-class JointDescriptionDAO(
-    Base, DataAccessObject[semantic_digital_twin.adapters.sdf.JointDescription]
-):
-    __tablename__ = "JointDescriptionDAO"
-
-    database_id: Mapped[builtins.int] = mapped_column(
-        Integer, primary_key=True, use_existing_column=True
-    )
-
-    connection_type: Mapped[TypeType] = mapped_column(
-        TypeType, nullable=False, use_existing_column=True
-    )
-
-    name_id: Mapped[int] = mapped_column(
-        ForeignKey("PrefixedNameDAO.database_id", use_alter=True),
-        nullable=True,
-        use_existing_column=True,
-    )
-    parent_id: Mapped[int] = mapped_column(
-        ForeignKey("BodyDAO.database_id", use_alter=True),
-        nullable=True,
-        use_existing_column=True,
-    )
-    child_id: Mapped[int] = mapped_column(
-        ForeignKey("BodyDAO.database_id", use_alter=True),
-        nullable=True,
-        use_existing_column=True,
-    )
-    parent_T_connection_id: Mapped[int] = mapped_column(
-        ForeignKey(
-            "HomogeneousTransformationMatrixMappingDAO.database_id", use_alter=True
-        ),
-        nullable=True,
-        use_existing_column=True,
-    )
-    connection_T_child_id: Mapped[int] = mapped_column(
-        ForeignKey(
-            "HomogeneousTransformationMatrixMappingDAO.database_id", use_alter=True
-        ),
-        nullable=True,
-        use_existing_column=True,
-    )
-    axis_id: Mapped[typing.Optional[builtins.int]] = mapped_column(
-        ForeignKey("Vector3MappingDAO.database_id", use_alter=True),
-        nullable=True,
-        use_existing_column=True,
-    )
-    dynamics_id: Mapped[int] = mapped_column(
-        ForeignKey("JointDynamicsDAO.database_id", use_alter=True),
-        nullable=True,
-        use_existing_column=True,
-    )
-
-    name: Mapped[PrefixedNameDAO] = relationship(
-        "PrefixedNameDAO", uselist=False, foreign_keys=[name_id], post_update=True
-    )
-    parent: Mapped[BodyDAO] = relationship(
-        "BodyDAO", uselist=False, foreign_keys=[parent_id], post_update=True
-    )
-    child: Mapped[BodyDAO] = relationship(
-        "BodyDAO", uselist=False, foreign_keys=[child_id], post_update=True
-    )
-    parent_T_connection: Mapped[HomogeneousTransformationMatrixMappingDAO] = (
-        relationship(
-            "HomogeneousTransformationMatrixMappingDAO",
-            uselist=False,
-            foreign_keys=[parent_T_connection_id],
-            post_update=True,
-        )
-    )
-    connection_T_child: Mapped[HomogeneousTransformationMatrixMappingDAO] = (
-        relationship(
-            "HomogeneousTransformationMatrixMappingDAO",
-            uselist=False,
-            foreign_keys=[connection_T_child_id],
-            post_update=True,
-        )
-    )
-    axis: Mapped[Vector3MappingDAO] = relationship(
-        "Vector3MappingDAO", uselist=False, foreign_keys=[axis_id], post_update=True
-    )
-    dynamics: Mapped[JointDynamicsDAO] = relationship(
-        "JointDynamicsDAO", uselist=False, foreign_keys=[dynamics_id], post_update=True
-    )
-
-
-class SDFParserDAO(
-    Base, DataAccessObject[semantic_digital_twin.adapters.sdf.SDFParser]
-):
-    __tablename__ = "SDFParserDAO"
-
-    database_id: Mapped[builtins.int] = mapped_column(
-        Integer, primary_key=True, use_existing_column=True
-    )
-
-    sdf: Mapped[builtins.str] = mapped_column(
-        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
-    )
-    prefix: Mapped[typing.Optional[builtins.str]] = mapped_column(
-        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
-    )
 
 
 class URDFParserDAO(
