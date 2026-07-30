@@ -8074,6 +8074,29 @@ class DuplicateWorldEntityErrorDAO(
     }
 
 
+class ExerciseVerificationFailedDAO(
+    UsageErrorDAO,
+    DataAccessObject[semantic_digital_twin.exceptions.ExerciseVerificationFailed],
+):
+    __tablename__ = "ExerciseVerificationFailedDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(UsageErrorDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
+    )
+
+    requirement: Mapped[builtins.str] = mapped_column(
+        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
+    )
+
+    __mapper_args__ = {
+        "polymorphic_identity": "ExerciseVerificationFailedDAO",
+        "inherit_condition": database_id == UsageErrorDAO.database_id,
+        "polymorphic_load": "selectin",
+    }
+
+
 class InvalidConnectionLimitsDAO(
     UsageErrorDAO,
     DataAccessObject[semantic_digital_twin.exceptions.InvalidConnectionLimits],

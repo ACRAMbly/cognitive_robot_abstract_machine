@@ -46,6 +46,7 @@ from semantic_digital_twin.spatial_types.spatial_types import HomogeneousTransfo
 from semantic_digital_twin.world import World
 from semantic_digital_twin.world_description.connections import PrismaticConnection
 from semantic_digital_twin.world_description.geometry import Scale
+from semantic_digital_twin.exceptions import ExerciseVerificationFailed
 
 logging.disable(logging.CRITICAL)
 root_path = Path(files("semantic_digital_twin")).parent.parent
@@ -87,10 +88,10 @@ for index, (x, y) in enumerate([(0.55, 0.35), (0.55, -0.35), (-0.55, 0.35), (-0.
 
 ```{code-cell} ipython3
 :tags: [verify-solution, remove-input]
-assert len(world.bodies) == 6, "Expected the root, the table top, and four legs."
+if len(world.bodies) != 6: raise ExerciseVerificationFailed("Expected the root, the table top, and four legs.")
 for index in range(4):
     leg = world.get_body_by_name(f"leg_{index}")
-    assert leg.parent_connection.parent is table_top, "Each leg should attach to the table top."
+    if leg.parent_connection.parent is not table_top: raise ExerciseVerificationFailed("Each leg should attach to the table top.")
 ```
 
 ## 2. Give a body a degree of freedom
@@ -120,7 +121,7 @@ sliding_drawer = BodySpecification.box(
 
 ```{code-cell} ipython3
 :tags: [verify-solution, remove-input]
-assert isinstance(sliding_drawer.parent_connection, PrismaticConnection), "The drawer should slide."
+if not isinstance(sliding_drawer.parent_connection, PrismaticConnection): raise ExerciseVerificationFailed("The drawer should slide.")
 ```
 
 ## 3. Build an annotation specification with a nested part
@@ -157,9 +158,8 @@ drawer_with_handle = Drawer.get_specification(
 
 ```{code-cell} ipython3
 :tags: [verify-solution, remove-input]
-assert isinstance(drawer_with_handle.handle, Handle), "The handle part should be mounted."
-assert drawer_with_handle.handle.root.parent_connection.parent is drawer_with_handle.root, \
-    "The handle should be a kinematic child of the drawer root."
+if not isinstance(drawer_with_handle.handle, Handle): raise ExerciseVerificationFailed("The handle part should be mounted.")
+if drawer_with_handle.handle.root.parent_connection.parent is not drawer_with_handle.root: raise ExerciseVerificationFailed("The handle should be a kinematic child of the drawer root.")
 ```
 
 ## 4. Describe a whole scene and materialize it twice
@@ -200,10 +200,10 @@ second_world = scene_specification.to_domain_object()
 
 ```{code-cell} ipython3
 :tags: [verify-solution, remove-input]
-assert first_world is not second_world, "Each materialization should yield an independent world."
-assert len(first_world.get_semantic_annotations_by_type(Milk)) == 1
-assert len(second_world.get_semantic_annotations_by_type(Milk)) == 1
-assert first_world.get_body_by_name("cup") is not None
+if first_world is second_world: raise ExerciseVerificationFailed("Each materialization should yield an independent world.")
+if len(first_world.get_semantic_annotations_by_type(Milk)) != 1: raise ExerciseVerificationFailed("The first world should contain exactly one Milk.")
+if len(second_world.get_semantic_annotations_by_type(Milk)) != 1: raise ExerciseVerificationFailed("The second world should contain exactly one Milk.")
+if first_world.get_body_by_name("cup") is None: raise ExerciseVerificationFailed("The first world should contain a body named 'cup'.")
 ```
 
 ## 5. Place a robot into the scene
@@ -241,9 +241,9 @@ robot_world = robot_specification.to_domain_object()
 
 ```{code-cell} ipython3
 :tags: [verify-solution, remove-input]
-assert len(robot_world.get_semantic_annotations_by_type(PR2)) == 1, "The robot should be annotated."
+if len(robot_world.get_semantic_annotations_by_type(PR2)) != 1: raise ExerciseVerificationFailed("The robot should be annotated.")
 odom_body = robot_world.get_body_by_name("odom")
-assert odom_body.parent_connection.parent is robot_world.root, "odom hangs off the world root."
+if odom_body.parent_connection.parent is not robot_world.root: raise ExerciseVerificationFailed("odom hangs off the world root.")
 root_T_odom = robot_world.compute_forward_kinematics(robot_world.root, odom_body)
-assert abs(root_T_odom.to_position().to_np()[0] - 1.0) < 1e-6, "The localization pose should apply."
+if not abs(root_T_odom.to_position().to_np()[0] - 1.0) < 1e-6: raise ExerciseVerificationFailed("The localization pose should apply.")
 ```

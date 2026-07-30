@@ -34,6 +34,7 @@ from semantic_digital_twin.semantic_annotations.semantic_annotations import Draw
 from semantic_digital_twin.spatial_types.spatial_types import HomogeneousTransformationMatrix
 from semantic_digital_twin.world import World
 from semantic_digital_twin.world_description.geometry import Scale
+from semantic_digital_twin.exceptions import ExerciseVerificationFailed
 
 logging.disable(logging.CRITICAL)
 ```
@@ -75,10 +76,10 @@ with world.modify_world():
 
 ```{code-cell} ipython3
 :tags: [verify-solution, remove-input]
-assert drawer in world.semantic_annotations, "The drawer should be registered in the world."
-assert handle in world.semantic_annotations, "The handle should be registered in the world."
-assert drawer.handle is handle, "The handle should be mounted on the drawer."
-assert len(drawer.root.collision.shapes) > 0, "The factory should have generated geometry for the drawer."
+if drawer not in world.semantic_annotations: raise ExerciseVerificationFailed("The drawer should be registered in the world.")
+if handle not in world.semantic_annotations: raise ExerciseVerificationFailed("The handle should be registered in the world.")
+if drawer.handle is not handle: raise ExerciseVerificationFailed("The handle should be mounted on the drawer.")
+if not len(drawer.root.collision.shapes) > 0: raise ExerciseVerificationFailed("The factory should have generated geometry for the drawer.")
 ```
 
 ## 2. Extract the geometry as a specification
@@ -104,6 +105,6 @@ free_standing = specification.to_domain_object("free_drawer_body")
 ```{code-cell} ipython3
 :tags: [verify-solution, remove-input]
 # The specification measures the same extents as the drawer the factory spawned.
-np.testing.assert_allclose(specification.scale.to_np(), drawer.scale.to_np(), atol=1e-6)
-assert free_standing not in world.bodies, "to_domain_object must not add the body to any world."
+if not np.allclose(specification.scale.to_np(), drawer.scale.to_np(), atol=1e-6): raise ExerciseVerificationFailed("The generated body should have the scale requested by the specification.")
+if free_standing in world.bodies: raise ExerciseVerificationFailed("to_domain_object must not add the body to any world.")
 ```

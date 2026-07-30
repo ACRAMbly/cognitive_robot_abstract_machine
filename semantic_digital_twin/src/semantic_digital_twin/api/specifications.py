@@ -246,12 +246,14 @@ class ConnectionSpecification(
             raise MissingConnectionParentError(connection_name=self.name)
 
         parent_T_connection = (
-            deepcopy(parent_T_connection)
+            parent_T_connection.copy_with_new_reference_frames(
+                new_reference_frame=parent, new_child_frame=child
+            )
             if parent_T_connection is not None
-            else HomogeneousTransformationMatrix()
+            else HomogeneousTransformationMatrix(
+                reference_frame=parent, child_frame=child
+            )
         )
-        parent_T_connection.reference_frame = parent
-        parent_T_connection.child_frame = child
 
         with world.modify_world():
             connection = self.connection_type.create_with_dofs(

@@ -32,6 +32,7 @@ from pathlib import Path
 from semantic_digital_twin.adapters.urdf import URDFParser
 
 from semantic_digital_twin.spatial_computations.raytracer import RayTracer
+from semantic_digital_twin.exceptions import ExerciseVerificationFailed
 
 logging.disable(logging.CRITICAL)
 ```
@@ -63,9 +64,9 @@ world = URDFParser.from_file(table_urdf).parse()
 ```{code-cell} ipython3
 :tags: [verify-solution, remove-input]
 from semantic_digital_twin.world import World
-assert world is not ..., "Create a World by parsing the URDF file."
-assert isinstance(world, World), "`world` must be an instance of World."
-assert len(world.bodies) == 6, "The loaded world must contain 6 bodies."
-assert world.get_connection_by_name("left_front_leg_to_top") is not None, "The world should contain a connection named 'left_front_leg_to_top'."
+if world is ...: raise ExerciseVerificationFailed("Create a World by parsing the URDF file.")
+if not isinstance(world, World): raise ExerciseVerificationFailed("`world` must be an instance of World.")
+if len(world.bodies) != 6: raise ExerciseVerificationFailed("The loaded world must contain 6 bodies.")
+if world.get_connection_by_name("left_front_leg_to_top") is None: raise ExerciseVerificationFailed("The world should contain a connection named 'left_front_leg_to_top'.")
 rt = RayTracer(world); rt.update_scene(); rt.scene.show("jupyter")
 ```

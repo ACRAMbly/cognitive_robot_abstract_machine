@@ -36,6 +36,7 @@ from semantic_digital_twin.semantic_annotations.semantic_annotations import Draw
 from semantic_digital_twin.spatial_types.spatial_types import HomogeneousTransformationMatrix, Vector3
 from semantic_digital_twin.world import World
 from semantic_digital_twin.world_description.geometry import Scale
+from semantic_digital_twin.exceptions import ExerciseVerificationFailed
 
 logging.disable(logging.CRITICAL)
 ```
@@ -93,10 +94,10 @@ with world.modify_world():
 
 ```{code-cell} ipython3
 :tags: [verify-solution, remove-input]
-assert drawer.handle is handle, "The handle should be routed to drawer.handle."
-assert drawer.mechanical_joint is slider, "The slider should be routed to drawer.mechanical_joint."
-assert drawer in dresser.drawers, "The drawer should be appended to dresser.drawers."
-assert handle.root.parent_connection.parent is drawer.root, "The handle should be a kinematic child of the drawer."
+if drawer.handle is not handle: raise ExerciseVerificationFailed("The handle should be routed to drawer.handle.")
+if drawer.mechanical_joint is not slider: raise ExerciseVerificationFailed("The slider should be routed to drawer.mechanical_joint.")
+if drawer not in dresser.drawers: raise ExerciseVerificationFailed("The drawer should be appended to dresser.drawers.")
+if handle.root.parent_connection.parent is not drawer.root: raise ExerciseVerificationFailed("The handle should be a kinematic child of the drawer.")
 ```
 
 ## 2. Reuse a mixin, declare a field only for a new part kind
@@ -170,11 +171,10 @@ with world.modify_world():
 
 ```{code-cell} ipython3
 :tags: [verify-solution, remove-input]
-assert ToolRack.__dataclass_fields__["handle"] is HasHandle.__dataclass_fields__["handle"], \
-    "The handle field must come from the HasHandle mixin, not be re-declared."
-assert rack.handle is rack_handle, "The handle should be routed to the inherited rack.handle field."
-assert rack.latch is rack_latch, "The latch should be routed to rack.latch."
-assert rack.label is None, "add must not touch plain fields."
-assert rack_handle.root.parent_connection.parent is rack.root, "The handle should be a kinematic child of the rack."
-assert rack_latch.root.parent_connection.parent is rack.root, "The latch should be a kinematic child of the rack."
+if ToolRack.__dataclass_fields__["handle"] is not HasHandle.__dataclass_fields__["handle"]: raise ExerciseVerificationFailed("The handle field must come from the HasHandle mixin, not be re-declared.")
+if rack.handle is not rack_handle: raise ExerciseVerificationFailed("The handle should be routed to the inherited rack.handle field.")
+if rack.latch is not rack_latch: raise ExerciseVerificationFailed("The latch should be routed to rack.latch.")
+if rack.label is not None: raise ExerciseVerificationFailed("add must not touch plain fields.")
+if rack_handle.root.parent_connection.parent is not rack.root: raise ExerciseVerificationFailed("The handle should be a kinematic child of the rack.")
+if rack_latch.root.parent_connection.parent is not rack.root: raise ExerciseVerificationFailed("The latch should be a kinematic child of the rack.")
 ```

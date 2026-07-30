@@ -357,10 +357,16 @@ class MissingConnectionParentError(UsageError):
     """
 
     def error_message(self) -> str:
-        return f"Connecting the connection '{self.connection_name}' requires a parent kinematic structure entity."
+        return (
+            f"Connecting the connection '{self.connection_name}' requires a parent kinematic structure entity, "
+            f"but None could be identified."
+        )
 
     def suggest_correction(self) -> str:
-        return "pass the parent entity via the 'parent' keyword argument of connect."
+        return (
+            "pass the parent entity via the 'parent' keyword argument of connect, or make sure that the current "
+            "world is not empty."
+        )
 
 
 @dataclass
@@ -1506,3 +1512,22 @@ class MergedRobotAnnotationNotFound(UsageError):
             "check that merging the robot world replays its semantic annotations into "
             "the target world."
         )
+
+
+@dataclass
+class ExerciseVerificationFailed(UsageError):
+    """
+    Raised when a solution written in a self-assessment exercise does not satisfy one of
+    the exercise's requirements.
+    """
+
+    requirement: str
+    """
+    The requirement that the solution failed to satisfy.
+    """
+
+    def error_message(self) -> str:
+        return f"Your solution does not satisfy this requirement: {self.requirement}"
+
+    def suggest_correction(self) -> str:
+        return "revisit the task description of this exercise and adjust your solution."
