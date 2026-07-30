@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - main
-      - semdt_specifications_rewrite
   workflow_dispatch: {}
 
 # Serialize Pages deployments so concurrent runs do not race. Never cancel a run in
@@ -40,7 +39,7 @@ jobs:
           - lib: semantic_digital_twin
             doc_path: doc
             artifact_name: semantic-digital-twin-doc
-            use_container: False
+            use_container: true
           - lib: probabilistic_model
             doc_path: doc
             artifact_name: probabilistic-model-doc
