@@ -139,18 +139,24 @@ class LocalMinimumReached(MotionStatechartNode):
     """
 
     def build(self, context: MotionStatechartContext) -> NodeArtifacts:
-        artifacts = NodeArtifacts()
+        """
+        .. note:: If there are no degrees of freedom to converge, there is nothing to
+            wait for, so this reports done immediately once running.
+        """
         degrees_of_freedom = (
             self.degrees_of_freedom
             if self.degrees_of_freedom is not None
             else context.world.active_degrees_of_freedom
         )
-        artifacts.observation = build_local_minimum_expression(
-            degrees_of_freedom=degrees_of_freedom,
-            context=context,
-            joint_convergence_threshold=self.joint_convergence_threshold,
-            minimum_threshold=self.minimum_threshold,
-            maximum_threshold=self.maximum_threshold,
-            minimum_time=self.minimum_time,
+        if not degrees_of_freedom:
+            return NodeArtifacts(observation=sm.Scalar.const_true())
+        return NodeArtifacts(
+            observation=build_local_minimum_expression(
+                degrees_of_freedom=degrees_of_freedom,
+                context=context,
+                joint_convergence_threshold=self.joint_convergence_threshold,
+                minimum_threshold=self.minimum_threshold,
+                maximum_threshold=self.maximum_threshold,
+                minimum_time=self.minimum_time,
+            )
         )
-        return artifacts
