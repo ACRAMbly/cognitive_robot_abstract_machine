@@ -6,6 +6,7 @@ from typing import Tuple
 
 import numpy as np
 import trimesh
+from krrood.class_diagrams.class_diagram import WrappedClass
 from krrood.entity_query_language.factories import variable_from, entity, variable, an
 from krrood.ormatic.utils import classproperty
 from krrood.patterns.subclass_safe_generic import SubClassSafeGeneric
@@ -34,7 +35,7 @@ from typing_extensions import (
     TypeVar,
 )
 
-from semantic_digital_twin.api.specifications import (
+from semantic_digital_twin.api import (
     BodySpecification,
     ConnectionSpecification,
     FixedConnectionSpecification,
@@ -53,8 +54,6 @@ from semantic_digital_twin.exceptions import (
 from semantic_digital_twin.reasoning.predicates import is_supported_by
 from semantic_digital_twin.semantic_annotations.part_whole import (
     IsPartWholeRelationship,
-    part_whole_relationship_of,
-    wrapped_part_whole_relationship_fields,
 )
 from semantic_digital_twin.spatial_types import (
     Point3,
@@ -166,7 +165,7 @@ class HasRootKinematicStructureEntity(
     @abstractmethod
     def get_default_root_specification(
         cls,
-        name: Optional[str] = None,
+        name: str | None = None,
         scale: Optional[Scale] = None,
         connection_specification: Optional[ConnectionSpecification] = None,
     ) -> KinematicStructureEntitySpecification:
@@ -334,7 +333,7 @@ class HasRootBody(HasRootKinematicStructureEntity[TBody], ABC):
     @classmethod
     def get_default_root_specification(
         cls,
-        name: Optional[str] = None,
+        name: str | None = None,
         scale: Optional[Scale] = None,
         connection_specification: Optional[ConnectionSpecification] = None,
     ) -> BodySpecification:
@@ -403,7 +402,7 @@ class HasRootRegion(HasRootKinematicStructureEntity[TRegion], ABC):
     @classmethod
     def get_default_root_specification(
         cls,
-        name: Optional[str] = None,
+        name: str | None = None,
         scale: Optional[Scale] = None,
         connection_specification: Optional[ConnectionSpecification] = None,
     ) -> RegionSpecification:
@@ -460,7 +459,9 @@ class PartWholeRelationship(HasRootKinematicStructureEntity, ABC):
         :raises AmbiguousPart: If ``type(part)`` matches more than one part-whole
             relationship field.
         """
-        candidate_fields = wrapped_part_whole_relationship_fields(type(self))
+        candidate_fields = WrappedClass.of(type(self)).fields_with_metadata(
+            IsPartWholeRelationship
+        )
         if field_name:
             named_fields = [
                 wrapped_part_whole_relationship_field
@@ -488,7 +489,7 @@ class PartWholeRelationship(HasRootKinematicStructureEntity, ABC):
             raise AmbiguousPart(self, part, [match.field for match in matches])
 
         [match] = matches
-        part._mount_strategy(self, part_whole_relationship_of(match))
+        part._mount_strategy(self, IsPartWholeRelationship.of_wrapped_field(match))
         if match.is_many_to_many_relationship:
             getattr(self, match.field.name).append(part)
         else:
@@ -1041,7 +1042,7 @@ class HasCaseAsRootBody(HasSupportingSurface, ABC):
     @classmethod
     def get_default_root_specification(
         cls,
-        name: Optional[str] = None,
+        name: str | None = None,
         scale: Optional[Scale] = None,
         connection_specification: Optional[ConnectionSpecification] = None,
         *,

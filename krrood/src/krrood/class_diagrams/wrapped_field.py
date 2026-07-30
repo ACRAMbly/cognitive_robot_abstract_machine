@@ -180,7 +180,7 @@ class WrappedField:
     @cached_property
     def is_optional(self):
         """
-        Whether the field holds an optional value.
+        :return: Whether the field holds an optional value.
 
         ``Optional[X]`` and the PEP 604 spelling ``X | None`` denote the same type but
         report different origins, so both are recognised here.

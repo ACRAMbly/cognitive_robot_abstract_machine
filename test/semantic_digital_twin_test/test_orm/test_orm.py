@@ -35,9 +35,9 @@ from semantic_digital_twin.semantic_annotations.semantic_annotations import (
     Slider,
 )
 from semantic_digital_twin.semantic_annotations.part_whole import (
-    wrapped_part_whole_relationship_fields,
     IsPartWholeRelationship,
 )
+from krrood.class_diagrams.class_diagram import WrappedClass
 from semantic_digital_twin.orm.ormatic_interface import *
 from krrood.ormatic.data_access_objects.helper import to_dao
 
@@ -213,7 +213,9 @@ def test_part_whole_relationship_field_survives_deepcopy():
         # The marked-field discovery still resolves the same part-whole relationship fields.
         discovered = {
             spec.field.name
-            for spec in wrapped_part_whole_relationship_fields(type(copied_drawer))
+            for spec in WrappedClass.of(type(copied_drawer)).fields_with_metadata(
+                IsPartWholeRelationship
+            )
         }
         assert {"handle", "mechanical_joint"} <= discovered
 
@@ -300,7 +302,9 @@ def test_part_whole_relationship_field_metadata_survives_orm_round_trip(session)
     # The marked-field discovery still resolves the same part-whole relationship fields.
     discovered = {
         spec.field.name
-        for spec in wrapped_part_whole_relationship_fields(type(reconstructed_drawer))
+        for spec in WrappedClass.of(type(reconstructed_drawer)).fields_with_metadata(
+            IsPartWholeRelationship
+        )
     }
     assert {"handle", "mechanical_joint"} <= discovered
 

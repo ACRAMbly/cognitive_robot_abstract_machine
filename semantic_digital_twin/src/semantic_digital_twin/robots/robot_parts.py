@@ -79,7 +79,7 @@ from semantic_digital_twin.world_description.world_modification import (
 
 if TYPE_CHECKING:
     from semantic_digital_twin.world import World
-    from semantic_digital_twin.api.specifications import (
+    from semantic_digital_twin.api import (
         BodySpecification,
         ConnectionSpecification,
     )

@@ -59,7 +59,7 @@ from semantic_digital_twin.world_description.world_entity import (
     SemanticAnnotation,
     Body,
 )
-from semantic_digital_twin.api.specifications import (
+from semantic_digital_twin.api import (
     BodySpecification,
     ConnectionSpecification,
     KinematicStructureEntitySpecification,

@@ -33,7 +33,7 @@ import os
 from importlib.resources import files
 from pathlib import Path
 
-from semantic_digital_twin.api.specifications import (
+from semantic_digital_twin.api import (
     BodySpecification,
     PrismaticConnectionSpecification,
     RobotSpecification,

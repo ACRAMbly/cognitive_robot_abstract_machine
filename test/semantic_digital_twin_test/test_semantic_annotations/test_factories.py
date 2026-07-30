@@ -77,7 +77,7 @@ from semantic_digital_twin.world_description.shape_collection import (
     BoundingBoxCollection,
 )
 from semantic_digital_twin.world_description.world_entity import Body
-from semantic_digital_twin.api.specifications import (
+from semantic_digital_twin.api import (
     SemanticAnnotationWithRootSpecification,
 )
 

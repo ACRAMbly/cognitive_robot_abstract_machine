@@ -15,6 +15,7 @@ from uuid import UUID, uuid4
 from typing_extensions import Self, TypeVar
 
 from krrood.class_diagrams.attribute_introspector import DataclassOnlyIntrospector
+from krrood.class_diagrams.class_diagram import WrappedClass
 from krrood.class_diagrams.wrapped_field import WrappedField
 from krrood.patterns.subclass_safe_generic import SubClassSafeGeneric
 from krrood.utils import get_generic_type_parameters
@@ -31,7 +32,7 @@ from semantic_digital_twin.exceptions import (
     MissingConnectionParentError,
 )
 from semantic_digital_twin.semantic_annotations.part_whole import (
-    wrapped_part_whole_relationship_fields,
+    IsPartWholeRelationship,
 )
 from semantic_digital_twin.spatial_types import (
     HomogeneousTransformationMatrix,
@@ -998,9 +999,9 @@ class SemanticAnnotationWithRootSpecification(SpawnSpecification[TSemanticAnnota
         """
         return {
             wrapped_field.name: wrapped_field
-            for wrapped_field in wrapped_part_whole_relationship_fields(
+            for wrapped_field in WrappedClass.of(
                 self.semantic_annotation_type
-            )
+            ).fields_with_metadata(IsPartWholeRelationship)
         }
 
     def _mount_part_specifications(

@@ -173,7 +173,7 @@ import semantic_digital_twin.adapters.sage_10k_dataset.loader
 import semantic_digital_twin.adapters.sage_10k_dataset.schema
 import semantic_digital_twin.adapters.urdf
 import semantic_digital_twin.adapters.world_entity_kwargs_tracker
-import semantic_digital_twin.api.specifications
+import semantic_digital_twin.api
 import semantic_digital_twin.callbacks.callback
 import semantic_digital_twin.collision_checking.collision_detector
 import semantic_digital_twin.collision_checking.collision_groups
@@ -18015,7 +18015,7 @@ class WorldEntityWithIDKwargsTrackerDAO(
 
 
 class NamedSpecificationDAO(
-    Base, DataAccessObject[semantic_digital_twin.api.specifications.NamedSpecification]
+    Base, DataAccessObject[semantic_digital_twin.api.NamedSpecification]
 ):
     __tablename__ = "NamedSpecificationDAO"
 
@@ -18039,7 +18039,7 @@ class NamedSpecificationDAO(
 
 class ConnectionSpecificationDAO(
     NamedSpecificationDAO,
-    DataAccessObject[semantic_digital_twin.api.specifications.ConnectionSpecification],
+    DataAccessObject[semantic_digital_twin.api.ConnectionSpecification],
 ):
     __tablename__ = "ConnectionSpecificationDAO"
 
@@ -18058,9 +18058,7 @@ class ConnectionSpecificationDAO(
 
 class ActiveConnection1DOFSpecificationDAO(
     ConnectionSpecificationDAO,
-    DataAccessObject[
-        semantic_digital_twin.api.specifications.ActiveConnection1DOFSpecification
-    ],
+    DataAccessObject[semantic_digital_twin.api.ActiveConnection1DOFSpecification],
 ):
     __tablename__ = "ActiveConnection1DOFSpecificationDAO"
 
@@ -18092,9 +18090,7 @@ class ActiveConnection1DOFSpecificationDAO(
 
 class Connection6DoFSpecificationDAO(
     ConnectionSpecificationDAO,
-    DataAccessObject[
-        semantic_digital_twin.api.specifications.Connection6DoFSpecification
-    ],
+    DataAccessObject[semantic_digital_twin.api.Connection6DoFSpecification],
 ):
     __tablename__ = "Connection6DoFSpecificationDAO"
 
@@ -18113,9 +18109,7 @@ class Connection6DoFSpecificationDAO(
 
 class FixedConnectionSpecificationDAO(
     ConnectionSpecificationDAO,
-    DataAccessObject[
-        semantic_digital_twin.api.specifications.FixedConnectionSpecification
-    ],
+    DataAccessObject[semantic_digital_twin.api.FixedConnectionSpecification],
 ):
     __tablename__ = "FixedConnectionSpecificationDAO"
 
@@ -18133,8 +18127,7 @@ class FixedConnectionSpecificationDAO(
 
 
 class PartSpecificationBindingDAO(
-    Base,
-    DataAccessObject[semantic_digital_twin.api.specifications.PartSpecificationBinding],
+    Base, DataAccessObject[semantic_digital_twin.api.PartSpecificationBinding]
 ):
     __tablename__ = "PartSpecificationBindingDAO"
 
@@ -18149,9 +18142,7 @@ class PartSpecificationBindingDAO(
 
 class PrismaticConnectionSpecificationDAO(
     ActiveConnection1DOFSpecificationDAO,
-    DataAccessObject[
-        semantic_digital_twin.api.specifications.PrismaticConnectionSpecification
-    ],
+    DataAccessObject[semantic_digital_twin.api.PrismaticConnectionSpecification],
 ):
     __tablename__ = "PrismaticConnectionSpecificationDAO"
 
@@ -18171,9 +18162,7 @@ class PrismaticConnectionSpecificationDAO(
 
 class RevoluteConnectionSpecificationDAO(
     ActiveConnection1DOFSpecificationDAO,
-    DataAccessObject[
-        semantic_digital_twin.api.specifications.RevoluteConnectionSpecification
-    ],
+    DataAccessObject[semantic_digital_twin.api.RevoluteConnectionSpecification],
 ):
     __tablename__ = "RevoluteConnectionSpecificationDAO"
 
@@ -18192,7 +18181,7 @@ class RevoluteConnectionSpecificationDAO(
 
 
 class RobotSpecificationDAO(
-    Base, DataAccessObject[semantic_digital_twin.api.specifications.RobotSpecification]
+    Base, DataAccessObject[semantic_digital_twin.api.RobotSpecification]
 ):
     __tablename__ = "RobotSpecificationDAO"
 
@@ -18237,7 +18226,7 @@ class RobotSpecificationDAO(
 
 class SpawnSpecificationDAO(
     NamedSpecificationDAO,
-    DataAccessObject[semantic_digital_twin.api.specifications.SpawnSpecification],
+    DataAccessObject[semantic_digital_twin.api.SpawnSpecification],
 ):
     __tablename__ = "SpawnSpecificationDAO"
 
@@ -18256,9 +18245,7 @@ class SpawnSpecificationDAO(
 
 class KinematicStructureEntitySpecificationDAO(
     SpawnSpecificationDAO,
-    DataAccessObject[
-        semantic_digital_twin.api.specifications.KinematicStructureEntitySpecification
-    ],
+    DataAccessObject[semantic_digital_twin.api.KinematicStructureEntitySpecification],
 ):
     __tablename__ = "KinematicStructureEntitySpecificationDAO"
 
@@ -18300,7 +18287,7 @@ class KinematicStructureEntitySpecificationDAO(
 
 class BodySpecificationDAO(
     KinematicStructureEntitySpecificationDAO,
-    DataAccessObject[semantic_digital_twin.api.specifications.BodySpecification],
+    DataAccessObject[semantic_digital_twin.api.BodySpecification],
 ):
     __tablename__ = "BodySpecificationDAO"
 
@@ -18341,7 +18328,7 @@ class BodySpecificationDAO(
 
 class RegionSpecificationDAO(
     KinematicStructureEntitySpecificationDAO,
-    DataAccessObject[semantic_digital_twin.api.specifications.RegionSpecification],
+    DataAccessObject[semantic_digital_twin.api.RegionSpecification],
 ):
     __tablename__ = "RegionSpecificationDAO"
 
@@ -18361,9 +18348,7 @@ class RegionSpecificationDAO(
 
 class SemanticAnnotationWithRootSpecificationDAO(
     SpawnSpecificationDAO,
-    DataAccessObject[
-        semantic_digital_twin.api.specifications.SemanticAnnotationWithRootSpecification
-    ],
+    DataAccessObject[semantic_digital_twin.api.SemanticAnnotationWithRootSpecification],
 ):
     __tablename__ = "SemanticAnnotationWithRootSpecificationDAO"
 
@@ -18397,7 +18382,7 @@ class SemanticAnnotationWithRootSpecificationDAO(
 
 
 class WorldSpecificationDAO(
-    Base, DataAccessObject[semantic_digital_twin.api.specifications.WorldSpecification]
+    Base, DataAccessObject[semantic_digital_twin.api.WorldSpecification]
 ):
     __tablename__ = "WorldSpecificationDAO"
 
@@ -20218,6 +20203,29 @@ class DuplicateWorldEntityErrorDAO(
 
     __mapper_args__ = {
         "polymorphic_identity": "DuplicateWorldEntityErrorDAO",
+        "inherit_condition": database_id == UsageErrorDAO.database_id,
+        "polymorphic_load": "selectin",
+    }
+
+
+class ExerciseVerificationFailedDAO(
+    UsageErrorDAO,
+    DataAccessObject[semantic_digital_twin.exceptions.ExerciseVerificationFailed],
+):
+    __tablename__ = "ExerciseVerificationFailedDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(UsageErrorDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
+    )
+
+    requirement: Mapped[builtins.str] = mapped_column(
+        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
+    )
+
+    __mapper_args__ = {
+        "polymorphic_identity": "ExerciseVerificationFailedDAO",
         "inherit_condition": database_id == UsageErrorDAO.database_id,
         "polymorphic_load": "selectin",
     }

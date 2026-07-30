@@ -91,7 +91,7 @@ Calling `spawn` materializes the body and attaches it to the world root with a `
 by default.
 
 ```{code-cell} ipython3
-from semantic_digital_twin.api.specifications import BodySpecification
+from semantic_digital_twin.api import BodySpecification
 from semantic_digital_twin.world_description.geometry import Scale, Color
 
 world = World.create_with_root_body()
@@ -251,7 +251,7 @@ carries no inertia or visuals — only geometry, a pose, and children. It shares
 constructors, including `parent_T_self`.
 
 ```{code-cell} ipython3
-from semantic_digital_twin.api.specifications import RegionSpecification
+from semantic_digital_twin.api import RegionSpecification
 
 world = World.create_with_root_body()
 
@@ -283,7 +283,7 @@ The active families (`Prismatic`/`Revolute`) require a movement `axis`, and opti
 `multiplier`, an `offset`, and `dof_limits`.
 
 ```{code-cell} ipython3
-from semantic_digital_twin.api.specifications import PrismaticConnectionSpecification
+from semantic_digital_twin.api import PrismaticConnectionSpecification
 from semantic_digital_twin.spatial_types import Vector3
 
 world = World.create_with_root_body()
@@ -316,7 +316,7 @@ This pairs naturally with `to_domain_object`, which materializes a free-standing
 attaching it anywhere.
 
 ```{code-cell} ipython3
-from semantic_digital_twin.api.specifications import FixedConnectionSpecification
+from semantic_digital_twin.api import FixedConnectionSpecification
 
 world = World.create_with_root_body()
 
@@ -349,7 +349,7 @@ materializes the root entity, attaches it, registers the annotation, and materia
 children.
 
 ```{code-cell} ipython3
-from semantic_digital_twin.api.specifications import SemanticAnnotationWithRootSpecification
+from semantic_digital_twin.api import SemanticAnnotationWithRootSpecification
 from semantic_digital_twin.semantic_annotations.semantic_annotations import Milk
 
 world = World.create_with_root_body()
@@ -594,7 +594,7 @@ import os
 from importlib.resources import files
 from pathlib import Path
 
-from semantic_digital_twin.api.specifications import WorldSpecification
+from semantic_digital_twin.api import WorldSpecification
 
 table_urdf = os.path.join(
     Path(files("semantic_digital_twin")).parent.parent, "resources", "urdf", "table.urdf"
@@ -646,7 +646,7 @@ is the drive determined by the robot's mobile base, or a fixed connection when t
 no mobile base.
 
 ```{code-cell} ipython3
-from semantic_digital_twin.api.specifications import RobotSpecification
+from semantic_digital_twin.api import RobotSpecification
 from semantic_digital_twin.robots.pr2 import PR2
 
 world = WorldSpecification.from_urdf(

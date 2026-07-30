@@ -8,7 +8,7 @@ import numpy as np
 import pytest
 
 from krrood.utils import recursive_subclasses
-from semantic_digital_twin.api.specifications import (
+from semantic_digital_twin.api import (
     BodySpecification,
     RegionSpecification,
     ActiveConnection1DOFSpecification,
