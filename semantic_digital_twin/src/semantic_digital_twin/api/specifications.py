@@ -245,15 +245,9 @@ class ConnectionSpecification(
         if parent is None:
             raise MissingConnectionParentError(connection_name=self.name)
 
-        parent_T_connection = (
-            parent_T_connection.copy_with_new_reference_frames(
-                new_reference_frame=parent, new_child_frame=child
-            )
-            if parent_T_connection is not None
-            else HomogeneousTransformationMatrix(
-                reference_frame=parent, child_frame=child
-            )
-        )
+        parent_T_connection = parent_T_connection.copy_with_new_reference_frames(
+            new_reference_frame=parent, new_child_frame=child
+        ) or HomogeneousTransformationMatrix(reference_frame=parent, child_frame=child)
 
         with world.modify_world():
             connection = self.connection_type.create_with_dofs(
@@ -456,9 +450,7 @@ class KinematicStructureEntitySpecification(
                 world,
                 child=entity,
                 parent=parent,
-                parent_T_connection=(
-                    parent_T_self if parent_T_self is not None else self.parent_T_self
-                ),
+                parent_T_connection=(parent_T_self or self.parent_T_self),
             )
             for child in self.child_specifications:
                 child.spawn(world, parent=entity)
@@ -511,9 +503,7 @@ class KinematicStructureEntitySpecification(
         :return: The materialized kinematic structure entity.
         """
         connection_specification = (
-            self.connection_specification
-            if self.connection_specification is not None
-            else FixedConnectionSpecification()
+            self.connection_specification or FixedConnectionSpecification()
         )
         return self._spawn_attached(
             world, connection_specification, name, parent, parent_T_self
@@ -549,19 +539,11 @@ class KinematicStructureEntitySpecification(
             name,
             Box(
                 scale=scale,
-                origin=(
-                    origin if origin is not None else HomogeneousTransformationMatrix()
-                ),
-                color=color if color is not None else Color(),
+                origin=(origin or HomogeneousTransformationMatrix()),
+                color=color or Color(),
             ).as_shape_collection(),
-            child_specifications=(
-                child_specifications if child_specifications is not None else []
-            ),
-            parent_T_self=(
-                parent_T_self
-                if parent_T_self is not None
-                else HomogeneousTransformationMatrix()
-            ),
+            child_specifications=(child_specifications or []),
+            parent_T_self=(parent_T_self or HomogeneousTransformationMatrix()),
             connection_specification=connection_specification,
         )
 
@@ -596,19 +578,11 @@ class KinematicStructureEntitySpecification(
             name,
             Sphere(
                 radius=radius,
-                origin=(
-                    origin if origin is not None else HomogeneousTransformationMatrix()
-                ),
-                color=color if color is not None else Color(),
+                origin=(origin or HomogeneousTransformationMatrix()),
+                color=color or Color(),
             ).as_shape_collection(),
-            child_specifications=(
-                child_specifications if child_specifications is not None else []
-            ),
-            parent_T_self=(
-                parent_T_self
-                if parent_T_self is not None
-                else HomogeneousTransformationMatrix()
-            ),
+            child_specifications=(child_specifications or []),
+            parent_T_self=(parent_T_self or HomogeneousTransformationMatrix()),
             connection_specification=connection_specification,
         )
 
@@ -646,19 +620,11 @@ class KinematicStructureEntitySpecification(
             Cylinder(
                 width=width,
                 height=height,
-                origin=(
-                    origin if origin is not None else HomogeneousTransformationMatrix()
-                ),
-                color=color if color is not None else Color(),
+                origin=(origin or HomogeneousTransformationMatrix()),
+                color=color or Color(),
             ).as_shape_collection(),
-            child_specifications=(
-                child_specifications if child_specifications is not None else []
-            ),
-            parent_T_self=(
-                parent_T_self
-                if parent_T_self is not None
-                else HomogeneousTransformationMatrix()
-            ),
+            child_specifications=(child_specifications or []),
+            parent_T_self=(parent_T_self or HomogeneousTransformationMatrix()),
             connection_specification=connection_specification,
         )
 
@@ -696,20 +662,12 @@ class KinematicStructureEntitySpecification(
             name,
             Mesh(
                 filename=filename,
-                origin=(
-                    origin if origin is not None else HomogeneousTransformationMatrix()
-                ),
-                scale=scale if scale is not None else Scale(),
-                color=color if color is not None else Color(),
+                origin=(origin or HomogeneousTransformationMatrix()),
+                scale=scale or Scale(),
+                color=color or Color(),
             ).as_shape_collection(),
-            child_specifications=(
-                child_specifications if child_specifications is not None else []
-            ),
-            parent_T_self=(
-                parent_T_self
-                if parent_T_self is not None
-                else HomogeneousTransformationMatrix()
-            ),
+            child_specifications=(child_specifications or []),
+            parent_T_self=(parent_T_self or HomogeneousTransformationMatrix()),
             connection_specification=connection_specification,
         )
 
@@ -746,14 +704,8 @@ class KinematicStructureEntitySpecification(
             shapes=BoundingBoxCollection.from_event(anchor, event)
             .as_shapes()
             .copy_without_reference_frame(),
-            child_specifications=(
-                child_specifications if child_specifications is not None else []
-            ),
-            parent_T_self=(
-                parent_T_self
-                if parent_T_self is not None
-                else HomogeneousTransformationMatrix()
-            ),
+            child_specifications=(child_specifications or []),
+            parent_T_self=(parent_T_self or HomogeneousTransformationMatrix()),
             connection_specification=connection_specification,
         )
 
@@ -795,14 +747,8 @@ class KinematicStructureEntitySpecification(
                     )
                 ]
             ).copy_without_reference_frame(),
-            child_specifications=(
-                child_specifications if child_specifications is not None else []
-            ),
-            parent_T_self=(
-                parent_T_self
-                if parent_T_self is not None
-                else HomogeneousTransformationMatrix()
-            ),
+            child_specifications=(child_specifications or []),
+            parent_T_self=(parent_T_self or HomogeneousTransformationMatrix()),
             connection_specification=connection_specification,
         )
 
@@ -844,9 +790,7 @@ class BodySpecification(KinematicStructureEntitySpecification[Body]):
             self._resolved_name(name),
             self.shapes.copy_without_reference_frame(),
             visuals_shape_collection=(
-                self.visual_shapes.copy_without_reference_frame()
-                if self.visual_shapes is not None
-                else None
+                self.visual_shapes.copy_without_reference_frame() or None
             ),
         )
         if self.inertial is not None:
@@ -980,8 +924,7 @@ class SemanticAnnotationWithRootSpecification(SpawnSpecification[TSemanticAnnota
 
         connection_specification = (
             self.root_specification.connection_specification
-            if self.root_specification.connection_specification is not None
-            else self.semantic_annotation_type.parent_connection_specification()
+            or self.semantic_annotation_type.parent_connection_specification()
         )
 
         with world.modify_world():
@@ -1166,7 +1109,7 @@ class RobotSpecification:
         if is_active and self.odom_T_robot_start is not None:
             odom_C_robot.origin = self.odom_T_robot_start
 
-        return cast(AbstractRobot, world.get_semantic_annotation_by_id(robot_id))
+        return cast("AbstractRobot", world.get_semantic_annotation_by_id(robot_id))
 
     @staticmethod
     def _create_odom_body() -> Body:
@@ -1244,8 +1187,8 @@ class WorldSpecification:
         ).parse()
         return cls(
             world=world,
-            robots=robots if robots is not None else [],
-            objects=objects if objects is not None else [],
+            robots=robots or [],
+            objects=objects or [],
         )
 
     @classmethod
@@ -1274,13 +1217,13 @@ class WorldSpecification:
 
         world = MJCFParser(
             file_path=file_path,
-            mimic_joints=mimic_joints if mimic_joints is not None else {},
+            mimic_joints=mimic_joints or {},
             prefix=prefix,
         ).parse()
         return cls(
             world=world,
-            robots=robots if robots is not None else [],
-            objects=objects if objects is not None else [],
+            robots=robots or [],
+            objects=objects or [],
         )
 
     def to_domain_object(self) -> World:

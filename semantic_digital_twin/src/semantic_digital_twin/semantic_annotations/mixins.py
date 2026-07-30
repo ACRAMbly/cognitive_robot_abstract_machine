@@ -297,12 +297,11 @@ TBody = TypeVar("TBody", bound=Body)
 @dataclass(eq=False)
 class HasRootBody(HasRootKinematicStructureEntity[TBody], ABC):
     """
-    Abstract base class for all household objects.
+    Abstract base class for all objects which have a unambiguous root reference frame.
 
     Each semantic annotation refers to a single Body. Each subclass automatically
-    derives a MatchRule from its own class name and the names of its HouseholdObject
-    ancestors. This makes specialized subclasses naturally more specific than their
-    bases.
+    derives a MatchRule from its own class name and the names of its ancestors.
+     This makes specialized subclasses naturally more specific than their bases.
     """
 
     @classmethod
