@@ -7,7 +7,7 @@ from copy import deepcopy
 import numpy as np
 import objgraph
 import pytest
-
+from semantic_digital_twin.robots.daisy import DAiSy
 from semantic_digital_twin.spatial_types.derivatives import DerivativeMap
 from semantic_digital_twin.world_description.degree_of_freedom import (
     DegreeOfFreedomLimits,
@@ -60,7 +60,6 @@ from semantic_digital_twin.semantic_annotations.semantic_annotations import (
     Carrot,
     Lettuce,
     Banana,
-    Bowl,
     Spoon,
     Drawer,
     Handle,
@@ -73,7 +72,11 @@ from semantic_digital_twin.spatial_types import (
     Vector3,
     Point3,
 )
-from semantic_digital_twin.utils import rclpy_installed, tracy_installed
+from semantic_digital_twin.utils import (
+    rclpy_installed,
+    tracy_installed,
+    daisy_installed,
+)
 from semantic_digital_twin.world import World
 from semantic_digital_twin.world_description.connections import (
     OmniDrive,
@@ -358,6 +361,7 @@ def supported_abstract_robots():
         ICub3,
         UnitreeG1,
         MMPDresden,
+        DAiSy,
         # Garmi, We dont have the ROS Package yet
     ]
 
@@ -486,6 +490,17 @@ def tracy_world():
     world_with_tracy = tracy_parser.parse()
     Tracy.from_world(world_with_tracy)
     return world_with_tracy
+
+
+@pytest.fixture(scope="session")
+def daisy_world():
+    if not daisy_installed():
+        pytest.skip("DAiSy not installed")
+    daisy = "package://iai_daisy_description/robots/daisy.urdf.xacro"
+    daisy_parser = URDFParser.from_file(file_path=daisy)
+    world_with_daisy = daisy_parser.parse()
+    DAiSy.from_world(world_with_daisy)
+    return world_with_daisy
 
 
 @pytest.fixture(scope="session")
