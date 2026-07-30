@@ -362,7 +362,7 @@ class SymbolicExpression(ABC):
 
             evaluation_context = create_default_evaluation_context()
             context_token = set_evaluation_context(evaluation_context)
-            evaluation_context.active_conditions_root.claim(
+            evaluation_context.active_conditions_root.set_active_root_if_not_set(
                 self._conditions_root_, has_condition=self._has_condition_
             )
         try:
@@ -603,15 +603,15 @@ class SymbolicExpression(ABC):
         """
         yield from self._iter_descendants_(set())
 
-    def _get_expression_names_by_their_ids_(
+    def _get_expressions_by_their_ids_(
         self, ids: OrderedSet[uuid.UUID]
-    ) -> List[str]:
+    ) -> List[SymbolicExpression]:
         """
         :param ids: Expression identifiers to resolve, typically an
             :attr:`OperationResult.satisfied_condition_ids`.
-        :return: The ``_name_`` of the expression for each id in *ids*.
+        :return: The expression for each id in *ids*.
         """
-        return [self._get_expression_by_id_(id_)._name_ for id_ in ids]
+        return [self._get_expression_by_id_(id_) for id_ in ids]
 
     def _iter_descendants_(
         self, visited_ids: Set[uuid.UUID]

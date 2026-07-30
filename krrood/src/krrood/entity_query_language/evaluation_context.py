@@ -97,28 +97,29 @@ class ActiveConditionsRoot:
 
     A node reused as the condition of more than one ``Filter`` has no single correct
     "root" — the right answer depends on which evaluation is currently running, not on
-    the node's construction history. The first node to claim this during a pass wins;
+    the node's construction history. The first node to set this during a pass wins;
     nested evaluations within the same pass never reassign it.
     """
 
     _root_id: Optional[uuid.UUID] = field(default=None, init=False)
     """
-    Identifier of the claimed root, or ``None`` before any node has claimed one this
-    pass.
+    Identifier of the active root, or ``None`` before one has been set this pass.
     """
 
     has_condition: bool = field(default=False, init=False)
     """
-    Whether the claimed root came from a genuine ``Filter``, rather than the Filter-less
+    Whether the active root came from a genuine ``Filter``, rather than the Filter-less
     fallback to the evaluation's own starting expression.
     """
 
-    def claim(self, root: SymbolicExpression, has_condition: bool) -> None:
+    def set_active_root_if_not_set(
+        self, root: SymbolicExpression, has_condition: bool
+    ) -> None:
         """
-        Claim *root* as the active conditions root for this pass, if none is claimed
-        yet.
+        Set *root* as the active conditions root for this pass, unless one is already
+        set.
 
-        :param root: The node to claim, normally
+        :param root: The node to set, normally
             ``originating_expression._conditions_root_``.
         :param has_condition: Whether *root* came from a genuine ``Filter``, recorded so
             that it need not be recomputed later in the pass from a node that may itself

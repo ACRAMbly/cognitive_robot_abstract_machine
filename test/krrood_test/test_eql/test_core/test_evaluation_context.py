@@ -26,54 +26,55 @@ class _NodeStub:
     """
 
 
-def test_active_conditions_root_claims_first_node_and_ignores_later_claims():
+def test_active_conditions_root_keeps_the_first_node_set_and_ignores_later_ones():
     tracking = ActiveConditionsRoot()
     first = _NodeStub()
     second = _NodeStub()
 
-    tracking.claim(first, has_condition=True)
-    tracking.claim(second, has_condition=True)
+    tracking.set_active_root_if_not_set(first, has_condition=True)
+    tracking.set_active_root_if_not_set(second, has_condition=True)
 
     assert tracking.is_active_root(first)
     assert not tracking.is_active_root(second)
 
 
-def test_active_conditions_root_resolves_by_claim_not_by_construction_order():
+def test_active_conditions_root_resolves_by_what_was_set_not_by_construction_order():
     """
-    The whole point of this class: whichever node claims the pass first is the active
-    root, regardless of any other node's structural/construction history.
+    The whole point of this class: whichever node is set first for the pass is the
+    active root, regardless of any other node's structural/construction history.
     """
     tracking = ActiveConditionsRoot()
     node = _NodeStub()
 
-    assert not tracking.is_active_root(node), "unclaimed pass must not match any node"
-    tracking.claim(node, has_condition=True)
+    assert not tracking.is_active_root(node), "an unset pass must not match any node"
+    tracking.set_active_root_if_not_set(node, has_condition=True)
     assert tracking.is_active_root(node)
 
 
-def test_active_conditions_root_has_condition_when_claimed_with_a_genuine_filter():
+def test_active_conditions_root_has_condition_when_set_with_a_genuine_filter():
     tracking = ActiveConditionsRoot()
     filter_condition = _NodeStub()
 
-    tracking.claim(filter_condition, has_condition=True)
+    tracking.set_active_root_if_not_set(filter_condition, has_condition=True)
 
     assert tracking.has_condition
 
 
-def test_active_conditions_root_has_no_condition_when_claimed_without_a_filter():
+def test_active_conditions_root_has_no_condition_when_set_without_a_filter():
     """
     A Filter-less evaluation's own _conditions_root_ falls back to its plain _root_, so
-    claiming with ``has_condition=False`` must record "no real condition" for this pass.
+    setting it with ``has_condition=False`` must record "no real condition" for this
+    pass.
     """
     tracking = ActiveConditionsRoot()
     node = _NodeStub()
 
-    tracking.claim(node, has_condition=False)
+    tracking.set_active_root_if_not_set(node, has_condition=False)
 
     assert not tracking.has_condition
 
 
-def test_active_conditions_root_has_condition_defaults_false_before_any_claim():
+def test_active_conditions_root_has_condition_defaults_false_before_anything_is_set():
     tracking = ActiveConditionsRoot()
 
     assert not tracking.has_condition

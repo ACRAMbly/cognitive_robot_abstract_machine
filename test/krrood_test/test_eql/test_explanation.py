@@ -318,18 +318,19 @@ def test_satisfied_conditions_and_both_true():
     AND with both children true: AND and both comparators are satisfied.
     """
     val = variable_from([6])
-    query = entity(val).where(and_(val > 5, val < 10))
+    greater = val > 5
+    less = val < 10
+    condition = and_(greater, less)
+    query = entity(val).where(condition)
 
     true_results = _get_true_results(query)
     assert len(true_results) == 1
     result = true_results[0]
 
-    ids = result.satisfied_condition_ids
-    assert ids is not None
-    expressions = val._conditions_root_._get_expression_names_by_their_ids_(ids)
-    assert "AND" in expressions
-    assert ">" in expressions
-    assert "<" in expressions
+    expressions = val._conditions_root_._get_expressions_by_their_ids_(
+        result.satisfied_condition_ids
+    )
+    assert set(expressions) == {condition, greater, less}
 
 
 def test_satisfied_conditions_and_short_circuit():
@@ -349,19 +350,20 @@ def test_satisfied_conditions_or_first_true():
     OR with first child true: short-circuits, right never evaluated.
     """
     val = variable_from([6])
-    query = entity(val).where(or_(val > 5, val < 0))
+    greater = val > 5
+    short_circuited = val < 0
+    condition = or_(greater, short_circuited)
+    query = entity(val).where(condition)
 
     true_results = _get_true_results(query)
     assert len(true_results) == 1
     result = true_results[0]
 
-    ids = result.satisfied_condition_ids
-    assert ids is not None
-    expressions = val._conditions_root_._get_expression_names_by_their_ids_(ids)
-    assert "OR" in expressions
-    assert ">" in expressions
-    # The right side was short-circuited, should NOT be in satisfied set
-    assert "<" not in expressions
+    expressions = val._conditions_root_._get_expressions_by_their_ids_(
+        result.satisfied_condition_ids
+    )
+    # Exact set: the short-circuited right side is absent rather than satisfied.
+    assert set(expressions) == {condition, greater}
 
 
 def test_satisfied_conditions_or_fallback():
@@ -369,20 +371,20 @@ def test_satisfied_conditions_or_fallback():
     OR with first false, second true: both children evaluated, OR satisfied.
     """
     val = variable_from([3])
-    query = entity(val).where(or_(val > 5, val < 10))
+    false_side = val > 5
+    true_side = val < 10
+    condition = or_(false_side, true_side)
+    query = entity(val).where(condition)
 
     true_results = _get_true_results(query)
     assert len(true_results) == 1
     result = true_results[0]
 
-    ids = result.satisfied_condition_ids
-    assert ids is not None
-    expressions = val._conditions_root_._get_expression_names_by_their_ids_(ids)
-    assert "OR" in expressions
-    # The right side (< 10) is satisfied
-    assert "<" in expressions
-    # The left side (> 5) is false, so NOT satisfied
-    assert ">" not in expressions
+    expressions = val._conditions_root_._get_expressions_by_their_ids_(
+        result.satisfied_condition_ids
+    )
+    # Exact set: the evaluated-but-false left side is absent rather than satisfied.
+    assert set(expressions) == {condition, true_side}
 
 
 def test_satisfied_conditions_not():
@@ -390,19 +392,19 @@ def test_satisfied_conditions_not():
     Not inverts satisfaction: Not is satisfied when its child is false.
     """
     val = variable_from([3])
-    query = entity(val).where(not_(val > 5))
+    negated_comparator = val > 5
+    condition = not_(negated_comparator)
+    query = entity(val).where(condition)
 
     true_results = _get_true_results(query)
     assert len(true_results) == 1
     result = true_results[0]
 
-    ids = result.satisfied_condition_ids
-    assert ids is not None
-    expressions = val._conditions_root_._get_expression_names_by_their_ids_(ids)
-    # Not should be satisfied
-    assert "Not" in expressions
-    # The inner comparator is false, so not satisfied
-    assert ">" not in expressions
+    expressions = val._conditions_root_._get_expressions_by_their_ids_(
+        result.satisfied_condition_ids
+    )
+    # Exact set: Not is satisfied, its false inner comparator is not.
+    assert set(expressions) == {condition}
 
 
 def test_satisfied_conditions_nested_and_or():
@@ -422,21 +424,22 @@ def test_satisfied_conditions_nested_and_or_satisfied():
     Nested and_(x > 5, or_(x < 10, x == -1)) with x=6: AND and OR satisfied.
     """
     val = variable_from([6])
-    query = entity(val).where(and_(val > 5, or_(val < 10, val == -1)))
+    greater = val > 5
+    less = val < 10
+    short_circuited = val == -1
+    inner_or = or_(less, short_circuited)
+    condition = and_(greater, inner_or)
+    query = entity(val).where(condition)
 
     true_results = _get_true_results(query)
     assert len(true_results) == 1
     result = true_results[0]
 
-    ids = result.satisfied_condition_ids
-    assert ids is not None
-    expressions = val._conditions_root_._get_expression_names_by_their_ids_(ids)
-    assert "AND" in expressions
-    assert "OR" in expressions
-    assert ">" in expressions  # val > 5 is true
-    assert "<" in expressions  # val < 10 is true (first child of OR)
-    # val == -1 is short-circuited by OR, so NOT satisfied
-    assert "==" not in expressions
+    expressions = val._conditions_root_._get_expressions_by_their_ids_(
+        result.satisfied_condition_ids
+    )
+    # Exact set: the equality short-circuited by OR is absent rather than satisfied.
+    assert set(expressions) == {condition, inner_or, greater, less}
 
 
 def test_satisfied_conditions_no_where():
