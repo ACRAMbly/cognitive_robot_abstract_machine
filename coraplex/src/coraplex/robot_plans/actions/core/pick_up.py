@@ -318,7 +318,9 @@ class PickUpAction(ActionDescription):
 
         :raises GraspVerificationFailed: if no attempt succeeds.
         """
-        attempt_count = self.max_grasp_attempts if self.max_grasp_attempts else 1
+        attempt_count = (
+            self.max_grasp_attempts if self.max_grasp_attempts is not None else 1
+        )
         for attempt_index in range(attempt_count):
             self.add_subplan(self._grasp_attempt_plan()).perform()
             if self._grasp_succeeded():

@@ -185,7 +185,7 @@ class PlaceAction(ActionDescription):
         ).perform()
 
         release_attempt_count = (
-            self.max_release_attempts if self.max_release_attempts else 1
+            self.max_release_attempts if self.max_release_attempts is not None else 1
         )
         for _ in range(release_attempt_count):
             self.add_subplan(
