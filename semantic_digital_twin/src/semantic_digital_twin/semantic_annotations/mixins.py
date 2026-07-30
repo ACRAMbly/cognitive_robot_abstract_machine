@@ -459,7 +459,7 @@ class PartWholeRelationship(HasRootKinematicStructureEntity, ABC):
         :raises AmbiguousPart: If ``type(part)`` matches more than one part-whole
             relationship field.
         """
-        candidate_fields = WrappedClass.of(type(self)).fields_with_metadata(
+        candidate_fields = WrappedClass(type(self)).fields_with_metadata(
             IsPartWholeRelationship
         )
         if field_name:

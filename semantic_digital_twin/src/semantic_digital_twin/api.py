@@ -1007,7 +1007,7 @@ class SemanticAnnotationWithRootSpecification(SpawnSpecification[TSemanticAnnota
         """
         return {
             wrapped_field.name: wrapped_field
-            for wrapped_field in WrappedClass.of(
+            for wrapped_field in WrappedClass(
                 self.semantic_annotation_type
             ).fields_with_metadata(IsPartWholeRelationship)
         }

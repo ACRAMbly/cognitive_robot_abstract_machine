@@ -7,7 +7,7 @@ from abc import ABC
 from copy import copy
 from dataclasses import dataclass, is_dataclass
 from dataclasses import field
-from functools import cached_property, lru_cache
+from functools import cached_property
 from typing import _GenericAlias
 
 import rustworkx as rx
@@ -39,7 +39,6 @@ from typing_extensions import (
     TYPE_CHECKING,
     TypeVar,
     Iterator,
-    Self,
 )
 
 
@@ -276,23 +275,6 @@ class WrappedClass(Generic[T], SubClassSafeGeneric):
     """
     A mapping from field name to its WrappedField instance.
     """
-    _fields_by_metadata_type_: Dict[Type[FieldMetadata], List[WrappedField]] = field(
-        init=False, hash=False, compare=False, default_factory=dict, repr=False
-    )
-    """
-    A mapping from a field metadata type to the fields carrying metadata of that type.
-    """
-
-    @classmethod
-    @lru_cache(maxsize=None)
-    def of(cls, clazz: Type[T]) -> Self:
-        """
-        :return: the shared wrapper of *clazz* for introspection outside of any class diagram.
-
-        ..warning:: The returned instance is shared between all callers; do not hand it to
-            :meth:`ClassDiagram.add_node`, which binds a wrapper to a diagram.
-        """
-        return cls(clazz)
 
     def fields_with_metadata(
         self, metadata_type: Type[FieldMetadata]
@@ -301,13 +283,11 @@ class WrappedClass(Generic[T], SubClassSafeGeneric):
         :return: the fields of this class carrying metadata of *metadata_type*, in
             declaration order.
         """
-        if metadata_type not in self._fields_by_metadata_type_:
-            self._fields_by_metadata_type_[metadata_type] = [
-                wrapped_field
-                for wrapped_field in self.fields
-                if metadata_type.of_wrapped_field(wrapped_field) is not None
-            ]
-        return self._fields_by_metadata_type_[metadata_type]
+        return [
+            wrapped_field
+            for wrapped_field in self.fields
+            if metadata_type.of_wrapped_field(wrapped_field) is not None
+        ]
 
     def _get_introspector(self) -> AttributeIntrospector:
         """

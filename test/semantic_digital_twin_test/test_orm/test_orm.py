@@ -213,7 +213,7 @@ def test_part_whole_relationship_field_survives_deepcopy():
         # The marked-field discovery still resolves the same part-whole relationship fields.
         discovered = {
             spec.field.name
-            for spec in WrappedClass.of(type(copied_drawer)).fields_with_metadata(
+            for spec in WrappedClass(type(copied_drawer)).fields_with_metadata(
                 IsPartWholeRelationship
             )
         }
@@ -302,7 +302,7 @@ def test_part_whole_relationship_field_metadata_survives_orm_round_trip(session)
     # The marked-field discovery still resolves the same part-whole relationship fields.
     discovered = {
         spec.field.name
-        for spec in WrappedClass.of(type(reconstructed_drawer)).fields_with_metadata(
+        for spec in WrappedClass(type(reconstructed_drawer)).fields_with_metadata(
             IsPartWholeRelationship
         )
     }

@@ -163,26 +163,3 @@ def test_metadata_is_found_when_the_public_name_differs_from_the_field_name():
     )
 
     assert MarksAStructuralPart.of_wrapped_field(wrapped_field).consumes_the_part
-
-
-# %% caching
-
-
-def test_shared_wrapper_is_reused_per_class():
-    assert WrappedClass.of(OwnerWithMarkedAndUnmarkedFields) is WrappedClass.of(
-        OwnerWithMarkedAndUnmarkedFields
-    )
-    assert WrappedClass.of(OwnerWithMarkedAndUnmarkedFields) is not WrappedClass.of(
-        HeirDeclaringAnotherMarkedField
-    )
-
-
-def test_discovered_fields_are_memoized_per_metadata_type():
-    wrapped_class = WrappedClass.of(OwnerWithMarkedAndUnmarkedFields)
-
-    assert wrapped_class.fields_with_metadata(
-        MarksAStructuralPart
-    ) is wrapped_class.fields_with_metadata(MarksAStructuralPart)
-    assert wrapped_class.fields_with_metadata(
-        MarksAStructuralPart
-    ) is not wrapped_class.fields_with_metadata(MarksAnIdentifyingField)
