@@ -111,7 +111,7 @@ TKinematicStructureEntity = TypeVar(
 
 @dataclass(eq=False)
 class HasRootKinematicStructureEntity(
-    SemanticAnnotation, Generic[TKinematicStructureEntity], SubClassSafeGeneric, ABC
+    SemanticAnnotation, Generic[TKinematicStructureEntity], SubClassSafeGeneric
 ):
     """
     Base class for shared method for HasRootBody and HasRootRegion.
@@ -294,7 +294,7 @@ TBody = TypeVar("TBody", bound=Body)
 
 
 @dataclass(eq=False)
-class HasRootBody(HasRootKinematicStructureEntity[TBody], ABC):
+class HasRootBody(HasRootKinematicStructureEntity[TBody]):
     """
     Abstract base class for all objects which have a unambiguous root reference frame.
 
@@ -367,7 +367,7 @@ TRegion = TypeVar("TRegion", bound=Region)
 
 
 @dataclass(eq=False)
-class HasRootRegion(HasRootKinematicStructureEntity[TRegion], ABC):
+class HasRootRegion(HasRootKinematicStructureEntity[TRegion]):
     """
     A mixin class for semantic annotations that have a region.
     """
@@ -430,7 +430,7 @@ class HasRootRegion(HasRootKinematicStructureEntity[TRegion], ABC):
 
 
 @dataclass(eq=False)
-class PartWholeRelationship(HasRootKinematicStructureEntity, ABC):
+class PartWholeRelationship(HasRootKinematicStructureEntity):
     """
     Base for annotations that have structural *parts* (the part-whole relation).
 
@@ -497,7 +497,7 @@ class PartWholeRelationship(HasRootKinematicStructureEntity, ABC):
 
 
 @dataclass(eq=False)
-class HasApertures(HasRootBody, PartWholeRelationship, ABC):
+class HasApertures(HasRootBody, PartWholeRelationship):
     """
     A mixin class for semantic annotations that have apertures.
 
@@ -519,7 +519,7 @@ class HasApertures(HasRootBody, PartWholeRelationship, ABC):
 
 
 @dataclass(eq=False)
-class HasMechanicalJoint(HasRootBody, PartWholeRelationship, ABC):
+class HasMechanicalJoint(HasRootBody, PartWholeRelationship):
     """
     A mixin class for semantic annotations that have mechanical joints.
     """
@@ -547,7 +547,7 @@ class HasMechanicalJoint(HasRootBody, PartWholeRelationship, ABC):
 
 
 @dataclass(eq=False)
-class HasDrawers(PartWholeRelationship, ABC):
+class HasDrawers(PartWholeRelationship):
     """
     A mixin class for semantic annotations that have drawers.
     """
@@ -564,7 +564,7 @@ class HasDrawers(PartWholeRelationship, ABC):
 
 
 @dataclass(eq=False)
-class HasDoors(PartWholeRelationship, ABC):
+class HasDoors(PartWholeRelationship):
     """
     A mixin class for semantic annotations that have doors.
     """
@@ -581,7 +581,7 @@ class HasDoors(PartWholeRelationship, ABC):
 
 
 @dataclass(eq=False)
-class HasHandle(HasRootBody, PartWholeRelationship, ABC):
+class HasHandle(HasRootBody, PartWholeRelationship):
     """
     A mixin class for semantic annotations that have a handle.
     """
@@ -602,7 +602,7 @@ A type variable for HasRootBody.
 
 
 @dataclass(eq=False)
-class HasLegs(PartWholeRelationship, ABC):
+class HasLegs(PartWholeRelationship):
     """
     A mixin class for semantic annotations that have legs.
     """
@@ -619,7 +619,7 @@ class HasLegs(PartWholeRelationship, ABC):
 
 
 @dataclass(eq=False)
-class HasSink(PartWholeRelationship, ABC):
+class HasSink(PartWholeRelationship):
     """
     A mixin class for semantic annotations that have a sink.
     """
@@ -634,7 +634,7 @@ class HasSink(PartWholeRelationship, ABC):
 
 
 @dataclass(eq=False)
-class IsStorageSpace(HasRootBody, Generic[THasRootBody], SubClassSafeGeneric, ABC):
+class IsStorageSpace(HasRootBody, Generic[THasRootBody], SubClassSafeGeneric):
     """
     A mixin class for semantic annotations that represent storage spaces.
 
@@ -672,7 +672,7 @@ class IsStorageSpace(HasRootBody, Generic[THasRootBody], SubClassSafeGeneric, AB
 
 
 @dataclass(eq=False)
-class HasSupportingSurface(IsStorageSpace, ABC):
+class HasSupportingSurface(IsStorageSpace):
     """
     A semantic annotation that represents a supporting surface.
     """
@@ -1003,7 +1003,7 @@ class HasSupportingSurface(IsStorageSpace, ABC):
 
 
 @dataclass(eq=False)
-class HasCaseAsRootBody(HasSupportingSurface, ABC):
+class HasCaseAsRootBody(HasSupportingSurface):
     """
     A mixin class for semantic annotations that have a case as root body.
     """
