@@ -533,6 +533,35 @@ class HasMechanicalJoint(HasRootBody, PartWholeRelationship):
     The mechanical joint of the semantic annotation.
     """
 
+    def _mount_strategy(
+        self,
+        main_has_root_body_annotation: HasRootBody,
+        relationship: IsPartWholeRelationship,
+    ) -> None:
+        """
+        Mount this annotation onto the whole through its mechanical joint, so the joint
+        keeps carrying it.
+
+        Moving this annotation on its own would pull it out from under its joint and
+        leave a door or drawer rigidly attached to the whole, unable to move.
+
+        :param main_has_root_body_annotation: The annotation (the whole) this one is
+            being added to as a part.
+        :param relationship: The metadata of the part-whole relationship field being
+            mounted into, describing how the mount affects the whole.
+        """
+        if (
+            self.mechanical_joint is None
+            or self.root.parent_kinematic_structure_entity
+            is not self.mechanical_joint.root
+        ):
+            super()._mount_strategy(main_has_root_body_annotation, relationship)
+            return
+
+        main_has_root_body_annotation._world.move_branch(
+            self.mechanical_joint.root, main_has_root_body_annotation.root, True
+        )
+
     def _kinematic_structure_entities(
         self, visited: Set[int]
     ) -> list[KinematicStructureEntity]:

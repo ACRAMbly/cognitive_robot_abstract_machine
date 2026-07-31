@@ -67,6 +67,14 @@ CEREAL_NAME = "cheeze_it.obj"
 Name of the transported body, which also marks whether the scene was already spawned.
 """
 
+WARDROBE_DOOR_VELOCITY_LIMIT = np.pi / 2
+"""
+Angular velocity limit of a wardrobe door in rad/s.
+
+Taken from the ``wardrobe_door_*_joint`` limits of the apartment's own URDF, which
+describes the same wardrobe this demonstration spawns from meshes.
+"""
+
 
 def apartment_mesh_path(mesh_file_name: str) -> str:
     """
@@ -200,11 +208,10 @@ class StretchApartmentDemonstration(RobotDemonstration):
 
         # %% wardrobe
 
-        door_definitions = [
-            ("left", "wardrobe_door_left.dae", -0.460513, 0.5, -np.pi / 2),
-            ("right", "wardrobe_door_right.dae", 0.460513, -0.5, np.pi / 2),
-        ]
-
+        # Each door mesh has its origin on the edge it hangs from, so a hinge at the
+        # door's own frame already sits on the rotation axis. The wardrobe opens towards
+        # -x and the leaves reach it from opposite sides, so they swing about the shared
+        # vertical axis in opposite directions.
         doors = [
             Door.get_specification(
                 door_mesh,
@@ -225,13 +232,33 @@ class StretchApartmentDemonstration(RobotDemonstration):
                                 -0.032089, handle_y, 0.973703
                             ),
                         ),
-                    )
+                    ),
+                    "mechanical_joint": Hinge.get_specification(
+                        f"wardrobe_hinge_{side}",
+                        Hinge.get_default_root_specification(),
+                        parent_connection_specification=Hinge.parent_connection_specification(
+                            axis=Vector3.Z(),
+                            dof_limits=DegreeOfFreedomLimits(
+                                lower=DerivativeMap[float](
+                                    position=min(0.0, opening_angle),
+                                    velocity=-WARDROBE_DOOR_VELOCITY_LIMIT,
+                                ),
+                                upper=DerivativeMap[float](
+                                    position=max(0.0, opening_angle),
+                                    velocity=WARDROBE_DOOR_VELOCITY_LIMIT,
+                                ),
+                            ),
+                        ),
+                    ),
                 },
             )
-            for side, door_mesh, handle_y, door_y, _ in door_definitions
+            for side, door_mesh, handle_y, door_y, opening_angle in [
+                ("left", "wardrobe_door_left.dae", -0.460513, 0.5, -np.pi / 2),
+                ("right", "wardrobe_door_right.dae", 0.460513, -0.5, np.pi / 2),
+            ]
         ]
 
-        wardrobe = Wardrobe.get_specification(
+        Wardrobe.get_specification(
             "wardrobe.dae",
             BodySpecification.mesh(
                 "wardrobe.dae",
@@ -242,38 +269,6 @@ class StretchApartmentDemonstration(RobotDemonstration):
             ),
             part_specifications={"doors": doors},
         ).spawn(world)
-
-        # The hinges are mounted after the doors are on the wardrobe: mounting a part
-        # moves it under the whole, which would undo a joint inserted beforehand.
-        #
-        # Each door mesh has its origin on the edge it hangs from, so a hinge placed at
-        # the door's own frame already sits on the rotation axis. Both leaves swing about
-        # the shared vertical axis, in opposite directions, to open towards -x.
-        doors_by_name = {door.root.name.name: door for door in wardrobe.doors}
-        hinge_poses = {
-            door_mesh: doors_by_name[door_mesh].root.global_transform
-            for _, door_mesh, _, _, _ in door_definitions
-        }
-        with world.modify_world():
-            for side, door_mesh, _, _, opening_angle in door_definitions:
-                doors_by_name[door_mesh].add(
-                    Hinge.create_with_new_body_in_world(
-                        world=world,
-                        name=f"wardrobe_hinge_{side}",
-                        world_root_T_self=hinge_poses[door_mesh],
-                        parent_connection_specification=Hinge.parent_connection_specification(
-                            axis=Vector3.Z(),
-                            dof_limits=DegreeOfFreedomLimits(
-                                lower=DerivativeMap[float](
-                                    position=min(0.0, opening_angle)
-                                ),
-                                upper=DerivativeMap[float](
-                                    position=max(0.0, opening_angle)
-                                ),
-                            ),
-                        ),
-                    )
-                )
 
         # %% cereal
 
