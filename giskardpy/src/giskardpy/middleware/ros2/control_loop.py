@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import List, Optional
+from typing import List
 
 from giskardpy.executor import Executor
 from giskardpy.middleware.ros2.action_server import ActionServerHandler
@@ -13,7 +13,6 @@ from giskardpy.middleware.ros2.exceptions import (
 from giskardpy.middleware.ros2.feedback_publisher import ActionFeedbackPublisher
 from giskardpy.middleware.ros2.heartbeat import Heartbeat
 from giskardpy.middleware.ros2.input_synchronization import WorldStateInputs
-from giskardpy.middleware.ros2.qp_data_publisher import QPDataPublisher
 from giskardpy.middleware.ros2.world_updates import IncomingWorldUpdates
 from semantic_digital_twin.world import World
 
@@ -66,10 +65,6 @@ class ControlLoop:
     Sends the computed velocities to the robot at the end of every cycle.
     """
 
-    qp_data_publisher: Optional[QPDataPublisher] = None
-    """
-    Streams the internals of the quadratic program for debugging, if configured.
-    """
 
     @property
     def world(self) -> World:
@@ -100,7 +95,6 @@ class ControlLoop:
         self.raise_if_canceled()
         self.executor.tick()
         self.publish_commands()
-        self.publish_qp_data()
         self.feedback_publisher.publish_if_changed()
         self.heartbeat.tick()
 
@@ -121,13 +115,6 @@ class ControlLoop:
         if self.world_updates.has_pending_model_change:
             raise WorldModelModifiedDuringMotionError()
 
-    def publish_qp_data(self) -> None:
-        """
-        Stream the internals of the quadratic program, if a publisher is configured.
-        """
-        if self.qp_data_publisher is None:
-            return
-        self.qp_data_publisher.publish(self.executor.qp_controller)
 
     def raise_if_canceled(self) -> None:
         """

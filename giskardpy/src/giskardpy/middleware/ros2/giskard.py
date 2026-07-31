@@ -4,21 +4,15 @@ import logging
 import os
 import traceback
 from dataclasses import dataclass, field
-from typing import List, Optional
+from typing import List
 
 import rclpy
 from json_msgs.action import JsonAction
-from semantic_digital_twin.adapters.ros.visualization.collision_viz_marker import (
-    CollisionVisualizationMarkerPublisher,
-)
 from sqlalchemy.orm import sessionmaker
 
 from giskardpy.data_types.exceptions import NoControlledJointsError
 from giskardpy.executor import Executor, SimulationPacer
-from giskardpy.model.world_config import WorldConfig
-from giskardpy.motion_statechart.context import MotionStatechartContext
-from giskardpy.qp.qp_controller_config import QPControllerConfig
-from giskardpy.ros_executor import Ros2Executor
+from giskardpy.middleware.ros2 import rospy
 from giskardpy.middleware.ros2.action_server import ActionServerHandler
 from giskardpy.middleware.ros2.control_loop import ControlLoop
 from giskardpy.middleware.ros2.feedback_publisher import ActionFeedbackPublisher
@@ -31,14 +25,19 @@ from giskardpy.middleware.ros2.post_goal_plotters import (
     MotionStatechartPlotter,
     PostGoalPlotter,
 )
-from giskardpy.middleware.ros2.qp_data_publisher import QPDataPublisher
 from giskardpy.middleware.ros2.robot_interface_config import RobotInterfaceConfig
 from giskardpy.middleware.ros2.server_config import GiskardServerConfig
 from giskardpy.middleware.ros2.world_updates import IncomingWorldUpdates
-from giskardpy.middleware.ros2 import rospy
+from giskardpy.model.world_config import WorldConfig
+from giskardpy.motion_statechart.context import MotionStatechartContext
+from giskardpy.qp.qp_controller_config import QPControllerConfig
+from giskardpy.ros_executor import Ros2Executor
 from krrood.ormatic.utils import create_engine
 from krrood.utils import clear_memoization_cache
 from semantic_digital_twin.adapters.ros.tf_publisher import TFPublisher
+from semantic_digital_twin.adapters.ros.visualization.collision_viz_marker import (
+    CollisionVisualizationMarkerPublisher,
+)
 from semantic_digital_twin.adapters.ros.visualization.viz_marker import (
     VizMarkerPublisher,
 )
@@ -139,7 +138,6 @@ class Giskard:
             inputs=WorldStateInputs(world=world),
             heartbeat=heartbeat,
             world_updates=world_updates,
-            qp_data_publisher=self.create_qp_data_publisher(),
         )
         return MotionServer(
             executor=self.executor,
@@ -152,16 +150,6 @@ class Giskard:
             idle_frequency=self.server_config.idle_frequency,
             post_goal_plotters=self.create_post_goal_plotters(),
         )
-
-    def create_qp_data_publisher(self) -> Optional[QPDataPublisher]:
-        """
-        Create the qp data publisher if it is configured.
-        """
-        if not self.server_config.debug_mode:
-            return None
-        if not self.server_config.qp_data_publisher.any():
-            return None
-        return QPDataPublisher(config=self.server_config.qp_data_publisher)
 
     def create_post_goal_plotters(self) -> List[PostGoalPlotter]:
         """

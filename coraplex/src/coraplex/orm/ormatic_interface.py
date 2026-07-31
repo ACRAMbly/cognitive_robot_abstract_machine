@@ -7262,11 +7262,6 @@ class ControlLoopDAO(
         nullable=True,
         use_existing_column=True,
     )
-    qp_data_publisher_id: Mapped[typing.Optional[builtins.int]] = mapped_column(
-        ForeignKey("QPDataPublisherDAO.database_id", use_alter=True),
-        nullable=True,
-        use_existing_column=True,
-    )
 
     executor: Mapped[ExecutorDAO] = relationship(
         "ExecutorDAO", uselist=False, foreign_keys=[executor_id], post_update=True
@@ -7303,12 +7298,6 @@ class ControlLoopDAO(
         cascade="all, delete-orphan",
         foreign_keys="[ControlLoopDAO_command_publishers_association.source_controlloopdao_id]",
         lazy="selectin",
-    )
-    qp_data_publisher: Mapped[QPDataPublisherDAO] = relationship(
-        "QPDataPublisherDAO",
-        uselist=False,
-        foreign_keys=[qp_data_publisher_id],
-        post_update=True,
     )
 
 
