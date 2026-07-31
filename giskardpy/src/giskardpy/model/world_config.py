@@ -136,7 +136,6 @@ class WorldWithDiffDriveRobot(WorldConfig):
         )
 
         self.world.merge_world(world_with_robot, odom)
-        ...
 
 
 @dataclass
