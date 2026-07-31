@@ -80,13 +80,13 @@ class Sage10kWithID(Sage10kBase):
         **kwargs,
     ) -> WorldEntity:
         """
-        Create the object in the world by getting its geometry from the provided information.
-        Spawn bodies, regions, connections, and semantic annotations.
+        Create the object in the world by getting its geometry from the provided
+        information. Spawn bodies, regions, connections, and semantic annotations.
 
         :param world: The world to create the instances in.
-        :param directory: The directory where the `layout*.json` and all its referenced files are found.
+        :param directory: The directory where the `layout*.json` and all its referenced
+            files are found.
         :param parent: The parent of the newly created entities
-
         :return: The relevant created body
         """
 
@@ -118,8 +118,8 @@ class HasXYZ(Sage10kBase):
 class Sage10kRotation(HasXYZ):
     """
     Rotations in the Sage 10k world.
-    The format is roll(x), pitch (y), and yaw (z).
-    They are given in degrees.
+
+    The format is roll(x), pitch (y), and yaw (z). They are given in degrees.
     """
 
     def as_roll_pitch_yaw_in_radians(self) -> Tuple[float, float, float]:
@@ -135,6 +135,7 @@ class Sage10kRotation(HasXYZ):
 class Sage10kPosition(HasXYZ):
     """
     Position of an entity in a Sage10k scene.
+
     It seems to always be global
     """
 
@@ -147,17 +148,17 @@ class Sage10kSize(Sage10kBase):
 
     height: float
     """
-    Scale in z
+    Scale in z.
     """
 
     length: float
     """
-    Scale in y
+    Scale in y.
     """
 
     width: float
     """
-    Scale in x
+    Scale in x.
     """
 
     @property
@@ -189,8 +190,10 @@ class Sage10kSize(Sage10kBase):
 class Sage10kPhysicallyBasedRendering(SubclassJSONSerializer):
     """
     Parameters for super realistic renderers.
-    Currently, we have no use of this in CRAM, but the information is provided by the dataset anyway.
-    This data is ignored when `Sage10kScene.create_world` is called but parsed from the JSON information.
+
+    Currently, we have no use of this in CRAM, but the information is provided by the
+    dataset anyway. This data is ignored when `Sage10kScene.create_world` is called but
+    parsed from the JSON information.
     """
 
     metallic: float
@@ -219,12 +222,14 @@ class Sage10kWall(Sage10kWithID):
     start_point: Sage10kPosition
     """
     The start point of the wall.
+
     Only x and y matter.
     """
 
     end_point: Sage10kPosition
     """
     The end point of the wall.
+
     Only x and y matter.
     """
 
@@ -235,12 +240,12 @@ class Sage10kWall(Sage10kWithID):
 
     height: float
     """
-    The height of the wall
+    The height of the wall.
     """
 
     thickness: float
     """
-    The thickness of the wall
+    The thickness of the wall.
     """
 
     def to_json(self) -> Dict[str, Any]:
@@ -362,7 +367,7 @@ class Sage10kObject(Sage10kWithID):
 
     source: str
     """
-    Always generation
+    Always generation.
     """
 
     source_id: str
@@ -382,28 +387,31 @@ class Sage10kObject(Sage10kWithID):
 
     mass: float
     """
-    The weight of the object in kilograms
+    The weight of the object in kilograms.
     """
 
     position: Sage10kPosition
     """
-    The global position of the object
+    The global position of the object.
     """
 
     rotation: Sage10kRotation
     """
-    The orientation of the object
+    The orientation of the object.
     """
 
     dimensions: Sage10kSize
     """
     The scale of the object.
+
     This seems to be already incorporated in the meshes themselves, so dont use it.
     """
 
     pbr_parameters: Sage10kPhysicallyBasedRendering
     """
-    Physical rendering parameters. Currently unused
+    Physical rendering parameters.
+
+    Currently unused
     """
 
     def create_in_world(
@@ -525,7 +533,9 @@ class Sage10kDoor(Sage10kWithID):
 
     position_on_wall: float
     """
-    Position on wall w. r. t. its starting point as percentage of the wall length.
+    Position on wall w.
+
+    r. t. its starting point as percentage of the wall length.
     """
 
     width: float
@@ -550,7 +560,7 @@ class Sage10kDoor(Sage10kWithID):
 
     opening: bool
     """
-    No idea
+    No idea.
     """
 
     door_material: str
@@ -648,7 +658,7 @@ class Sage10kDoor(Sage10kWithID):
         body.visual = geometry_with_texture
 
         with world.modify_world():
-            wall_annotation.add_aperture(annotation.entry_way)
+            wall_annotation.add(annotation.entry_way)
 
         self._create_handle_in_world(world, annotation)
         self._create_hinge_in_world(world, annotation)
@@ -662,7 +672,6 @@ class Sage10kDoor(Sage10kWithID):
         :param door: The door to create the handle for.
         :return: The handle of the door.
         """
-
         floor = world.get_semantic_annotations_by_type(Floor)[0]
 
         door_T_handle = HomogeneousTransformationMatrix.from_xyz_rpy(
@@ -697,12 +706,13 @@ class Sage10kDoor(Sage10kWithID):
                 world_root_T_self=world_root_T_handle,
                 scale=Scale(0.05, 0.02, 0.2),
             )
-            door.add_handle(handle)
+            door.add(handle)
         return handle
 
     def _create_hinge_in_world(self, world: World, door: Door) -> Hinge:
         """
         Create the hinge (the joint that makes the door openable) of the door.
+
         :param world: The world where the hinge is created.
         :param door: The door to create the hinge for.
         :return: The hinge
@@ -724,7 +734,7 @@ class Sage10kDoor(Sage10kWithID):
                 world_root_T_self=world_root_T_hinge,
                 connection_limits=DegreeOfFreedomLimits(lower=lower, upper=upper),
             )
-            door.add_hinge(hinge)
+            door.add(hinge)
 
         return hinge
 
@@ -747,7 +757,9 @@ class Sage10kRoom(Sage10kWithID):
 
     position: Sage10kPosition
     """
-    The position of the rooms lower left corner? in the scene.
+    The position of the rooms lower left corner?
+
+    in the scene.
     """
 
     floor_material: str
@@ -767,7 +779,7 @@ class Sage10kRoom(Sage10kWithID):
 
     doors: List[Sage10kDoor] = field(default_factory=list)
     """
-    The doors of the room
+    The doors of the room.
     """
 
     def _create_floor(
@@ -946,6 +958,7 @@ class Sage10kScene(Sage10kWithID):
     created_from_text: str
     """
     I think this is the entire prompt that was used to generate the scene.
+
     Usually contains just the descriptiom + 'Complete layout with doors/windows:'
     """
 
@@ -962,6 +975,7 @@ class Sage10kScene(Sage10kWithID):
     directory: Optional[Path] = None
     """
     The directory of the scenes json file.
+
     The layout files are named like `layout*.json`.
     """
 

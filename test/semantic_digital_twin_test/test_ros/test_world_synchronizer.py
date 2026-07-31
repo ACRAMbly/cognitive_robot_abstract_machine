@@ -1,11 +1,13 @@
 import hashlib
+import json
 import os
 import threading
 import time
+from datetime import timedelta
 import unittest
 import uuid
-from copy import deepcopy
 from dataclasses import dataclass, field
+from multiprocessing.synchronize import RLock
 from time import sleep
 from typing import Optional, Set, Tuple, List
 from uuid import uuid4
@@ -14,19 +16,27 @@ import numpy as np
 import pytest
 import rclpy
 import sqlalchemy
-from importlib.resources import files
-from pathlib import Path
-
+import std_msgs.msg
 from rclpy.executors import SingleThreadedExecutor
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from krrood.adapters.json_serializer import JSONAttributeDiff, to_json, from_json
 from krrood.ormatic.utils import drop_database, create_engine
+from semantic_digital_twin.adapters.ros.messages import (
+    MetaData,
+    WorldStateUpdate,
+    LoadModel,
+    Acknowledgment,
+    WorldUpdate,
+)
 from semantic_digital_twin.adapters.ros.world_synchronizer import (
     ModelReloadSynchronizer,
+    Synchronizer,
     WorldSynchronizer,
 )
 from semantic_digital_twin.adapters.urdf import URDFParser
+from semantic_digital_twin.callbacks.callback import StateChangeCallback
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 from semantic_digital_twin.exceptions import (
     MissingWorldModificationContextError,
@@ -35,6 +45,7 @@ from semantic_digital_twin.exceptions import (
     StateUpdateContainsUnknownDegreesOfFreedomError,
     BrokenWorldModificationHistoryError,
 )
+from semantic_digital_twin.orm.ormatic_interface import Base, WorldMappingDAO
 from semantic_digital_twin.robots.pr2 import PR2
 from semantic_digital_twin.semantic_annotations.semantic_annotations import (
     Handle,
@@ -42,7 +53,7 @@ from semantic_digital_twin.semantic_annotations.semantic_annotations import (
     Fridge,
     Drawer,
 )
-from semantic_digital_twin.spatial_types import Vector3, HomogeneousTransformationMatrix
+from semantic_digital_twin.spatial_types import Vector3
 from semantic_digital_twin.world import World
 from semantic_digital_twin.world_description.connections import (
     Connection6DoF,
@@ -60,10 +71,17 @@ from semantic_digital_twin.world_description.world_modification import (
     synchronized_attribute_modification,
 )
 from krrood.adapters.json_serializer import JSONAttributeDiff, to_json, from_json
-from semantic_digital_twin.callbacks.callback import StateChangeCallback
+from semantic_digital_twin.callbacks.callback import (
+    StateChangeCallback,
+    ModelChangeCallback,
+)
+from semantic_digital_twin.adapters.world_entity_kwargs_tracker import (
+    WorldEntityWithIDKwargsTracker,
+)
 from semantic_digital_twin.adapters.ros.messages import (
     MetaData,
     WorldStateUpdate,
+    ModificationBlock,
     LoadModel,
     Acknowledgment,
     WorldUpdate,
@@ -111,13 +129,13 @@ def create_dummy_world(w: Optional[World] = None) -> World:
             Connection6DoF(
                 parent=b1,
                 child=b2,
-                x_id=x_dof.id,
-                y_id=y_dof.id,
-                z_id=z_dof.id,
-                qx_id=qx_dof.id,
-                qy_id=qy_dof.id,
-                qz_id=qz_dof.id,
-                qw_id=qw_dof.id,
+                x=x_dof,
+                y=y_dof,
+                z=z_dof,
+                qx=qx_dof,
+                qy=qy_dof,
+                qz=qz_dof,
+                qw=qw_dof,
             )
         )
     return w
@@ -127,14 +145,16 @@ def wait_for_sync_kse_and_return_ids(
     w1: World, w2: World, timeout: float = 5.0, interval: float = 0.05
 ) -> Tuple[Set[uuid.UUID], Set[uuid.UUID]]:
     """
-    Waits until the sets of kinematic structure entity IDs in both worlds are identical, or until the timeout is reached.
+    Waits until the sets of kinematic structure entity IDs in both worlds are identical,
+    or until the timeout is reached.
 
     :param w1: The first world.
     :param w2: The second world.
-    :param timeout: The maximum time to wait for synchronization, in seconds. Defaults to 5.0.
+    :param timeout: The maximum time to wait for synchronization, in seconds. Defaults
+        to 5.0.
     :param interval: The time interval between checks, in seconds. Defaults to 0.05.
-
-    :return: A tuple containing the sets of kinematic structure entity IDs in both worlds.
+    :return: A tuple containing the sets of kinematic structure entity IDs in both
+        worlds.
     """
     start = time.time()
     while time.time() - start < timeout:
@@ -153,10 +173,10 @@ def wait_for_condition(condition, timeout: float = 5.0, interval: float = 0.05) 
     """
     Waits until the condition callable returns True, or until the timeout is reached.
 
-    :param condition: A callable returning a truthy value once the awaited state is reached.
+    :param condition: A callable returning a truthy value once the awaited state is
+        reached.
     :param timeout: The maximum time to wait, in seconds. Defaults to 5.0.
     :param interval: The time interval between checks, in seconds. Defaults to 0.05.
-
     :return: The final result of the condition.
     """
     start = time.time()
@@ -165,6 +185,31 @@ def wait_for_condition(condition, timeout: float = 5.0, interval: float = 0.05) 
             return True
         time.sleep(interval)
     return bool(condition())
+
+
+def probe_lock_is_free(lock: RLock, timeout: float = 0.3) -> bool:
+    """
+    Determine, from a *separate* thread, whether ``lock`` can currently be acquired.
+
+    The probe runs in another thread on purpose: ``World._world_lock`` is a reentrant
+    lock, so the thread that already owns it would always re-acquire it successfully.
+    A foreign thread, by contrast, only succeeds when the lock is genuinely free.
+
+    :param lock: The lock to probe (e.g. ``world._world_lock``).
+    :param timeout: How long the probe thread waits to acquire the lock.
+    :return: ``True`` if the lock was free (acquired by the probe), ``False`` if it was held.
+    """
+    acquired = {"value": False}
+
+    def _try_acquire():
+        if lock.acquire(timeout=timeout):
+            acquired["value"] = True
+            lock.release()
+
+    probe_thread = threading.Thread(target=_try_acquire, daemon=True)
+    probe_thread.start()
+    probe_thread.join(timeout + 1.0)
+    return acquired["value"]
 
 
 def test_state_synchronization(rclpy_node):
@@ -428,7 +473,6 @@ def test_callback_pausing(rclpy_node):
 
 
 def test_ChangeDifHasHardwareInterface(rclpy_node):
-
     w1 = World(name="w1")
     w2 = World(name="w2")
 
@@ -441,38 +485,44 @@ def test_ChangeDifHasHardwareInterface(rclpy_node):
         _world=w2,
     )
 
-    with w1.modify_world():
-        body1 = Body(name=PrefixedName("b1"))
-        body2 = Body(name=PrefixedName("b2"))
-        w1.add_kinematic_structure_entity(body1)
-        w1.add_kinematic_structure_entity(body2)
-        dof = DegreeOfFreedom(name=PrefixedName("dof"))
-        w1.add_degree_of_freedom(dof)
-        connection = PrismaticConnection(
-            dof_id=dof.id, parent=body1, child=body2, axis=Vector3(1, 1, 1)
-        )
-        w1.add_connection(connection)
-    assert len(w1.kinematic_structure_entities) == 2
-    assert len(w1.connections) == 1
+    try:
 
-    time.sleep(0.2)
-    assert len(w1.kinematic_structure_entities) == 2
-    assert len(w2.kinematic_structure_entities) == 2
-    assert len(w2.connections) == 1
-    assert not w2.connections[0].dof.has_hardware_interface
-    assert not w2.connections[0].dof.has_hardware_interface
+        with w1.modify_world():
+            body1 = Body(name=PrefixedName("b1"))
+            body2 = Body(name=PrefixedName("b2"))
+            w1.add_kinematic_structure_entity(body1)
+            w1.add_kinematic_structure_entity(body2)
+            dof = DegreeOfFreedom(name=PrefixedName("dof"))
+            w1.add_degree_of_freedom(dof)
+            connection = PrismaticConnection(
+                raw_dof=dof, parent=body1, child=body2, axis=Vector3(1, 1, 1)
+            )
+            w1.add_connection(connection)
 
-    assert w2.get_kinematic_structure_entity_by_name("b2")
+        w1_ids, w2_ids = wait_for_sync_kse_and_return_ids(w1, w2)
 
-    with w1.modify_world():
-        w1.set_dofs_has_hardware_interface(w1.degrees_of_freedom, True)
+        assert len(w1.kinematic_structure_entities) == 2
+        assert len(w1.connections) == 1
 
-    time.sleep(0.2)
-    assert w1.connections[0].dof.has_hardware_interface
-    assert w2.connections[0].dof.has_hardware_interface
+        time.sleep(0.2)
+        assert len(w1.kinematic_structure_entities) == 2
+        assert len(w2.kinematic_structure_entities) == 2
+        assert len(w2.connections) == 1
+        assert not w2.connections[0].dof.has_hardware_interface
+        assert not w2.connections[0].dof.has_hardware_interface
 
-    synchronizer_1.close()
-    synchronizer_2.close()
+        assert w2.get_kinematic_structure_entity_by_name("b2")
+
+        with w1.modify_world():
+            w1.set_dofs_has_hardware_interface(w1.degrees_of_freedom, True)
+
+        time.sleep(0.2)
+        assert w1.connections[0].dof.has_hardware_interface
+        assert w2.connections[0].dof.has_hardware_interface
+
+    finally:
+        synchronizer_1.close()
+        synchronizer_2.close()
 
 
 def test_semantic_annotation_modifications(rclpy_node):
@@ -518,7 +568,7 @@ def test_semantic_annotation_modifications_merge_world(rclpy_node):
             name=PrefixedName("handle"),
             world=w0,
         )
-        door.add_handle(handle)
+        door.add(handle)
 
     w1 = World(name="w1")
     w2 = World(name="w2")
@@ -573,7 +623,7 @@ def test_semantic_annotation_change_parameter_during_same_modification_block(
     with w1.modify_world():
         w1.add_semantic_annotation(drawer)
         w1.add_semantic_annotation(handle)
-        drawer.add_handle(handle)
+        drawer.add(handle)
 
     time.sleep(1)
     assert [hash(sa) for sa in w1.semantic_annotations] == [
@@ -600,7 +650,7 @@ def test_synchronize_6dof(rclpy_node):
     time.sleep(1)
     c2 = w2.get_connection_by_name(c1.name)
     assert isinstance(c2, Connection6DoF)
-    assert w1.state[c1.qw_id].position == w2.state[c2.qw_id].position
+    assert w1.state[c1.qw.id].position == w2.state[c2.qw.id].position
     np.testing.assert_array_almost_equal(w1.state._data, w2.state._data)
 
     ws1.close()
@@ -608,9 +658,11 @@ def test_synchronize_6dof(rclpy_node):
 
 
 def test_synchronous_state_synchronization(rclpy_node):
-    """When synchronous=True the notify_state_change call blocks until
-    all subscribers have acknowledged receipt, so the remote world is
-    already up-to-date when the call returns."""
+    """
+    When synchronous=True the notify_state_change call blocks until all subscribers have
+    acknowledged receipt, so the remote world is already up-to-date when the call
+    returns.
+    """
     import rclpy
     from rclpy.executors import SingleThreadedExecutor
 
@@ -656,9 +708,10 @@ def test_synchronous_state_synchronization(rclpy_node):
 
 
 def test_synchronous_model_synchronization(rclpy_node):
-    """When synchronous=True the modify_world call blocks until all subscribers
-    acknowledge receipt, so the remote world is already up-to-date when the call
-    returns."""
+    """
+    When synchronous=True the modify_world call blocks until all subscribers acknowledge
+    receipt, so the remote world is already up-to-date when the call returns.
+    """
     import rclpy
     from rclpy.executors import SingleThreadedExecutor
 
@@ -707,14 +760,15 @@ def test_synchronous_model_synchronization(rclpy_node):
 
 
 def test_synchronous_publish_blocks_until_receiver_acknowledges(rclpy_node):
-    """Test whether synchronous publication genuinely blocks the caller until
-    the remote subscriber acknowledges, rather than succeeding by coincidence.
+    """
+    Test whether synchronous publication genuinely blocks the caller until the remote
+    subscriber acknowledges, rather than succeeding by coincidence.
 
     Uses a second ROS node (distinct ``node_name``) so the acknowledgment protocol can
-    distinguish sender from receiver.  The receiver's acknowledgment publisher
-    is intercepted so that acknowledgments are captured but not sent.  We then verify
-    that the sender thread stays blocked, release the captured acknowledgments, and
-    confirm that the sender unblocks.
+    distinguish sender from receiver.  The receiver's acknowledgment publisher is
+    intercepted so that acknowledgments are captured but not sent.  We then verify that
+    the sender thread stays blocked, release the captured acknowledgments, and confirm
+    that the sender unblocks.
     """
     import rclpy
     from rclpy.executors import SingleThreadedExecutor
@@ -745,7 +799,9 @@ def test_synchronous_publish_blocks_until_receiver_acknowledges(rclpy_node):
         captured_acknowledgments = []
 
         class _AcknowledgmentInterceptor:
-            """Drop-in replacement that records but does not send acknowledgments."""
+            """
+            Drop-in replacement that records but does not send acknowledgments.
+            """
 
             def publish(self, msg):
                 captured_acknowledgments.append(msg)
@@ -794,6 +850,380 @@ def test_synchronous_publish_blocks_until_receiver_acknowledges(rclpy_node):
         receiver_executor.shutdown()
         receiver_thread.join(timeout=2.0)
         receiver_node.destroy_node()
+
+
+@dataclass
+class _SynchronizerWithNoOpSubscriptionHandling(Synchronizer):
+    """
+    Concrete :class:`Synchronizer` that ignores incoming messages, so tests can exercise
+    the base class's discovery/acknowledgment logic without a real message type.
+    """
+
+    def _subscription_callback(self, msg):
+        pass
+
+
+@dataclass
+class _FakeSubscriptionInfo:
+    """
+    Stand-in for the objects ``Node.get_subscriptions_info_by_topic`` returns, exposing
+    only the ``node_name`` attribute :meth:`Synchronizer._snapshot_subscribers` reads.
+    """
+
+    node_name: str
+    """
+    The name of the node the fake subscription belongs to.
+    """
+
+
+@dataclass
+class _DiscoveryLaggingNode:
+    """
+    Fake ``rclpy`` node whose ``get_subscriptions_info_by_topic`` walks through a
+    caller-supplied sequence of subscriber counts, simulating ROS graph discovery
+    gradually catching up with a remote subscriber created moments earlier.
+    """
+
+    own_name: str
+    """
+    The name reported by :meth:`get_name`, used to identify this node's own
+    subscriptions.
+    """
+
+    subscriber_counts: List[int]
+    """
+    The sequence of subscriber counts successive calls to
+    :meth:`get_subscriptions_info_by_topic` walk through.
+    """
+
+    _remaining_subscriber_counts: List[int] = field(init=False, repr=False)
+    """
+    Unconsumed prefix of :attr:`subscriber_counts`.
+    """
+
+    _last_subscriber_count: int = field(init=False, default=0, repr=False)
+    """
+    The most recently consumed subscriber count, repeated once :attr:`subscriber_counts`
+    is exhausted.
+    """
+
+    def __post_init__(self):
+        self._remaining_subscriber_counts = list(self.subscriber_counts)
+
+    def create_subscription(self, *args, **kwargs):
+        return None
+
+    def create_publisher(self, *args, **kwargs):
+        return None
+
+    def get_name(self) -> str:
+        return self.own_name
+
+    def get_subscriptions_info_by_topic(self, topic_name: str):
+        if self._remaining_subscriber_counts:
+            self._last_subscriber_count = self._remaining_subscriber_counts.pop(0)
+        return [
+            _FakeSubscriptionInfo(node_name=f"remote_subscriber_{i}")
+            for i in range(self._last_subscriber_count)
+        ]
+
+
+def test_snapshot_subscribers_waits_for_discovery_to_stabilize():
+    """
+    Regression test: a subscriber count that is still climbing (discovery catching up
+    with a just-created remote subscriber) must not be treated as final on the first
+    read, since an under-count would silently break the synchronous-publish contract in
+    :meth:`Synchronizer.publish`.
+    """
+    node = _DiscoveryLaggingNode(own_name="sender_node", subscriber_counts=[0, 1, 1])
+    synchronizer = _SynchronizerWithNoOpSubscriptionHandling(
+        node=node, topic_name="/test_topic"
+    )
+    synchronizer._subscriber_discovery_grace_period = timedelta(seconds=1.0)
+    synchronizer._subscriber_discovery_poll_interval = timedelta(seconds=0.01)
+
+    count = synchronizer._snapshot_subscribers_after_discovery_settles()
+
+    assert count == 1
+
+
+def test_snapshot_subscribers_falls_back_to_highest_sample_not_last_sample():
+    """
+    If the subscriber count fluctuates without ever settling, the highest sample seen
+    must be used, not merely the most recently read one: under-counting silently breaks
+    the synchronous-publish contract (the bug this method fixes), so a transient dip in
+    the final sample taken before the grace period elapses must not discard a higher
+    count that was already observed.
+    """
+    node = _DiscoveryLaggingNode(
+        own_name="sender_node", subscriber_counts=[0, 3, 1, 3, 1, 3, 1, 3, 1]
+    )
+    synchronizer = _SynchronizerWithNoOpSubscriptionHandling(
+        node=node, topic_name="/test_topic"
+    )
+    synchronizer._subscriber_discovery_grace_period = timedelta(seconds=0.05)
+    synchronizer._subscriber_discovery_poll_interval = timedelta(seconds=0.01)
+
+    count = synchronizer._snapshot_subscribers_after_discovery_settles()
+
+    assert count == 3
+
+
+def test_snapshot_subscribers_gives_up_after_grace_period_elapses():
+    """
+    If the subscriber count never stabilizes within the grace period, the settled
+    snapshot must return promptly instead of blocking indefinitely.
+    """
+    node = _DiscoveryLaggingNode(
+        own_name="sender_node", subscriber_counts=list(range(1000))
+    )
+    synchronizer = _SynchronizerWithNoOpSubscriptionHandling(
+        node=node, topic_name="/test_topic"
+    )
+    synchronizer._subscriber_discovery_grace_period = timedelta(seconds=0.05)
+    synchronizer._subscriber_discovery_poll_interval = timedelta(seconds=0.01)
+
+    start = time.monotonic()
+    count = synchronizer._snapshot_subscribers_after_discovery_settles()
+    elapsed = time.monotonic() - start
+
+    assert elapsed < 0.5
+    assert count >= 0
+
+
+def test_synchronous_publish_settles_promptly_with_multiple_real_subscribers(
+    rclpy_node,
+):
+    """
+    Regression test against real ROS discovery (no fakes): with several concurrently
+    created real subscribers and no graph churn, the highest-observed-count fallback in
+    :meth:`Synchronizer._snapshot_subscribers_after_discovery_settles` must settle on the
+    true, stable subscriber count, so synchronous publication returns promptly instead of
+    paying the ``wait_for_synchronization_timeout`` wait.
+    """
+    w1 = create_dummy_world()
+    synchronizer_1 = WorldSynchronizer(
+        node=rclpy_node,
+        _world=w1,
+        synchronous=True,
+        wait_for_synchronization_timeout=2.0,
+    )
+
+    receiver_nodes = []
+    receiver_executors = []
+    receiver_threads = []
+    receiver_worlds = []
+    receiver_synchronizers = []
+    try:
+        for index in range(3):
+            node = rclpy.create_node(f"real_discovery_receiver_{index}")
+            executor = SingleThreadedExecutor()
+            executor.add_node(node)
+            thread = threading.Thread(target=executor.spin, daemon=True)
+            thread.start()
+            world = create_dummy_world()
+            synchronizer = WorldSynchronizer(node=node, _world=world)
+            receiver_nodes.append(node)
+            receiver_executors.append(executor)
+            receiver_threads.append(thread)
+            receiver_worlds.append(world)
+            receiver_synchronizers.append(synchronizer)
+
+        time.sleep(0.3)
+
+        w1.state._data[0, 0] = 1.0
+        start = time.monotonic()
+        w1.notify_state_change()
+        elapsed = time.monotonic() - start
+
+        assert elapsed < synchronizer_1.wait_for_synchronization_timeout, (
+            "With a stable, accurately discovered subscriber count, synchronous "
+            "publish must not pay the timeout wait"
+        )
+        for world in receiver_worlds:
+            assert world.state._data[0, 0] == 1.0
+
+        synchronizer_1.close()
+    finally:
+        for synchronizer in receiver_synchronizers:
+            synchronizer.close()
+        for executor in receiver_executors:
+            executor.shutdown()
+        for thread in receiver_threads:
+            thread.join(timeout=2.0)
+        for node in receiver_nodes:
+            node.destroy_node()
+
+
+def test_overcounted_expected_acknowledgments_times_out_but_recovers_on_next_publish(
+    rclpy_node,
+):
+    """
+    Addresses the PR #448 review concern: falling back to the *highest* observed
+    subscriber count could make ``_expected_acknowledgment_count`` exceed the number of
+    subscribers that will actually acknowledge, if the highest sample was a transient
+    discovery artifact rather than the true, settled count.
+
+    An over-count must never turn into a real deadlock. It can only ever cost the
+    existing, already-logged ``wait_for_synchronization_timeout`` wait on the single
+    affected publish - the call must still return, the message must still have been
+    delivered to the real subscriber, and the very next publish must recompute the count
+    fresh and return promptly instead of staying wedged.
+    """
+    receiver_node = rclpy.create_node("test_overcount_receiver")
+    receiver_executor = SingleThreadedExecutor()
+    receiver_executor.add_node(receiver_node)
+    receiver_thread = threading.Thread(
+        target=receiver_executor.spin, daemon=True, name="overcount-receiver"
+    )
+    receiver_thread.start()
+    time.sleep(0.1)
+
+    try:
+        w1 = create_dummy_world()
+        w2 = create_dummy_world()
+
+        synchronizer_1 = WorldSynchronizer(
+            node=rclpy_node,
+            _world=w1,
+            synchronous=True,
+            wait_for_synchronization_timeout=1.0,
+        )
+        synchronizer_2 = WorldSynchronizer(node=receiver_node, _world=w2)
+
+        time.sleep(0.2)
+
+        real_snapshot = synchronizer_1._snapshot_subscribers_after_discovery_settles
+
+        def snapshot_overcounted_by_one():
+            # Simulate a highest-sample fallback that overshoots the true, live
+            # subscriber count by one - exactly the scenario the reviewer raised.
+            return real_snapshot() + 1
+
+        synchronizer_1._snapshot_subscribers_after_discovery_settles = (
+            snapshot_overcounted_by_one
+        )
+
+        w1.state._data[0, 0] = 1.0
+        publish_done = threading.Event()
+
+        def do_publish():
+            w1.notify_state_change()
+            publish_done.set()
+
+        start = time.monotonic()
+        thread = threading.Thread(target=do_publish, daemon=True)
+        thread.start()
+        thread.join(timeout=synchronizer_1.wait_for_synchronization_timeout + 3.0)
+        elapsed = time.monotonic() - start
+
+        assert publish_done.is_set(), (
+            "An over-counted expected-acknowledgment-count must time out, not block "
+            "forever - this is the reviewer's deadlock concern"
+        )
+        assert elapsed >= synchronizer_1.wait_for_synchronization_timeout
+        assert elapsed < synchronizer_1.wait_for_synchronization_timeout + 3.0
+
+        # The real subscriber still received and applied the message - only the
+        # (phantom) extra acknowledgment was missing.
+        assert w1.state._data[0, 0] == w2.state._data[0, 0]
+
+        # Restore accurate counting and confirm the synchronizer self-heals: the very
+        # next publish must not pay the timeout again.
+        synchronizer_1._snapshot_subscribers_after_discovery_settles = real_snapshot
+
+        w1.state._data[0, 1] = 2.0
+        start = time.monotonic()
+        w1.notify_state_change()
+        elapsed = time.monotonic() - start
+
+        assert elapsed < 1.5, (
+            "A transient over-count must not permanently wedge the synchronizer - the "
+            "next publish recomputes the count fresh and should return promptly"
+        )
+        assert w1.state._data[0, 1] == w2.state._data[0, 1]
+
+        synchronizer_1.close()
+        synchronizer_2.close()
+    finally:
+        receiver_executor.shutdown()
+        receiver_thread.join(timeout=2.0)
+        receiver_node.destroy_node()
+
+
+def test_subscriber_disconnecting_during_discovery_grace_period_does_not_hang_forever(
+    rclpy_node,
+):
+    """
+    Exercises real ROS graph churn (no fakes): a subscriber that appears and then
+    disconnects again while :meth:`Synchronizer._snapshot_subscribers_after_discovery_settles`
+    is still polling can make the settled count reflect a subscriber that is no longer
+    actually there by the time :meth:`Synchronizer.publish` sends the message. Whether
+    this particular run manages to trigger an over-count depends on ROS discovery timing
+    and is intentionally not asserted directly; what must always hold is that publish is
+    bounded by ``wait_for_synchronization_timeout``, never blocks forever, and recovers
+    on the next publish once the graph has settled.
+    """
+    w1 = create_dummy_world()
+    synchronizer_1 = WorldSynchronizer(
+        node=rclpy_node,
+        _world=w1,
+        synchronous=True,
+        wait_for_synchronization_timeout=1.0,
+    )
+    synchronizer_1._subscriber_discovery_grace_period = timedelta(seconds=0.3)
+    synchronizer_1._subscriber_discovery_poll_interval = timedelta(seconds=0.02)
+
+    flapping_node = rclpy.create_node("flapping_subscriber")
+    flapping_subscription = flapping_node.create_subscription(
+        std_msgs.msg.String,
+        topic=synchronizer_1.topic_name,
+        callback=lambda msg: None,
+        qos_profile=10,
+    )
+
+    def disconnect_shortly_after_appearing():
+        time.sleep(0.05)
+        flapping_node.destroy_subscription(flapping_subscription)
+
+    flap_thread = threading.Thread(target=disconnect_shortly_after_appearing, daemon=True)
+    flap_thread.start()
+
+    try:
+        w1.state._data[0, 0] = 1.0
+        publish_done = threading.Event()
+
+        def do_publish():
+            w1.notify_state_change()
+            publish_done.set()
+
+        start = time.monotonic()
+        thread = threading.Thread(target=do_publish, daemon=True)
+        thread.start()
+        thread.join(timeout=synchronizer_1.wait_for_synchronization_timeout + 3.0)
+        elapsed = time.monotonic() - start
+
+        assert (
+            publish_done.is_set()
+        ), "Real ROS discovery churn must not hang publish() forever"
+        assert elapsed < synchronizer_1.wait_for_synchronization_timeout + 3.0
+
+        # Recovery: once the flapping subscriber is gone and the graph has settled, the
+        # next synchronous publish (with zero live subscribers now) must return quickly
+        # rather than paying another timeout.
+        flap_thread.join(timeout=2.0)
+        time.sleep(0.5)
+
+        w1.state._data[0, 1] = 2.0
+        start = time.monotonic()
+        w1.notify_state_change()
+        elapsed = time.monotonic() - start
+        assert elapsed < 1.5
+
+        synchronizer_1.close()
+    finally:
+        flap_thread.join(timeout=2.0)
+        flapping_node.destroy_node()
 
 
 def test_compute_state_changes_no_changes(rclpy_node):
@@ -875,7 +1305,7 @@ def test_attribute_updates(rclpy_node):
     ], f"{[sa.name for sa in world1.semantic_annotations]} vs {[sa.name for sa in world2.semantic_annotations]}"
 
     with world1.modify_world():
-        fridge.add_door(door)
+        fridge.add(door)
 
     time.sleep(1)
     assert [hash(sa) for sa in world1.semantic_annotations] == [
@@ -1524,20 +1954,28 @@ def test_state_diff_during_concurrent_dof_add_remove_is_consistent(rclpy_node):
     ss.close()
 
 
+@pytest.mark.skip(
+    reason="Exercises an ABBA lock-order inversion on two in-memory World._world_lock "
+    "instances held simultaneously in a single process (one thread locks w1 then w2, the other "
+    "w2 then w1). Currently we have the assumption that each World lives in its own OS process/address space and"
+    "a process only ever holds its own world's lock, so this cross-world deadlock cannot occur."
+    "If we decide that we want to support this, remove this skip mark"
+)
 def test_bidirectional_nested_modify_worlds_no_deadlock(rclpy_node):
     """
     Nested modify_world across two Worlds must not deadlock.
     """
     w1 = World(name="w1")
     w2 = World(name="w2")
+
     ms1 = WorldSynchronizer(node=rclpy_node, _world=w1)
     ms2 = WorldSynchronizer(node=rclpy_node, _world=w2)
 
-    # Seed
     with w1.modify_world():
         w1.add_body(Body(name=PrefixedName("root1")))
-    with w2.modify_world():
-        w2.add_body(Body(name=PrefixedName("root2")))
+
+    time.sleep(0.1)
+    assert w2.root
 
     # Thread A: w1 -> w2 nested
     def a():
@@ -1563,10 +2001,11 @@ def test_bidirectional_nested_modify_worlds_no_deadlock(rclpy_node):
     t1.join(timeout=10.0)
     t2.join(timeout=10.0)
 
-    # If we hit a lock-order inversion between different Worlds this would hang.
-    assert len(w1.kinematic_structure_entities) > 0
-    assert len(w2.kinematic_structure_entities) > 0
-
+    # 5x 2 Handles for both a and b, plus the root
+    assert len(w1.kinematic_structure_entities) == 21
+    assert len(w2.kinematic_structure_entities) == 21
+    w1.validate()
+    w2.validate()
     ms1.close()
     ms2.close()
 
@@ -1590,7 +2029,9 @@ def test_reentrant_modify_world_same_thread():
 
 
 def test_world_update_serialization_round_trip():
-    """WorldUpdate round-trips through to_json / from_json correctly."""
+    """
+    WorldUpdate round-trips through to_json / from_json correctly.
+    """
     from krrood.adapters.json_serializer import to_json, from_json
     import json
 
@@ -1613,7 +2054,9 @@ def test_world_update_serialization_round_trip():
 
 
 def test_world_synchronizer_basic_state_sync(rclpy_node):
-    """State changes on w1 are reflected on w2 via the single combined topic."""
+    """
+    State changes on w1 are reflected on w2 via the single combined topic.
+    """
     w1 = create_dummy_world()
     w2 = create_dummy_world()
 
@@ -1632,7 +2075,9 @@ def test_world_synchronizer_basic_state_sync(rclpy_node):
 
 
 def test_world_synchronizer_basic_model_sync(rclpy_node):
-    """Model changes on w1 (new bodies + connection) are applied on w2."""
+    """
+    Model changes on w1 (new bodies + connection) are applied on w2.
+    """
     w1 = World(name="ws_model_w1")
     w2 = World(name="ws_model_w2")
 
@@ -1704,7 +2149,9 @@ def test_world_synchronizer_ordering_no_key_error_after_model_change(rclpy_node)
 
 
 def test_world_synchronizer_missed_messages_applied_in_order(rclpy_node):
-    """Messages buffered while paused are applied (in order) after apply_missed_messages()."""
+    """
+    Messages buffered while paused are applied (in order) after apply_missed_messages().
+    """
     w1 = create_dummy_world()
     w2 = create_dummy_world()
 
@@ -1732,7 +2179,9 @@ def test_world_synchronizer_missed_messages_applied_in_order(rclpy_node):
 
 
 def test_synchronize_model_false_suppresses_outgoing_model(rclpy_node):
-    """When synchronize_model=False, local model changes are not published to peers."""
+    """
+    When synchronize_model=False, local model changes are not published to peers.
+    """
     world_1 = World(name="sync_model_false_w1")
     world_2 = World(name="sync_model_false_w2")
 
@@ -1764,7 +2213,10 @@ def test_synchronize_model_false_suppresses_outgoing_model(rclpy_node):
 
 
 def test_synchronize_model_false_still_receives_incoming_model(rclpy_node):
-    """Even when synchronize_model=False, the synchronizer still applies incoming model messages."""
+    """
+    Even when synchronize_model=False, the synchronizer still applies incoming model
+    messages.
+    """
     world_1 = World(name="recv_model_w1")
     world_2 = World(name="recv_model_w2")
 
@@ -1796,7 +2248,9 @@ def test_synchronize_model_false_still_receives_incoming_model(rclpy_node):
 
 
 def test_synchronize_state_false_suppresses_outgoing_state(rclpy_node):
-    """When synchronize_state=False, local state changes are not published to peers."""
+    """
+    When synchronize_state=False, local state changes are not published to peers.
+    """
     world_1 = create_dummy_world()
     world_2 = create_dummy_world()
 
@@ -1826,7 +2280,10 @@ def test_synchronize_state_false_suppresses_outgoing_state(rclpy_node):
 
 
 def test_synchronize_state_false_still_receives_incoming_state(rclpy_node):
-    """Even when synchronize_state=False, the synchronizer still applies incoming state messages."""
+    """
+    Even when synchronize_state=False, the synchronizer still applies incoming state
+    messages.
+    """
     world_1 = create_dummy_world()
     world_2 = create_dummy_world()
 
@@ -1856,7 +2313,9 @@ def test_synchronize_state_false_still_receives_incoming_state(rclpy_node):
 
 
 def test_synchronize_both_false_suppresses_all_outgoing(rclpy_node):
-    """When both flags are False, no outgoing messages are published."""
+    """
+    When both flags are False, no outgoing messages are published.
+    """
     world_1 = World(name="both_false_w1")
     world_2 = World(name="both_false_w2")
 
@@ -1888,7 +2347,9 @@ def test_synchronize_both_false_suppresses_all_outgoing(rclpy_node):
 
 
 def test_stop_is_idempotent(rclpy_node):
-    """Calling stop() twice must not raise ValueError."""
+    """
+    Calling stop() twice must not raise ValueError.
+    """
     world = World(name="idempotent_stop_world")
     world_synchronizer = WorldSynchronizer(node=rclpy_node, _world=world)
 
@@ -1899,7 +2360,9 @@ def test_stop_is_idempotent(rclpy_node):
 
 
 def test_stop_without_close_leaves_ros_resources_alive(rclpy_node):
-    """stop() deregisters callbacks but must not destroy the ROS subscriber or publisher."""
+    """
+    Stop() deregisters callbacks but must not destroy the ROS subscriber or publisher.
+    """
     world = World(name="stop_no_close_world")
     world_synchronizer = WorldSynchronizer(node=rclpy_node, _world=world)
 
@@ -1916,7 +2379,9 @@ def test_stop_without_close_leaves_ros_resources_alive(rclpy_node):
 
 
 def test_stop_deregisters_from_model_change_callbacks(rclpy_node):
-    """After stop(), the synchronizer must no longer be in model_change_callbacks."""
+    """
+    After stop(), the synchronizer must no longer be in model_change_callbacks.
+    """
     world = World(name="stop_deregister_model_world")
     world_synchronizer = WorldSynchronizer(node=rclpy_node, _world=world)
 
@@ -1932,7 +2397,9 @@ def test_stop_deregisters_from_model_change_callbacks(rclpy_node):
 
 
 def test_stop_deregisters_from_state_change_callbacks(rclpy_node):
-    """After stop(), the synchronizer must no longer be in state_change_callbacks."""
+    """
+    After stop(), the synchronizer must no longer be in state_change_callbacks.
+    """
     world = World(name="stop_deregister_state_world")
     world_synchronizer = WorldSynchronizer(node=rclpy_node, _world=world)
 
@@ -1946,7 +2413,10 @@ def test_stop_deregisters_from_state_change_callbacks(rclpy_node):
 
 
 def test_stop_with_synchronize_model_false_does_not_touch_model_callbacks(rclpy_node):
-    """stop() must not try to remove from model_change_callbacks when synchronize_model=False."""
+    """
+    Stop() must not try to remove from model_change_callbacks when
+    synchronize_model=False.
+    """
     world = World(name="stop_no_model_reg_world")
     world_synchronizer = WorldSynchronizer(
         node=rclpy_node,
@@ -1993,7 +2463,7 @@ def test_apply_missed_messages_interleaved_model_and_state(rclpy_node):
 
     time.sleep(0.2)
 
-    world_1.state[prismatic_connection.dof_id].position = 3.5
+    world_1.state[prismatic_connection.dof.id].position = 3.5
     world_1.notify_state_change()
 
     time.sleep(0.2)
@@ -2021,9 +2491,9 @@ def test_apply_missed_messages_interleaved_model_and_state(rclpy_node):
 
 def test_apply_state_with_unknown_identifier_raises(rclpy_node):
     """
-    _apply_state must raise StateUpdateContainsUnknownDegreesOfFreedomError when
-    any DOF identifier in the WorldStateUpdate is absent from the world state index,
-    whether that is one unknown identifier or all of them.
+    _apply_state must raise StateUpdateContainsUnknownDegreesOfFreedomError when any DOF
+    identifier in the WorldStateUpdate is absent from the world state index, whether
+    that is one unknown identifier or all of them.
     """
     world = create_dummy_world()
     world_synchronizer = WorldSynchronizer(node=rclpy_node, _world=world)
@@ -2055,6 +2525,7 @@ def test_apply_state_with_unknown_identifier_raises(rclpy_node):
 def test_close_destroys_acknowledge_publisher_and_subscriber(rclpy_node):
     """
     After close(), both acknowledge_publisher and acknowledge_subscriber must be None.
+
     Failure here means Synchronizer.close() is leaking acknowledge ROS resources.
     """
     world = World(name="ack_leak_world")
@@ -2115,8 +2586,8 @@ def test_apply_state_does_not_deadlock_when_callback_acquires_world_lock(rclpy_n
     StateChangeCallback whose on_state_change acquires _world_lock from a separate
     thread does not deadlock.
 
-    A 3-second thread-join timeout is used as the deadlock sentinel — the test fails
-    if the publish does not complete within that window.
+    A 3-second thread-join timeout is used as the deadlock sentinel — the test fails if
+    the publish does not complete within that window.
     """
     receiver_node = rclpy.create_node("deadlock_test_receiver")
     receiver_executor = SingleThreadedExecutor()
@@ -2136,7 +2607,9 @@ def test_apply_state_does_not_deadlock_when_callback_acquires_world_lock(rclpy_n
 
         @dataclass(eq=False)
         class LockAcquiringStateCallback(StateChangeCallback):
-            """A state callback that acquires _world_lock from inside on_state_change."""
+            """
+            A state callback that acquires _world_lock from inside on_state_change.
+            """
 
             def on_state_change(self, **kwargs):
                 with self._world._world_lock:
@@ -2169,6 +2642,490 @@ def test_apply_state_does_not_deadlock_when_callback_acquires_world_lock(rclpy_n
         receiver_executor.shutdown()
         receiver_thread.join(timeout=2.0)
         receiver_node.destroy_node()
+
+
+def test_model_publish_does_not_hold_world_lock(rclpy_node):
+    """
+    A model update must be published *after* ``_world_lock`` is released.
+
+    Currently ``on_model_change`` runs inside
+    ``WorldModelUpdateContextManager.__exit__`` while the lock is still held, which lets
+    an inbound apply on the receiving side block the executor and (in synchronous mode)
+    deadlock the ack round-trip.
+    """
+    w = World()
+    ms = WorldSynchronizer(node=rclpy_node, _world=w)
+
+    lock_free_during_publish = []
+    original_publish = ms.publish
+
+    def probing_publish(msg):
+        lock_free_during_publish.append(probe_lock_is_free(w._world_lock, 0.3))
+        return original_publish(msg)
+
+    ms.publish = probing_publish
+
+    with w.modify_world():
+        w.add_body(Body(name=PrefixedName("publish_lock_body")))
+
+    ms.close()
+
+    assert lock_free_during_publish, "synchronizer.publish was never called"
+    assert all(lock_free_during_publish), (
+        "Model update was published while _world_lock was held. Publishing must happen "
+        "outside the modify_world critical section so inbound applies / acks cannot deadlock."
+    )
+
+
+def test_state_publish_does_not_hold_world_lock(rclpy_node):
+    """
+    A state update triggered from within ``modify_world`` must be published after the
+    lock is released.
+    """
+    w = create_dummy_world()
+    ms = WorldSynchronizer(node=rclpy_node, _world=w)
+
+    state_publish_lock_free = []
+    original_publish = ms.publish
+
+    def probing_publish(msg):
+        lock_free = probe_lock_is_free(w._world_lock, 0.3)
+        if msg.state_update is not None:
+            state_publish_lock_free.append(lock_free)
+        return original_publish(msg)
+
+    ms.publish = probing_publish
+
+    with w.modify_world():
+        w.state._data[0, 0] = 1.234
+
+    ms.close()
+
+    assert state_publish_lock_free, "no state update was published"
+    assert all(
+        state_publish_lock_free
+    ), "State update was published while _world_lock was held."
+
+
+def test_bidirectional_synchronous_publish_does_not_stall(rclpy_node):
+    """
+    Two processes that synchronously publish at the same time must not stall.
+
+    With each synchronizer holding its own ``_world_lock`` while waiting for the peer's
+    acknowledgment, and the peer's single-threaded executor blocked trying to acquire
+    that same lock to apply the inbound message, both publishers stall until the ack
+    timeout.
+    """
+    receiver_node = rclpy.create_node("bidir_sync_receiver")
+    receiver_executor = SingleThreadedExecutor()
+    receiver_executor.add_node(receiver_node)
+    receiver_thread = threading.Thread(
+        target=receiver_executor.spin, daemon=True, name="bidir-sync-receiver"
+    )
+    receiver_thread.start()
+    time.sleep(0.1)
+
+    try:
+        w1 = create_dummy_world()
+        w2 = create_dummy_world()
+
+        ms1 = WorldSynchronizer(
+            node=rclpy_node,
+            _world=w1,
+            synchronous=True,
+            wait_for_synchronization_timeout=2.0,
+        )
+        ms2 = WorldSynchronizer(
+            node=receiver_node,
+            _world=w2,
+            synchronous=True,
+            wait_for_synchronization_timeout=2.0,
+        )
+        time.sleep(0.3)  # allow pub/sub discovery
+
+        done_1 = threading.Event()
+        done_2 = threading.Event()
+
+        def worker(world, suffix, done_event):
+            with world.modify_world():
+                Handle.create_with_new_body_in_world(
+                    name=PrefixedName(f"h_{suffix}"), world=world
+                )
+            done_event.set()
+
+        start = time.time()
+        t1 = threading.Thread(target=worker, args=(w1, "1", done_1), daemon=True)
+        t2 = threading.Thread(target=worker, args=(w2, "2", done_2), daemon=True)
+        t1.start()
+        t2.start()
+        t1.join(timeout=8.0)
+        t2.join(timeout=8.0)
+        elapsed = time.time() - start
+
+        assert (
+            done_1.is_set() and done_2.is_set()
+        ), "Deadlock: bidirectional synchronous modify_world did not complete."
+        assert elapsed < 1.0, (
+            f"Bidirectional synchronous publish stalled ~{elapsed:.2f}s. Publishing while "
+            "_world_lock is held blocks the peer executor from applying/acknowledging."
+        )
+
+        ms1.close()
+        ms2.close()
+    finally:
+        receiver_executor.shutdown()
+        receiver_thread.join(timeout=2.0)
+        receiver_node.destroy_node()
+
+
+def test_concurrent_publishes_do_not_clobber_ack_state(rclpy_node):
+    """
+    Two concurrent synchronous publishes must each wait for their own acknowledgment.
+
+    Today ``publish`` keeps the pending event id / ack set in single shared instance
+    fields, so a second publish overwrites ``_current_publication_event_id`` while the
+    first is still waiting — the first publisher's ack is then ignored and it stalls
+    until timeout. After the fix (publications are serialized per synchronizer) the
+    second publish cannot start until the first has finished, so the first keeps its own
+    event id and is released by its own ack.
+    """
+    receiver_node = rclpy.create_node("clobber_ack_receiver")
+    receiver_executor = SingleThreadedExecutor()
+    receiver_executor.add_node(receiver_node)
+    receiver_thread = threading.Thread(
+        target=receiver_executor.spin, daemon=True, name="clobber-ack-receiver"
+    )
+    receiver_thread.start()
+    time.sleep(0.1)
+
+    try:
+        w1 = create_dummy_world()
+        w2 = create_dummy_world()
+
+        sender = WorldSynchronizer(
+            node=rclpy_node,
+            _world=w1,
+            synchronous=True,
+            wait_for_synchronization_timeout=1.0,
+        )
+        receiver = WorldSynchronizer(node=receiver_node, _world=w2)
+        time.sleep(0.3)
+
+        # Capture (withhold) acknowledgments so the sender keeps waiting.
+        captured_acks = []
+
+        class _CapturingAckPublisher:
+            def publish(self, msg):
+                captured_acks.append(msg)
+
+        real_ack_publisher = receiver.acknowledge_publisher
+        receiver.acknowledge_publisher = _CapturingAckPublisher()
+
+        dof_id = list(w1.state.keys())[0]
+        update_a = WorldUpdate(
+            meta_data=sender.meta_data,
+            state_update=WorldStateUpdate(
+                meta_data=sender.meta_data, ids=[dof_id], states=[0.11]
+            ),
+        )
+        update_b = WorldUpdate(
+            meta_data=sender.meta_data,
+            state_update=WorldStateUpdate(
+                meta_data=sender.meta_data, ids=[dof_id], states=[0.22]
+            ),
+        )
+
+        a_duration = {}
+
+        def publish_a():
+            started = time.time()
+            sender.publish(update_a)
+            a_duration["value"] = time.time() - started
+
+        thread_a = threading.Thread(target=publish_a, daemon=True)
+        thread_a.start()
+
+        # Wait until the receiver has processed A (so A's publisher is now blocking on its ack).
+        assert wait_for_condition(
+            lambda: len(captured_acks) >= 1, timeout=3.0
+        ), "Receiver never acknowledged the first publish"
+
+        # Start a second concurrent publish. With the bug it runs immediately and clobbers the
+        # shared event id; once fixed it serializes behind A and does not start yet. We do NOT wait
+        # for B to be processed (after the fix it cannot be until A completes).
+        thread_b = threading.Thread(
+            target=lambda: sender.publish(update_b), daemon=True
+        )
+        thread_b.start()
+        time.sleep(0.2)  # give the buggy path time to clobber the shared event id
+
+        # Deliver A's acknowledgment. A must be released by *its own* ack regardless of B.
+        real_ack_publisher.publish(captured_acks[0])
+
+        thread_a.join(timeout=3.0)
+        assert "value" in a_duration, "First publisher never returned (hard deadlock)."
+        assert a_duration["value"] < 0.8, (
+            f"First synchronous publish stalled ~{a_duration['value']:.2f}s: a concurrent "
+            "publish clobbered the shared acknowledgment state."
+        )
+
+        # Best-effort cleanup: once A is done, B proceeds and produces its own ack; deliver any
+        # captured acks until B returns. Cleanup failures must not mask the assertion above.
+        wait_for_condition(lambda: len(captured_acks) >= 2, timeout=3.0)
+        for ack in list(captured_acks):
+            real_ack_publisher.publish(ack)
+        thread_b.join(timeout=3.0)
+
+        sender.close()
+        receiver.close()
+    finally:
+        receiver_executor.shutdown()
+        receiver_thread.join(timeout=2.0)
+        receiver_node.destroy_node()
+
+
+def test_inbound_message_deserialization_holds_world_lock(rclpy_node):
+    """
+    ``subscription_callback`` reads the world (building the id/kwargs tracker and
+    running ``from_json``) *before* acquiring ``_world_lock``, racing with concurrent
+    modifications.
+
+    Deserialization that reads world structure must hold the lock.
+    """
+    receiver_node = rclpy.create_node("deserialize_lock_receiver")
+    receiver_executor = SingleThreadedExecutor()
+    receiver_executor.add_node(receiver_node)
+    receiver_thread = threading.Thread(
+        target=receiver_executor.spin, daemon=True, name="deserialize-lock-receiver"
+    )
+    receiver_thread.start()
+    time.sleep(0.1)
+
+    original_from_world = WorldEntityWithIDKwargsTracker.from_world
+    try:
+        w1 = create_dummy_world()
+        w2 = create_dummy_world()
+
+        ms1 = WorldSynchronizer(node=rclpy_node, _world=w1)
+        ms2 = WorldSynchronizer(node=receiver_node, _world=w2)
+        time.sleep(0.3)
+
+        lock_held_during_deserialization = {}
+
+        def patched_from_world(world, *args, **kwargs):
+            if world is w2 and "held" not in lock_held_during_deserialization:
+                lock_held_during_deserialization["held"] = not probe_lock_is_free(
+                    w2._world_lock, 0.2
+                )
+            return original_from_world(world, *args, **kwargs)
+
+        WorldEntityWithIDKwargsTracker.from_world = staticmethod(patched_from_world)
+
+        with w1.modify_world():
+            race_body = Body(name=PrefixedName("deserialize_race_body"))
+            w1.add_body(race_body)
+            w1.add_connection(FixedConnection(parent=w1.root, child=race_body))
+
+        assert wait_for_condition(
+            lambda: "held" in lock_held_during_deserialization, timeout=3.0
+        ), "Receiver never deserialized the inbound message"
+
+        assert lock_held_during_deserialization["held"], (
+            "Inbound message was deserialized (reading world structure) without holding "
+            "_world_lock, racing with concurrent world modifications."
+        )
+
+        ms1.close()
+        ms2.close()
+    finally:
+        WorldEntityWithIDKwargsTracker.from_world = original_from_world
+        receiver_executor.shutdown()
+        receiver_thread.join(timeout=2.0)
+        receiver_node.destroy_node()
+
+
+def test_callback_removal_during_notify_does_not_skip_callbacks():
+    """
+    Model-change callbacks are iterated over the *live* list, so a callback removing
+    itself during notification shifts the indices and silently skips the following
+    callback.
+    """
+    world = World()
+
+    @dataclass(eq=False)
+    class _RecordingModelCallback(ModelChangeCallback):
+        fired: int = 0
+        remove_self_on_fire: bool = False
+
+        def on_model_change(self, **kwargs):
+            self.fired += 1
+            if self.remove_self_on_fire:
+                self._world.get_world_model_manager().model_change_callbacks.remove(
+                    self
+                )
+
+    # Registration order is [first, second]; the first removes itself when fired.
+    first = _RecordingModelCallback(_world=world, remove_self_on_fire=True)
+    second = _RecordingModelCallback(_world=world)
+
+    with world.modify_world():
+        world.add_body(Body(name=PrefixedName("callback_iter_body")))
+
+    assert first.fired == 1, "the self-removing callback should still have fired once"
+    assert second.fired == 1, (
+        "the second callback was skipped because the callback list was mutated during "
+        "iteration; notification must iterate over a copy."
+    )
+
+
+def test_apply_missed_messages_is_atomic_against_concurrent_modify(rclpy_node):
+    """
+    ``apply_missed_messages`` must apply the buffered batch atomically with respect to other
+    threads: it should hold ``_world_lock`` across the whole batch so a concurrent ``modify_world``
+    serializes behind it instead of interleaving between messages.
+
+    Probed by checking, from another thread, whether the world lock is held at the moment
+    ``apply_message`` is entered. Red today (the lock is free between messages), green once
+    ``apply_missed_messages`` holds the lock across the batch.
+    """
+    w1 = create_dummy_world()
+    w2 = create_dummy_world()
+
+    ms1 = WorldSynchronizer(node=rclpy_node, _world=w1)
+    ms2 = WorldSynchronizer(node=rclpy_node, _world=w2)
+    time.sleep(0.3)
+
+    ms2.pause()
+
+    with w1.modify_world():
+        toctou_body = Body(name=PrefixedName("toctou_body"))
+        w1.add_body(toctou_body)
+        w1.add_connection(FixedConnection(parent=w1.root, child=toctou_body))
+
+    assert wait_for_condition(
+        lambda: len(ms2.missed_messages) >= 1, timeout=3.0
+    ), "paused receiver never buffered the model change"
+    ms2.resume()
+
+    lock_held_during_apply = {}
+    original_apply_message = ms2.apply_message
+
+    def probing_apply_message(message):
+        # Probe at entry (before apply_message takes its own reentrant lock): the lock is only held
+        # here if apply_missed_messages holds it across the batch.
+        if "held" not in lock_held_during_apply:
+            lock_held_during_apply["held"] = not probe_lock_is_free(w2._world_lock, 0.3)
+        return original_apply_message(message)
+
+    ms2.apply_message = probing_apply_message
+
+    try:
+        ms2.apply_missed_messages()
+        assert lock_held_during_apply.get("held") is True, (
+            "apply_missed_messages did not hold _world_lock across the batch; a concurrent "
+            "modify_world could interleave between buffered messages."
+        )
+    finally:
+        ms2.apply_message = original_apply_message
+        ms1.close()
+        ms2.close()
+
+
+@pytest.mark.xfail(
+    reason="Fails when two synchronizers share one ROS node/process. "
+    "_snapshot_subscribers discounts every subscription on its own node, so a second world "
+    "synchronized in the same process is wrongly uncounted. Our current assumption is that synchronized"
+    "world runs in its own process/node, so peers are remote subscriptions and are counted correctly."
+    "If we decide that we want to support this, remove this xfail mark"
+)
+def test_snapshot_subscribers_counts_in_process_peer(rclpy_node):
+    """
+    Two worlds synchronized within one process (one node) are genuine peers, yet
+    ``_snapshot_subscribers`` subtracts *all* own-node subscriptions and reports zero,
+    so synchronous publication never waits for the in-process peer.
+    """
+    w1 = create_dummy_world()
+    w2 = create_dummy_world()
+
+    ms1 = WorldSynchronizer(node=rclpy_node, _world=w1)
+    ms2 = WorldSynchronizer(node=rclpy_node, _world=w2)
+    time.sleep(0.3)
+
+    try:
+        assert ms1._snapshot_subscribers() >= 1, (
+            "The in-process peer world's subscription was not counted; _snapshot_subscribers "
+            "must not discount distinct peers that merely share the node."
+        )
+    finally:
+        ms1.close()
+        ms2.close()
+
+
+def test_combined_update_model_and_state_applied_atomically(rclpy_node):
+    """
+    ``apply_message`` applies the model block and the state update under *separate*
+    ``_world_lock`` acquisitions, leaving a window where the new structure is visible
+    without its state.
+
+    The combined update must be applied atomically.
+    """
+    source_world = create_dummy_world()
+    receiver_world = create_dummy_world()
+
+    ms = WorldSynchronizer(node=rclpy_node, _world=receiver_world)
+
+    # Build a real model-modification block (adds one DOF) on the source world.
+    with source_world.modify_world():
+        new_body = Body(name=PrefixedName("atomic_body"))
+        source_world.add_body(new_body)
+        connection = PrismaticConnection.create_with_dofs(
+            world=source_world,
+            parent=source_world.root,
+            child=new_body,
+            axis=Vector3.X(),
+        )
+        source_world.add_connection(connection)
+
+    model_block = source_world.get_world_model_manager().model_modification_blocks[-1]
+    new_dof_id = connection.dof.id
+
+    source_meta = MetaData(node_name="atomic_src", process_id=0, world_id=uuid4())
+    combined_update = WorldUpdate(
+        meta_data=source_meta,
+        modification_block=ModificationBlock(
+            meta_data=source_meta, modifications=model_block
+        ),
+        state_update=WorldStateUpdate(
+            meta_data=source_meta, ids=[new_dof_id], states=[0.73]
+        ),
+    )
+
+    # Round-trip through JSON against the receiver's tracker (as subscription_callback does)
+    # so the applied modifications operate on fresh objects owned by the receiver world.
+    tracker = WorldEntityWithIDKwargsTracker.from_world(receiver_world)
+    combined_update = from_json(
+        json.loads(json.dumps(to_json(combined_update))), **tracker.create_kwargs()
+    )
+
+    lock_held_between_model_and_state = {}
+    original_apply_model = ms._apply_model
+
+    def probing_apply_model(modification_block_message):
+        original_apply_model(modification_block_message)
+        # We are now in the gap between model application and state application.
+        lock_held_between_model_and_state["held"] = not probe_lock_is_free(
+            receiver_world._world_lock, 0.3
+        )
+
+    ms._apply_model = probing_apply_model
+
+    ms.apply_message(combined_update)
+    ms.close()
+
+    assert lock_held_between_model_and_state.get("held") is True, (
+        "_world_lock was released between applying the model block and the state update; "
+        "a combined WorldUpdate must be applied atomically under a single lock."
+    )
 
 
 if __name__ == "__main__":

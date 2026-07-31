@@ -1,8 +1,22 @@
+import math
 import os
 from importlib.resources import files
 from pathlib import Path
 
-from semantic_digital_twin.world_description.geometry import Mesh
+import numpy as np
+import pytest
+import trimesh
+
+from krrood.adapters.json_serializer import from_json, to_json
+
+from semantic_digital_twin.world_description.geometry import (
+    Box,
+    Cylinder,
+    Mesh,
+    Scale,
+    Sphere,
+    Texture,
+)
 
 
 def test_shape():
@@ -23,3 +37,98 @@ def test_shape():
     assert mesh.filename.startswith("/tmp/")
     assert mesh.filename.endswith(".obj")
     assert len(mesh.mesh.visual.uv) == 8527
+
+
+def test_mesh_color_survives_serialization(tmp_path):
+    """
+    Per-vertex mesh color survives the to_json/from_json round-trip.
+
+    Color travels inside the serialized geometry (re-exported as OBJ, which the
+    collision loader and visualizer can read), so a receiver renders it without needing
+    the original mesh file.
+    """
+    source = trimesh.creation.box(extents=(1.0, 1.0, 1.0))
+    source.visual.vertex_colors = np.tile([200, 50, 50, 255], (len(source.vertices), 1))
+
+    mesh = Mesh.from_trimesh(mesh=source, dirname=str(tmp_path), file_type="ply")
+    restored = Mesh.from_json(mesh.to_json())
+
+    assert restored.filename.endswith(".obj")
+    assert (restored.mesh.visual.vertex_colors[:, :3] == [200, 50, 50]).all()
+
+
+def test_mesh_color_is_lost_without_color_preserving_format(tmp_path):
+    """
+    A format that cannot store per-vertex color (STL) drops it on export.
+
+    The contrast to the PLY round-trip: without a color-preserving format the color
+    is lost.
+    """
+    source = trimesh.creation.box(extents=(1.0, 1.0, 1.0))
+    source.visual.vertex_colors = np.tile([200, 50, 50, 255], (len(source.vertices), 1))
+
+    mesh = Mesh.from_trimesh(mesh=source, dirname=str(tmp_path), file_type="stl")
+
+    assert not (mesh.mesh.visual.vertex_colors[:, :3] == [200, 50, 50]).all()
+
+
+def test_texture_defaults():
+    texture = Texture(file_path="/textures/wood.png")
+
+    assert texture.repeat == (1.0, 1.0)
+    assert texture.uniform is False
+
+
+def test_texture_survives_serialization():
+    """
+    A texture's fields survive the to_json/from_json round-trip, so a receiver renders the
+    same tiling as the sender without needing the original scene.
+    """
+    texture = Texture(file_path="/textures/wood.png", repeat=(2.0, 3.0), uniform=True)
+
+    restored = from_json(to_json(texture))
+
+    assert restored == texture
+
+
+def test_textured_primitive_survives_serialization():
+    """
+    A primitive shape carrying a texture round-trips through serialization with the texture
+    intact, rather than silently collapsing to its flat color.
+    """
+    box = Box(scale=Scale(1.0, 1.0, 1.0), texture=Texture(file_path="/textures/marble.png"))
+
+    restored = Box.from_json(box.to_json())
+
+    assert restored.texture == box.texture
+    assert restored == box
+
+
+# %% the volume a shape encloses
+
+
+def test_box_volume():
+    assert Box(scale=Scale(0.5, 2.0, 3.0)).volume == pytest.approx(3.0)
+
+
+def test_sphere_volume():
+    assert Sphere(radius=2.0).volume == pytest.approx(4.0 / 3.0 * math.pi * 8.0)
+
+
+def test_cylinder_volume():
+    """
+    A cylinder's volume follows from the circle its width spans, not from the polygon
+    its mesh approximates that circle with.
+    """
+    cylinder = Cylinder(width=2.0, height=3.0)
+
+    assert cylinder.volume == pytest.approx(math.pi * 3.0)
+    assert cylinder.volume > cylinder.mesh.volume
+
+
+def test_mesh_volume(tmp_path):
+    source = trimesh.creation.box(extents=(1.0, 2.0, 4.0))
+
+    mesh = Mesh.from_trimesh(mesh=source, dirname=str(tmp_path), file_type="stl")
+
+    assert mesh.volume == pytest.approx(8.0)

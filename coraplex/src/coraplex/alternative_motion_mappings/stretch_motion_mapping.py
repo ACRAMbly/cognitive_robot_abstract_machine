@@ -1,6 +1,6 @@
-from copy import deepcopy
+from __future__ import annotations
 
-from nav2_msgs.action import NavigateToPose
+from copy import deepcopy
 
 from giskardpy.motion_statechart.binding_policy import GoalBindingPolicy
 from giskardpy.motion_statechart.data_types import DefaultWeights
@@ -8,12 +8,8 @@ from giskardpy.motion_statechart.goals.cartesian_goals import DifferentialDriveB
 from giskardpy.motion_statechart.goals.open_close import Close
 from giskardpy.motion_statechart.goals.templates import Sequence, Parallel
 from giskardpy.motion_statechart.monitors.monitors import LocalMinimumReached
-from giskardpy.motion_statechart.ros2_nodes.ros_tasks import NavigateActionServerTask
 from giskardpy.motion_statechart.tasks.align_planes import AlignPlanes
-from giskardpy.motion_statechart.tasks.cartesian_tasks import (
-    CartesianPose,
-    CartesianOrientation,
-)
+from giskardpy.motion_statechart.tasks.cartesian_tasks import CartesianPose
 from giskardpy.motion_statechart.tasks.joint_tasks import JointPositionList
 from giskardpy.motion_statechart.tasks.pointing import Pointing
 from coraplex.datastructures.enums import ExecutionType
@@ -22,27 +18,24 @@ from coraplex.robot_plans.motions.base import AlternativeMotion
 from coraplex.view_manager import ViewManager
 from semantic_digital_twin.datastructures.joint_state import JointState
 from semantic_digital_twin.robots.stretch import Stretch
-from semantic_digital_twin.spatial_types import (
-    Vector3,
-    HomogeneousTransformationMatrix,
-    RotationMatrix,
-)
+from semantic_digital_twin.spatial_types import Vector3, HomogeneousTransformationMatrix
 from semantic_digital_twin.spatial_types.spatial_types import Pose
 
 
 class StretchMoveToolCenterPoint(MoveToolCenterPointMotion, AlternativeMotion[Stretch]):
     """
-    Better motions for stretch to move the tool center point to the given goal, first rotates the base such that the
-    gripper is pointing at the goal pose and then uses full body control to move the TCP to the goal.
+    Better motions for stretch to move the tool center point to the given goal, first
+    rotates the base such that the gripper is pointing at the goal pose and then uses
+    full body control to move the TCP to the goal.
     """
 
-    execution_type = (ExecutionType.SIMULATED, ExecutionType.REAL)
+    execution_type = ExecutionType.SIMULATED, ExecutionType.REAL
 
     def perform(self):
         return
 
     @property
-    def _motion_chart(self):
+    def _motion_chart(self) -> Sequence:
         tip = ViewManager().get_end_effector_view(self.arm, self.robot).tool_frame
         goal_copy = deepcopy(self.target)
         goal_copy = self.world.transform(goal_copy, self.world.root)
@@ -50,6 +43,8 @@ class StretchMoveToolCenterPoint(MoveToolCenterPointMotion, AlternativeMotion[St
         goal_point.z = 0
         return Sequence(
             [
+                # The wrist is straightened while the base turns, so the gripper is
+                # already aligned by the time the cartesian goal takes over.
                 Parallel(
                     [
                         Pointing(
@@ -68,6 +63,8 @@ class StretchMoveToolCenterPoint(MoveToolCenterPointMotion, AlternativeMotion[St
                         ),
                     ]
                 ),
+                # On the real robot the arm regularly settles just short of the goal, so
+                # a local minimum counts as success alongside reaching the pose.
                 Parallel(
                     [
                         CartesianPose(
@@ -85,7 +82,8 @@ class StretchMoveToolCenterPoint(MoveToolCenterPointMotion, AlternativeMotion[St
 
 class StretchMoveSim(MoveMotion, AlternativeMotion[Stretch]):
     """
-    Different giskard goal for moving stretch to a goal pose, this uses a goal optimal for a diff drive
+    Different giskard goal for moving stretch to a goal pose, this uses a goal optimal
+    for a diff drive.
     """
 
     execution_type = ExecutionType.SIMULATED
@@ -97,12 +95,13 @@ class StretchMoveSim(MoveMotion, AlternativeMotion[Stretch]):
     def _motion_chart(self):
         world_T_target = self.world.transform(self.target, self.world.root)
         world_T_target.z = 0
-        return DifferentialDriveBaseGoal(goal_pose=world_T_target, threshold=0.05)
+        return DifferentialDriveBaseGoal(goal_pose=world_T_target, threshold=0.01)
 
 
 class StretchMoveReal(MoveMotion, AlternativeMotion[Stretch]):
     """
-    Uses a Nav2 action server to move the base of the real HSRB
+    Uses a Giskard differential drive goal to move the Stretch base during real
+    execution.
     """
 
     execution_type = ExecutionType.REAL
@@ -111,22 +110,25 @@ class StretchMoveReal(MoveMotion, AlternativeMotion[Stretch]):
         return
 
     @property
-    def _motion_chart(self) -> NavigateActionServerTask:
+    def _motion_chart(self) -> DifferentialDriveBaseGoal:
         world_T_target = self.world.transform(self.target, self.world.root)
         world_T_target.z = 0
         return DifferentialDriveBaseGoal(goal_pose=world_T_target, threshold=0.1)
-        return NavigateActionServerTask(
-            target_pose=self.target,
-            base_link=self.robot.root,
-            action_topic="/navigate_to_pose",
-            message_type=NavigateToPose,
-        )
+        # Commented out for now since we use the giskard goal which also works for smaller distances
+        # return NavigateActionServerTask(
+        #     target_pose=self.target,
+        #     base_link=self.robot.root,
+        #     action_topic="/navigate_to_pose",
+        #     message_type=NavigateToPose,
+        # )
 
 
 class StretchClose(ClosingMotion, AlternativeMotion[Stretch]):
     """
-    Optimized close motion for the stretch robot. This puts the stretch directly in front of the container while holding
-    the handle and then pushes it arm forward to close the container.
+    Optimized close motion for the stretch robot.
+
+    This puts the stretch directly in front of the container while holding the handle
+    and then pushes it arm forward to close the container.
     """
 
     execution_type = ExecutionType.SIMULATED

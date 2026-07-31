@@ -83,7 +83,7 @@ class suppress_stdout_stderr(object):
 
 
 def hacky_urdf_parser_fix(
-        urdf: str, blacklist: Tuple[str] = ("transmission", "gazebo")
+    urdf: str, blacklist: Tuple[str] = ("transmission", "gazebo")
 ) -> str:
     # Parse input string
     root = ET.fromstring(urdf)
@@ -158,6 +158,19 @@ def tracy_installed() -> bool:
         return False
 
 
+def daisy_installed() -> bool:
+    try:
+        from ament_index_python.packages import get_package_share_directory
+
+        pkg_name = "iai_daisy_description"
+
+        if get_package_share_directory(pkg_name):
+            return True
+        return False
+    except (ImportError, PackageNotFoundError, ValueError):
+        return False
+
+
 def hsrb_installed() -> bool:
     try:
         from ament_index_python.packages import get_package_share_directory
@@ -203,6 +216,7 @@ class MockedNodeClass(MockedClass):
     """
     Mocked class for Node in rclpy
     """
+
     ...
 
 
@@ -211,6 +225,7 @@ class MockedNodeModule(MockedModule):
     """
     Mocked module for rclpy.node.
     """
+
     Node: Type[MockedNodeClass] = MockedNodeClass
     """
     A mocked Node class.
@@ -222,6 +237,7 @@ class MockedRCLPY(MockedModule):
     """
     Mocked module for rclpy.
     """
+
     node: ClassVar[MockedNodeModule] = MockedNodeModule()
 
 

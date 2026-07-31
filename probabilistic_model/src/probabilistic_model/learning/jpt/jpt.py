@@ -55,8 +55,10 @@ class JointProbabilityTree(SubclassJSONSerializer):
 
     min_samples_per_leaf: Union[int, float] = field(default=1)
     """
-    The minimum number of samples to create another sum node. If this is smaller than one, it will be reinterpreted
-    as fraction w. r. t. the number of samples total.
+    The minimum number of samples to create another sum node.
+
+    If this is smaller than one, it will be reinterpreted as fraction w. r. t. the
+    number of samples total.
     """
 
     min_impurity_improvement: float = field(default=0.0)
@@ -139,9 +141,10 @@ class JointProbabilityTree(SubclassJSONSerializer):
     ) -> None:
         """
         Set the targets and features of the model.
-        If only one of them is provided, the other is set as the complement of the provided one.
-        If none are provided, both of them are set as the variables of the model.
-        If both are provided, they are taken as given.
+
+        If only one of them is provided, the other is set as the complement of the
+        provided one. If none are provided, both of them are set as the variables of the
+        model. If both are provided, they are taken as given.
 
         :param targets: The targets of the model.
         :param features: The features of the model.
@@ -226,7 +229,6 @@ class JointProbabilityTree(SubclassJSONSerializer):
         :param data: The data to preprocess.
         :return: The preprocessed data.
         """
-
         result = np.zeros(data.shape)
 
         for variable_index, variable in enumerate(self.variables):
@@ -276,7 +278,6 @@ class JointProbabilityTree(SubclassJSONSerializer):
         :param depth: The current depth of the induction
         :return: The constructed decision tree node
         """
-
         number_of_samples = end - start
         # if the inducing in this step results in inadmissible nodes, skip the impurity calculation
         if depth >= self.max_depth or number_of_samples < 2 * self.min_samples_leaf:
@@ -370,9 +371,9 @@ class JointProbabilityTree(SubclassJSONSerializer):
     def construct_impurity(self) -> Impurity:
         """
         Construct the impurity object to be used in the model.
+
         An impurity object is used to calculate the best split.
         """
-
         min_samples_leaf = self.min_samples_leaf
 
         numeric_vars = np.array(
@@ -381,7 +382,7 @@ class JointProbabilityTree(SubclassJSONSerializer):
                 for index, variable in enumerate(self.variables)
                 if variable in self.numeric_targets
             ],
-            dtype=int,
+            dtype=np.int64,
         )
         symbolic_vars = np.array(
             [
@@ -389,10 +390,10 @@ class JointProbabilityTree(SubclassJSONSerializer):
                 for index, variable in enumerate(self.variables)
                 if variable in self.symbolic_targets
             ],
-            dtype=int,
+            dtype=np.int64,
         )
 
-        invert_impurity = np.array([0] * len(self.symbolic_targets), dtype=int)
+        invert_impurity = np.array([0] * len(self.symbolic_targets), dtype=np.int64)
 
         n_sym_vars_total = len(self.symbolic_variables)
         n_num_vars_total = len(self.numeric_variables)
@@ -403,7 +404,7 @@ class JointProbabilityTree(SubclassJSONSerializer):
                 for index, variable in enumerate(self.variables)
                 if variable in self.numeric_features
             ],
-            dtype=int,
+            dtype=np.int64,
         )
         symbolic_features = np.array(
             [
@@ -411,26 +412,34 @@ class JointProbabilityTree(SubclassJSONSerializer):
                 for index, variable in enumerate(self.variables)
                 if variable in self.symbolic_features
             ],
-            dtype=int,
+            dtype=np.int64,
         )
 
         symbols = np.array(
-            [len(variable.domain.simple_sets) for variable in self.symbolic_variables]
+            [len(variable.domain.simple_sets) for variable in self.symbolic_variables],
+            dtype=np.int64,
         )
         max_variances = np.array(
             [
                 annotated_variable.standard_deviation**2
                 for annotated_variable in self.annotated_variables
-            ]
+                if annotated_variable.variable in self.numeric_targets
+            ],
+            dtype=np.float64,
         )
 
         min_impurity_improvement = np.array(
             [
                 annotated_variable.min_impurity_improvement
                 for annotated_variable in self.annotated_variables
-                if annotated_variable.variable in self.features
+                if annotated_variable.variable in self.numeric_features
+            ]
+            + [
+                annotated_variable.min_impurity_improvement
+                for annotated_variable in self.annotated_variables
+                if annotated_variable.variable in self.symbolic_features
             ],
-            dtype=float,
+            dtype=np.float64,
         )
 
         dependency_indices = dict()
@@ -459,6 +468,7 @@ class JointProbabilityTree(SubclassJSONSerializer):
     def _variable_dependencies_to_json(self) -> Dict[str, List[str]]:
         """
         Convert the variable dependencies to a json compatible format.
+
         The result maps variable names to lists of variable names.
         """
         return {

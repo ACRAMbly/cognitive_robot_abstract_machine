@@ -2,12 +2,11 @@
 from giskardpy.middleware.ros2 import rospy
 from giskardpy.middleware.ros2.behavior_tree_config import StandAloneBTConfig
 from giskardpy.middleware.ros2.scripts.iai_robots.stretch.configs import (
-    WorldWithStretchConfigDiffDrive,
     StretchStandaloneInterface,
+    WorldWithStretchConfigDiffDrive,
 )
 from giskardpy.middleware.ros2.giskard import Giskard
 from giskardpy.middleware.ros2.utils.utils import load_xacro
-from giskardpy.model.world_config import WorldWithDiffDriveRobot
 from giskardpy.qp.qp_controller_config import QPControllerConfig
 
 

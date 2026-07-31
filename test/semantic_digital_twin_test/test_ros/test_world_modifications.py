@@ -65,7 +65,7 @@ class ConnectionModificationTestCase(unittest.TestCase):
             dof = DegreeOfFreedom(name=PrefixedName("dofyboi"))
             w.add_degree_of_freedom(dof)
             connection = RevoluteConnection(
-                b1, b2, axis=Vector3.from_iterable([0, 0, 1]), dof_id=dof.id
+                b1, b2, axis=Vector3.from_iterable([0, 0, 1]), raw_dof=dof
             )
             w.add_connection(connection)
         assert connection.dof.has_hardware_interface is False
@@ -94,7 +94,7 @@ class ConnectionModificationTestCase(unittest.TestCase):
                     parent=b2,
                     child=b3,
                     axis=Vector3.from_iterable([0, 0, 1]),
-                    dof_id=dof.id,
+                    raw_dof=dof,
                 )
             )
 
@@ -286,11 +286,13 @@ def test_body_inertial_survives_world_deepcopy():
 
 
 def test_design_09_failed_atomic_modification_is_not_recorded():
-    """world.py:283-289: atomic_world_modification appends the modification to the
-    current block *before* executing the function. If the function raises and the
-    caller catches the error inside the modify_world block, a phantom modification
-    stays in the history."""
+    """
+    world.py:283-289: atomic_world_modification appends the modification to the current
+    block *before* executing the function.
 
+    If the function raises and the caller catches the error inside the modify_world
+    block, a phantom modification stays in the history.
+    """
     world = World()
     root = Body(name=PrefixedName("root", prefix="review"))
     child = Body(name=PrefixedName("child", prefix="review"))

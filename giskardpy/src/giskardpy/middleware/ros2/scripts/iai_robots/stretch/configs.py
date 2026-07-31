@@ -1,7 +1,5 @@
 from dataclasses import dataclass, field
 
-from dataclasses import dataclass, field
-
 from giskardpy.middleware.ros2.robot_interface_config import (
     StandAloneRobotInterfaceConfig,
     RobotInterfaceConfig,
@@ -71,7 +69,9 @@ class StretchVelocityInterface(RobotInterfaceConfig):
             "joint_left_wheel",  # 9
         ]
         self.add_joint_velocity_group_controller(
-            cmd_topic="/joint_velocity_cmd", connections=joints
+            cmd_topic="/joint_velocity_cmd",
+            connections=joints,
+            minimum_valid_velocity=0.03,
         )
 
 

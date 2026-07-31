@@ -4,6 +4,8 @@ import statistics
 from dataclasses import dataclass
 from typing import List
 
+from krrood.class_diagrams.utils import get_type_hints_of_object
+
 
 from krrood.class_diagrams.attribute_introspector import (
     DataclassOnlyIntrospector,
@@ -15,8 +17,8 @@ from krrood.class_diagrams.attribute_introspector import (
 @dataclass
 class MeanAndStandardDeviation:
     """
-    Class that represents a mean and standard deviation for tables that will be directly rendered as
-    mean +- standard deviation.
+    Class that represents a mean and standard deviation for tables that will be directly
+    rendered as mean +- standard deviation.
 
     Use this in experiment results when you want to render a mean +- standard deviation.
     """
@@ -47,12 +49,14 @@ class MeanAndStandardDeviation:
 class ExperimentResult:
     """
     Class for results from experiments.
-    Use this when you want to create a table of results (measurements) from experiments for scientific articles.
+
+    Use this when you want to create a table of results (measurements) from experiments
+    for scientific articles.
 
     This class is like a single row in a table of experiments.
 
-    Assumptions made here are that there are only built in like fields or one-to-one relationships with other
-    ExperimentResult classes.
+    Assumptions made here are that there are only built in like fields or one-to-one
+    relationships with other ExperimentResult classes.
     """
 
     @classmethod
@@ -62,9 +66,11 @@ class ExperimentResult:
     @classmethod
     def recursive_fields(cls) -> List[DiscoveredAttribute]:
         result = []
+        type_hints = get_type_hints_of_object(cls)
         for field_ in cls.introspector().discover(cls):
-            if issubclass(field_.field.type, ExperimentResult):
-                result.extend(field_.field.type.recursive_fields())
+            resolved_type = type_hints[field_.field.name]
+            if issubclass(resolved_type, ExperimentResult):
+                result.extend(resolved_type.recursive_fields())
             else:
                 result.append(field_)
         return result
@@ -80,9 +86,11 @@ class ExperimentResult:
 @dataclass
 class ExperimentsTable:
     """
-    A collection of experiments ready to be presented as a table in a scientific article.
+    A collection of experiments ready to be presented as a table in a scientific
+    article.
 
-    This class assumes that all rows in the table have the same type and are a subclass of ExperimentResult.
+    This class assumes that all rows in the table have the same type and are a subclass
+    of ExperimentResult.
     """
 
     experiments: list[ExperimentResult]
@@ -117,11 +125,15 @@ class TypstRenderer:
     """
 
     def render_row(self, row: ExperimentResult) -> str:
-        """Renders the cells of a single row in Typst format."""
+        """
+        Renders the cells of a single row in Typst format.
+        """
         return ", ".join([f"[{v}]" for v in row.get_column_values()])
 
     def render_table(self) -> str:
-        """Renders the entire ExperimentsTable into a valid Typst #table markup string."""
+        """
+        Renders the entire ExperimentsTable into a valid Typst #table markup string.
+        """
         row_class = self.experiments_table.row_class
 
         # Handle empty table edge-case gracefully
@@ -155,3 +167,15 @@ class TypstRenderer:
             f")"
         )
         return typst_markup
+
+    def render_figure(self, caption: str) -> str:
+        """
+        Renders the table wrapped in a Typst #figure with a caption.
+
+        Use this instead of :meth:`render_table` whenever the table is presented to a
+        reader, so every table in a document explains what it shows.
+
+        :param caption: Caption text describing what the table shows.
+        :return: Typst markup for a captioned figure.
+        """
+        return f"#figure(\n{self.render_table()},\n  caption: [{caption}]\n)"

@@ -174,6 +174,9 @@ def main():
         "ros-jazzy-ament-lint-auto",
         "ros-jazzy-ament-cmake-ros",
         "ros-jazzy-launch-testing-ament-cmake",
+        "ros-jazzy-rviz2",
+        "ros-jazzy-ur-robot-driver",
+        "ros-jazzy-ur-client-library",
     ]
     manager.dep_manager.install_packages(packages)
 
@@ -201,7 +204,7 @@ def main():
             ["iai_tracy_bringup", "iai_tracy_ur"],
         ),
         Repository(
-            "https://github.com/maltehue/ros2_robotiq_gripper.git",
+            "https://github.com/code-iai/ros2_robotiq_gripper.git",
             "iai_dualarm",
             "ros2_robotiq_gripper",
             [
@@ -239,6 +242,11 @@ def main():
             "iai_tiago_description",
         ),
         Repository(
+            "https://github.com/geriatronics/garmi_description.git",
+            "main",
+            "garmi_description",
+        ),
+        Repository(
             "https://github.com/pal-robotics/pmb2_robot.git",
             "humble-devel",
             "pmb2_robot",
@@ -264,6 +272,12 @@ def main():
             "https://github.com/cram2/cram_ros2_packages.git",
             "main",
             "cram_ros2_packages",
+        ),
+        Repository(
+            "https://github.com/code-iai/iai_weiss_wpg_300-120-gripper.git",
+            "main",
+            "iai_weiss_wpg_300-120-gripper",
+            ["griplink"],
         ),
     ]
 

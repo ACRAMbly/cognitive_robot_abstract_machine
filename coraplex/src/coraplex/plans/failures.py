@@ -20,6 +20,20 @@ if TYPE_CHECKING:
 class PlanFailure(DataclassException):
     """
     Base class for all exceptions that are related to plan errors.
+    Can also be raised directly as a generic plan failure.
+    """
+
+    def error_message(self) -> str:
+        return "Plan failed."
+
+    def suggest_correction(self) -> str:
+        return ""
+
+
+@dataclass
+class EmptyUnderspecified(PlanFailure):
+    """
+    Raised when a plan is empty.
     """
 
 
@@ -34,23 +48,22 @@ class AllChildrenFailed(PlanFailure):
     The language node where all children failed.
     """
 
-    def __post_init__(self):
-        self.message = f"All children of {self.language_node} failed"
+    def error_message(self) -> str:
+        return f"All children of {self.language_node} failed"
 
-#todo: rename when searchaction is refactored
-# @dataclass
-# class PerceptionObjectNotFound(PlanFailure):
-#     search_action: SearchAction
-#
-#     def __post_init__(self):
-#         self.message = (
-#             f"Perception object not found in search action {self.search_action}"
-#         )
+    def suggest_correction(self) -> str:
+        return ""
 
 
 @dataclass
 class RobotInCollision(PlanFailure):
     """Thrown when the robot is in collision with the environment."""
+
+    def error_message(self) -> str:
+        return "The robot is in collision with the environment."
+
+    def suggest_correction(self) -> str:
+        return ""
 
 
 @dataclass
@@ -66,8 +79,11 @@ class ConfigurationNotReached(PlanFailure):
     The configuration type that should be reached.
     """
 
-    def __post_init__(self):
-        self.message = f"Configuration type: {self.configuration_type.name} not reached"
+    def error_message(self) -> str:
+        return f"Configuration type: {self.configuration_type.name} not reached"
+
+    def suggest_correction(self) -> str:
+        return ""
 
 
 @dataclass
@@ -85,8 +101,11 @@ class NavigationGoalNotReachedError(PlanFailure):
     The goal pose of the robot.
     """
 
-    def __post_init__(self):
-        self.message = f"Navigation goal not reached. Current pose: {self.current_pose}, goal pose: {self.goal_pose}"
+    def error_message(self) -> str:
+        return f"Navigation goal not reached. Current pose: {self.current_pose}, goal pose: {self.goal_pose}"
+
+    def suggest_correction(self) -> str:
+        return ""
 
 
 @dataclass
@@ -105,8 +124,11 @@ class BodyUnfetchable(PlanFailure):
     The arm from which the body cannot be fetched.
     """
 
-    def __post_init__(self):
-        self.message = f"Body {self.body} not fetchable from arm {self.arm}"
+    def error_message(self) -> str:
+        return f"Body {self.body} not fetchable from arm {self.arm}"
+
+    def suggest_correction(self) -> str:
+        return ""
 
 
 @dataclass
@@ -125,7 +147,8 @@ class EndEffectorDidNotReachTarget(PlanFailure):
     The target pose that the end effector did not reach.
     """
 
-    def __post_init__(self):
-        self.message = (
-            f"EndEffector {self.end_effector} did not reach target {self.target}"
-        )
+    def error_message(self) -> str:
+        return f"EndEffector {self.end_effector} did not reach target {self.target}"
+
+    def suggest_correction(self) -> str:
+        return ""

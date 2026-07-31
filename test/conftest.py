@@ -7,6 +7,11 @@ from copy import deepcopy
 import numpy as np
 import objgraph
 import pytest
+from semantic_digital_twin.robots.daisy import DAiSy
+from semantic_digital_twin.spatial_types.derivatives import DerivativeMap
+from semantic_digital_twin.world_description.degree_of_freedom import (
+    DegreeOfFreedomLimits,
+)
 
 try:
     from semantic_digital_twin.robots.garmi import Garmi
@@ -24,7 +29,7 @@ from semantic_digital_twin.collision_checking.collision_matrix import (
 )
 from typing_extensions import Type
 
-from krrood.class_diagrams import ClassDiagram
+from krrood.class_diagrams.class_diagram import ClassDiagram
 from krrood.symbol_graph.symbol_graph import SymbolGraph, Symbol
 from krrood.ontomatic.property_descriptor.attribute_introspector import (
     DescriptorAwareIntrospector,
@@ -55,9 +60,23 @@ from semantic_digital_twin.semantic_annotations.semantic_annotations import (
     Carrot,
     Lettuce,
     Banana,
+    Spoon,
+    Drawer,
+    Handle,
+    Elevator,
+    Slider,
+    Door,
 )
-from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix, Vector3
-from semantic_digital_twin.utils import rclpy_installed, tracy_installed
+from semantic_digital_twin.spatial_types import (
+    HomogeneousTransformationMatrix,
+    Vector3,
+    Point3,
+)
+from semantic_digital_twin.utils import (
+    rclpy_installed,
+    tracy_installed,
+    daisy_installed,
+)
 from semantic_digital_twin.world import World
 from semantic_digital_twin.world_description.connections import (
     OmniDrive,
@@ -155,6 +174,15 @@ def count_worlds():
 #############################################
 ############### Worlds ######################
 #############################################
+
+
+@pytest.fixture()
+def world_with_two_bodies() -> tuple[World, Body, Body]:
+    """A fresh world with an unconnected parent and child body, ready to receive a connection."""
+    world = World()
+    parent = Body(name=PrefixedName("parent"))
+    child = Body(name=PrefixedName("child"))
+    return world, parent, child
 
 
 @pytest.fixture()
@@ -333,6 +361,7 @@ def supported_abstract_robots():
         ICub3,
         UnitreeG1,
         MMPDresden,
+        DAiSy,
         # Garmi, We dont have the ROS Package yet
     ]
 
@@ -375,11 +404,11 @@ def cylinder_bot_diff_world():
 
 
 def world_with_urdf_factory(
-        robot_semantic_annotation: Type[AbstractRobot],
-        drive_connection_type: Type[OmniDrive | DifferentialDrive],
-        robot_starting_pose: HomogeneousTransformationMatrix | None = None,
-        urdf_path_resolver: PathResolver | None = None,
-        robot_localization_pose: HomogeneousTransformationMatrix | None = None,
+    robot_semantic_annotation: Type[AbstractRobot],
+    drive_connection_type: Type[OmniDrive | DifferentialDrive],
+    robot_starting_pose: HomogeneousTransformationMatrix | None = None,
+    urdf_path_resolver: PathResolver | None = None,
+    robot_localization_pose: HomogeneousTransformationMatrix | None = None,
 ):
     """
     Builds this tree:
@@ -464,6 +493,17 @@ def tracy_world():
 
 
 @pytest.fixture(scope="session")
+def daisy_world():
+    if not daisy_installed():
+        pytest.skip("DAiSy not installed")
+    daisy = "package://iai_daisy_description/robots/daisy.urdf.xacro"
+    daisy_parser = URDFParser.from_file(file_path=daisy)
+    world_with_daisy = daisy_parser.parse()
+    DAiSy.from_world(world_with_daisy)
+    return world_with_daisy
+
+
+@pytest.fixture(scope="session")
 def _stretch_world_setup():
     return world_with_urdf_factory(Stretch, DifferentialDrive)
 
@@ -505,6 +545,17 @@ def _apartment_world_setup():
             "breakfast_cereal.stl",
         )
     ).parse()
+    spoon_world = STLParser(
+        os.path.join(
+            os.path.dirname(__file__),
+            "..",
+            "coraplex",
+            "resources",
+            "objects",
+            "spoon.stl",
+        )
+    ).parse()
+
     apartment_world.merge_world_at_pose(
         milk_world,
         HomogeneousTransformationMatrix.from_xyz_rpy(
@@ -517,13 +568,107 @@ def _apartment_world_setup():
             2.37, 2.5, 1.05, reference_frame=apartment_world.root
         ),
     )
-    milk_view = Milk(
-        root=apartment_world.get_body_by_name("milk.stl"), _world=apartment_world
+    apartment_world.merge_world(
+        spoon_world,
+        FixedConnection(
+            parent=apartment_world.get_body_by_name("cabinet10_drawer_top"),
+            child=spoon_world.root,
+            parent_T_connection_expression=HomogeneousTransformationMatrix.from_xyz_rpy(
+                -0.05, -0.05, -0.02
+            ),
+        ),
     )
+
     with apartment_world.modify_world():
-        apartment_world.add_semantic_annotation(milk_view)
+
+        apartment_world.add_semantic_annotations(
+            [
+                Milk(root=apartment_world.get_body_by_name("milk.stl")),
+                Spoon(root=apartment_world.get_body_by_name("spoon.stl")),
+            ]
+        )
+        apartment_world.add_semantic_annotation_recursively(
+            Drawer(
+                root=apartment_world.get_body_by_name("cabinet10_drawer_top"),
+                handle=Handle(root=apartment_world.get_body_by_name("handle_cab10_t")),
+            )
+        )
 
     return apartment_world
+
+
+@pytest.fixture(scope="session")
+def _elevator_world_setup():
+
+    world = World()
+
+    with world.modify_world():
+        world.add_body(Body(name=PrefixedName("root")))
+
+        wall_thickness = 0.05
+        scale = Scale(1, 1, 1)
+        name = PrefixedName("elevator")
+        elevator = Elevator.create_with_new_body_in_world(
+            name=PrefixedName("Elevator"),
+            world=world,
+            scale=Scale(1, 1, 1),
+            wall_thickness=0.05,
+        )
+
+        vertical_drive = Slider.create_with_new_body_in_world(
+            name=PrefixedName(f"{name.name}_drive", name.prefix),
+            world=world,
+            active_axis=Vector3.Z(),
+        )
+        elevator.add(vertical_drive)
+
+        door_scale = Scale(wall_thickness, scale.y / 2, scale.z)
+        door1 = Door.create_with_new_body_in_world(
+            name=PrefixedName(f"{name.name}_door0", name.prefix),
+            world=world,
+            world_root_T_self=HomogeneousTransformationMatrix.from_point_rotation_matrix(
+                Point3(-scale.x / 2, -scale.y / 4, 0),
+                reference_frame=world.root,
+            ),
+            scale=door_scale,
+        )
+        door2 = Door.create_with_new_body_in_world(
+            name=PrefixedName(f"{name.name}_door1", name.prefix),
+            world=world,
+            world_root_T_self=HomogeneousTransformationMatrix.from_point_rotation_matrix(
+                Point3(-scale.x / 2, scale.y / 4, 0),
+                reference_frame=world.root,
+            ),
+            scale=door_scale,
+        )
+
+        elevator.add(door1)
+        elevator.add(door2)
+
+        door_travel = door_scale.y
+        door_slider_configs = (
+            (
+                door1,
+                DerivativeMap(position=0.0),
+                DerivativeMap(position=door_travel),
+            ),
+            (
+                door2,
+                DerivativeMap(position=0.0),
+                DerivativeMap(position=door_travel),
+            ),
+        )
+        for i, (current_door, lower, upper) in enumerate(door_slider_configs):
+            door_slider = Slider.create_with_new_body_in_world(
+                name=PrefixedName(f"{name.name}_door{i}_drive", name.prefix),
+                world=world,
+                active_axis=(Vector3.Y() * ((-1) ** (i + 1))),
+                connection_limits=DegreeOfFreedomLimits(lower=lower, upper=upper),
+            )
+            current_door.add(door_slider)
+
+        world.add_semantic_annotation(elevator)
+    return world
 
 
 @pytest.fixture(scope="function")

@@ -2,7 +2,7 @@ import os
 
 import pytest
 
-from krrood.class_diagrams import ClassDiagram
+from krrood.class_diagrams.class_diagram import ClassDiagram
 from krrood.symbol_graph.symbol_graph import SymbolGraph, Symbol
 from krrood.ontomatic.property_descriptor.attribute_introspector import (
     DescriptorAwareIntrospector,
@@ -16,13 +16,19 @@ from pathlib import Path
 
 
 def pytest_configure(config):
-    # Ensure ORM classes are generated before tests run
-    repo_root = Path(__file__).resolve().parents[2]
-    generate_orm_path = (
-        repo_root / "semantic_digital_twin" / "scripts" / "generate_orm.py"
-    )
-    # Execute the ORM generation script as a standalone module
-    runpy.run_path(str(generate_orm_path), run_name="__main__")
+
+    worker = os.environ.get("PYTEST_XDIST_WORKER")
+
+    if not worker:
+        # Ensure ORM classes are generated before tests run
+        repo_root = Path(__file__).resolve().parents[2]
+        generate_orm_path = (
+            repo_root / "semantic_digital_twin" / "scripts" / "generate_orm.py"
+        )
+        # Execute the ORM generation script as a standalone module
+        runpy.run_path(str(generate_orm_path), run_name="__main__")
+    # Build the symbol graph
+    SymbolGraph.clear()
     class_diagram = ClassDiagram(
         recursive_subclasses(Symbol) + [World],
         introspector=DescriptorAwareIntrospector(),
