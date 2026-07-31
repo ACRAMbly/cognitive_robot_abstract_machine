@@ -46,6 +46,7 @@ from semantic_digital_twin.world_description.connections import (
     Connection6DoF,
     PrismaticConnection,
     RevoluteConnection,
+    ScrewConnection,
 )
 from semantic_digital_twin.world_description.degree_of_freedom import (
     DegreeOfFreedomLimits,
@@ -347,6 +348,26 @@ class RevoluteConnectionSpecification(
 
     Use this for a single rotational degree of freedom about the connection axis, such
     as a door swinging on its hinge.
+    """
+
+
+@dataclass
+class ScrewConnectionSpecification(ActiveConnection1DOFSpecification[ScrewConnection]):
+    """
+    Declares a
+    :class:`~semantic_digital_twin.world_description.connections.ScrewConnection`.
+
+    Use this where rotation about the connection axis and translation along it are
+    coupled into a single degree of freedom, such as the thread between a bottle and its
+    cap.
+    """
+
+    screw_pitch: float = field(kw_only=True)
+    """
+    The distance between adjacent threads along the connection axis in meters.
+
+    Mandatory: a thread without a pitch couples no translation to its rotation, so it
+    cannot be constructed.
     """
 
 

@@ -17,6 +17,7 @@ from semantic_digital_twin.api import (
     Connection6DoFSpecification,
     PrismaticConnectionSpecification,
     RevoluteConnectionSpecification,
+    ScrewConnectionSpecification,
     SemanticAnnotationWithRootSpecification,
     RobotSpecification,
     WorldSpecification,
@@ -42,6 +43,7 @@ from semantic_digital_twin.semantic_annotations.semantic_annotations import (
     Slider,
     Handle,
     Hinge,
+    ScrewMechanism,
     Door,
     Floor,
     Wall,
@@ -69,6 +71,7 @@ from semantic_digital_twin.world_description.connections import (
     FixedConnection,
     PrismaticConnection,
     RevoluteConnection,
+    ScrewConnection,
     Connection6DoF,
     OmniDrive,
 )
@@ -669,6 +672,8 @@ def _build_connection_specification(
     """
     Build a specification, supplying the parameters its own family requires.
     """
+    if issubclass(specification_type, ScrewConnectionSpecification):
+        return specification_type(axis=Vector3.Z(), screw_pitch=0.005)
     if issubclass(specification_type, ActiveConnection1DOFSpecification):
         return specification_type(axis=Vector3.Z())
     return specification_type()
@@ -720,6 +725,15 @@ def test_connection_spec_connect_active_forwards_kwargs(empty_world):
     assert isinstance(connection, PrismaticConnection)
     assert connection.dof.limits.upper.velocity == 1.5
     assert connection.dof.limits.lower.velocity == -1.5
+
+
+def test_screw_connection_spec_connect_forwards_pitch(empty_world):
+    child = BodySpecification.box("cap", Scale(1, 1, 1)).to_domain_object()
+    connection = ScrewConnectionSpecification(
+        axis=Vector3.Z(), screw_pitch=0.005
+    ).connect(empty_world, child=child)
+    assert isinstance(connection, ScrewConnection)
+    assert connection.screw_pitch == 0.005
 
 
 def test_connection_spec_connect_applies_pose(empty_world):
@@ -779,6 +793,7 @@ def test_connection_spec_connect_without_name_matches_direct_creation(empty_worl
         (Milk, FixedConnectionSpecification),
         (Slider, PrismaticConnectionSpecification),
         (Hinge, RevoluteConnectionSpecification),
+        (ScrewMechanism, ScrewConnectionSpecification),
     ],
 )
 def test_annotation_declares_parent_connection_specification_type(
@@ -787,6 +802,19 @@ def test_annotation_declares_parent_connection_specification_type(
     assert isinstance(
         annotation_type.parent_connection_specification(), expected_specification_type
     )
+
+
+def test_screw_mechanism_pitch_reads_back_from_its_connection(empty_world):
+    # The pitch is stored only on the connection, so the annotation must report the
+    # value the connection it was spawned with actually carries.
+    screw_mechanism = ScrewMechanism.create_with_new_body_in_world(
+        name="screw_mechanism",
+        world=empty_world,
+        parent_connection_specification=ScrewMechanism.parent_connection_specification(
+            screw_pitch=0.005
+        ),
+    )
+    assert screw_mechanism.screw_pitch == 0.005
 
 
 def test_parent_connection_specification_is_built_per_call():

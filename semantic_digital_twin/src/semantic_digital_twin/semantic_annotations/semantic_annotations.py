@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from typing import Iterable, Optional, Self, Tuple, TYPE_CHECKING, Union
 
 import numpy as np
-from typing_extensions import List, Type
+from typing_extensions import List
 
 from krrood.ormatic.utils import classproperty
 from krrood.symbolic_math import symbolic_math
@@ -66,6 +66,7 @@ from semantic_digital_twin.api import (
     PrismaticConnectionSpecification,
     RegionSpecification,
     RevoluteConnectionSpecification,
+    ScrewConnectionSpecification,
     SemanticAnnotationWithRootSpecification,
 )
 
@@ -358,6 +359,51 @@ class Slider(MechanicalJoint):
             offset=offset,
             dof_limits=dof_limits,
         )
+
+
+@dataclass(eq=False)
+class ScrewMechanism(MechanicalJoint):
+    """
+    A screw joint is a physical entity that connects two bodies and couples rotation
+    about a fixed axis with translation along that axis into a single degree of freedom,
+    like the thread between a bottle and its cap.
+    """
+
+    @classmethod
+    def parent_connection_specification(
+        cls,
+        axis: Optional[Vector3] = None,
+        multiplier: float = 1.0,
+        offset: float = 0.0,
+        dof_limits: Optional[DegreeOfFreedomLimits] = None,
+        screw_pitch: float = 0.001,
+    ) -> ScrewConnectionSpecification:
+        """
+        Build the screw connection a screw mechanism moves along.
+
+        :param axis: Thread axis. Defaults to the z axis.
+        :param multiplier: Scaling factor applied to the degree of freedom's motion.
+        :param offset: Constant offset applied to the degree of freedom's motion.
+        :param dof_limits: Limits for the generated degree of freedom.
+        :param screw_pitch: The distance between adjacent threads along ``axis`` in
+            meters.
+        :return: The screw connection specification.
+        """
+        return ScrewConnectionSpecification(
+            axis=axis if axis is not None else Vector3.Z(),
+            multiplier=multiplier,
+            offset=offset,
+            dof_limits=dof_limits,
+            screw_pitch=screw_pitch,
+        )
+
+    @property
+    def screw_pitch(self) -> float:
+        """
+        The distance between adjacent threads along the thread axis in meters, read from
+        the screw connection this mechanism moves along.
+        """
+        return self.root.parent_connection.screw_pitch
 
 
 @dataclass(eq=False)
@@ -1348,9 +1394,9 @@ class Baseball(HasRootBody):
 
 
 @dataclass(eq=False)
-class LiquidCap(HasRootBody):
+class BottleCap(HasMechanicalJoint):
     """
-    A liquid cap.
+    A cap that closes a bottle, typically mounted on a screw joint.
     """
 
 

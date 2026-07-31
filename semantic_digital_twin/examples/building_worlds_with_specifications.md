@@ -276,11 +276,14 @@ parameters that family needs:
 | `Connection6DoFSpecification` | `Connection6DoF` | A free-floating object that may move and rotate freely |
 | `PrismaticConnectionSpecification` | `PrismaticConnection` | One translational DoF (a sliding drawer) |
 | `RevoluteConnectionSpecification` | `RevoluteConnection` | One rotational DoF (a swinging door) |
+| `ScrewConnectionSpecification` | `ScrewConnection` | One DoF coupling rotation and translation (a bottle cap on its thread) |
 
 Every entity specification carries an optional `connection_specification`; when it is left unset,
 `spawn` attaches the entity with a fixed connection. Set it to give the entity a degree of freedom.
-The active families (`Prismatic`/`Revolute`) require a movement `axis`, and optionally accept a
-`multiplier`, an `offset`, and `dof_limits`.
+The active families (`Prismatic`/`Revolute`/`Screw`) require a movement `axis`, and optionally accept a
+`multiplier`, an `offset`, and `dof_limits`. A `ScrewConnectionSpecification` additionally requires a
+`screw_pitch`: the distance between adjacent threads along the axis, which is what couples its
+rotation to its translation.
 
 ```{code-cell} ipython3
 from semantic_digital_twin.api import PrismaticConnectionSpecification
