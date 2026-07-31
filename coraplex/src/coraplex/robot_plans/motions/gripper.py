@@ -32,13 +32,18 @@ from coraplex.utils import translate_pose_along_local_axis
 
 TOOL_ORIENTATION_THRESHOLD = 0.02
 """
-Orientation tolerance in rad (~1.1 degrees) for tool-center-point poses.
+Default orientation tolerance in rad for tool-center-point poses.
 
-The position ``threshold`` of 0.005 doubles as a rotation tolerance in
-:class:`~giskardpy.motion_statechart.tasks.cartesian_tasks.CartesianPose` unless
-overridden -- 0.005 rad (0.29 degrees) is unreachable for a physically simulated arm,
-whose PD-tracked joints settle with a residual orientation error of ~0.008 rad, so such
-a task never registers as done and stalls the rest of the plan behind it.
+.. note:: A physically simulated arm's PD-tracked joints settle with a small residual
+    orientation error, so reusing the (much tighter) position tolerance as the
+    rotation tolerance can leave the task perpetually unfinished, stalling the rest of
+    the plan behind it.
+"""
+
+DEFAULT_TCP_POSITION_THRESHOLD = 0.005
+"""
+Default position tolerance in meters for tool-center-point poses, tighter than
+Giskard's own task default so an approach doesn't stop short of a small object.
 """
 
 
@@ -68,6 +73,16 @@ class ReachMotion(BaseMotion):
     reverse_pose_sequence: bool = False
     """
     Reverses the sequence of poses, i.e., moves away from the object instead of towards it. Used for placing objects.
+    """
+
+    position_threshold: float = DEFAULT_TCP_POSITION_THRESHOLD
+    """
+    Distance threshold in meters for goal achievement.
+    """
+
+    orientation_threshold: float = TOOL_ORIENTATION_THRESHOLD
+    """
+    Rotation threshold in rad for goal achievement.
     """
 
     def _calculate_pose_sequence(self) -> List[Pose]:
@@ -104,8 +119,8 @@ class ReachMotion(BaseMotion):
                 root_link=self.robot_view.root,
                 tip_link=tip,
                 goal_pose=pose,
-                threshold=0.005,
-                orientation_threshold=TOOL_ORIENTATION_THRESHOLD,
+                threshold=self.position_threshold,
+                orientation_threshold=self.orientation_threshold,
                 name="Reach",
             )
             for pose in self._calculate_pose_sequence()
@@ -231,6 +246,17 @@ class MoveToolCenterPointMotion(BaseMotion):
     keeps the default velocity.
     """
 
+    position_threshold: float = DEFAULT_TCP_POSITION_THRESHOLD
+    """
+    Distance threshold in meters for goal achievement.
+    """
+
+    orientation_threshold: float = TOOL_ORIENTATION_THRESHOLD
+    """
+    Rotation threshold in rad for goal achievement, used only for
+    :class:`~giskardpy.motion_statechart.tasks.cartesian_tasks.CartesianPose`.
+    """
+
     def perform(self):
         return
 
@@ -254,7 +280,7 @@ class MoveToolCenterPointMotion(BaseMotion):
                 goal_point=self.target.to_position(),
                 name="MoveTCP",
                 weight=DefaultWeights.WEIGHT_BELOW_COLLISION_AVOIDANCE,
-                threshold=0.005,
+                threshold=self.position_threshold,
                 **keyword_arguments,
             )
         else:
@@ -273,8 +299,8 @@ class MoveToolCenterPointMotion(BaseMotion):
                 goal_pose=self.target,
                 name="MoveTCP",
                 weight=DefaultWeights.WEIGHT_BELOW_COLLISION_AVOIDANCE,
-                threshold=0.005,
-                orientation_threshold=TOOL_ORIENTATION_THRESHOLD,
+                threshold=self.position_threshold,
+                orientation_threshold=self.orientation_threshold,
                 **keyword_arguments,
             )
         return task
@@ -452,6 +478,16 @@ class MoveManipulatorMotion(BaseMotion):
     If the gripper can collide with something
     """
 
+    position_threshold: float = DEFAULT_TCP_POSITION_THRESHOLD
+    """
+    Distance threshold in meters for goal achievement.
+    """
+
+    orientation_threshold: float = TOOL_ORIENTATION_THRESHOLD
+    """
+    Rotation threshold in rad for goal achievement.
+    """
+
     @property
     def _motion_chart(self):
         robot = self.robot
@@ -465,8 +501,8 @@ class MoveManipulatorMotion(BaseMotion):
             root_link=root,
             tip_link=self.end_effector.tool_frame,
             goal_pose=self.target,
-            threshold=0.005,
-            orientation_threshold=TOOL_ORIENTATION_THRESHOLD,
+            threshold=self.position_threshold,
+            orientation_threshold=self.orientation_threshold,
             binding_policy=GoalBindingPolicy.Bind_on_start,
             name=self.__class__.__name__,
         )

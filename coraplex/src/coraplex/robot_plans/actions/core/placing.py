@@ -35,7 +35,7 @@ from coraplex.robot_plans.motions.gripper import (
 from coraplex.view_manager import ViewManager
 from semantic_digital_twin.datastructures.definitions import GripperState
 from semantic_digital_twin.reasoning.predicates import allclose
-from semantic_digital_twin.reasoning.robot_predicates import is_body_in_gripper
+from semantic_digital_twin.reasoning.robot_predicates import is_body_gripped
 from semantic_digital_twin.spatial_types.spatial_types import Pose
 from semantic_digital_twin.world_description.world_entity import Body
 
@@ -43,7 +43,7 @@ GRASP_RELEASE_THRESHOLD: float = 0.1
 """
 Maximum fraction of sampled rays between the gripper's fingers that may still hit the
 object for it to be considered released (see
-:func:`~semantic_digital_twin.reasoning.robot_predicates.is_body_in_gripper`).
+:func:`~semantic_digital_twin.reasoning.robot_predicates.is_body_gripped`).
 """
 
 
@@ -96,6 +96,20 @@ class PlaceAction(ActionDescription):
     How many times to (re-)issue the OPEN motion, checking afterwards whether the
     object is released, before retracting regardless. ``None`` keeps the original
     single-attempt behaviour.
+    """
+
+    grasp_detection_threshold: float = GRASP_DETECTION_THRESHOLD
+    """
+    Minimum fraction of sampled rays between the gripper's fingers that must hit
+    :attr:`object_designator` for it to still count as held (see
+    :func:`~semantic_digital_twin.reasoning.robot_predicates.is_body_gripped`).
+    """
+
+    grasp_release_threshold: float = GRASP_RELEASE_THRESHOLD
+    """
+    Maximum fraction of sampled rays between the gripper's fingers that may still hit
+    :attr:`object_designator` for it to count as released (see
+    :func:`~semantic_digital_twin.reasoning.robot_predicates.is_body_gripped`).
     """
 
     def _previous_grasp(self) -> GraspDescription:
@@ -164,12 +178,11 @@ class PlaceAction(ActionDescription):
     def _object_released(self) -> bool:
         """
         :return: Whether :attr:`object_designator` is no longer detected between the
-            gripper's fingers (see :data:`GRASP_RELEASE_THRESHOLD`).
+            gripper's fingers (see :attr:`grasp_release_threshold`).
         """
         end_effector = ViewManager.get_end_effector_view(self.arm, self.robot)
-        return not (
-            is_body_in_gripper(self.object_designator, end_effector)
-            > GRASP_DETECTION_THRESHOLD
+        return not is_body_gripped(
+            self.object_designator, end_effector, threshold=self.grasp_release_threshold
         )
 
     def execute(self) -> Any:
@@ -231,8 +244,11 @@ class PlaceAction(ActionDescription):
         )
         return or_(
             not_(GripperIsFree(end_effector)),
-            is_body_in_gripper(variable_from(kwargs["object_designator"]), end_effector)
-            > GRASP_DETECTION_THRESHOLD,
+            is_body_gripped(
+                variable_from(kwargs["object_designator"]),
+                end_effector,
+                threshold=kwargs["grasp_detection_threshold"],
+            ),
         )
 
     @staticmethod
@@ -248,8 +264,13 @@ class PlaceAction(ActionDescription):
         )
         return and_(
             GripperIsFree(end_effector),
-            is_body_in_gripper(variable_from(kwargs["object_designator"]), end_effector)
-            < GRASP_RELEASE_THRESHOLD,
+            not_(
+                is_body_gripped(
+                    variable_from(kwargs["object_designator"]),
+                    end_effector,
+                    threshold=kwargs["grasp_release_threshold"],
+                )
+            ),
             allclose(
                 variable_from(kwargs["object_designator"]).global_pose,
                 kwargs["target_location"],

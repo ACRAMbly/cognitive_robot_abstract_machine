@@ -33,7 +33,7 @@ from coraplex.robot_plans.motions.gripper import (
 from coraplex.view_manager import ViewManager
 from semantic_digital_twin.datastructures.definitions import GripperState
 from semantic_digital_twin.reasoning.predicates import allclose
-from semantic_digital_twin.reasoning.robot_predicates import is_body_in_gripper
+from semantic_digital_twin.reasoning.robot_predicates import is_body_gripped
 from semantic_digital_twin.robots.robot_part_mixins import HasMobileBase
 from semantic_digital_twin.spatial_types.spatial_types import Pose
 from semantic_digital_twin.world_description.world_entity import Body
@@ -44,7 +44,7 @@ GRASP_DETECTION_THRESHOLD: float = 0.9
 """
 Minimum fraction of sampled rays between the gripper's fingers that must hit an object
 for it to be considered grasped/held (see
-:func:`~semantic_digital_twin.reasoning.robot_predicates.is_body_in_gripper`).
+:func:`~semantic_digital_twin.reasoning.robot_predicates.is_body_gripped`).
 """
 
 
@@ -95,6 +95,13 @@ class ReachAction(ActionDescription):
     """
     Whether to open the gripper once the pre-pose is reached, used by
     :class:`PickUpAction` to open before its slower final approach.
+    """
+
+    grasp_detection_threshold: float = GRASP_DETECTION_THRESHOLD
+    """
+    Minimum fraction of sampled rays between the gripper's fingers that must hit
+    :attr:`object_designator` for it to count as reached (see
+    :func:`~semantic_digital_twin.reasoning.robot_predicates.is_body_gripped`).
     """
 
     @property
@@ -160,8 +167,11 @@ class ReachAction(ActionDescription):
         """
         end_effector = ViewManager.get_end_effector_view(kwargs["arm"], context.robot)
         return or_(
-            is_body_in_gripper(variable_from(kwargs["object_designator"]), end_effector)
-            > GRASP_DETECTION_THRESHOLD,
+            is_body_gripped(
+                variable_from(kwargs["object_designator"]),
+                end_effector,
+                threshold=kwargs["grasp_detection_threshold"],
+            ),
             allclose(
                 variable_from(kwargs["object_designator"]).global_pose.to_position(),
                 variable_from(end_effector.tool_frame).global_pose.to_position(),
@@ -240,9 +250,16 @@ class PickUpAction(ActionDescription):
     max_grasp_attempts: Optional[int] = None
     """
     How many times to attempt reach and close before giving up, each verified via
-    :func:`~semantic_digital_twin.reasoning.robot_predicates.is_body_in_gripper`. ``None``
+    :func:`~semantic_digital_twin.reasoning.robot_predicates.is_body_gripped`. ``None``
     keeps the original single-attempt behaviour, raising
     :class:`~coraplex.exceptions.GraspVerificationFailed` immediately on failure.
+    """
+
+    grasp_detection_threshold: float = GRASP_DETECTION_THRESHOLD
+    """
+    Minimum fraction of sampled rays between the gripper's fingers that must hit
+    :attr:`object_designator` for it to count as grasped (see
+    :func:`~semantic_digital_twin.reasoning.robot_predicates.is_body_gripped`).
     """
 
     def _grasp_attempt_plan(self) -> PlanNode:
@@ -297,12 +314,13 @@ class PickUpAction(ActionDescription):
     def _grasp_succeeded(self) -> bool:
         """
         :return: Whether :attr:`object_designator` is currently detected between the
-            gripper's fingers (see :data:`GRASP_DETECTION_THRESHOLD`).
+            gripper's fingers (see :attr:`grasp_detection_threshold`).
         """
         end_effector = ViewManager.get_end_effector_view(self.arm, self.robot)
-        return (
-            is_body_in_gripper(self.object_designator, end_effector)
-            > GRASP_DETECTION_THRESHOLD
+        return is_body_gripped(
+            self.object_designator,
+            end_effector,
+            threshold=self.grasp_detection_threshold,
         )
 
     def execute(self) -> Any:
@@ -390,8 +408,11 @@ class PickUpAction(ActionDescription):
         )
         return or_(
             not_(GripperIsFree(end_effector)),
-            is_body_in_gripper(variable_from(kwargs["object_designator"]), end_effector)
-            > GRASP_DETECTION_THRESHOLD,
+            is_body_gripped(
+                variable_from(kwargs["object_designator"]),
+                end_effector,
+                threshold=kwargs["grasp_detection_threshold"],
+            ),
         )
 
 

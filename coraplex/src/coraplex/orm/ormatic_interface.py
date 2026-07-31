@@ -5641,6 +5641,9 @@ class PickUpActionDAO(
     max_grasp_attempts: Mapped[typing.Optional[builtins.int]] = mapped_column(
         use_existing_column=True
     )
+    grasp_detection_threshold: Mapped[builtins.float] = mapped_column(
+        use_existing_column=True
+    )
 
     arm: Mapped[coraplex.datastructures.enums.Arms] = mapped_column(
         krrood.ormatic.custom_types.PolymorphicEnumType,
@@ -5696,6 +5699,9 @@ class ReachActionDAO(
         mapped_column(use_existing_column=True)
     )
     open_gripper_at_pre_pose: Mapped[builtins.bool] = mapped_column(
+        use_existing_column=True
+    )
+    grasp_detection_threshold: Mapped[builtins.float] = mapped_column(
         use_existing_column=True
     )
 
@@ -5766,6 +5772,12 @@ class PlaceActionDAO(
         use_existing_column=True
     )
     max_release_attempts: Mapped[typing.Optional[builtins.int]] = mapped_column(
+        use_existing_column=True
+    )
+    grasp_detection_threshold: Mapped[builtins.float] = mapped_column(
+        use_existing_column=True
+    )
+    grasp_release_threshold: Mapped[builtins.float] = mapped_column(
         use_existing_column=True
     )
 
@@ -6196,6 +6208,10 @@ class MoveManipulatorMotionDAO(
     allow_gripper_collision: Mapped[builtins.bool] = mapped_column(
         use_existing_column=True
     )
+    position_threshold: Mapped[builtins.float] = mapped_column(use_existing_column=True)
+    orientation_threshold: Mapped[builtins.float] = mapped_column(
+        use_existing_column=True
+    )
 
     target_id: Mapped[int] = mapped_column(
         ForeignKey("PoseMappingDAO.database_id", use_alter=True),
@@ -6351,6 +6367,10 @@ class MoveToolCenterPointMotionDAO(
     reference_angular_velocity: Mapped[typing.Optional[builtins.float]] = mapped_column(
         use_existing_column=True
     )
+    position_threshold: Mapped[builtins.float] = mapped_column(use_existing_column=True)
+    orientation_threshold: Mapped[builtins.float] = mapped_column(
+        use_existing_column=True
+    )
 
     arm: Mapped[coraplex.datastructures.enums.Arms] = mapped_column(
         krrood.ormatic.custom_types.PolymorphicEnumType,
@@ -6415,6 +6435,10 @@ class ReachMotionDAO(
     )
 
     reverse_pose_sequence: Mapped[builtins.bool] = mapped_column(
+        use_existing_column=True
+    )
+    position_threshold: Mapped[builtins.float] = mapped_column(use_existing_column=True)
+    orientation_threshold: Mapped[builtins.float] = mapped_column(
         use_existing_column=True
     )
 

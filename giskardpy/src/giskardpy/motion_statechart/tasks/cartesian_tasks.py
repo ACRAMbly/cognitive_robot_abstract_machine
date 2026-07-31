@@ -606,9 +606,9 @@ class CartesianPose(CartesianTask):
     Separate tolerance for the orientation error in rad; falls back to ``threshold``
     when ``None``.
 
-    ..note:: A physically tracked arm settles with a residual orientation error, so a
-        rotation tolerance as tight as a position tolerance in meters (e.g. 0.005 rad =
-        0.29 degrees) may never be reached.
+    ..note:: A physically tracked arm settles with a residual orientation error, so
+        reusing a position tolerance meant for meters as a rotation tolerance in
+        radians may never be reached.
     """
 
     @property

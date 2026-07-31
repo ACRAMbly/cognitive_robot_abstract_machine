@@ -21,7 +21,10 @@ from coraplex.robot_plans.actions.core.navigation import NavigateAction
 from coraplex.robot_plans.actions.core.pick_up import PickUpAction, ReachAction
 from coraplex.robot_plans.actions.core.placing import PlaceAction
 from coraplex.robot_plans.actions.core.robot_body import MoveTorsoAction
-from coraplex.robot_plans.motions.gripper import MoveGripperMotion
+from coraplex.robot_plans.motions.gripper import (
+    DEFAULT_TCP_POSITION_THRESHOLD,
+    MoveGripperMotion,
+)
 from semantic_digital_twin.datastructures.definitions import GripperState, TorsoState
 from semantic_digital_twin.robots.pr2 import PR2
 from semantic_digital_twin.spatial_types import Point3, Quaternion
@@ -117,13 +120,13 @@ def test_move_tool_center_point_motion_uses_tight_threshold(immutable_model_worl
     )
     execute_single(cartesian_motion, context=context)
     assert isinstance(cartesian_motion.motion_chart, CartesianPose)
-    assert cartesian_motion.motion_chart.threshold == 0.005
+    assert cartesian_motion.motion_chart.threshold == DEFAULT_TCP_POSITION_THRESHOLD
 
     translation_motion = MoveToolCenterPointMotion(
         target, Arms.LEFT, movement_type=MovementType.TRANSLATION
     )
     execute_single(translation_motion, context=context)
-    assert translation_motion.motion_chart.threshold == 0.005
+    assert translation_motion.motion_chart.threshold == DEFAULT_TCP_POSITION_THRESHOLD
 
 
 def test_move_gripper_motion_tolerate_stall_defaults_to_false(immutable_model_world):
