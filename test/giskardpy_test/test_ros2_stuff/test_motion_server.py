@@ -324,6 +324,22 @@ class RecordingPlotter(PostGoalPlotter):
         self.plotted_goal_ids.append(goal_id)
 
 
+@dataclass
+class FailingPlotter(PostGoalPlotter):
+    """
+    Fails while drawing its plot, standing in for a broken plotting backend.
+    """
+
+    def plot(self, goal_id: int) -> None:
+        raise BrokenPlotError()
+
+
+class BrokenPlotError(Exception):
+    """
+    Raised by :class:`FailingPlotter`.
+    """
+
+
 # %% fixtures
 
 
@@ -554,6 +570,52 @@ class TestCleanupAfterGoal:
         motion_server.motion_server.run_idle_cycle()
 
         assert len(motion_server.action_server.feedback_messages) > 0
+
+    def test_a_failing_plotter_still_answers_the_client(
+        self, motion_server: MotionServerFixture
+    ):
+        motion_server.motion_server.post_goal_plotters = [
+            FailingPlotter(executor=motion_server.executor)
+        ]
+        motion_server.action_server.goal_json = create_goal_json()
+
+        motion_server.motion_server.run_idle_cycle()
+
+        assert len(motion_server.action_server.sent_results) == 1
+
+    def test_a_failing_plotter_keeps_the_server_taking_goals(
+        self, motion_server: MotionServerFixture
+    ):
+        """
+        A debug plot is a diagnostic, so it may never escape the idle cycle: an
+        exception here would end the loop that serves goals and leave every later client
+        waiting forever.
+        """
+        motion_server.motion_server.post_goal_plotters = [
+            FailingPlotter(executor=motion_server.executor)
+        ]
+        motion_server.action_server.goal_json = create_goal_json()
+        motion_server.motion_server.run_idle_cycle()
+
+        motion_server.action_server.goal_json = create_goal_json()
+        motion_server.motion_server.run_idle_cycle()
+
+        assert len(motion_server.action_server.sent_results) == 2
+
+    def test_a_failing_plotter_does_not_stop_the_remaining_plotters(
+        self, motion_server: MotionServerFixture
+    ):
+        motion_server.motion_server.post_goal_plotters = [
+            FailingPlotter(executor=motion_server.executor),
+            motion_server.plotter,
+        ]
+        motion_server.action_server.goal_json = create_goal_json()
+
+        motion_server.motion_server.run_idle_cycle()
+
+        assert motion_server.plotter.plotted_goal_ids == [
+            motion_server.action_server.goal_id
+        ]
 
 
 # %% control loop

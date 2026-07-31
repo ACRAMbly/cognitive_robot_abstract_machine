@@ -1,4 +1,3 @@
-from dataclasses import field
 from typing import Optional
 
 from giskardpy.middleware.ros2.robot_interface_config import (
@@ -12,6 +11,9 @@ from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 
 
 class DAiSyVelocityInterface(RobotInterfaceConfig):
+    """
+    Commands both arms of DAiSy through their forward velocity controllers.
+    """
 
     def setup(self):
         self.sync_joint_state_topic("/joint_states")
@@ -42,11 +44,8 @@ class DAiSyVelocityInterface(RobotInterfaceConfig):
 
 
 class WorldWithDaisyConfig(WorldWithFixedRobot):
-    """Minimal Tracy world config analogous to WorldWithPR2Config.
-
-    - Fixed-base robot (no drive joint)
-    - Accepts URDF via argument; if not provided, reads from ROS parameter server
-    - Applies conservative default motion limits
+    """
+    A world containing only DAiSy, whose base is fixed to the world root.
     """
 
     def __init__(self, urdf: Optional[str] = None):
@@ -60,6 +59,10 @@ class WorldWithDaisyConfig(WorldWithFixedRobot):
 
 
 class DaisyStandAloneRobotInterfaceConfig(StandAloneRobotInterfaceConfig):
+    """
+    Simulates both arms and both grippers of DAiSy without talking to hardware.
+    """
+
     def __init__(self):
         super().__init__(
             [

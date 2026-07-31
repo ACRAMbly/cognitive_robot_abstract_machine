@@ -5,7 +5,6 @@ from time import sleep
 from typing import Tuple, Union, Iterable
 
 import numpy as np
-from geometry_msgs.msg import PoseStamped, Point, Quaternion, Pose
 
 import semantic_digital_twin.spatial_types.spatial_types as cas
 from giskardpy.middleware.ros2.giskard import Giskard
@@ -22,7 +21,7 @@ from semantic_digital_twin.collision_checking.collision_rules import AvoidAllCol
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 from semantic_digital_twin.exceptions import WorldEntityNotFoundError
 from semantic_digital_twin.robots.robot_parts import AbstractRobot
-from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix
+from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix, Quaternion
 from semantic_digital_twin.world import World
 from semantic_digital_twin.world_description.connections import (
     OmniDrive,
@@ -40,78 +39,42 @@ from semantic_digital_twin.world_description.world_entity import (
 )
 
 
+
+
 def compare_poses(
-    actual_pose: Union[cas.HomogeneousTransformationMatrix, Pose],
-    desired_pose: Union[cas.HomogeneousTransformationMatrix, Pose],
-    decimal: int = 2,
+    actual_pose: cas.HomogeneousTransformationMatrix,
+    desired_pose: cas.HomogeneousTransformationMatrix,
+    rtol: float = 1e-2,
 ) -> None:
-    if isinstance(actual_pose, cas.HomogeneousTransformationMatrix):
-        actual_pose = SemDTToRos2Converter.convert(actual_pose).pose
-    if isinstance(desired_pose, cas.HomogeneousTransformationMatrix):
-        desired_pose = SemDTToRos2Converter.convert(desired_pose).pose
     compare_points(
-        actual_point=actual_pose.position,
-        desired_point=desired_pose.position,
-        decimal=decimal,
+        actual_point=actual_pose.to_position(),
+        desired_point=desired_pose.to_position(),
+        rtol=rtol,
     )
     compare_orientations(
-        actual_orientation=actual_pose.orientation,
-        desired_orientation=desired_pose.orientation,
-        decimal=decimal,
+        actual_orientation=actual_pose.to_quaternion(),
+        desired_orientation=desired_pose.to_quaternion(),
+        rtol=rtol,
     )
 
 
 def compare_points(
-    actual_point: Union[cas.Point3, Point],
-    desired_point: Union[cas.Point3, Point],
-    decimal: int = 2,
+    actual_point: cas.Point3,
+    desired_point: cas.Point3,
+    rtol: float = 1e-2,
 ) -> None:
-    if isinstance(actual_point, cas.Point3):
-        actual_point = SemDTToRos2Converter.convert(actual_point).point
-    if isinstance(desired_point, cas.Point3):
-        desired_point = SemDTToRos2Converter.convert(desired_point).point
-    np.testing.assert_almost_equal(actual_point.x, desired_point.x, decimal=decimal)
-    np.testing.assert_almost_equal(actual_point.y, desired_point.y, decimal=decimal)
-    np.testing.assert_almost_equal(actual_point.z, desired_point.z, decimal=decimal)
+    assert np.allclose(actual_point, desired_point, rtol=rtol)
 
 
 def compare_orientations(
-    actual_orientation: Union[Quaternion, np.ndarray],
-    desired_orientation: Union[Quaternion, np.ndarray],
-    decimal: int = 2,
+    actual_orientation: Quaternion,
+    desired_orientation: Quaternion,
+    rtol: float = 1e-2,
 ) -> None:
-    if isinstance(actual_orientation, Quaternion):
-        q1 = np.array(
-            [
-                actual_orientation.x,
-                actual_orientation.y,
-                actual_orientation.z,
-                actual_orientation.w,
-            ]
-        )
-    else:
-        q1 = actual_orientation
-    if isinstance(desired_orientation, Quaternion):
-        q2 = np.array(
-            [
-                desired_orientation.x,
-                desired_orientation.y,
-                desired_orientation.z,
-                desired_orientation.w,
-            ]
-        )
-    else:
-        q2 = desired_orientation
     try:
-        np.testing.assert_almost_equal(q1[0], q2[0], decimal=decimal)
-        np.testing.assert_almost_equal(q1[1], q2[1], decimal=decimal)
-        np.testing.assert_almost_equal(q1[2], q2[2], decimal=decimal)
-        np.testing.assert_almost_equal(q1[3], q2[3], decimal=decimal)
+        assert np.allclose(actual_orientation, desired_orientation, rtol=rtol)
     except:
-        np.testing.assert_almost_equal(q1[0], -q2[0], decimal=decimal)
-        np.testing.assert_almost_equal(q1[1], -q2[1], decimal=decimal)
-        np.testing.assert_almost_equal(q1[2], -q2[2], decimal=decimal)
-        np.testing.assert_almost_equal(q1[3], -q2[3], decimal=decimal)
+        assert np.allclose(actual_orientation, -desired_orientation, rtol=rtol)
 
 
 @dataclass
@@ -222,7 +185,7 @@ class GiskardTester(ABC):
         name: str,
         height: float,
         radius: float,
-        pose: PoseStamped = None,
+        pose: HomogeneousTransformationMatrix = None,
         parent_link: str | PrefixedName | None = None,
     ) -> None:
         if parent_link is None:

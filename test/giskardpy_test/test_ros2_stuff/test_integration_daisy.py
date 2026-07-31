@@ -4,8 +4,7 @@ from time import sleep
 
 import numpy as np
 import pytest
-from geometry_msgs.msg import PoseStamped
-from giskardpy.middleware.ros2.behavior_tree_config import StandAloneBTConfig
+from giskardpy.middleware.ros2.server_config import ExecutionMode, GiskardServerConfig
 from giskardpy.middleware.ros2.giskard import Giskard
 from giskardpy.middleware.ros2.scripts.iai_robots.daisy.configs import (
     WorldWithDaisyConfig,
@@ -27,7 +26,6 @@ from giskardpy.motion_statechart.motion_statechart import (
 from giskardpy.motion_statechart.tasks.cartesian_tasks import CartesianPose
 from giskardpy.motion_statechart.tasks.joint_tasks import JointPositionList, JointState
 from giskardpy.qp.qp_controller_config import QPControllerConfig
-from giskardpy.tree.blackboard_utils import GiskardBlackboard
 from semantic_digital_twin.datastructures.definitions import StaticJointState
 from semantic_digital_twin.robots.daisy import DAiSy
 from semantic_digital_twin.spatial_types import (
@@ -106,22 +104,20 @@ class DAiSyTester(GiskardTester):
         return Giskard(
             world_config=WorldWithDaisyConfig(urdf=robot_desc),
             robot_interface_config=DaisyStandAloneRobotInterfaceConfig(),
-            behavior_tree_config=StandAloneBTConfig(
+            server_config=GiskardServerConfig(
+                execution_mode=ExecutionMode.STANDALONE,
                 debug_mode=True,
-                add_debug_marker_publisher=True,
-                add_gantt_chart_plotter=True,
-                add_trajectory_plotter=True,
+                plot_gantt_chart=True,
+                plot_trajectory=True,
             ),
             qp_controller_config=QPControllerConfig.create_with_simulation_defaults(),
         )
 
     @property
     def robot(self) -> DAiSy:
-        return (
-            GiskardBlackboard().executor.context.world.get_semantic_annotations_by_type(
-                DAiSy
-            )[0]
-        )
+        return self.giskard.executor.context.world.get_semantic_annotations_by_type(
+            DAiSy
+        )[0]
 
 
 @pytest.fixture()
@@ -131,7 +127,7 @@ def robot():
         yield c
     finally:
         print("tear down")
-        c.print_stats()
+        c.close()
 
 
 @pytest.fixture()
@@ -169,19 +165,24 @@ class TestJointGoals:
         msc.add_node(EndMotion.when_true(joint_goal))
         giskard.api.execute(msc)
 
-        hand_T_finger_current = giskard.compute_fk_pose(
-            f"{arm}_base_link", f"{arm}_gripper_left_finger_tip_link"
+        base = giskard.world.get_kinematic_structure_entity_by_name(f"{arm}_base_link")
+        finger_tip = giskard.world.get_kinematic_structure_entity_by_name(
+            f"{arm}_gripper_left_finger_tip_link"
         )
-        hand_T_finger_expected = PoseStamped()
-        hand_T_finger_expected.header.frame_id = f"{arm}_base_link"
-        hand_T_finger_expected.pose.position.x = 0.3807
-        hand_T_finger_expected.pose.position.y = 0.1862
-        hand_T_finger_expected.pose.position.z = 0.5557
-        hand_T_finger_expected.pose.orientation.x = 0.8587
-        hand_T_finger_expected.pose.orientation.y = 0.2248
-        hand_T_finger_expected.pose.orientation.z = 0.4539
-        hand_T_finger_expected.pose.orientation.w = -0.0767
-        compare_poses(hand_T_finger_current.pose, hand_T_finger_expected.pose)
+        base_T_finger_current = giskard.world.compute_forward_kinematics(
+            root=base, tip=finger_tip
+        )
+        base_T_finger_expected = HomogeneousTransformationMatrix.from_xyz_quaternion(
+            pos_x=0.3807,
+            pos_y=0.1862,
+            pos_z=0.5557,
+            quat_x=0.8587,
+            quat_y=0.2248,
+            quat_z=0.4539,
+            quat_w=-0.0767,
+            reference_frame=base,
+        )
+        compare_poses(base_T_finger_current, base_T_finger_expected)
 
     @pytest.mark.parametrize(
         "arm",
@@ -209,17 +210,26 @@ class TestJointGoals:
 
         giskard.api.execute(msc)
 
-        base_T_tip = PoseStamped()
-        base_T_tip.header.frame_id = base
-        base_T_tip.pose.position.x = 0.3945
-        base_T_tip.pose.position.y = 0.4690
-        base_T_tip.pose.position.z = 0.6194
-        base_T_tip.pose.orientation.x = -0.1977
-        base_T_tip.pose.orientation.y = 0.6767
-        base_T_tip.pose.orientation.z = 0.6804
-        base_T_tip.pose.orientation.w = 0.1996
-        base_T_tip2 = giskard.compute_fk_pose(base.name.name, tip.name.name)
-        compare_poses(base_T_tip2.pose, base_T_tip.pose)
+        controlled_base = giskard.world.get_kinematic_structure_entity_by_name(
+            f"{arm}_base_link"
+        )
+        controlled_tip = giskard.world.get_kinematic_structure_entity_by_name(
+            f"{arm}_gripper_left_finger_tip_link"
+        )
+        base_T_tip_expected = HomogeneousTransformationMatrix.from_xyz_quaternion(
+            pos_x=0.3945,
+            pos_y=0.4690,
+            pos_z=0.6194,
+            quat_x=-0.1977,
+            quat_y=0.6767,
+            quat_z=0.6804,
+            quat_w=0.1996,
+            reference_frame=controlled_base,
+        )
+        base_T_tip_current = giskard.world.compute_forward_kinematics(
+            root=controlled_base, tip=controlled_tip
+        )
+        compare_poses(base_T_tip_current, base_T_tip_expected)
 
     @pytest.mark.parametrize(
         "arm",

@@ -78,6 +78,7 @@ import giskardpy.middleware.ros2.motion_server
 import giskardpy.middleware.ros2.post_goal_plotters
 import giskardpy.middleware.ros2.python_interface
 import giskardpy.middleware.ros2.qp_data_publisher
+import giskardpy.middleware.ros2.scripts.iai_robots.daisy.configs
 import giskardpy.middleware.ros2.scripts.iai_robots.hsr.configs
 import giskardpy.middleware.ros2.scripts.iai_robots.pr2.configs
 import giskardpy.middleware.ros2.scripts.iai_robots.stretch.configs
@@ -8553,6 +8554,9 @@ class GiskardWrapperNodeDAO(
         sqlalchemy.sql.sqltypes.Text, use_existing_column=True
     )
     avoid_name_conflict: Mapped[builtins.bool] = mapped_column(use_existing_column=True)
+    namespace: Mapped[typing.Optional[builtins.str]] = mapped_column(
+        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
+    )
     use_global_arguments: Mapped[builtins.bool] = mapped_column(
         use_existing_column=True
     )
@@ -8568,6 +8572,16 @@ class GiskardWrapperNodeDAO(
     )
     enable_logger_service: Mapped[builtins.bool] = mapped_column(
         use_existing_column=True
+    )
+
+    context_id: Mapped[typing.Optional[builtins.int]] = mapped_column(
+        ForeignKey("ContextDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
+    )
+
+    context: Mapped[ContextDAO] = relationship(
+        "ContextDAO", uselist=False, foreign_keys=[context_id], post_update=True
     )
 
     __mapper_args__ = {
@@ -8737,6 +8751,10 @@ class GiskardTesterDAO(
         Integer, primary_key=True, use_existing_column=True
     )
 
+    default_env_name: Mapped[typing.Optional[builtins.str]] = mapped_column(
+        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
+    )
+
 
 class IncomingWorldUpdatesDAO(
     Base, DataAccessObject[giskardpy.middleware.ros2.world_updates.IncomingWorldUpdates]
@@ -8752,11 +8770,22 @@ class IncomingWorldUpdatesDAO(
         nullable=True,
         use_existing_column=True,
     )
+    model_reload_synchronizer_id: Mapped[typing.Optional[builtins.int]] = mapped_column(
+        ForeignKey("ModelReloadSynchronizerDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
+    )
 
     world_synchronizer: Mapped[WorldSynchronizerDAO] = relationship(
         "WorldSynchronizerDAO",
         uselist=False,
         foreign_keys=[world_synchronizer_id],
+        post_update=True,
+    )
+    model_reload_synchronizer: Mapped[ModelReloadSynchronizerDAO] = relationship(
+        "ModelReloadSynchronizerDAO",
+        uselist=False,
+        foreign_keys=[model_reload_synchronizer_id],
         post_update=True,
     )
 
@@ -8952,6 +8981,27 @@ class WorldWithFixedRobotDAO(
     __mapper_args__ = {
         "polymorphic_identity": "WorldWithFixedRobotDAO",
         "inherit_condition": database_id == WorldConfigDAO.database_id,
+        "polymorphic_load": "selectin",
+    }
+
+
+class WorldWithDaisyConfigDAO(
+    WorldWithFixedRobotDAO,
+    DataAccessObject[
+        giskardpy.middleware.ros2.scripts.iai_robots.daisy.configs.WorldWithDaisyConfig
+    ],
+):
+    __tablename__ = "WorldWithDaisyConfigDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(WorldWithFixedRobotDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
+    )
+
+    __mapper_args__ = {
+        "polymorphic_identity": "WorldWithDaisyConfigDAO",
+        "inherit_condition": database_id == WorldWithFixedRobotDAO.database_id,
         "polymorphic_load": "selectin",
     }
 

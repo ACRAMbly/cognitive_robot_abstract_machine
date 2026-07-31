@@ -213,8 +213,18 @@ class MotionServer:
     def write_debug_plots(self) -> None:
         """
         Write the configured debug plots of the finished goal.
+
+        A plot is a diagnostic, so a plotter that fails is reported and skipped. Letting
+        it raise would end the loop that serves goals, leaving every later client
+        waiting for a result that no one is going to produce.
         """
         if self.executor.motion_statechart is None:
             return
         for plotter in self.post_goal_plotters:
-            plotter.plot(self.action_server.goal_id)
+            try:
+                plotter.plot(self.action_server.goal_id)
+            except Exception:
+                rospy.node.get_logger().error(
+                    f"{type(plotter).__name__} failed to plot goal "
+                    f"#{self.action_server.goal_id}:\n{traceback.format_exc()}"
+                )
