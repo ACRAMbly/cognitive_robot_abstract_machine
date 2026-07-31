@@ -6,7 +6,6 @@ with no hardware, which is the closest offline proxy for whether a goal the demo
 will actually be reached on the robot.
 """
 
-
 import numpy as np
 import pytest
 
@@ -146,4 +145,3 @@ def test_local_minimum_ends_a_motion(giskard: StretchTester):
     np.testing.assert_allclose(
         height_after - height_before, LIFT_GOAL_HEIGHT - LIFT_SEED_HEIGHT, atol=5e-2
     )
-

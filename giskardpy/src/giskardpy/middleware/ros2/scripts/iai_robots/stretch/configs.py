@@ -58,6 +58,29 @@ class StretchStandaloneInterface(StandAloneRobotInterfaceConfig):
 
 
 class StretchVelocityInterface(RobotInterfaceConfig):
+    """
+    Interface for the real robot, driving it through velocity commands and reading its
+    state back from the hardware's own topics.
+    """
+
+    def velocity_controlled_joint_names(self) -> List[str]:
+        """
+        The joints driven by the velocity group controller.
+
+        Their order matches the controller's command layout, so it is significant.
+        """
+        return [
+            "joint_arm_l0",
+            "joint_lift",
+            "joint_wrist_yaw",
+            "joint_wrist_pitch",
+            "joint_wrist_roll",
+            "joint_head_pan",
+            "joint_head_tilt",
+            "joint_gripper_finger_left",
+            "joint_right_wheel",
+            "joint_left_wheel",
+        ]
 
     def setup(self):
         self.sync_6dof_joint_with_tf_frame(
@@ -75,21 +98,9 @@ class StretchVelocityInterface(RobotInterfaceConfig):
         self.add_base_cmd_velocity(cmd_vel_topic="/stretch/cmd_vel", joint=diff_drive)
 
         self.sync_joint_state_topic("/joint_states")
-        joints = [
-            "joint_arm_l0",  # 0
-            "joint_lift",  # 1
-            "joint_wrist_yaw",  # 2
-            "joint_wrist_pitch",  # 3
-            "joint_wrist_roll",  # 4
-            "joint_head_pan",  # 5
-            "joint_head_tilt",  # 6
-            "joint_gripper_finger_left",  # 7
-            "joint_right_wheel",  # 8
-            "joint_left_wheel",  # 9
-        ]
         self.add_joint_velocity_group_controller(
             cmd_topic="/joint_velocity_cmd",
-            connections=joints,
+            connections=self.velocity_controlled_joint_names(),
             minimum_valid_velocity=0.03,
         )
 
