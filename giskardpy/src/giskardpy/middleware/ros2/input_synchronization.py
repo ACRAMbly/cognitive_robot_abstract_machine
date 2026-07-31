@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Any, ClassVar, Dict, List, Optional, Tuple, Type, Union
+from typing import Any, ClassVar, Dict, List, Tuple, Type, Union
 
 from nav_msgs.msg import Odometry
 from rclpy.subscription import Subscription
@@ -96,7 +96,7 @@ class TopicInputSynchronizer(InputSynchronizer, ABC):
     Type of the messages published on ``topic_name``.
     """
 
-    latest_message: Optional[Any] = field(init=False, default=None)
+    latest_message: Any | None = field(init=False, default=None)
     """
     The most recently received message, or ``None`` if nothing was received yet.
     """

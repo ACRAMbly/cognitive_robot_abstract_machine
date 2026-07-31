@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
 
 from semantic_digital_twin.adapters.ros.world_synchronizer import (
     ModelReloadSynchronizer,
@@ -25,7 +24,7 @@ class IncomingWorldUpdates:
     Delivers the model and state updates of other processes.
     """
 
-    model_reload_synchronizer: Optional[ModelReloadSynchronizer] = None
+    model_reload_synchronizer: ModelReloadSynchronizer | None = None
     """
     Delivers requests to replace the whole world model.
 

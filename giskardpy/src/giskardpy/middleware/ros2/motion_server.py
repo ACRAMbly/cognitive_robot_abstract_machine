@@ -3,23 +3,24 @@ from __future__ import annotations
 import json
 import traceback
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 import rclpy
 from json_msgs.action import JsonAction
 
 from giskardpy.data_types.exceptions import DontPrintStackTrace
-from giskardpy.executor import Executor, SimulationPacer
+from giskardpy.executor import Executor, RealTimePacer
 from giskardpy.middleware.ros2 import rospy
 from giskardpy.middleware.ros2.action_server import ActionServerHandler
 from giskardpy.middleware.ros2.control_loop import ControlLoop
 from giskardpy.middleware.ros2.exceptions import ExecutionCanceledException
 from giskardpy.middleware.ros2.feedback_publisher import ActionFeedbackPublisher
-from giskardpy.middleware.ros2.heartbeat import Heartbeat
+from giskardpy.middleware.ros2.cycle_counter import CycleCounter
 from giskardpy.middleware.ros2.input_synchronization import WorldStateInputs
 from giskardpy.middleware.ros2.post_goal_plotters import PostGoalPlotter
 from giskardpy.middleware.ros2.world_updates import IncomingWorldUpdates
 from giskardpy.motion_statechart.motion_statechart import MotionStatechart
+from krrood.adapters.json_serializer import to_json
 from semantic_digital_twin.adapters.world_entity_kwargs_tracker import (
     WorldEntityWithIDKwargsTracker,
 )
@@ -66,7 +67,7 @@ class MotionServer:
     Writes the state of the robot into the world while waiting for a goal.
     """
 
-    heartbeat: Heartbeat
+    cycle_counter: CycleCounter
     """
     Ticked once per idle cycle and, through the control loop, once per control cycle.
     """
@@ -81,13 +82,13 @@ class MotionServer:
     Debug plots that are written once a goal is finished.
     """
 
-    idle_pacer: SimulationPacer = field(init=False)
+    idle_pacer: RealTimePacer = field(init=False)
     """
     Paces the idle loop to ``idle_frequency``.
     """
 
     def __post_init__(self):
-        self.idle_pacer = SimulationPacer(real_time_factor=1.0)
+        self.idle_pacer = RealTimePacer()
         self.idle_pacer.target_frequency = self.idle_frequency
 
     @property
@@ -114,7 +115,7 @@ class MotionServer:
             return
         self.world_updates.apply_all()
         self.inputs.synchronize()
-        self.heartbeat.tick()
+        self.cycle_counter.tick()
         if not self.action_server.has_goal():
             return
         self.action_server.accept_goal()
@@ -126,7 +127,7 @@ class MotionServer:
         """
         Execute the accepted goal and answer the client, whatever happens.
         """
-        error: Optional[Exception] = None
+        error: Exception | None = None
         try:
             self.compile_goal()
             self.control_loop.run()
@@ -155,7 +156,7 @@ class MotionServer:
         self.executor.compile(motion_statechart)
         rospy.node.get_logger().info("Done parsing goal message.")
 
-    def finish_goal(self, error: Optional[Exception]) -> None:
+    def finish_goal(self, error: Exception | None) -> None:
         """
         Stop the robot, clean up the motion statechart and answer the client.
 
@@ -174,12 +175,13 @@ class MotionServer:
             self.action_server.result_msg = self.create_result(error)
             self.action_server.send_result()
 
-    def create_result(self, error: Optional[Exception]) -> JsonAction.Result:
+    def create_result(self, error: Exception | None) -> JsonAction.Result:
         """
         Mark the goal as canceled, aborted or succeeded and describe its final state.
 
-        A failed goal also reports what went wrong, because the ROS action status alone
-        cannot tell a client whether sending the goal again would help.
+        A failed goal also reports the error itself, because the ROS action status alone
+        cannot tell a client whether sending the goal again would help. The error is
+        serialized so that the client can rebuild and raise the very same exception.
         """
         match error:
             case ExecutionCanceledException():
@@ -193,7 +195,7 @@ class MotionServer:
                 rospy.node.get_logger().error(f"Goal aborted: {error}")
         states = self.create_states()
         if error is not None:
-            states["error"] = type(error).__name__
+            states["error"] = to_json(error)
         result = JsonAction.Result()
         result.result = json.dumps(states)
         return result

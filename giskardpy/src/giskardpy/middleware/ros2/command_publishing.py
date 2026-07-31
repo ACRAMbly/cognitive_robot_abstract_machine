@@ -3,7 +3,7 @@ from __future__ import annotations
 import math
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Union
 
 from geometry_msgs.msg import Twist
 from rclpy.publisher import Publisher
@@ -11,6 +11,7 @@ from std_msgs.msg import Float64, Float64MultiArray
 from typing_extensions import Self
 
 from giskardpy.middleware.ros2 import rospy
+from giskardpy.middleware.ros2.exceptions import UnknownMinimumVelocityJointError
 from giskardpy.middleware.ros2.ros2_interface import get_parameters
 from semantic_digital_twin.world import World
 from semantic_digital_twin.world_description.connections import (
@@ -31,10 +32,10 @@ class MinimumVelocity:
 
     magnitude: float = 0.0
     """
-    Velocities below this magnitude are raised to it. ``0.0`` disables raising.
+    Velocities below this magnitude are increased to it. ``0.0`` disables the minimum.
     """
 
-    def raise_vector(self, velocities: List[float]) -> List[float]:
+    def enforce_on_vector(self, velocities: List[float]) -> List[float]:
         """
         Scale a velocity vector up to :attr:`magnitude`, keeping its direction.
         """
@@ -44,9 +45,9 @@ class MinimumVelocity:
         scale = self.magnitude / norm
         return [velocity * scale for velocity in velocities]
 
-    def raise_scalar(self, velocity: float) -> float:
+    def enforce_on_scalar(self, velocity: float) -> float:
         """
-        Raise a single velocity to :attr:`magnitude`, keeping its sign.
+        Increase a single velocity to :attr:`magnitude`, keeping its sign.
         """
         if 0.0 < velocity < self.magnitude:
             return self.magnitude
@@ -85,7 +86,7 @@ class JointMinimumVelocities:
 
     @classmethod
     def from_magnitudes(
-        cls, default: float = 0.0, overrides: Optional[Dict[str, float]] = None
+        cls, default: float = 0.0, overrides: Dict[str, float] | None = None
     ) -> Self:
         """
         Build minimum velocities from a default magnitude and per-joint magnitudes.
@@ -106,6 +107,27 @@ class JointMinimumVelocities:
             if override.joint_name == connection.name.name:
                 return override
         return self.default
+
+    def validate_overrides_apply_to(
+        self, connections: List[ActiveConnection1DOF]
+    ) -> None:
+        """
+        Make sure every override is used by one of the given connections.
+
+        An override for a joint that is not commanded reads like that joint is exempt,
+        while the hardware keeps receiving the default minimum.
+
+        :raises UnknownMinimumVelocityJointError: If an override applies to no
+            connection.
+        """
+        commanded_joint_names = [connection.name.name for connection in connections]
+        for override in self.overrides:
+            if override.joint_name in commanded_joint_names:
+                continue
+            raise UnknownMinimumVelocityJointError(
+                joint_name=override.joint_name,
+                commanded_joint_names=commanded_joint_names,
+            )
 
 
 # %% reading the commanded velocities
@@ -178,7 +200,7 @@ class JointVelocityCommand:
         """
         Scale a raw state velocity to the joint and raise it to the minimum.
         """
-        return self.minimum_velocity.raise_scalar(
+        return self.minimum_velocity.enforce_on_scalar(
             state_velocity * self.connection.multiplier
         )
 
@@ -190,7 +212,11 @@ class JointVelocityCommand:
     ) -> List[Self]:
         """
         Resolve the minimum velocity of every connection once.
+
+        :raises UnknownMinimumVelocityJointError: If an override applies to no
+            connection.
         """
+        minimum_velocities.validate_overrides_apply_to(connections)
         return [
             cls(connection, minimum_velocities.of(connection))
             for connection in connections
@@ -449,11 +475,13 @@ class DriveVelocityCommandPublisher(CommandPublisher):
 
     def publish(self) -> None:
         velocities = self.velocity_reader.velocities()
-        linear_velocities = self.minimum_linear_velocity.raise_vector(velocities[:-1])
+        linear_velocities = self.minimum_linear_velocity.enforce_on_vector(
+            velocities[:-1]
+        )
         self.message.linear.x = linear_velocities[0]
         if len(linear_velocities) > 1:
             self.message.linear.y = linear_velocities[1]
-        self.message.angular.z = self.minimum_angular_velocity.raise_scalar(
+        self.message.angular.z = self.minimum_angular_velocity.enforce_on_scalar(
             velocities[-1]
         )
         self.vel_pub.publish(self.message)

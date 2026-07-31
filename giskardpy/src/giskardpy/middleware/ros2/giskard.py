@@ -11,12 +11,12 @@ from json_msgs.action import JsonAction
 from sqlalchemy.orm import sessionmaker
 
 from giskardpy.data_types.exceptions import NoControlledJointsError
-from giskardpy.executor import Executor, SimulationPacer
+from giskardpy.executor import Executor
 from giskardpy.middleware.ros2 import rospy
 from giskardpy.middleware.ros2.action_server import ActionServerHandler
 from giskardpy.middleware.ros2.control_loop import ControlLoop
 from giskardpy.middleware.ros2.feedback_publisher import ActionFeedbackPublisher
-from giskardpy.middleware.ros2.heartbeat import Heartbeat
+from giskardpy.middleware.ros2.cycle_counter import CycleCounter
 from giskardpy.middleware.ros2.input_synchronization import WorldStateInputs
 from giskardpy.middleware.ros2.motion_server import MotionServer
 from giskardpy.middleware.ros2.post_goal_plotters import (
@@ -104,9 +104,7 @@ class Giskard:
                     world=self.world_config.world,
                     qp_controller_config=self.qp_controller_config,
                 ),
-                pacer=SimulationPacer(
-                    real_time_factor=self.server_config.real_time_factor
-                ),
+                pacer=self.server_config.create_pacer(),
             )
 
         self.setup_world_model_ros_interface()
@@ -126,7 +124,7 @@ class Giskard:
         feedback_publisher = ActionFeedbackPublisher(
             executor=self.executor, action_server=action_server
         )
-        heartbeat = Heartbeat()
+        cycle_counter = CycleCounter()
         world_updates = IncomingWorldUpdates(
             world_synchronizer=self.world_synchronizer,
             model_reload_synchronizer=self.model_reload_synchronizer,
@@ -136,7 +134,7 @@ class Giskard:
             action_server=action_server,
             feedback_publisher=feedback_publisher,
             inputs=WorldStateInputs(world=world),
-            heartbeat=heartbeat,
+            cycle_counter=cycle_counter,
             world_updates=world_updates,
         )
         return MotionServer(
@@ -146,14 +144,15 @@ class Giskard:
             world_updates=world_updates,
             feedback_publisher=feedback_publisher,
             inputs=WorldStateInputs(world=world),
-            heartbeat=heartbeat,
+            cycle_counter=cycle_counter,
             idle_frequency=self.server_config.idle_frequency,
             post_goal_plotters=self.create_post_goal_plotters(),
         )
 
     def create_post_goal_plotters(self) -> List[PostGoalPlotter]:
         """
-        Create the debug plotters that are configured.
+        Create the debug plotters that are configured and let them record what they
+        need.
         """
         if not self.server_config.debug_mode:
             return []
@@ -164,6 +163,8 @@ class Giskard:
             plotters.append(GoalGanttChartPlotter(executor=self.executor))
         if self.server_config.plot_motion_statechart:
             plotters.append(MotionStatechartPlotter(executor=self.executor))
+        for plotter in plotters:
+            plotter.start_recording()
         return plotters
 
     def setup_world_model_ros_interface(self):

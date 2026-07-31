@@ -3,7 +3,6 @@ from time import sleep
 
 import numpy as np
 import pytest
-from geometry_msgs.msg import PoseStamped, PointStamped
 from giskardpy.middleware.ros2.server_config import ExecutionMode, GiskardServerConfig
 from giskardpy.middleware.ros2.giskard import Giskard
 from giskardpy.middleware.ros2.scripts.iai_robots.hsr.configs import (
@@ -61,6 +60,7 @@ def better_pose(default_joint_state):
 class HSRTester(GiskardTester):
     tip: KinematicStructureEntity = field(init=False)
     base_footprint: KinematicStructureEntity = field(init=False)
+    torso_lift_link: KinematicStructureEntity = field(init=False)
     map: KinematicStructureEntity = field(init=False)
 
     def __post_init__(self):
@@ -70,6 +70,9 @@ class HSRTester(GiskardTester):
         )
         self.base_footprint = self.api.world.get_kinematic_structure_entity_by_name(
             "base_footprint"
+        )
+        self.torso_lift_link = self.api.world.get_kinematic_structure_entity_by_name(
+            "torso_lift_link"
         )
         self.map = self.api.world.root
 
@@ -101,7 +104,6 @@ def robot():
         yield c
     finally:
         print("tear down")
-        c.print_stats()
         c.close()
 
 
@@ -135,36 +137,37 @@ class TestJointGoals:
         arm_lift_joint: ActiveConnection1DOF = giskard.world.get_connection_by_name(
             "arm_lift_joint"
         )
-        hand_T_finger_current = giskard.compute_fk_pose(
-            "hand_palm_link", "hand_l_distal_link"
+        hand_palm_link = giskard.world.get_kinematic_structure_entity_by_name(
+            "hand_palm_link"
         )
-        hand_T_finger_expected = PoseStamped()
-        hand_T_finger_expected.header.frame_id = "hand_palm_link"
-        hand_T_finger_expected.pose.position.x = -0.01675
-        hand_T_finger_expected.pose.position.y = -0.0907
-        hand_T_finger_expected.pose.position.z = 0.0052
-        hand_T_finger_expected.pose.orientation.x = -0.0434
-        hand_T_finger_expected.pose.orientation.y = 0.0
-        hand_T_finger_expected.pose.orientation.z = 0.0
-        hand_T_finger_expected.pose.orientation.w = 0.999
-        compare_poses(hand_T_finger_current.pose, hand_T_finger_expected.pose)
+        hand_T_finger_current = giskard.world.compute_forward_kinematics(
+            root=hand_palm_link,
+            tip=giskard.world.get_kinematic_structure_entity_by_name(
+                "hand_l_distal_link"
+            ),
+        )
+        hand_T_finger_expected = HomogeneousTransformationMatrix.from_xyz_quaternion(
+            pos_x=-0.01675,
+            pos_y=-0.0907,
+            pos_z=0.0052,
+            quat_x=-0.0434,
+            quat_w=0.999,
+            reference_frame=hand_palm_link,
+        )
+        compare_poses(hand_T_finger_current, hand_T_finger_expected)
 
         np.testing.assert_almost_equal(
             arm_lift_joint.position,
             0.2,
             decimal=2,
         )
-        base_T_torso = PoseStamped()
-        base_T_torso.header.frame_id = "base_footprint"
-        base_T_torso.pose.position.x = 0.0
-        base_T_torso.pose.position.y = 0.0
-        base_T_torso.pose.position.z = 0.8518
-        base_T_torso.pose.orientation.x = 0.0
-        base_T_torso.pose.orientation.y = 0.0
-        base_T_torso.pose.orientation.z = 0.0
-        base_T_torso.pose.orientation.w = 1.0
-        base_T_torso2 = giskard.compute_fk_pose("base_footprint", "torso_lift_link")
-        compare_poses(base_T_torso2.pose, base_T_torso.pose)
+        base_T_torso_expected = HomogeneousTransformationMatrix.from_xyz_rpy(
+            z=0.8518, reference_frame=giskard.base_footprint
+        )
+        base_T_torso_current = giskard.world.compute_forward_kinematics(
+            root=giskard.base_footprint, tip=giskard.torso_lift_link
+        )
+        compare_poses(base_T_torso_current, base_T_torso_expected)
 
     def test_mimic_joints2(self, giskard: HSRTester):
         msc = MotionStatechart()
@@ -190,17 +193,13 @@ class TestJointGoals:
             0.2,
             decimal=2,
         )
-        base_T_torso = PoseStamped()
-        base_T_torso.header.frame_id = "base_footprint"
-        base_T_torso.pose.position.x = 0.0
-        base_T_torso.pose.position.y = 0.0
-        base_T_torso.pose.position.z = 0.8518
-        base_T_torso.pose.orientation.x = 0.0
-        base_T_torso.pose.orientation.y = 0.0
-        base_T_torso.pose.orientation.z = 0.0
-        base_T_torso.pose.orientation.w = 1.0
-        base_T_torso2 = giskard.compute_fk_pose("base_footprint", "torso_lift_link")
-        compare_poses(base_T_torso2.pose, base_T_torso.pose)
+        base_T_torso_expected = HomogeneousTransformationMatrix.from_xyz_rpy(
+            z=0.8518, reference_frame=giskard.base_footprint
+        )
+        base_T_torso_current = giskard.world.compute_forward_kinematics(
+            root=giskard.base_footprint, tip=giskard.torso_lift_link
+        )
+        compare_poses(base_T_torso_current, base_T_torso_expected)
 
     def test_mimic_joints3(self, giskard: HSRTester):
         head = giskard.api.world.get_body_by_name("head_pan_link")
@@ -227,17 +226,13 @@ class TestJointGoals:
             0.3,
             decimal=2,
         )
-        base_T_torso = PoseStamped()
-        base_T_torso.header.frame_id = "base_footprint"
-        base_T_torso.pose.position.x = 0.0
-        base_T_torso.pose.position.y = 0.0
-        base_T_torso.pose.position.z = 0.902
-        base_T_torso.pose.orientation.x = 0.0
-        base_T_torso.pose.orientation.y = 0.0
-        base_T_torso.pose.orientation.z = 0.0
-        base_T_torso.pose.orientation.w = 1.0
-        base_T_torso2 = giskard.compute_fk_pose("base_footprint", "torso_lift_link")
-        compare_poses(base_T_torso2.pose, base_T_torso.pose)
+        base_T_torso_expected = HomogeneousTransformationMatrix.from_xyz_rpy(
+            z=0.902, reference_frame=giskard.base_footprint
+        )
+        base_T_torso_current = giskard.world.compute_forward_kinematics(
+            root=giskard.base_footprint, tip=giskard.torso_lift_link
+        )
+        compare_poses(base_T_torso_current, base_T_torso_expected)
 
     def test_mimic_joints4(self, giskard: HSRTester):
         arm_lift_joints: ActiveConnection1DOF = (

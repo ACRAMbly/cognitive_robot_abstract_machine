@@ -4,7 +4,7 @@ import json
 from dataclasses import dataclass, field
 from threading import Thread
 from time import sleep
-from typing import Dict, Optional, List
+from typing import Dict, List
 
 import rclpy
 from json_msgs.action import JsonAction
@@ -38,9 +38,9 @@ class GiskardWrapper:
 
     node_handle: Node
     giskard_node_name: str = "giskard"
-    _goal_handle: Optional[ClientGoalHandle] = None
-    _goal_result: Optional[JsonAction_Result] = None
-    _result_future: Optional[Future] = None
+    _goal_handle: ClientGoalHandle | None = None
+    _goal_result: JsonAction_Result | None = None
+    _result_future: Future | None = None
     world: World = None
     _client: MyActionClient = None
     _motion_statechart: MotionStatechart = field(init=False)
@@ -76,9 +76,9 @@ class GiskardWrapper:
         """
         Executes a MotionStatechart and syncs its state with the result of Giskard.
 
-        :raises WorldModelModifiedDuringMotionError: If another process modified the
-            world model while the motion was running. The goal can be sent again, since
-            the modification is applied by then.
+        A goal that fails raises the exception that made Giskard abort it, for example
+        :class:`WorldModelModifiedDuringMotionError` when another process modified the
+        world model while the motion was running.
         """
         motion_statechart.sanity_check()
         result = self._send_action_goal(motion_statechart)
@@ -130,15 +130,15 @@ class GiskardWrapper:
         """
         Wait for the goal sent with :func:`execute_async` and sync its final states.
 
-        :raises WorldModelModifiedDuringMotionError: If another process modified the
-            world model while the motion was running. The goal can be sent again, since
-            the modification is applied by then.
+        A goal that fails raises the exception that made Giskard abort it, for example
+        :class:`WorldModelModifiedDuringMotionError` when another process modified the
+        world model while the motion was running.
         """
         result = await self._client.get_result()
         self._take_over_result(result, self._motion_statechart)
 
     def get_end_motion_reason(
-        self, move_result: Optional[JsonAction_Result] = None, show_all: bool = False
+        self, move_result: JsonAction_Result | None = None, show_all: bool = False
     ) -> Dict[str, bool]:
         """
         Analyzes a MoveResult msg to return a list of all monitors that hindered the
@@ -159,13 +159,13 @@ class GiskardWrapperNode(GiskardWrapper):
     node_name: str = "giskard_client"
     giskard_node_name: str = "giskard"
     avoid_name_conflict: bool = True
-    context: Optional[Context] = field(kw_only=True, default=None)
-    cli_args: Optional[List[str]] = field(kw_only=True, default=None)
-    namespace: Optional[str] = field(kw_only=True, default=None)
+    context: Context | None = field(kw_only=True, default=None)
+    cli_args: List[str] | None = field(kw_only=True, default=None)
+    namespace: str | None = field(kw_only=True, default=None)
     use_global_arguments: bool = field(kw_only=True, default=True)
     enable_rosout: bool = field(kw_only=True, default=True)
     start_parameter_services: bool = field(kw_only=True, default=True)
-    parameter_overrides: Optional[List[Parameter]] = field(kw_only=True, default=None)
+    parameter_overrides: List[Parameter] | None = field(kw_only=True, default=None)
     allow_undeclared_parameters: bool = field(kw_only=True, default=False)
     automatically_declare_parameters_from_overrides: bool = field(
         kw_only=True, default=False

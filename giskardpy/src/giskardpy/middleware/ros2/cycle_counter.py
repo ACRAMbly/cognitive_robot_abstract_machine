@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 
 @dataclass
-class Heartbeat:
+class CycleCounter:
     """
     Counts how often the motion server made progress.
 
@@ -13,7 +13,7 @@ class Heartbeat:
     or executing one.
     """
 
-    count: int = 0
+    completed_cycles: int = 0
     """
     Number of cycles the motion server completed, monotonically increasing.
     """
@@ -22,4 +22,4 @@ class Heartbeat:
         """
         Record that one cycle was completed.
         """
-        self.count += 1
+        self.completed_cycles += 1

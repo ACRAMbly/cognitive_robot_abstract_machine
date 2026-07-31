@@ -46,6 +46,22 @@ class MissingActionResultError(GiskardException):
 
 
 @dataclass
+class MissingGoalOutcomeError(GiskardException):
+    """
+    Raised when a goal is answered without having been marked succeeded, aborted or
+    canceled.
+    """
+
+    def error_message(self) -> str:
+        return "No outcome set for the goal that is being answered."
+
+    def suggest_correction(self) -> str:
+        return (
+            "Mark the goal as succeeded, aborted or canceled before sending its result."
+        )
+
+
+@dataclass
 class DuplicateNameException(GiskardException):
     """
     Raised when a name that must be unique is used more than once.
@@ -74,6 +90,24 @@ class NoControlledJointsError(SetupException):
 
     def suggest_correction(self) -> str:
         return "Make sure robot_interface_config of Giskard is setup correctly."
+
+
+@dataclass
+class NonPositiveRealTimeFactorError(SetupException):
+    """
+    Raised when a simulation is configured to run at a non positive speed.
+    """
+
+    real_time_factor: float
+    """
+    The rejected factor.
+    """
+
+    def error_message(self) -> str:
+        return f"A real time factor of {self.real_time_factor} would never advance the simulation."
+
+    def suggest_correction(self) -> str:
+        return "Use a positive factor, or NoPacing to run as fast as possible."
 
 
 @dataclass

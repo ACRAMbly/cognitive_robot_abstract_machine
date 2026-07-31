@@ -5,12 +5,39 @@ Exceptions raised while executing a trajectory on a robot.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import List
 
 from giskardpy.data_types.exceptions import (
     DontPrintStackTrace,
     GiskardException,
     SetupException,
 )
+
+
+@dataclass
+class UnknownMinimumVelocityJointError(SetupException):
+    """
+    Raised when a minimum velocity override names a joint that is not commanded.
+    """
+
+    joint_name: str
+    """
+    The joint the override was written for.
+    """
+
+    commanded_joint_names: List[str]
+    """
+    The joints the publisher actually commands.
+    """
+
+    def error_message(self) -> str:
+        return (
+            f'The minimum velocity override for "{self.joint_name}" applies to no '
+            f"commanded joint."
+        )
+
+    def suggest_correction(self) -> str:
+        return f"Use one of {sorted(self.commanded_joint_names)}."
 
 
 @dataclass

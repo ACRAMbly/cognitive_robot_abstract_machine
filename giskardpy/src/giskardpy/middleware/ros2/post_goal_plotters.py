@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 import tempfile
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from giskardpy.executor import Executor
 from giskardpy.middleware.ros2 import rospy
@@ -23,6 +23,14 @@ class PostGoalPlotter(ABC):
     """
     The executor holding the data that is plotted.
     """
+
+    def start_recording(self) -> None:
+        """
+        Turn on whatever the executor has to collect for this plot.
+
+        Most plots are drawn from data the executor keeps anyway, so nothing has to be
+        turned on by default.
+        """
 
     @abstractmethod
     def plot(self, goal_id: int) -> None:
@@ -48,14 +56,22 @@ class GoalTrajectoryPlotter(PostGoalPlotter):
     Plots the trajectory the robot followed.
     """
 
-    def __post_init__(self):
-        self.executor.trajectory_plotter = WorldStateTrajectoryPlotter()
+    trajectory_plotter: WorldStateTrajectoryPlotter = field(
+        default_factory=WorldStateTrajectoryPlotter
+    )
+    """
+    Collects the trajectory while the executor ticks; only recorded once
+    :meth:`start_recording` handed it to the executor.
+    """
+
+    def start_recording(self) -> None:
+        self.executor.trajectory_plotter = self.trajectory_plotter
 
     def plot(self, goal_id: int) -> None:
-        if len(self.executor.trajectory_plotter.world_state_trajectory.times) <= 1:
+        if len(self.trajectory_plotter.world_state_trajectory.times) <= 1:
             return
         file_name = self.create_file_name("trajectories", goal_id)
-        self.executor.plot_trajectory(file_name)
+        self.trajectory_plotter.plot_trajectory(file_name)
         rospy.node.get_logger().info(f"saved {file_name}")
 
 

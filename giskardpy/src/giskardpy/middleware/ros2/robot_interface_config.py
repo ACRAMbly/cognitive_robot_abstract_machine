@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Dict, List, Optional, Union
+from typing import TYPE_CHECKING, Dict, List, Union
 
 from geometry_msgs.msg import Twist
 from nav_msgs.msg import Odometry
@@ -60,7 +60,7 @@ class RobotInterfaceConfig(ABC):
     The Giskard instance this interface belongs to, set by :meth:`attach`.
     """
 
-    tf_frame_synchronizer: Optional[TfFrameSynchronizer] = None
+    tf_frame_synchronizer: TfFrameSynchronizer | None = None
     """
     Created on demand, tracks all 6 degree of freedom connections that follow tf.
     """
@@ -104,7 +104,7 @@ class RobotInterfaceConfig(ABC):
 
     def sync_odometry_topic(
         self,
-        odometry_topic: Optional[str] = None,
+        odometry_topic: str | None = None,
         joint: Union[OmniDrive, DifferentialDrive] = None,
         sync_in_control_loop: bool = True,
     ):
@@ -138,7 +138,7 @@ class RobotInterfaceConfig(ABC):
                 )
         self.tf_frame_synchronizer.track(joint, tf_parent_frame, tf_child_frame)
 
-    def sync_joint_state_topic(self, topic_name: str, group_name: Optional[str] = None):
+    def sync_joint_state_topic(self, topic_name: str, group_name: str | None = None):
         """
         Tell Giskard to sync the world state with a joint state topic.
         """
@@ -157,7 +157,7 @@ class RobotInterfaceConfig(ABC):
 
     def add_base_cmd_velocity(
         self,
-        cmd_vel_topic: Optional[str] = None,
+        cmd_vel_topic: str | None = None,
         joint: Union[OmniDrive, DifferentialDrive] = None,
         minimum_linear_velocity: float = 0.0,
         minimum_angular_velocity: float = 0.0,
@@ -192,7 +192,7 @@ class RobotInterfaceConfig(ABC):
         self,
         namespaces: List[str],
         minimum_valid_velocity: float = 0.0,
-        minimum_velocity_overrides: Optional[Dict[str, float]] = None,
+        minimum_velocity_overrides: Dict[str, float] | None = None,
     ):
         """
         For closed loop mode.
@@ -220,7 +220,7 @@ class RobotInterfaceConfig(ABC):
         cmd_topic: str,
         connections: List[str],
         minimum_valid_velocity: float = 0.0,
-        minimum_velocity_overrides: Optional[Dict[str, float]] = None,
+        minimum_velocity_overrides: Dict[str, float] | None = None,
     ):
         """
         For closed loop mode.
@@ -270,7 +270,7 @@ class RobotInterfaceConfig(ABC):
     def discover_interfaces_from_controller_manager(
         self,
         controller_manager_name: str = "controller_manager",
-        whitelist: Optional[List[str]] = None,
+        whitelist: List[str] | None = None,
     ) -> None:
         """
         :param whitelist: list all controllers that should get added, if None, giskard will search automatically
@@ -314,7 +314,7 @@ class RobotInterfaceConfig(ABC):
                     self.add_base_cmd_velocity(controller.name)
 
     def __filter_controllers_with_whitelist(
-        self, controllers: list, whitelist: Optional[List[str]]
+        self, controllers: list, whitelist: List[str] | None
     ) -> list:
         from controller_manager_msgs.msg import ControllerState
 

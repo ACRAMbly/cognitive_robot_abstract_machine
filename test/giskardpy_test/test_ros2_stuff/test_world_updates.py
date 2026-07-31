@@ -5,12 +5,12 @@ from typing import Any, List
 
 import pytest
 
-from giskardpy.executor import Executor, SimulationPacer
+from giskardpy.executor import Executor, NoPacing
 from giskardpy.middleware.ros2 import rospy
 from giskardpy.middleware.ros2.control_loop import ControlLoop
 from giskardpy.middleware.ros2.exceptions import WorldModelModifiedDuringMotionError
 from giskardpy.middleware.ros2.feedback_publisher import ActionFeedbackPublisher
-from giskardpy.middleware.ros2.heartbeat import Heartbeat
+from giskardpy.middleware.ros2.cycle_counter import CycleCounter
 from giskardpy.middleware.ros2.input_synchronization import WorldStateInputs
 from giskardpy.middleware.ros2.world_updates import IncomingWorldUpdates
 from giskardpy.motion_statechart.context import MotionStatechartContext
@@ -284,7 +284,7 @@ def control_loop(init_rospy) -> ControlLoopFixture:
             world=controlled_world,
             qp_controller_config=QPControllerConfig.create_with_simulation_defaults(),
         ),
-        pacer=SimulationPacer(real_time_factor=None),
+        pacer=NoPacing(),
     )
     motion_statechart = MotionStatechart()
     motion_statechart.add_node(counter := CountSimulationTimeSeconds(seconds=1000.0))
@@ -305,7 +305,7 @@ def control_loop(init_rospy) -> ControlLoopFixture:
                 executor=executor, action_server=action_server
             ),
             inputs=WorldStateInputs(world=controlled_world),
-            heartbeat=Heartbeat(),
+            cycle_counter=CycleCounter(),
             world_updates=world_updates,
         ),
         controlled_world=controlled_world,

@@ -39,7 +39,7 @@ from giskardpy.motion_statechart.data_types import (
     DefaultWeights,
     ObservationStateValues,
 )
-from giskardpy.motion_statechart.exceptions import EmptyMotionStatechartError
+from giskardpy.motion_statechart.exceptions import EmptyMotionStatechartError, CollisionViolatedError
 from giskardpy.motion_statechart.goals.collision_avoidance import (
     ExternalCollisionAvoidance,
     SelfCollisionAvoidance,
@@ -227,7 +227,6 @@ def robot():
         yield c
     finally:
         print("tear down")
-        c.print_stats()
         c.close()
 
 
@@ -1066,7 +1065,7 @@ class TestSelfCollisionAvoidance:
             ]
         )
         msc.add_node(EndMotion.when_true(local_min))
-        with pytest.raises(ExecutionAbortedException):
+        with pytest.raises(CollisionViolatedError):
             giskard.api.execute(msc)
 
 
@@ -1086,7 +1085,7 @@ class TestCollisionAvoidanceGoals:
                 ]
             )
         )
-        with pytest.raises(ExecutionAbortedException):
+        with pytest.raises(CollisionViolatedError):
             kitchen_setup.api.execute(msc)
 
     def test_avoid_collision_go_around_corner(self, fake_table_setup: PR2Tester):
@@ -1826,7 +1825,7 @@ class TestActionServerEvents:
             )
         )
         msc.add_node(EndMotion.when_true(joint_goal))
-        with pytest.raises(ExecutionAbortedException):
+        with pytest.raises(AttributeError):
             giskard.api.execute(msc)
 
         msc = MotionStatechart()

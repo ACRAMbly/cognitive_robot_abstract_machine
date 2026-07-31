@@ -15,6 +15,7 @@ from giskardpy.middleware.ros2.command_publishing import (
     JointMinimumVelocities,
     MinimumVelocity,
 )
+from giskardpy.middleware.ros2.exceptions import UnknownMinimumVelocityJointError
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 from semantic_digital_twin.spatial_types import Vector3
 from semantic_digital_twin.world import World
@@ -285,34 +286,34 @@ def build_drive_world(
 def test_scalar_below_minimum_keeps_its_sign():
     minimum_velocity = MinimumVelocity(0.03)
 
-    assert minimum_velocity.raise_scalar(0.01) == pytest.approx(0.03)
-    assert minimum_velocity.raise_scalar(-0.01) == pytest.approx(-0.03)
+    assert minimum_velocity.enforce_on_scalar(0.01) == pytest.approx(0.03)
+    assert minimum_velocity.enforce_on_scalar(-0.01) == pytest.approx(-0.03)
 
 
 def test_scalar_at_zero_stays_zero():
-    assert MinimumVelocity(0.03).raise_scalar(0.0) == pytest.approx(0.0)
+    assert MinimumVelocity(0.03).enforce_on_scalar(0.0) == pytest.approx(0.0)
 
 
 def test_scalar_above_minimum_is_unchanged():
-    assert MinimumVelocity(0.03).raise_scalar(0.1) == pytest.approx(0.1)
+    assert MinimumVelocity(0.03).enforce_on_scalar(0.1) == pytest.approx(0.1)
 
 
 def test_zero_magnitude_disables_raising():
-    assert MinimumVelocity().raise_scalar(0.001) == pytest.approx(0.001)
-    assert MinimumVelocity().raise_vector([0.001, 0.001]) == pytest.approx(
+    assert MinimumVelocity().enforce_on_scalar(0.001) == pytest.approx(0.001)
+    assert MinimumVelocity().enforce_on_vector([0.001, 0.001]) == pytest.approx(
         [0.001, 0.001]
     )
 
 
 def test_vector_below_minimum_is_scaled_to_the_minimum_norm():
-    raised = MinimumVelocity(0.05).raise_vector([0.02, 0.02])
+    raised = MinimumVelocity(0.05).enforce_on_vector([0.02, 0.02])
 
     assert raised[0] == pytest.approx(raised[1])
     assert np.linalg.norm(raised) == pytest.approx(0.05)
 
 
 def test_vector_below_minimum_keeps_its_direction():
-    raised = MinimumVelocity(0.05).raise_vector([0.03, -0.01])
+    raised = MinimumVelocity(0.05).enforce_on_vector([0.03, -0.01])
 
     assert raised[0] / raised[1] == pytest.approx(0.03 / -0.01)
 
@@ -320,17 +321,21 @@ def test_vector_below_minimum_keeps_its_direction():
 def test_single_element_vector_matches_the_scalar_case():
     minimum_velocity = MinimumVelocity(0.05)
 
-    assert minimum_velocity.raise_vector([-0.01]) == pytest.approx(
-        [minimum_velocity.raise_scalar(-0.01)]
+    assert minimum_velocity.enforce_on_vector([-0.01]) == pytest.approx(
+        [minimum_velocity.enforce_on_scalar(-0.01)]
     )
 
 
 def test_vector_above_minimum_is_unchanged():
-    assert MinimumVelocity(0.05).raise_vector([0.3, 0.4]) == pytest.approx([0.3, 0.4])
+    assert MinimumVelocity(0.05).enforce_on_vector([0.3, 0.4]) == pytest.approx(
+        [0.3, 0.4]
+    )
 
 
 def test_zero_vector_stays_zero():
-    assert MinimumVelocity(0.05).raise_vector([0.0, 0.0]) == pytest.approx([0.0, 0.0])
+    assert MinimumVelocity(0.05).enforce_on_vector([0.0, 0.0]) == pytest.approx(
+        [0.0, 0.0]
+    )
 
 
 # %% joint group publisher
@@ -456,6 +461,48 @@ def test_group_publisher_publishes_the_velocities_of_the_current_cycle(init_rosp
     recorded = [list(message.data) for message in recorder.published_messages]
     assert recorded[0] == pytest.approx([0.1])
     assert recorded[1] == pytest.approx([0.4])
+
+
+# %% minimum velocity overrides that apply to nothing
+
+
+def test_an_override_of_an_uncommanded_joint_is_rejected(init_rospy):
+    """
+    An override that matches no commanded joint would silently do nothing, which reads
+    like the joint is exempt while the hardware still receives the default minimum.
+    """
+    specs = [ConnectionSpec(name="joint_a", velocity=0.01)]
+
+    with pytest.raises(UnknownMinimumVelocityJointError):
+        build_group_publisher(
+            specs,
+            minimum_valid_velocity=0.03,
+            minimum_velocity_overrides={"typo_joint": 0.0},
+        )
+
+
+def test_the_rejected_override_names_the_joint_it_could_not_find(init_rospy):
+    specs = [ConnectionSpec(name="joint_a", velocity=0.01)]
+
+    with pytest.raises(UnknownMinimumVelocityJointError) as rejection:
+        build_group_publisher(specs, minimum_velocity_overrides={"typo_joint": 0.0})
+
+    assert rejection.value.joint_name == "typo_joint"
+
+
+def test_overrides_of_commanded_joints_are_accepted(init_rospy):
+    specs = [
+        ConnectionSpec(name="joint_a", velocity=0.01),
+        ConnectionSpec(name="joint_b", velocity=0.01),
+    ]
+
+    controller = build_group_publisher(
+        specs,
+        minimum_valid_velocity=0.03,
+        minimum_velocity_overrides={"joint_a": 0.0, "joint_b": 0.1},
+    )
+
+    assert publish_group(controller) == pytest.approx([0.01, 0.1])
 
 
 # %% per joint publisher

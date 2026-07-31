@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum, auto
-from typing import Optional
 
+from giskardpy.executor import NoPacing, Pacer, RealTimePacer
 from giskardpy.middleware.ros2.qp_data_publisher import QPDataPublisherConfig
 from giskardpy.middleware.ros2.utils.utils import is_in_github_workflow
 
@@ -85,11 +85,14 @@ class GiskardServerConfig:
         """
         return self.execution_mode == ExecutionMode.CLOSED_LOOP
 
-    @property
-    def real_time_factor(self) -> Optional[float]:
+    def create_pacer(self) -> Pacer:
         """
-        Simulation speed of the control loop; ``None`` means as fast as possible.
+        Build the pacer of the control loop.
+
+        A simulated motion may run as fast as the hardware allows, while a real robot
+        has to be commanded in real time, so a closed loop setup can never be sped up or
+        slowed down.
         """
         if self.is_standalone:
-            return None
-        return 1.0
+            return NoPacing()
+        return RealTimePacer()

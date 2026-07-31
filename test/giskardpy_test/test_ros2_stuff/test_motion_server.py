@@ -4,12 +4,16 @@ from typing import Any, List, Optional
 
 import pytest
 
-from giskardpy.executor import Executor, SimulationPacer
+from giskardpy.executor import Executor, NoPacing
+from giskardpy.middleware.ros2.action_server import GoalOutcome
 from giskardpy.middleware.ros2.command_publishing import CommandPublisher
 from giskardpy.middleware.ros2.control_loop import ControlLoop
-from giskardpy.middleware.ros2.exceptions import WorldModelModifiedDuringMotionError
+from giskardpy.middleware.ros2.exceptions import (
+    ExecutionCanceledException,
+    WorldModelModifiedDuringMotionError,
+)
 from giskardpy.middleware.ros2.feedback_publisher import ActionFeedbackPublisher
-from giskardpy.middleware.ros2.heartbeat import Heartbeat
+from giskardpy.middleware.ros2.cycle_counter import CycleCounter
 from giskardpy.middleware.ros2.input_synchronization import (
     InputSynchronizer,
     WorldStateInputs,
@@ -23,6 +27,7 @@ from giskardpy.motion_statechart.monitors.payload_monitors import (
 )
 from giskardpy.motion_statechart.motion_statechart import MotionStatechart
 from giskardpy.qp.qp_controller_config import QPControllerConfig
+from krrood.adapters.json_serializer import from_json
 from semantic_digital_twin.callbacks.callback import StateChangeCallback
 from semantic_digital_twin.world import World
 
@@ -65,7 +70,7 @@ class GoalQueueMimic:
     Result built for the accepted goal.
     """
 
-    outcome: Optional[str] = field(init=False, default=None)
+    outcome: Optional[GoalOutcome] = field(init=False, default=None)
     """
     Whether the goal was marked as succeeded, aborted or canceled.
     """
@@ -98,13 +103,13 @@ class GoalQueueMimic:
         self.feedback_messages.append(message)
 
     def set_canceled(self) -> None:
-        self.outcome = "canceled"
+        self.outcome = GoalOutcome.CANCELED
 
     def set_aborted(self) -> None:
-        self.outcome = "aborted"
+        self.outcome = GoalOutcome.ABORTED
 
     def set_succeeded(self) -> None:
-        self.outcome = "succeeded"
+        self.outcome = GoalOutcome.SUCCEEDED
 
     def send_result(self) -> None:
         self.sent_results.append(self.result_msg)
@@ -228,15 +233,15 @@ class BrokenInputError(Exception):
 
 
 @dataclass
-class HeartbeatWatcher(InputSynchronizer):
+class CycleWatchingGoalCanceler(InputSynchronizer):
     """
-    Watches the heartbeat from inside the control loop and cancels the goal once it
-    ticked often enough, standing in for a client that cancels a never-ending motion.
+    Watches the completed cycles from inside the control loop and cancels the goal once
+    enough of them passed, standing in for a client that cancels a never-ending motion.
     """
 
-    heartbeat: Heartbeat = None
+    cycle_counter: CycleCounter = None
     """
-    The heartbeat that is watched.
+    The counter that is watched.
     """
 
     action_server: Optional[GoalQueueMimic] = None
@@ -255,7 +260,7 @@ class HeartbeatWatcher(InputSynchronizer):
     """
 
     def apply(self) -> None:
-        self.observed_ticks = self.heartbeat.count
+        self.observed_ticks = self.cycle_counter.completed_cycles
         if self.observed_ticks >= self.ticks_until_cancel:
             self.action_server.cancel_requested = True
 
@@ -331,7 +336,7 @@ def create_executor() -> Executor:
             world=World(),
             qp_controller_config=QPControllerConfig.create_with_simulation_defaults(),
         ),
-        pacer=SimulationPacer(real_time_factor=None),
+        pacer=NoPacing(),
     )
 
 
@@ -360,7 +365,7 @@ class MotionServerFixture:
     idle_input: RecordingInputSynchronizer
     control_input: RecordingInputSynchronizer
     plotter: RecordingPlotter
-    heartbeat: Heartbeat
+    cycle_counter: CycleCounter
 
 
 @pytest.fixture()
@@ -374,13 +379,13 @@ def motion_server(init_rospy) -> MotionServerFixture:
     )
     command_publisher = RecordingCommandPublisher(world=world)
     control_input = RecordingInputSynchronizer(world=world, executor=executor)
-    heartbeat = Heartbeat()
+    cycle_counter = CycleCounter()
     control_loop = ControlLoop(
         executor=executor,
         action_server=action_server,
         feedback_publisher=feedback_publisher,
         inputs=WorldStateInputs(world=world, synchronizers=[control_input]),
-        heartbeat=heartbeat,
+        cycle_counter=cycle_counter,
         world_updates=world_updates,
         command_publishers=[command_publisher],
     )
@@ -393,7 +398,7 @@ def motion_server(init_rospy) -> MotionServerFixture:
         world_updates=world_updates,
         feedback_publisher=feedback_publisher,
         inputs=WorldStateInputs(world=world, synchronizers=[idle_input]),
-        heartbeat=heartbeat,
+        cycle_counter=cycle_counter,
         post_goal_plotters=[plotter],
     )
     return MotionServerFixture(
@@ -406,7 +411,7 @@ def motion_server(init_rospy) -> MotionServerFixture:
         idle_input=idle_input,
         control_input=control_input,
         plotter=plotter,
-        heartbeat=heartbeat,
+        cycle_counter=cycle_counter,
     )
 
 
@@ -423,7 +428,7 @@ class TestGoalResult:
 
         motion_server.motion_server.run_idle_cycle()
 
-        assert motion_server.action_server.outcome == "succeeded"
+        assert motion_server.action_server.outcome == GoalOutcome.SUCCEEDED
         assert len(motion_server.action_server.sent_results) == 1
 
     def test_canceled_goal_is_reported_as_canceled(
@@ -434,7 +439,7 @@ class TestGoalResult:
 
         motion_server.motion_server.run_idle_cycle()
 
-        assert motion_server.action_server.outcome == "canceled"
+        assert motion_server.action_server.outcome == GoalOutcome.CANCELED
 
     def test_broken_input_aborts_the_goal(self, motion_server: MotionServerFixture):
         motion_server.control_loop.inputs.synchronizers = [
@@ -444,7 +449,7 @@ class TestGoalResult:
 
         motion_server.motion_server.run_idle_cycle()
 
-        assert motion_server.action_server.outcome == "aborted"
+        assert motion_server.action_server.outcome == GoalOutcome.ABORTED
         assert len(motion_server.action_server.sent_results) == 1
 
     def test_the_reason_of_a_failure_is_reported(
@@ -465,7 +470,24 @@ class TestGoalResult:
         motion_server.motion_server.run_idle_cycle()
 
         result = json.loads(motion_server.action_server.sent_results[0].result)
-        assert result["error"] == WorldModelModifiedDuringMotionError.__name__
+        assert isinstance(
+            from_json(result["error"]), WorldModelModifiedDuringMotionError
+        )
+
+    def test_the_fields_of_a_failure_survive_the_round_trip(
+        self, motion_server: MotionServerFixture
+    ):
+        """
+        An error only helps a client if it arrives with the details it was raised with.
+        """
+        result = motion_server.motion_server.create_result(
+            ExecutionCanceledException(action_server_name="mimic", goal_id=7)
+        )
+
+        error = from_json(json.loads(result.result)["error"])
+
+        assert error.action_server_name == "mimic"
+        assert error.goal_id == 7
 
     def test_a_successful_goal_reports_no_failure(
         self, motion_server: MotionServerFixture
@@ -622,13 +644,13 @@ class TestIdleLoop:
 
         assert len(motion_server.idle_input.applied_at_control_cycles) == 1
 
-    def test_heartbeat_ticks_once_per_idle_cycle(
+    def test_one_cycle_is_counted_per_idle_cycle(
         self, motion_server: MotionServerFixture
     ):
         motion_server.motion_server.run_idle_cycle()
         motion_server.motion_server.run_idle_cycle()
 
-        assert motion_server.heartbeat.count == 2
+        assert motion_server.cycle_counter.completed_cycles == 2
 
     def test_nothing_happens_while_the_world_is_being_modified(
         self, motion_server: MotionServerFixture
@@ -636,38 +658,39 @@ class TestIdleLoop:
         with motion_server.executor.context.world.modify_world():
             motion_server.motion_server.run_idle_cycle()
 
-        assert motion_server.heartbeat.count == 0
+        assert motion_server.cycle_counter.completed_cycles == 0
         assert motion_server.world_updates.applied_batches == 0
 
 
-class TestHeartbeatDuringGoals:
+class TestCycleCountingDuringGoals:
     """
-    The heartbeat keeps ticking while a goal is running, so an observer waiting for the
-    server to make progress is never blocked by a motion that only ends on cancel.
+    The cycle counter keeps counting while a goal is running, so an observer waiting for
+    the server to make progress is never blocked by a motion that only ends on cancel.
     """
 
-    def test_heartbeat_ticks_during_a_goal(self, motion_server: MotionServerFixture):
+    def test_cycles_are_counted_during_a_goal(self, motion_server: MotionServerFixture):
         motion_server.action_server.goal_json = create_goal_json()
-        heartbeat_before_goal = motion_server.heartbeat.count
+        cycles_before_goal = motion_server.cycle_counter.completed_cycles
 
         motion_server.motion_server.run_idle_cycle()
 
         control_cycles = len(motion_server.control_input.applied_at_control_cycles)
         assert control_cycles > 1
         assert (
-            motion_server.heartbeat.count == heartbeat_before_goal + 1 + control_cycles
+            motion_server.cycle_counter.completed_cycles
+            == cycles_before_goal + 1 + control_cycles
         )
 
-    def test_heartbeat_ticks_while_a_goal_never_ends_on_its_own(
+    def test_cycles_are_counted_while_a_goal_never_ends_on_its_own(
         self, motion_server: MotionServerFixture
     ):
         """
         A goal without an end motion only stops on cancel; an observer must still see
         progress while it runs.
         """
-        cancel_after = HeartbeatWatcher(
+        cancel_after = CycleWatchingGoalCanceler(
             world=motion_server.executor.context.world,
-            heartbeat=motion_server.heartbeat,
+            cycle_counter=motion_server.cycle_counter,
             action_server=motion_server.action_server,
             ticks_until_cancel=5,
         )
@@ -677,7 +700,7 @@ class TestHeartbeatDuringGoals:
         motion_server.motion_server.run_idle_cycle()
 
         assert cancel_after.observed_ticks >= 5
-        assert motion_server.action_server.outcome == "canceled"
+        assert motion_server.action_server.outcome == GoalOutcome.CANCELED
 
 
 class TestWorldUpdatesDuringGoals:
@@ -736,7 +759,7 @@ class TestWorldUpdatesDuringGoals:
 
         motion_server.motion_server.run_idle_cycle()
 
-        assert motion_server.action_server.outcome == "aborted"
+        assert motion_server.action_server.outcome == GoalOutcome.ABORTED
         control_cycles = len(motion_server.control_input.applied_at_control_cycles)
         assert control_cycles < 10, "the goal ran on instead of terminating promptly"
 

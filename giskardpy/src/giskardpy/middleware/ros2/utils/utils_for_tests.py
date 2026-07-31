@@ -1,16 +1,13 @@
-import asyncio
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from threading import Thread
 from time import sleep
-from typing import Tuple, Optional, List, Dict, Union, Iterable
+from typing import Tuple, Union, Iterable
 
 import numpy as np
-from angles import shortest_angular_distance
-from geometry_msgs.msg import PoseStamped, Point, PointStamped, Quaternion, Pose
+from geometry_msgs.msg import PoseStamped, Point, Quaternion, Pose
 
 import semantic_digital_twin.spatial_types.spatial_types as cas
-from giskardpy.middleware.ros2 import rospy
 from giskardpy.middleware.ros2.giskard import Giskard
 from giskardpy.middleware.ros2.python_interface import GiskardWrapperNode
 from semantic_digital_twin.adapters.ros import (
@@ -35,9 +32,7 @@ from semantic_digital_twin.world_description.connections import (
 from semantic_digital_twin.world_description.geometry import (
     Box,
     Scale,
-    Sphere,
     Cylinder,
-    Mesh,
 )
 from semantic_digital_twin.world_description.world_entity import (
     Body,
@@ -124,26 +119,17 @@ class GiskardTester(ABC):
     api: GiskardWrapperNode = field(init=False)
     giskard: Giskard = field(init=False)
 
-    total_time_spend_giskarding: int = 0
-    total_time_spend_moving: int = 0
-    default_env_name: Optional[str] = None
-    robot_names: List[PrefixedName] = field(default_factory=list)
+    default_env_name: str | None = None
 
     def __post_init__(self):
-        self.async_loop = asyncio.new_event_loop()
         self.giskard = self.setup_giskard()
         self.giskard.setup()
-        self.robot_names = [
-            v.name for v in self.world.get_semantic_annotations_by_type(AbstractRobot)
-        ]
         self.default_root = self.world.root
-
-        self.original_number_of_links = len(self.world.bodies)
-        self.heart = Thread(
+        self.motion_server_thread = Thread(
             target=self.giskard.motion_server.live, name="motion server"
         )
-        self.heart.start()
-        self.wait_heartbeats(1)
+        self.motion_server_thread.start()
+        self.wait_for_cycles(1)
         self.api = GiskardWrapperNode(node_name="tests")
 
     @abstractmethod
@@ -156,20 +142,6 @@ class GiskardTester(ABC):
     def get_odometry_joint(self) -> OmniDrive:
         return self.world.get_semantic_annotations_by_type(AbstractRobot)[0].drive
 
-    def compute_fk_pose(self, root_link: str, tip_link: str) -> PoseStamped:
-        root_T_tip = self.world.compute_forward_kinematics(
-            root=self.world.get_kinematic_structure_entity_by_name(root_link),
-            tip=self.world.get_kinematic_structure_entity_by_name(tip_link),
-        )
-        return SemDTToRos2Converter.convert(root_T_tip.to_pose())
-
-    def compute_fk_point(self, root_link: str, tip_link: str) -> PointStamped:
-        root_T_tip = self.world.compute_forward_kinematics(
-            root=self.world.get_kinematic_structure_entity_by_name(root_link),
-            tip=self.world.get_kinematic_structure_entity_by_name(tip_link),
-        ).to_position()
-        return SemDTToRos2Converter.convert(root_T_tip)
-
     def has_odometry_joint(self) -> bool:
         try:
             joint = self.get_odometry_joint()
@@ -177,15 +149,17 @@ class GiskardTester(ABC):
             return False
         return isinstance(joint, (OmniDrive,))
 
-    def wait_heartbeats(self, number=5):
+    def wait_for_cycles(self, number_of_cycles: int = 5) -> None:
         """
-        Block until the motion server completed ``number`` more cycles.
+        Block until the motion server completed that many more cycles.
 
         Control cycles count too, so this also returns while a goal is being executed.
+
+        :param number_of_cycles: How many cycles to wait for.
         """
-        heartbeat = self.giskard.motion_server.heartbeat
-        first_cycle = heartbeat.count
-        while heartbeat.count < first_cycle + number:
+        cycle_counter = self.giskard.motion_server.cycle_counter
+        first_cycle = cycle_counter.completed_cycles
+        while cycle_counter.completed_cycles < first_cycle + number_of_cycles:
             sleep(0.001)
 
     def close(self):
@@ -196,42 +170,6 @@ class GiskardTester(ABC):
         callback left registered here would publish on a node that is already gone.
         """
         self.giskard.close_world_model_ros_interface()
-
-    def print_stats(self):
-        giskarding_time = self.total_time_spend_giskarding
-        if not self.giskard.server_config.is_standalone:
-            giskarding_time -= self.total_time_spend_moving
-        rospy.node.get_logger().info(f"total time spend giskarding: {giskarding_time}")
-        rospy.node.get_logger().info(
-            f"total time spend moving: {self.total_time_spend_moving}"
-        )
-
-    def compare_joint_state(
-        self,
-        current_js: Dict[Union[str, PrefixedName], float],
-        goal_js: Dict[Union[str, PrefixedName], float],
-        decimal: int = 2,
-    ):
-        for joint_name in goal_js:
-            goal = goal_js[joint_name]
-            current = current_js[joint_name]
-            connection: ActiveConnection1DOF = self.world.get_connection_by_name(
-                joint_name
-            )
-            if not connection.dof.has_position_limits():
-                np.testing.assert_almost_equal(
-                    shortest_angular_distance(goal, current),
-                    0,
-                    decimal=decimal,
-                    err_msg=f"{joint_name}: actual: {current} desired: {goal}",
-                )
-            else:
-                np.testing.assert_almost_equal(
-                    current,
-                    goal,
-                    decimal,
-                    err_msg=f"{joint_name}: actual: {current} desired: {goal}",
-                )
 
     #
     # BULLET WORLD #####################################################################################################
@@ -250,14 +188,14 @@ class GiskardTester(ABC):
             )
             self.api.world.remove_connection(body.parent_connection)
             self.api.world.add_connection(new_connection)
-        self.wait_heartbeats()
+        self.wait_for_cycles()
 
     def add_box_to_world(
         self,
         name: str,
         size: Tuple[float, float, float],
         pose: HomogeneousTransformationMatrix,
-        parent_link: Optional[KinematicStructureEntity] = None,
+        parent_link: KinematicStructureEntity | None = None,
     ) -> None:
         parent_link = parent_link or self.api.world.root
 
@@ -277,36 +215,7 @@ class GiskardTester(ABC):
                 parent_T_connection_expression=parent_T_pose,
             )
             self.api.world.add_connection(connection)
-        self.wait_heartbeats()
-
-    def add_sphere_to_world(
-        self,
-        name: str,
-        radius: float = 1.0,
-        pose: PoseStamped = None,
-        parent_link: str | PrefixedName | None = None,
-    ) -> None:
-        if parent_link is None:
-            parent_link = self.api.world.root
-        else:
-            parent_link = self.api.world.get_kinematic_structure_entity_by_name(
-                parent_link
-            )
-        with self.api.world.modify_world():
-            sphere = Body(name=PrefixedName(name))
-            sphere_shape = Sphere(radius=radius)
-            sphere.collision.append(sphere_shape)
-            sphere.visual.append(sphere_shape)
-
-            connection = FixedConnection(
-                parent=parent_link,
-                child=sphere,
-                parent_T_connection_expression=Ros2ToSemDTConverter.convert(
-                    pose, self.api.world
-                ),
-            )
-            self.api.world.add_connection(connection)
-        self.wait_heartbeats()
+        self.wait_for_cycles()
 
     def add_cylinder_to_world(
         self,
@@ -338,39 +247,7 @@ class GiskardTester(ABC):
                 parent_T_connection_expression=parent_T_pose,
             )
             self.api.world.add_connection(connection)
-        self.wait_heartbeats()
-
-    def add_mesh_to_world(
-        self,
-        pose: PoseStamped,
-        name: str = "meshy",
-        mesh: str = "",
-        parent_link: str | PrefixedName | None = None,
-        scale: Tuple[float, float, float] = (1.0, 1.0, 1.0),
-    ) -> None:
-        if parent_link is None:
-            parent_link = self.api.world.root
-        else:
-            parent_link = self.api.world.get_kinematic_structure_entity_by_name(
-                parent_link
-            )
-        parent_T_pose = self.api.world.transform(
-            spatial_object=Ros2ToSemDTConverter.convert(pose, self.api.world),
-            target_frame=parent_link,
-        )
-        with self.api.world.modify_world():
-            mesh_body = Body(name=PrefixedName(name))
-            mesh_shape = Mesh(filename=mesh, scale=Scale(*scale))
-            mesh_body.collision.append(mesh_shape)
-            mesh_body.visual.append(mesh_shape)
-
-            connection = FixedConnection(
-                parent=parent_link,
-                child=mesh_body,
-                parent_T_connection_expression=parent_T_pose,
-            )
-            self.api.world.add_connection(connection)
-        self.wait_heartbeats()
+        self.wait_for_cycles()
 
     def add_urdf_to_world(
         self,
@@ -395,7 +272,7 @@ class GiskardTester(ABC):
             )
             self.api.world.merge_world(world_with_pr2, root_connection=c_map_root)
 
-        self.wait_heartbeats()
+        self.wait_for_cycles()
 
     def update_parent_link_of_group(
         self,
@@ -406,7 +283,7 @@ class GiskardTester(ABC):
             body = self.api.world.get_kinematic_structure_entity_by_name(name)
             parent = self.api.world.get_kinematic_structure_entity_by_name(parent_link)
             self.api.world.move_branch(branch_root=body, new_parent=parent)
-        self.wait_heartbeats()
+        self.wait_for_cycles()
 
     def compute_all_collisions(self) -> CollisionCheckingResult:
         collision_manager = self.world.collision_manager
@@ -417,13 +294,7 @@ class GiskardTester(ABC):
         collision_manager.update_collision_matrix()
         return collision_manager.compute_collisions()
 
-    def check_cpi_geq(
-        self,
-        bodies: Iterable[Body],
-        distance_threshold: float,
-        check_external: bool = True,
-        check_self: bool = True,
-    ):
+    def check_cpi_geq(self, bodies: Iterable[Body], distance_threshold: float):
         collisions = self.compute_all_collisions()
         assert len(collisions.contacts) > 0
         for collision in collisions.contacts:
@@ -437,8 +308,6 @@ class GiskardTester(ABC):
         self,
         bodies: Iterable[Body],
         distance_threshold: float,
-        check_external: bool = True,
-        check_self: bool = True,
     ):
         collisions = self.compute_all_collisions()
         min_contact = None

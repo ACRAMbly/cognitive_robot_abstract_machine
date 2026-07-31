@@ -11,7 +11,7 @@ from giskardpy.middleware.ros2.exceptions import (
     WorldModelModifiedDuringMotionError,
 )
 from giskardpy.middleware.ros2.feedback_publisher import ActionFeedbackPublisher
-from giskardpy.middleware.ros2.heartbeat import Heartbeat
+from giskardpy.middleware.ros2.cycle_counter import CycleCounter
 from giskardpy.middleware.ros2.input_synchronization import WorldStateInputs
 from giskardpy.middleware.ros2.world_updates import IncomingWorldUpdates
 from semantic_digital_twin.world import World
@@ -46,7 +46,7 @@ class ControlLoop:
     Writes the state of the robot into the world at the start of every cycle.
     """
 
-    heartbeat: Heartbeat
+    cycle_counter: CycleCounter
     """
     Ticked at the end of every cycle, shared with the idle loop of the motion server.
     """
@@ -64,7 +64,6 @@ class ControlLoop:
     """
     Sends the computed velocities to the robot at the end of every cycle.
     """
-
 
     @property
     def world(self) -> World:
@@ -96,7 +95,7 @@ class ControlLoop:
         self.executor.tick()
         self.publish_commands()
         self.feedback_publisher.publish_if_changed()
-        self.heartbeat.tick()
+        self.cycle_counter.tick()
 
     def apply_world_updates(self) -> None:
         """
@@ -114,7 +113,6 @@ class ControlLoop:
         self.world_updates.acknowledge_receipt()
         if self.world_updates.has_pending_model_change:
             raise WorldModelModifiedDuringMotionError()
-
 
     def raise_if_canceled(self) -> None:
         """

@@ -1,15 +1,52 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from enum import Enum, auto
 from queue import Queue, Empty
 from time import sleep
-from typing import Any, Callable, Optional
+from typing import Any
 
 from rclpy.action import ActionServer, CancelResponse, GoalResponse
 from rclpy.action.server import ServerGoalHandle
 
-from giskardpy.data_types.exceptions import MissingActionResultError
+from giskardpy.data_types.exceptions import (
+    MissingActionResultError,
+    MissingGoalOutcomeError,
+)
 from giskardpy.middleware.ros2 import rospy
+
+
+class GoalOutcome(Enum):
+    """
+    How a goal ended, in the terms rclpy expects.
+    """
+
+    SUCCEEDED = auto()
+    """
+    The motion reached its end.
+    """
+
+    ABORTED = auto()
+    """
+    The motion failed.
+    """
+
+    CANCELED = auto()
+    """
+    The motion was stopped by the client or superseded by a new goal.
+    """
+
+    def report_to(self, goal_handle: ServerGoalHandle) -> None:
+        """
+        Transition the goal handle into the state matching this outcome.
+        """
+        match self:
+            case GoalOutcome.SUCCEEDED:
+                goal_handle.succeed()
+            case GoalOutcome.ABORTED:
+                goal_handle.abort()
+            case GoalOutcome.CANCELED:
+                goal_handle.canceled()
 
 
 @dataclass
@@ -38,12 +75,12 @@ class ActionServerHandler:
     Number of goals accepted so far, used to identify goals in logs and feedback.
     """
 
-    goal_msg: Optional[Any] = field(init=False, default=None)
+    goal_msg: Any | None = field(init=False, default=None)
     """
     Request of the currently accepted goal.
     """
 
-    goal_handle: Optional[ServerGoalHandle] = field(init=False, default=None)
+    goal_handle: ServerGoalHandle | None = field(init=False, default=None)
     """
     Handle of the currently accepted goal.
     """
@@ -53,10 +90,9 @@ class ActionServerHandler:
     Set when a new goal arrives while another one is still running.
     """
 
-    payload: Optional[Callable[[], None]] = field(init=False, default=None)
+    outcome: GoalOutcome | None = field(init=False, default=None)
     """
-    Callback that marks the goal as succeeded, aborted or canceled once the result was
-    handed back to rclpy.
+    How the current goal ended, reported to rclpy once the result was handed back.
     """
 
     goal_queue: Queue = field(init=False, default_factory=lambda: Queue(1))
@@ -69,7 +105,7 @@ class ActionServerHandler:
     Handover of results back to the rclpy executor thread.
     """
 
-    _result_msg: Optional[Any] = field(init=False, default=None)
+    _result_msg: Any | None = field(init=False, default=None)
     """
     Result of the currently accepted goal.
     """
@@ -125,12 +161,29 @@ class ActionServerHandler:
         self.goal_queue.put(goal_handle)
         result_msg = self.result_queue.get()
         self.loginfo("Sending response.")
+        outcome = self.outcome
         self.goal_msg = None
         self.goal_handle = None
         self.result_msg = None
         self.cancel_requested = False
-        self.payload()
+        self.outcome = None
+        self.report_outcome(goal_handle, outcome)
         return result_msg
+
+    def report_outcome(
+        self, goal_handle: ServerGoalHandle, outcome: GoalOutcome | None
+    ) -> None:
+        """
+        Tell rclpy how the goal ended.
+
+        The handler releases the goal before this runs, so that the next goal waiting in
+        :meth:`execute_cb` is not blocked while rclpy transitions this one.
+
+        :raises MissingGoalOutcomeError: If the goal is answered without an outcome.
+        """
+        if outcome is None:
+            raise MissingGoalOutcomeError()
+        outcome.report_to(goal_handle)
 
     def accept_goal(self) -> None:
         """
@@ -151,7 +204,7 @@ class ActionServerHandler:
         return self._result_msg
 
     @result_msg.setter
-    def result_msg(self, value: Optional[Any]) -> None:
+    def result_msg(self, value: Any | None) -> None:
         self._result_msg = value
 
     def has_goal(self) -> bool:
@@ -167,13 +220,13 @@ class ActionServerHandler:
         self.goal_handle.publish_feedback(message)
 
     def set_canceled(self) -> None:
-        self.payload = self.goal_handle.canceled
+        self.outcome = GoalOutcome.CANCELED
 
     def set_aborted(self) -> None:
-        self.payload = self.goal_handle.abort
+        self.outcome = GoalOutcome.ABORTED
 
     def set_succeeded(self) -> None:
-        self.payload = self.goal_handle.succeed
+        self.outcome = GoalOutcome.SUCCEEDED
 
     def send_result(self) -> None:
         """
