@@ -85,7 +85,11 @@ def main() -> None:
             WorldSynchronizer,
         )
 
-        rclpy.init()
+        # Only own the ROS context if this script started it, so the demo can also run
+        # inside a process that already has one.
+        started_ros_context = not rclpy.ok()
+        if started_ros_context:
+            rclpy.init()
         node = rclpy.create_node("stretch_demo_node")
 
         executor = SingleThreadedExecutor()
@@ -343,7 +347,7 @@ def main() -> None:
     with ExecutionEnvironment(execution_type=execution_type, collision_avoidance=False):
         plan.perform()
 
-    if execution_type == ExecutionType.REAL:
+    if execution_type == ExecutionType.REAL and started_ros_context:
         rclpy.shutdown()
 
 
