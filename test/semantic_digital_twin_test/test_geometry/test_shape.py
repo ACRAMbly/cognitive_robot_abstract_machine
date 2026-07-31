@@ -174,6 +174,55 @@ def test_per_vertex_colors_survive_serialization_unwelded(tmp_path):
     )
 
 
+def test_serialization_reproduces_the_same_mesh():
+    """
+    A deserialized mesh is the mesh that was serialized, not a differently tessellated
+    reading of the same file: same vertices, same faces, and the same answer to whether
+    it bounds a volume.
+    """
+    original = Mesh(
+        filename=os.path.join(
+            Path(files("semantic_digital_twin")).parent.parent,
+            "resources",
+            "stl",
+            "milk.stl",
+        )
+    )
+
+    restored = Mesh.from_json(original.to_json())
+
+    np.testing.assert_allclose(
+        np.asarray(restored.mesh.vertices),
+        np.asarray(original.mesh.vertices),
+        atol=1e-6,
+    )
+    np.testing.assert_array_equal(
+        np.asarray(restored.mesh.faces), np.asarray(original.mesh.faces)
+    )
+    assert restored.mesh.is_volume == original.mesh.is_volume
+
+
+def test_serialization_preserves_watertightness_of_a_closed_mesh():
+    """
+    Volume and boolean operations need a watertight mesh, so a closed mesh must still
+    bound a volume after a round-trip.
+    """
+    original = Mesh(
+        filename=os.path.join(
+            Path(files("semantic_digital_twin")).parent.parent,
+            "resources",
+            "stl",
+            "milk.stl",
+        )
+    )
+    assert original.mesh.is_volume
+
+    restored = Mesh.from_json(original.to_json())
+
+    assert restored.mesh.is_volume
+    np.testing.assert_allclose(restored.mesh.volume, original.mesh.volume, rtol=1e-6)
+
+
 def test_texture_defaults():
     texture = Texture(file_path="/textures/wood.png")
 
