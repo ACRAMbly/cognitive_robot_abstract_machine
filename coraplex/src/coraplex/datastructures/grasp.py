@@ -107,7 +107,7 @@ class GraspDescription:
 
             # Pre-pose calculation
             offset = (
-                np.array(bb_in_frame.dimensions)[approach_axis]
+                np.array(bb_in_frame.dimensions)[approach_axis] / 2
                 + self.manipulation_offset
             )[0]
         else:
