@@ -8630,6 +8630,25 @@ class NodeInitializationErrorDAO(
     }
 
 
+class EmptyDegreesOfFreedomErrorDAO(
+    NodeInitializationErrorDAO,
+    DataAccessObject[giskardpy.motion_statechart.exceptions.EmptyDegreesOfFreedomError],
+):
+    __tablename__ = "EmptyDegreesOfFreedomErrorDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(NodeInitializationErrorDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
+    )
+
+    __mapper_args__ = {
+        "polymorphic_identity": "EmptyDegreesOfFreedomErrorDAO",
+        "inherit_condition": database_id == NodeInitializationErrorDAO.database_id,
+        "polymorphic_load": "selectin",
+    }
+
+
 class EmptyGoalStateErrorDAO(
     NodeInitializationErrorDAO,
     DataAccessObject[giskardpy.motion_statechart.exceptions.EmptyGoalStateError],

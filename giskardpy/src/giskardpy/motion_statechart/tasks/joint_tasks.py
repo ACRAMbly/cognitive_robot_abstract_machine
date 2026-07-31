@@ -107,16 +107,27 @@ class JointVelocityLimit(Task):
     """
 
     connections: List[ActiveConnection1DOF] = field(kw_only=True)
-    """The joints whose velocity is constrained."""
+    """
+    The joints whose velocity is constrained.
+    """
 
     max_velocity: float = field(default=0.1, kw_only=True)
-    """Maximum allowed velocity (in rad/s or m/s, per joint)."""
+    """
+    Maximum allowed velocity (in rad/s or m/s, per joint).
+    """
 
     weight: float = field(
         default=DefaultWeights.WEIGHT_ABOVE_COLLISION_AVOIDANCE, kw_only=True
     )
     """
     Optimization weight determining how strongly the velocity limit is enforced.
+
+    Defaults to the same weight as its Cartesian equivalents
+    (:class:`~giskardpy.motion_statechart.tasks.cartesian_tasks.CartesianPositionVelocityLimit`,
+    :class:`~giskardpy.motion_statechart.tasks.cartesian_tasks.CartesianRotationVelocityLimit`):
+    a velocity *limit* is a physical constraint like a joint limit, not a goal, so it
+    is weighted above collision avoidance rather than below it like goal tasks (e.g.
+    :class:`JointPositionList`).
     """
 
     def build(self, context: MotionStatechartContext) -> NodeArtifacts:

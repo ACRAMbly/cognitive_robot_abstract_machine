@@ -115,6 +115,7 @@ class DifferentialDriveBaseGoal(Sequence):
                 goal_pose=root_T_goal2,
                 weight=self.weight,
                 translation_threshold=self.threshold,
+                orientation_threshold=self.threshold,
             ),
             CartesianPose(
                 name=f"{self.name}/step3",
@@ -123,6 +124,7 @@ class DifferentialDriveBaseGoal(Sequence):
                 goal_pose=root_T_goal,
                 weight=self.weight,
                 translation_threshold=self.threshold,
+                orientation_threshold=self.threshold,
             ),
         ]
         super().expand(context)

@@ -5,9 +5,9 @@ from abc import ABC
 from dataclasses import field
 from typing_extensions import List, Optional
 
-import krrood.symbolic_math.symbolic_math as sm
 from giskardpy.motion_statechart.context import MotionStatechartContext
 from giskardpy.motion_statechart.data_types import ObservationStateValues
+from giskardpy.motion_statechart.exceptions import EmptyDegreesOfFreedomError
 from giskardpy.motion_statechart.graph_node import (
     MotionStatechartNode,
     NodeArtifacts,
@@ -79,10 +79,10 @@ class LocalMinimumReached(MotionStatechartNode):
     Minimum elapsed control time before the observation can become true.
     """
 
-    measure_from_own_start: bool = False
+    measure_from_own_start: bool = True
     """
-    Whether ``minimum_time`` is measured from when this monitor itself started,
-    instead of from the start of the whole motion chart.
+    Whether ``minimum_time`` is measured from when this monitor itself started, instead
+    of from the start of the whole motion chart.
 
     Set this when the monitor is wrapped around one specific, possibly late-starting
     motion (e.g. via :class:`~giskardpy.motion_statechart.goals.templates.Parallel`)
@@ -106,17 +106,8 @@ class LocalMinimumReached(MotionStatechartNode):
             )
 
     def build(self, context: MotionStatechartContext) -> NodeArtifacts:
-        """
-        .. note:: If there are no degrees of freedom to converge, there is nothing to
-            wait for, so this reports done immediately once running.
-        """
-        degrees_of_freedom = (
-            self.degrees_of_freedom
-            if self.degrees_of_freedom is not None
-            else context.world.active_degrees_of_freedom
-        )
-        if not degrees_of_freedom:
-            return NodeArtifacts(observation=sm.Scalar.const_true())
+        if self.degrees_of_freedom is not None and not self.degrees_of_freedom:
+            raise EmptyDegreesOfFreedomError(node=self)
         if self.measure_from_own_start:
             self._start_cycle_variable = FloatVariable(f"{self.name}_start_cycle")
             context.float_variable_data.register_expression(self._start_cycle_variable)
@@ -126,7 +117,7 @@ class LocalMinimumReached(MotionStatechartNode):
                 joint_convergence_threshold=self.joint_convergence_threshold,
                 minimum_threshold=self.minimum_threshold,
                 maximum_threshold=self.maximum_threshold,
-                degrees_of_freedom=degrees_of_freedom,
+                degrees_of_freedom=self.degrees_of_freedom,
                 minimum_time=self.minimum_time,
                 reference_cycle_variable=self._start_cycle_variable,
             )

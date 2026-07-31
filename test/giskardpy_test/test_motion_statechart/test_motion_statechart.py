@@ -27,6 +27,7 @@ from giskardpy.motion_statechart.exceptions import (
     NonObservationVariableError,
     NodeAlreadyBelongsToDifferentNodeError,
     ConditionScopeError,
+    EmptyDegreesOfFreedomError,
 )
 from giskardpy.motion_statechart.goals.templates import Sequence, Parallel
 from giskardpy.motion_statechart.graph_node import (
@@ -516,6 +517,32 @@ def test_local_minimum_reached_only_depends_on_given_degrees_of_freedom(
         "r_wrist_roll_joint should still be mid-motion at this point -- otherwise "
         "this test doesn't prove the monitor ignored it"
     )
+
+
+def test_local_minimum_reached_measures_minimum_time_from_own_start_by_default():
+    """
+    measure_from_own_start must default to True: LocalMinimumReached is normally used to
+    detect a stall on one specific, possibly late-starting motion (e.g. wrapped in a
+    Parallel around it), so minimum_time should count from when the monitor itself
+    started running, not from the start of the whole motion chart, even if the caller
+    never sets the flag explicitly.
+    """
+    assert LocalMinimumReached().measure_from_own_start is True
+
+
+def test_local_minimum_reached_raises_on_explicitly_empty_degrees_of_freedom(
+    pr2_world_state_reset,
+):
+    """
+    Passing an explicit empty degrees_of_freedom list is a caller misconfiguration (e.g.
+    an empty set of connections upstream) and must raise, rather than silently turning
+    the monitor into a constant-true observation that could mask the bug.
+    """
+    monitor = LocalMinimumReached(degrees_of_freedom=[])
+    context = MotionStatechartContext(world=pr2_world_state_reset)
+
+    with pytest.raises(EmptyDegreesOfFreedomError):
+        monitor.build(context)
 
 
 @dataclass(eq=False, repr=False)

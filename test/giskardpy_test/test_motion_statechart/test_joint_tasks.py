@@ -274,34 +274,40 @@ def test_joint_velocity_limit_caps_a_fast_goal(pr2_world_state_reset):
     """
     JointVelocityLimit must genuinely slow down a joint's approach towards a distant
     target, unlike a reference/normalization velocity which is only a QP-optimization
-    hint -- capping the DOF far below its own hardware limit and a large target
-    distance should leave the joint clearly short of the target after a fixed number
-    of ticks.
+    hint -- the joint's velocity must stay within max_velocity on every single tick,
+    all the way until the goal is actually reached.
     """
     head_pan_joint = pr2_world_state_reset.get_connection_by_name("head_pan_joint")
+    max_velocity = 0.05
 
     msc = MotionStatechart()
     msc.add_nodes(
         [
             joint_goal := JointPositionList(
-                goal_state=JointState.from_mapping({head_pan_joint: 2.0}),
+                goal_state=JointState.from_mapping({head_pan_joint: 0.5}),
             ),
-            JointVelocityLimit(connections=[head_pan_joint], max_velocity=0.01),
+            JointVelocityLimit(connections=[head_pan_joint], max_velocity=max_velocity),
         ]
     )
-    end = EndMotion()
-    msc.add_node(end)
-    end.start_condition = joint_goal.observation_variable
 
     kin_sim = Executor(MotionStatechartContext(world=pr2_world_state_reset))
     kin_sim.compile(motion_statechart=msc)
-    for _ in range(5):
-        kin_sim.tick()
 
-    assert abs(head_pan_joint.position) < 0.05, (
-        "the joint should still be far short of the 2.0 rad target after only 5 "
-        "ticks under a 0.01 rad/s cap -- otherwise the limit isn't being enforced"
-    )
+    for i in range(400):
+        kin_sim.tick()
+        observed_velocity = abs(head_pan_joint.raw_dof.variables.velocity.resolve())
+        assert observed_velocity <= max_velocity + 1e-3, (
+            f"head_pan_joint's velocity {observed_velocity} exceeded the "
+            f"{max_velocity} rad/s cap on tick {i}"
+        )
+        if msc.observation_state[joint_goal] == ObservationStateValues.TRUE:
+            break
+    else:
+        raise TimeoutError(
+            "joint_goal never reached its target while under the velocity limit"
+        )
+
+    assert np.isclose(head_pan_joint.position, 0.5, atol=1e-2)
 
 
 def test_joint_sequence(pr2_world_state_reset):

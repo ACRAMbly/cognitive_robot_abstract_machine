@@ -1047,8 +1047,8 @@ class TestCartesianTasks:
 
     def test_soft_trunk_cartesian_position(self):
         """
-        Verifies that Giskardpy can solve and execute a CartesianPosition task
-        for the procedurally built Piecewise Constant Curvature SoftTrunk robot.
+        Verifies that Giskardpy can solve and execute a CartesianPosition task for the
+        procedurally built Piecewise Constant Curvature SoftTrunk robot.
         """
         from semantic_digital_twin.datastructures.soft_trunk import (
             SoftTrunk,
@@ -1137,6 +1137,32 @@ class TestDiffDriveBaseGoal:
             goal_pose,
             atol=1e-2,
         )
+
+    def test_custom_threshold_applies_to_both_translation_and_orientation(
+        self, cylinder_bot_diff_world
+    ):
+        """
+        DifferentialDriveBaseGoal exposes a single ``threshold`` field for its callers,
+        so it must feed both of CartesianPose's translation_threshold and
+        orientation_threshold -- otherwise a caller raising ``threshold`` only relaxes
+        the position tolerance while the rotation tolerance silently stays at
+        CartesianPose's own hardcoded default.
+        """
+        goal_pose = Pose.from_xyz_rpy(
+            x=1, y=1, yaw=np.pi / 4, reference_frame=cylinder_bot_diff_world.root
+        )
+        motion_statechart = MotionStatechart()
+        motion_statechart.add_node(
+            goal := DifferentialDriveBaseGoal(goal_pose=goal_pose, threshold=0.3)
+        )
+        motion_statechart.add_node(EndMotion.when_true(goal))
+
+        executor = Executor(MotionStatechartContext(world=cylinder_bot_diff_world))
+        executor.compile(motion_statechart=motion_statechart)
+
+        for step in goal.nodes[1:]:
+            assert step.translation_threshold == 0.3
+            assert step.orientation_threshold == 0.3
 
 
 class TestVelocityTasks:
