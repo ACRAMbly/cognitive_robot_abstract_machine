@@ -30,6 +30,7 @@ import krrood.ormatic.type_dict
 import krrood.patterns.role
 import krrood.symbol_graph.symbol_graph
 import pathlib
+import random_events.interval
 import sqlalchemy.sql.sqltypes
 import test.krrood_test.dataset.alternative_mappings_construction_order
 import test.krrood_test.dataset.example_classes
@@ -1535,6 +1536,21 @@ class GenericClassAssociationDAO(
         cascade="all, delete-orphan",
         foreign_keys="[GenericClassAssociationDAO_associated_value_list_association.source_genericclassassociationdao_id]",
         lazy="selectin",
+    )
+
+
+class HolderOfSimpleIntervalDAO(
+    Base,
+    DataAccessObject[test.krrood_test.dataset.example_classes.HolderOfSimpleInterval],
+):
+    __tablename__ = "HolderOfSimpleIntervalDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
+
+    bounds: Mapped[random_events.interval.SimpleInterval] = mapped_column(
+        sqlalchemy.sql.sqltypes.JSON, nullable=False, use_existing_column=True
     )
 
 
