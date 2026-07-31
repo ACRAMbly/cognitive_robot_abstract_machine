@@ -1,5 +1,7 @@
 from dataclasses import dataclass, field
 
+from typing_extensions import List, Union
+
 from giskardpy.middleware.ros2.robot_interface_config import (
     StandAloneRobotInterfaceConfig,
     RobotInterfaceConfig,
@@ -8,8 +10,10 @@ from giskardpy.model.world_config import (
     WorldWithOmniDriveRobot,
     WorldWithDiffDriveRobot,
 )
+from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 from semantic_digital_twin.robots.robot_parts import AbstractRobot
 from semantic_digital_twin.robots.stretch import Stretch
+from semantic_digital_twin.world import World
 from semantic_digital_twin.world_description.connections import (
     Connection6DoF,
     DifferentialDrive,
@@ -17,11 +21,14 @@ from semantic_digital_twin.world_description.connections import (
 
 
 class StretchStandaloneInterface(StandAloneRobotInterfaceConfig):
+    """
+    Standalone interface controlling Stretch's base drive and all of its actuated
+    joints.
+    """
 
     def __init__(self):
         super().__init__(
             [
-                # self.world.get_connections_by_type(DifferentialDrive)[0].name,
                 "joint_gripper_finger_left",
                 "joint_gripper_finger_right",
                 "joint_right_wheel",
@@ -36,6 +43,18 @@ class StretchStandaloneInterface(StandAloneRobotInterfaceConfig):
                 "joint_head_tilt",
             ]
         )
+
+    def controlled_joint_names(self, world: World) -> List[Union[str, PrefixedName]]:
+        """
+        The joints to control, with the base drive resolved from ``world``.
+
+        :param world: The world holding the robot and its base drive connection.
+        """
+        drive = world.get_connections_by_type(DifferentialDrive)[0]
+        return [drive.name, *self.joint_names]
+
+    def setup(self):
+        self.register_controlled_joints(self.controlled_joint_names(self.world))
 
 
 class StretchVelocityInterface(RobotInterfaceConfig):

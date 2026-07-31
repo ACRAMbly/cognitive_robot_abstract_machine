@@ -103,12 +103,11 @@ def coraplex_testing_session():
 
 @pytest.fixture(scope="function")
 def immutable_stretch_apartment_world(stretch_apartment_world):
-    context = Context(
-        stretch_apartment_world,
-        Stretch.from_world(stretch_apartment_world),
-    )
+    robot = stretch_apartment_world.get_semantic_annotations_by_type(Stretch)[0]
+    context = Context(stretch_apartment_world, robot)
     state = deepcopy(stretch_apartment_world.state._data)
 
-    yield stretch_apartment_world, context.robot, context
+    yield stretch_apartment_world, robot, context
 
     stretch_apartment_world.state._data[:] = state
+    stretch_apartment_world.notify_state_change()

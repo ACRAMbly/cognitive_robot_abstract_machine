@@ -72,6 +72,8 @@ import experiments.ormatic_experiments.scalability
 import experiments.querying
 import experiments.random_events_experiments.complement_worst_case_experiment
 import experiments.random_events_experiments.scalability_experiment
+import experiments.real_stretch_apartment_demo.apartment
+import experiments.real_stretch_apartment_demo.demo
 import experiments.sage_10k.demos
 import experiments.sage_10k.sage10k_actions
 import giskardpy.data_types.exceptions
@@ -531,6 +533,23 @@ class ExperimentsTableDAO_experiments_association(Base, AssociationDataAccessObj
         "ExperimentResultDAO",
         foreign_keys=[target_experimentresultdao_id],
         lazy="selectin",
+    )
+
+
+class StretchApartmentDAO_shelf_layers_association(Base, AssociationDataAccessObject):
+    __tablename__ = "_81615392203936453796357315928395965732783789986237919733255567"
+
+    database_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+
+    source_stretchapartmentdao_id: Mapped[int] = mapped_column(
+        ForeignKey("StretchApartmentDAO.database_id")
+    )
+    target_shelflayerdao_id: Mapped[int] = mapped_column(
+        ForeignKey("ShelfLayerDAO.database_id")
+    )
+
+    target: Mapped[ShelfLayerDAO] = relationship(
+        "ShelfLayerDAO", foreign_keys=[target_shelflayerdao_id], lazy="selectin"
     )
 
 
@@ -7693,6 +7712,195 @@ class ScalabilitySweepDAO(
 
     table: Mapped[ExperimentsTableDAO] = relationship(
         "ExperimentsTableDAO", uselist=False, foreign_keys=[table_id], post_update=True
+    )
+
+
+class PlacementDAO(
+    Base, DataAccessObject[experiments.real_stretch_apartment_demo.apartment.Placement]
+):
+    __tablename__ = "PlacementDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
+
+    x: Mapped[builtins.float] = mapped_column(use_existing_column=True)
+    y: Mapped[builtins.float] = mapped_column(use_existing_column=True)
+    z: Mapped[builtins.float] = mapped_column(use_existing_column=True)
+    yaw: Mapped[builtins.float] = mapped_column(use_existing_column=True)
+
+
+class StretchApartmentDAO(
+    Base,
+    DataAccessObject[
+        experiments.real_stretch_apartment_demo.apartment.StretchApartment
+    ],
+):
+    __tablename__ = "StretchApartmentDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
+
+    shelf_id: Mapped[int] = mapped_column(
+        ForeignKey("ShelfDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
+    )
+    wall_id: Mapped[typing.Optional[builtins.int]] = mapped_column(
+        ForeignKey("WallDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
+    )
+    bedside_table_id: Mapped[typing.Optional[builtins.int]] = mapped_column(
+        ForeignKey("BodyDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
+    )
+    sofa_id: Mapped[typing.Optional[builtins.int]] = mapped_column(
+        ForeignKey("BodyDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
+    )
+    walls_id: Mapped[typing.Optional[builtins.int]] = mapped_column(
+        ForeignKey("BodyDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
+    )
+    wardrobe_id: Mapped[typing.Optional[builtins.int]] = mapped_column(
+        ForeignKey("BodyDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
+    )
+    cereal_id: Mapped[typing.Optional[builtins.int]] = mapped_column(
+        ForeignKey("BodyDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
+    )
+
+    shelf: Mapped[ShelfDAO] = relationship(
+        "ShelfDAO", uselist=False, foreign_keys=[shelf_id], post_update=True
+    )
+    shelf_layers: Mapped[
+        builtins.list[StretchApartmentDAO_shelf_layers_association]
+    ] = relationship(
+        "StretchApartmentDAO_shelf_layers_association",
+        collection_class=builtins.list,
+        cascade="all, delete-orphan",
+        foreign_keys="[StretchApartmentDAO_shelf_layers_association.source_stretchapartmentdao_id]",
+        lazy="selectin",
+    )
+    wall: Mapped[WallDAO] = relationship(
+        "WallDAO", uselist=False, foreign_keys=[wall_id], post_update=True
+    )
+    bedside_table: Mapped[BodyDAO] = relationship(
+        "BodyDAO", uselist=False, foreign_keys=[bedside_table_id], post_update=True
+    )
+    sofa: Mapped[BodyDAO] = relationship(
+        "BodyDAO", uselist=False, foreign_keys=[sofa_id], post_update=True
+    )
+    walls: Mapped[BodyDAO] = relationship(
+        "BodyDAO", uselist=False, foreign_keys=[walls_id], post_update=True
+    )
+    wardrobe: Mapped[BodyDAO] = relationship(
+        "BodyDAO", uselist=False, foreign_keys=[wardrobe_id], post_update=True
+    )
+    cereal: Mapped[BodyDAO] = relationship(
+        "BodyDAO", uselist=False, foreign_keys=[cereal_id], post_update=True
+    )
+
+
+class WardrobeDoorMeasurementsDAO(
+    Base,
+    DataAccessObject[
+        experiments.real_stretch_apartment_demo.apartment.WardrobeDoorMeasurements
+    ],
+):
+    __tablename__ = "WardrobeDoorMeasurementsDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
+
+    side: Mapped[builtins.str] = mapped_column(
+        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
+    )
+    mesh_file_name: Mapped[builtins.str] = mapped_column(
+        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
+    )
+
+    handle_placement_id: Mapped[int] = mapped_column(
+        ForeignKey("PlacementDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
+    )
+    door_placement_id: Mapped[int] = mapped_column(
+        ForeignKey("PlacementDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
+    )
+
+    handle_placement: Mapped[PlacementDAO] = relationship(
+        "PlacementDAO",
+        uselist=False,
+        foreign_keys=[handle_placement_id],
+        post_update=True,
+    )
+    door_placement: Mapped[PlacementDAO] = relationship(
+        "PlacementDAO",
+        uselist=False,
+        foreign_keys=[door_placement_id],
+        post_update=True,
+    )
+
+
+class RealStretchApartmentDemoDAO(
+    Base,
+    DataAccessObject[
+        experiments.real_stretch_apartment_demo.demo.RealStretchApartmentDemo
+    ],
+):
+    __tablename__ = "RealStretchApartmentDemoDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
+
+    world_id: Mapped[int] = mapped_column(
+        ForeignKey("WorldMappingDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
+    )
+    robot_id: Mapped[int] = mapped_column(
+        ForeignKey("StretchDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
+    )
+    apartment_id: Mapped[int] = mapped_column(
+        ForeignKey("StretchApartmentDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
+    )
+    context_id: Mapped[int] = mapped_column(
+        ForeignKey("ContextDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
+    )
+
+    world: Mapped[WorldMappingDAO] = relationship(
+        "WorldMappingDAO", uselist=False, foreign_keys=[world_id], post_update=True
+    )
+    robot: Mapped[StretchDAO] = relationship(
+        "StretchDAO", uselist=False, foreign_keys=[robot_id], post_update=True
+    )
+    apartment: Mapped[StretchApartmentDAO] = relationship(
+        "StretchApartmentDAO",
+        uselist=False,
+        foreign_keys=[apartment_id],
+        post_update=True,
+    )
+    context: Mapped[ContextDAO] = relationship(
+        "ContextDAO", uselist=False, foreign_keys=[context_id], post_update=True
     )
 
 

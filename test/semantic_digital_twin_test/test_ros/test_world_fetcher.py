@@ -255,5 +255,21 @@ def test_pr2_collision_rules(rclpy_node, pr2_world_state_reset):
         pr2_world_copy.collision_manager.rules
     )
 
-    copy_pr2 = pr2_world_copy.get_semantic_annotations_by_type(PR2)[0]
-    assert len(copy_pr2.torso.joint_states) !=0
+
+def test_fetched_robot_parts_keep_their_joint_states(rclpy_node, pr2_world_state_reset):
+    """
+    Joint states are attached to robot parts after the parts themselves exist, so they
+    are recorded as their own modifications.
+
+    A fetched world must replay those too, not just the modifications that created the
+    kinematic structure.
+    """
+    pr2 = pr2_world_state_reset.get_semantic_annotations_by_type(PR2)[0]
+    fetcher = FetchWorldServer(node=rclpy_node, world=pr2_world_state_reset)
+
+    pr2_world_copy = fetch_world_from_service(rclpy_node, timeout_seconds=10)
+
+    fetched_pr2 = pr2_world_copy.get_semantic_annotations_by_type(PR2)[0]
+    assert [joint_state.name for joint_state in fetched_pr2.torso.joint_states] == [
+        joint_state.name for joint_state in pr2.torso.joint_states
+    ]

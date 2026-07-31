@@ -1,8 +1,16 @@
+"""
+Stretch fetches a cereal box from a shelf and places it on a bedside table.
+
+Set ``STRETCH_DEMO_EXECUTION=REAL`` to drive the actual robot, which fetches the world
+from the running world server. The default runs the whole plan in simulation against a
+world built from the Stretch URDF, so importing this script needs nothing on the
+network.
+"""
+
+import os
 import threading
 
 import numpy as np
-import rclpy
-from rclpy.executors import SingleThreadedExecutor
 
 from coraplex.alternative_motion_mappings.stretch_motion_mapping import (
     StretchClose,
@@ -12,26 +20,21 @@ from coraplex.alternative_motion_mappings.stretch_motion_mapping import (
 )
 from coraplex.datastructures.dataclasses import Context
 from coraplex.datastructures.enums import (
-    Arms,
     ApproachDirection,
-    VerticalAlignment,
+    Arms,
     ExecutionType,
+    VerticalAlignment,
 )
 from coraplex.datastructures.grasp import GraspDescription
 from coraplex.execution_environment import ExecutionEnvironment
 from coraplex.plans.factories import sequential
-from coraplex.robot_plans.actions.core.navigation import NavigateAction, LookAtAction
+from coraplex.robot_plans.actions.core.navigation import LookAtAction, NavigateAction
 from coraplex.robot_plans.actions.core.pick_up import PickUpAction
 from coraplex.robot_plans.actions.core.placing import PlaceAction
 from coraplex.robot_plans.actions.core.robot_body import ParkArmsAction
 from coraplex.view_manager import ViewManager
 from semantic_digital_twin.adapters.mesh import STLParser
 from semantic_digital_twin.adapters.package_resolver import CompositePathResolver
-from semantic_digital_twin.adapters.ros.visualization.viz_marker import (
-    VizMarkerPublisher,
-)
-from semantic_digital_twin.adapters.ros.world_fetcher import fetch_world_from_service
-from semantic_digital_twin.adapters.ros.world_synchronizer import WorldSynchronizer
 from semantic_digital_twin.adapters.urdf import URDFParser
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 from semantic_digital_twin.robots.stretch import Stretch
@@ -49,38 +52,55 @@ from semantic_digital_twin.world_description.connections import (
 from semantic_digital_twin.world_description.geometry import Scale
 from semantic_digital_twin.world_description.world_entity import Body
 
-rclpy.init()
-node = rclpy.create_node("stretch_demo_node")
+execution_type = ExecutionType[os.environ.get("STRETCH_DEMO_EXECUTION", "SIMULATED")]
 
-executor = SingleThreadedExecutor()
-executor.add_node(node)
 
-thread = threading.Thread(target=executor.spin, daemon=True, name="rclpy-executor")
-thread.start()
+def apartment_mesh(mesh_file_name: str):
+    """
+    Parse one of the apartment's visual meshes into its own world.
+    """
+    return STLParser(
+        file_path=CompositePathResolver().resolve(
+            f"package://iai_apartment/meshes/visual/{mesh_file_name}"
+        )
+    ).parse()
 
-execution_type = ExecutionType.REAL
 
-if execution_type == ExecutionType.SIMULATED:
-    stretch_parse = URDFParser.from_file(
-        "package://stretch_description/urdf/stretch_description_RE2V0_tool_stretch_dex_wrist.xacro"
+# %% world
+
+if execution_type == ExecutionType.REAL:
+    import rclpy
+    from rclpy.executors import SingleThreadedExecutor
+
+    from semantic_digital_twin.adapters.ros.world_fetcher import (
+        fetch_world_from_service,
     )
-    world = stretch_parse.parse()
+    from semantic_digital_twin.adapters.ros.world_synchronizer import WorldSynchronizer
+
+    rclpy.init()
+    node = rclpy.create_node("stretch_demo_node")
+
+    executor = SingleThreadedExecutor()
+    executor.add_node(node)
+    threading.Thread(target=executor.spin, daemon=True, name="rclpy-executor").start()
+
+    # 300s matches giskardpy's own client (giskardpy/middleware/ros2/python_interface.py),
+    # which waits this long for the same race: the world-fetcher server is still parsing
+    # the URDF and starting up when the default 10s budget would otherwise expire.
+    world = fetch_world_from_service(node=node, timeout_seconds=300)
+    WorldSynchronizer(_world=world, node=node)
+else:
+    node = None
+    world = URDFParser.from_file(Stretch.get_ros_file_path()).parse()
     Stretch.from_world(world)
     with world.modify_world():
         world.add_kinematic_structure_entity(map_body := Body(name=PrefixedName("map")))
         world.add_connection(
             drive := DifferentialDrive.create_with_dofs(world, map_body, world.root)
         )
-    VizMarkerPublisher(_world=world, node=node).with_tf_publisher()
     drive.origin = HomogeneousTransformationMatrix.from_xyz_rpy(
         1, 1, reference_frame=world.root
     )
-else:
-    # 300s matches giskardpy's own client (giskardpy/middleware/ros2/python_interface.py),
-    # which waits this long for the same race: the world-fetcher server is still parsing
-    # the URDF and starting up when the default 10s budget would otherwise expire.
-    world = fetch_world_from_service(node=node, timeout_seconds=300)
-    WorldSynchronizer(_world=world, node=node)
 
 if not world.is_kinematic_structure_entity_in_world_by_name("cheeze_it.obj"):
     # ------------------------------------------------------------------ shelf
@@ -133,39 +153,23 @@ if not world.is_kinematic_structure_entity_in_world_by_name("cheeze_it.obj"):
         )
 
     # ---------------------------------------------------------- bedside table
-    bedside_table_world = STLParser(
-        file_path=CompositePathResolver().resolve(
-            "package://iai_apartment/meshes/visual/bedside_table.dae"
-        )
-    ).parse()
-    world_T_bedside_table = HomogeneousTransformationMatrix.from_xyz_rpy(
-        x=1.92, y=2.68, yaw=17.8 * (-np.pi / 32), reference_frame=world.root
-    )
+    bedside_table_world = apartment_mesh("bedside_table.dae")
     world.merge_world(
         bedside_table_world,
         FixedConnection.create_with_dofs(
             world=world,
             parent=world.root,
             child=bedside_table_world.root,
-            parent_T_connection_expression=world_T_bedside_table,
+            parent_T_connection_expression=HomogeneousTransformationMatrix.from_xyz_rpy(
+                x=1.92, y=2.68, yaw=17.8 * (-np.pi / 32), reference_frame=world.root
+            ),
         ),
     )
 
     # -------------------------------------------------------------------- sofa
-    sofa_world = STLParser(
-        file_path=CompositePathResolver().resolve(
-            "package://iai_apartment/meshes/visual/sofa_bed.obj"
-        )
-    ).parse()
+    sofa_world = apartment_mesh("sofa_bed.obj")
     sofa_height = (
         sofa_world.root.collision.max_point[2] - sofa_world.root.collision.min_point[2]
-    )
-    world_T_sofa = HomogeneousTransformationMatrix.from_xyz_rpy(
-        x=1.0,
-        y=3.15,
-        z=sofa_height / 2,
-        yaw=17.75 * (-np.pi / 32),
-        reference_frame=world.root,
     )
     world.merge_world(
         sofa_world,
@@ -173,51 +177,40 @@ if not world.is_kinematic_structure_entity_in_world_by_name("cheeze_it.obj"):
             world=world,
             parent=world.root,
             child=sofa_world.root,
-            parent_T_connection_expression=world_T_sofa,
+            parent_T_connection_expression=HomogeneousTransformationMatrix.from_xyz_rpy(
+                x=1.0,
+                y=3.15,
+                z=sofa_height / 2,
+                yaw=17.75 * (-np.pi / 32),
+                reference_frame=world.root,
+            ),
         ),
     )
 
     # ------------------------------------------------------------------- walls
-    wall_world = STLParser(
-        file_path=CompositePathResolver().resolve(
-            "package://iai_apartment/meshes/visual/walls.dae"
-        )
-    ).parse()
-    world_T_wall = HomogeneousTransformationMatrix.from_xyz_rpy(
-        x=-7.34, y=1.43, z=-0.2, yaw=0, reference_frame=world.root
-    )
+    wall_world = apartment_mesh("walls.dae")
     world.merge_world(
         wall_world,
         FixedConnection.create_with_dofs(
             world=world,
             parent=world.root,
             child=wall_world.root,
-            parent_T_connection_expression=world_T_wall,
+            parent_T_connection_expression=HomogeneousTransformationMatrix.from_xyz_rpy(
+                x=-7.34, y=1.43, z=-0.2, yaw=0, reference_frame=world.root
+            ),
         ),
     )
 
     # ---------------------------------------------------------------- wardrobe
-    wardrobe_world = STLParser(
-        file_path=CompositePathResolver().resolve(
-            "package://iai_apartment/meshes/visual/wardrobe.dae"
-        )
-    ).parse()
+    wardrobe_world = apartment_mesh("wardrobe.dae")
 
     for side, door_mesh, handle_y, door_y in [
         ("left", "wardrobe_door_left.dae", -0.460513, 0.5),
         ("right", "wardrobe_door_right.dae", 0.460513, -0.5),
     ]:
-        door_world = STLParser(
-            file_path=CompositePathResolver().resolve(
-                f"package://iai_apartment/meshes/visual/{door_mesh}"
-            )
-        ).parse()
+        door_world = apartment_mesh(door_mesh)
 
-        handle_world = STLParser(
-            file_path=CompositePathResolver().resolve(
-                "package://iai_apartment/meshes/visual/wardrobe_door_handle.dae"
-            )
-        ).parse()
+        handle_world = apartment_mesh("wardrobe_door_handle.dae")
         handle_world.root.name.name = f"wardrobe_door_handle_{side}"
         door_world.merge_world(
             handle_world,
@@ -259,11 +252,7 @@ if not world.is_kinematic_structure_entity_in_world_by_name("cheeze_it.obj"):
     )
 
     # ------------------------------------------------------------------ cereal
-    cereal = STLParser(
-        file_path=CompositePathResolver().resolve(
-            "package://iai_apartment/meshes/visual/cheeze_it.obj"
-        )
-    ).parse()
+    cereal = apartment_mesh("cheeze_it.obj")
 
     with world.modify_world():
         parent = world.get_body_by_name("shelf_layer2")
@@ -281,6 +270,8 @@ if not world.is_kinematic_structure_entity_in_world_by_name("cheeze_it.obj"):
                 ),
             ),
         )
+
+# %% plan
 
 robot = world.get_semantic_annotations_by_type(Stretch)[0]
 
@@ -337,4 +328,5 @@ plan = sequential(
 with ExecutionEnvironment(execution_type=execution_type, collision_avoidance=False):
     plan.perform()
 
-rclpy.shutdown()
+if execution_type == ExecutionType.REAL:
+    rclpy.shutdown()
