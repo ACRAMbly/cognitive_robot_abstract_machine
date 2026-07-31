@@ -3,12 +3,15 @@ from copy import deepcopy
 import numpy as np
 import pytest
 
+from giskardpy.motion_statechart.goals.cartesian_goals import DifferentialDriveBaseGoal
 from giskardpy.motion_statechart.goals.templates import Parallel
 from giskardpy.motion_statechart.monitors.monitors import LocalMinimumReached
 from giskardpy.motion_statechart.tasks.cartesian_tasks import CartesianPose
 from giskardpy.motion_statechart.tasks.joint_tasks import JointPositionList
 from giskardpy.motion_statechart.tasks.pointing import Pointing
 from coraplex.alternative_motion_mappings.stretch_motion_mapping import (
+    StretchMoveReal,
+    StretchMoveSim,
     StretchMoveToolCenterPoint,
 )
 from coraplex.datastructures.dataclasses import Context
@@ -208,3 +211,27 @@ def test_stretch_tool_center_point_accepts_a_local_minimum(
         node for node in reaching_stage.nodes if isinstance(node, LocalMinimumReached)
     )
     assert local_minimum.joint_convergence_threshold == 0.025
+
+
+# %% stretch base motion
+
+
+@pytest.mark.skipif(skip_tests, reason="Alternative motion mappings not available")
+def test_stretch_base_motion_follows_the_execution_environment(
+    immutable_stretch_apartment_world,
+):
+    """
+    One base motion resolves to a different mapping per execution environment, so a run
+    on the robot drives the real base rather than silently simulating it.
+    """
+    world, robot, context = immutable_stretch_apartment_world
+    context.alternative_motion_mappings = [StretchMoveSim, StretchMoveReal]
+    motion = MoveMotion(Pose.from_xyz_rpy(1, 1, 0, reference_frame=world.root))
+    execute_single(motion, context=context)
+
+    with real_robot:
+        assert motion.get_alternative_motion() is StretchMoveReal
+        assert isinstance(motion.motion_chart, DifferentialDriveBaseGoal)
+
+    with simulated_robot:
+        assert motion.get_alternative_motion() is StretchMoveSim

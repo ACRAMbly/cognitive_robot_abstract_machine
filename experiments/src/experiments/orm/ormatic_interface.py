@@ -64,6 +64,7 @@ import coraplex.training_environments.training_environment
 import coraplex.view_manager
 import datetime
 import enum
+import experiments.demonstration
 import experiments.eql_experiments.monitoring_profile
 import experiments.experiment_definitions
 import experiments.graph_of_convex_sets_experiments
@@ -72,6 +73,7 @@ import experiments.ormatic_experiments.scalability
 import experiments.querying
 import experiments.random_events_experiments.complement_worst_case_experiment
 import experiments.random_events_experiments.scalability_experiment
+import experiments.real_stretch_apartment_demo.demo
 import experiments.sage_10k.demos
 import experiments.sage_10k.sage10k_actions
 import giskardpy.data_types.exceptions
@@ -6769,6 +6771,42 @@ class ViewManagerDAO(Base, DataAccessObject[coraplex.view_manager.ViewManager]):
     )
 
 
+class RobotDemonstrationDAO(
+    Base, DataAccessObject[experiments.demonstration.RobotDemonstration]
+):
+    __tablename__ = "RobotDemonstrationDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
+
+    collision_avoidance: Mapped[builtins.bool] = mapped_column(use_existing_column=True)
+
+    execution_type: Mapped[coraplex.datastructures.enums.ExecutionType] = mapped_column(
+        krrood.ormatic.custom_types.PolymorphicEnumType,
+        nullable=False,
+        use_existing_column=True,
+    )
+    polymorphic_type: Mapped[str] = mapped_column(
+        String(255), nullable=False, use_existing_column=True
+    )
+
+    __mapper_args__ = {
+        "polymorphic_on": "polymorphic_type",
+        "polymorphic_identity": "RobotDemonstrationDAO",
+    }
+
+
+class RosSessionDAO(Base, DataAccessObject[experiments.demonstration.RobotDemonstrationRosSession]):
+    __tablename__ = "RosSessionDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
+
+    owns_context: Mapped[builtins.bool] = mapped_column(use_existing_column=True)
+
+
 class GadgetDAO(
     Base, DataAccessObject[experiments.eql_experiments.monitoring_profile.Gadget]
 ):
@@ -7694,6 +7732,27 @@ class ScalabilitySweepDAO(
     table: Mapped[ExperimentsTableDAO] = relationship(
         "ExperimentsTableDAO", uselist=False, foreign_keys=[table_id], post_update=True
     )
+
+
+class StretchApartmentDemonstrationDAO(
+    RobotDemonstrationDAO,
+    DataAccessObject[
+        experiments.real_stretch_apartment_demo.demo.StretchApartmentDemonstration
+    ],
+):
+    __tablename__ = "StretchApartmentDemonstrationDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(RobotDemonstrationDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
+    )
+
+    __mapper_args__ = {
+        "polymorphic_identity": "StretchApartmentDemonstrationDAO",
+        "inherit_condition": database_id == RobotDemonstrationDAO.database_id,
+        "polymorphic_load": "selectin",
+    }
 
 
 class Sage10kAbstractDemoHSRBDAO(
@@ -8854,6 +8913,10 @@ class GiskardTesterDAO(
         sqlalchemy.sql.sqltypes.Text, use_existing_column=True
     )
 
+    polymorphic_type: Mapped[str] = mapped_column(
+        String(255), nullable=False, use_existing_column=True
+    )
+
     robot_names: Mapped[builtins.list[GiskardTesterDAO_robot_names_association]] = (
         relationship(
             "GiskardTesterDAO_robot_names_association",
@@ -8863,6 +8926,30 @@ class GiskardTesterDAO(
             lazy="selectin",
         )
     )
+
+    __mapper_args__ = {
+        "polymorphic_on": "polymorphic_type",
+        "polymorphic_identity": "GiskardTesterDAO",
+    }
+
+
+class StretchTesterDAO(
+    GiskardTesterDAO,
+    DataAccessObject[giskardpy.middleware.ros2.utils.utils_for_tests.StretchTester],
+):
+    __tablename__ = "StretchTesterDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(GiskardTesterDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
+    )
+
+    __mapper_args__ = {
+        "polymorphic_identity": "StretchTesterDAO",
+        "inherit_condition": database_id == GiskardTesterDAO.database_id,
+        "polymorphic_load": "selectin",
+    }
 
 
 class WorldConfigDAO(Base, DataAccessObject[giskardpy.model.world_config.WorldConfig]):

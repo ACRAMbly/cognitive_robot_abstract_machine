@@ -1,16 +1,16 @@
 """
 Stretch fetches a cereal box from a shelf and places it on a bedside table.
 
-Set ``STRETCH_DEMO_EXECUTION=REAL`` to drive the actual robot, which fetches the world
-from the running world server. The default runs the whole plan in simulation against a
-world built from the Stretch URDF, so importing this script needs nothing on the
-network.
+Running with :attr:`~coraplex.datastructures.enums.ExecutionType.REAL` drives the actual
+robot and fetches the world from the running world server. The default runs the whole plan
+in simulation against a world built from the Stretch URDF, so nothing on the network is
+needed.
 """
 
-import os
-import threading
+from dataclasses import dataclass
 
 import numpy as np
+from typing_extensions import ClassVar
 
 from coraplex.alternative_motion_mappings.stretch_motion_mapping import (
     StretchClose,
@@ -26,13 +26,14 @@ from coraplex.datastructures.enums import (
     VerticalAlignment,
 )
 from coraplex.datastructures.grasp import GraspDescription
-from coraplex.execution_environment import ExecutionEnvironment
 from coraplex.plans.factories import sequential
+from coraplex.plans.plan_node import PlanNode
 from coraplex.robot_plans.actions.core.navigation import LookAtAction, NavigateAction
 from coraplex.robot_plans.actions.core.pick_up import PickUpAction
 from coraplex.robot_plans.actions.core.placing import PlaceAction
 from coraplex.robot_plans.actions.core.robot_body import ParkArmsAction
 from coraplex.view_manager import ViewManager
+from experiments.demonstration import RobotDemonstration
 from semantic_digital_twin.adapters.mesh import STLParser
 from semantic_digital_twin.adapters.package_resolver import CompositePathResolver
 from semantic_digital_twin.adapters.urdf import URDFParser
@@ -45,12 +46,18 @@ from semantic_digital_twin.semantic_annotations.semantic_annotations import (
 )
 from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix
 from semantic_digital_twin.spatial_types.spatial_types import Pose
+from semantic_digital_twin.world import World
 from semantic_digital_twin.world_description.connections import (
     DifferentialDrive,
     FixedConnection,
 )
 from semantic_digital_twin.world_description.geometry import Scale
 from semantic_digital_twin.world_description.world_entity import Body
+
+CEREAL_NAME = "cheeze_it.obj"
+"""
+Name of the transported body, which also marks whether the scene was already spawned.
+"""
 
 
 def apartment_mesh(mesh_file_name: str):
@@ -64,47 +71,18 @@ def apartment_mesh(mesh_file_name: str):
     ).parse()
 
 
-def main() -> None:
+@dataclass
+class StretchApartmentDemonstration(RobotDemonstration):
     """
-    Build the world, spawn the apartment and run the transport plan.
+    Stretch transports a cereal box from a shelf to a bedside table in the apartment.
     """
-    execution_type = ExecutionType[
-        os.environ.get("STRETCH_DEMO_EXECUTION", "SIMULATED")
-    ]
 
-    # %% world
+    ros_node_name: ClassVar[str] = "stretch_demo_node"
 
-    if execution_type == ExecutionType.REAL:
-        import rclpy
-        from rclpy.executors import SingleThreadedExecutor
-
-        from semantic_digital_twin.adapters.ros.world_fetcher import (
-            fetch_world_from_service,
-        )
-        from semantic_digital_twin.adapters.ros.world_synchronizer import (
-            WorldSynchronizer,
-        )
-
-        # Only own the ROS context if this script started it, so the demo can also run
-        # inside a process that already has one.
-        started_ros_context = not rclpy.ok()
-        if started_ros_context:
-            rclpy.init()
-        node = rclpy.create_node("stretch_demo_node")
-
-        executor = SingleThreadedExecutor()
-        executor.add_node(node)
-        threading.Thread(
-            target=executor.spin, daemon=True, name="rclpy-executor"
-        ).start()
-
-        # 300s matches giskardpy's own client (giskardpy/middleware/ros2/python_interface.py),
-        # which waits this long for the same race: the world-fetcher server is still parsing
-        # the URDF and starting up when the default 10s budget would otherwise expire.
-        world = fetch_world_from_service(node=node, timeout_seconds=300)
-        WorldSynchronizer(_world=world, node=node)
-    else:
-        node = None
+    def build_simulated_world(self) -> World:
+        """
+        Build the Stretch from its URDF and put it on a drive relative to a map body.
+        """
         world = URDFParser.from_file(Stretch.get_ros_file_path()).parse()
         Stretch.from_world(world)
         with world.modify_world():
@@ -117,9 +95,17 @@ def main() -> None:
         drive.origin = HomogeneousTransformationMatrix.from_xyz_rpy(
             1, 1, reference_frame=world.root
         )
+        return world
 
-    if not world.is_kinematic_structure_entity_in_world_by_name("cheeze_it.obj"):
-        # ------------------------------------------------------------------ shelf
+    def is_scene_populated(self, world: World) -> bool:
+        return world.is_kinematic_structure_entity_in_world_by_name(CEREAL_NAME)
+
+    def populate_scene(self, world: World) -> None:
+        """
+        Spawn the shelf, the furniture meshes and the cereal box.
+        """
+        # %% shelf
+
         with world.modify_world():
             # The hollow-case geometry parameters live on the root specification, so the
             # shelf is spawned from a specification rather than the plain body factory.
@@ -168,7 +154,8 @@ def main() -> None:
                 scale=Scale(0.03, 2.81, 0.265),
             )
 
-        # ---------------------------------------------------------- bedside table
+        # %% bedside table
+
         bedside_table_world = apartment_mesh("bedside_table.dae")
         world.merge_world(
             bedside_table_world,
@@ -182,7 +169,8 @@ def main() -> None:
             ),
         )
 
-        # -------------------------------------------------------------------- sofa
+        # %% sofa
+
         sofa_world = apartment_mesh("sofa_bed.obj")
         sofa_height = (
             sofa_world.root.collision.max_point[2]
@@ -204,7 +192,8 @@ def main() -> None:
             ),
         )
 
-        # ------------------------------------------------------------------- walls
+        # %% walls
+
         wall_world = apartment_mesh("walls.dae")
         world.merge_world(
             wall_world,
@@ -218,7 +207,8 @@ def main() -> None:
             ),
         )
 
-        # ---------------------------------------------------------------- wardrobe
+        # %% wardrobe
+
         wardrobe_world = apartment_mesh("wardrobe.dae")
 
         for side, door_mesh, handle_y, door_y in [
@@ -268,8 +258,9 @@ def main() -> None:
             ),
         )
 
-        # ------------------------------------------------------------------ cereal
-        cereal = apartment_mesh("cheeze_it.obj")
+        # %% cereal
+
+        cereal = apartment_mesh(CEREAL_NAME)
 
         with world.modify_world():
             parent = world.get_body_by_name("shelf_layer2")
@@ -288,67 +279,80 @@ def main() -> None:
                 ),
             )
 
-    # %% plan
+    def build_context(self, world: World) -> Context:
+        """
+        Build the plan context around the Stretch in ``world``.
 
-    robot = world.get_semantic_annotations_by_type(Stretch)[0]
+        ..note:: The ROS node has to be in the context for a real robot.
+        """
+        return Context(
+            world=world,
+            robot=world.get_semantic_annotations_by_type(Stretch)[0],
+            ros_node=self.ros_node,
+            evaluate_conditions=False,
+            alternative_motion_mappings=[
+                StretchMoveToolCenterPoint,
+                StretchMoveSim,
+                StretchMoveReal,
+                StretchClose,
+            ],
+        )
 
-    # It is important to have the ros_node in the context for a real robot.
-    context = Context(
-        world=world,
-        robot=robot,
-        ros_node=node,
-        evaluate_conditions=False,
-        alternative_motion_mappings=[
-            StretchMoveToolCenterPoint,
-            StretchMoveSim,
-            StretchMoveReal,
-            StretchClose,
-        ],
-    )
+    def build_plan(self, context: Context) -> PlanNode:
+        """
+        Pick the cereal box off the shelf and place it on the bedside table.
+        """
+        world = context.world
 
-    # Stretch has a single arm, so ViewManager resolves Arms.LEFT to it. Going through the
-    # ViewManager guarantees this is the same end effector the pick/place actions will drive.
-    grasp_description = GraspDescription(
-        ApproachDirection.FRONT,
-        VerticalAlignment.NoAlignment,
-        ViewManager.get_arm_view(Arms.LEFT, robot).end_effector,
-    )
+        # Stretch has a single arm, so ViewManager resolves Arms.LEFT to it. Going
+        # through the ViewManager guarantees this is the same end effector the pick and
+        # place actions will drive.
+        grasp_description = GraspDescription(
+            ApproachDirection.FRONT,
+            VerticalAlignment.NoAlignment,
+            ViewManager.get_arm_view(Arms.LEFT, context.robot).end_effector,
+        )
 
-    cereal_body = world.get_body_by_name("cheeze_it.obj")
-    shelf_layer_body = world.get_body_by_name("shelf_layer2")
-    bedside_table_body = world.get_body_by_name("bedside_table.dae")
+        cereal_body = world.get_body_by_name(CEREAL_NAME)
+        shelf_layer_body = world.get_body_by_name("shelf_layer2")
+        bedside_table_body = world.get_body_by_name("bedside_table.dae")
 
-    plan = sequential(
-        [
-            ParkArmsAction(Arms.BOTH),
-            NavigateAction(
-                Pose.from_xyz_rpy(
-                    0.8, 0.6, 0, yaw=-np.pi / 2, reference_frame=world.root
-                )
-            ),
-            LookAtAction(Pose.from_xyz_rpy(reference_frame=shelf_layer_body)),
-            PickUpAction(cereal_body, Arms.LEFT, grasp_description),
-            ParkArmsAction(Arms.BOTH),
-            NavigateAction(
-                Pose.from_xyz_rpy(2, 2, 0, yaw=np.pi / 2, reference_frame=world.root)
-            ),
-            PlaceAction(
-                object_designator=cereal_body,
-                target_location=Pose.from_xyz_rpy(
-                    x=0.1, z=0.49, yaw=np.pi, reference_frame=bedside_table_body
+        return sequential(
+            [
+                ParkArmsAction(Arms.BOTH),
+                NavigateAction(
+                    Pose.from_xyz_rpy(
+                        0.8, 0.6, 0, yaw=-np.pi / 2, reference_frame=world.root
+                    )
                 ),
-                arm=Arms.LEFT,
-            ),
-            ParkArmsAction(Arms.BOTH),
-        ],
-        context,
-    )
+                LookAtAction(Pose.from_xyz_rpy(reference_frame=shelf_layer_body)),
+                PickUpAction(cereal_body, Arms.LEFT, grasp_description),
+                ParkArmsAction(Arms.BOTH),
+                NavigateAction(
+                    Pose.from_xyz_rpy(
+                        2, 2, 0, yaw=np.pi / 2, reference_frame=world.root
+                    )
+                ),
+                PlaceAction(
+                    object_designator=cereal_body,
+                    target_location=Pose.from_xyz_rpy(
+                        x=0.1, z=0.49, yaw=np.pi, reference_frame=bedside_table_body
+                    ),
+                    arm=Arms.LEFT,
+                ),
+                ParkArmsAction(Arms.BOTH),
+            ],
+            context,
+        )
 
-    with ExecutionEnvironment(execution_type=execution_type, collision_avoidance=False):
-        plan.perform()
 
-    if execution_type == ExecutionType.REAL and started_ros_context:
-        rclpy.shutdown()
+def main(execution_type: ExecutionType = ExecutionType.SIMULATED) -> None:
+    """
+    Run the demonstration.
+
+    :param execution_type: Whether to drive the real robot or simulate it.
+    """
+    StretchApartmentDemonstration(execution_type=execution_type).run()
 
 
 if __name__ == "__main__":

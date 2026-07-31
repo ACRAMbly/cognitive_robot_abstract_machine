@@ -7678,6 +7678,10 @@ class GiskardTesterDAO(
         sqlalchemy.sql.sqltypes.Text, use_existing_column=True
     )
 
+    polymorphic_type: Mapped[str] = mapped_column(
+        String(255), nullable=False, use_existing_column=True
+    )
+
     robot_names: Mapped[builtins.list[GiskardTesterDAO_robot_names_association]] = (
         relationship(
             "GiskardTesterDAO_robot_names_association",
@@ -7687,6 +7691,30 @@ class GiskardTesterDAO(
             lazy="selectin",
         )
     )
+
+    __mapper_args__ = {
+        "polymorphic_on": "polymorphic_type",
+        "polymorphic_identity": "GiskardTesterDAO",
+    }
+
+
+class StretchTesterDAO(
+    GiskardTesterDAO,
+    DataAccessObject[giskardpy.middleware.ros2.utils.utils_for_tests.StretchTester],
+):
+    __tablename__ = "StretchTesterDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(GiskardTesterDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
+    )
+
+    __mapper_args__ = {
+        "polymorphic_identity": "StretchTesterDAO",
+        "inherit_condition": database_id == GiskardTesterDAO.database_id,
+        "polymorphic_load": "selectin",
+    }
 
 
 class WorldConfigDAO(Base, DataAccessObject[giskardpy.model.world_config.WorldConfig]):
