@@ -34,25 +34,33 @@ from coraplex.robot_plans.actions.core.placing import PlaceAction
 from coraplex.robot_plans.actions.core.robot_body import ParkArmsAction
 from coraplex.view_manager import ViewManager
 from experiments.demonstration import RobotDemonstration
-from semantic_digital_twin.adapters.mesh import STLParser
 from semantic_digital_twin.adapters.package_resolver import CompositePathResolver
-from semantic_digital_twin.adapters.urdf import URDFParser
-from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
+from semantic_digital_twin.api import (
+    BodySpecification,
+    RobotSpecification,
+    WorldSpecification,
+)
 from semantic_digital_twin.robots.stretch import Stretch
 from semantic_digital_twin.semantic_annotations.semantic_annotations import (
+    CheezeIt,
+    Door,
+    Handle,
+    Hinge,
     Shelf,
     ShelfLayer,
+    SideTable,
+    Sofa,
     Wall,
+    Wardrobe,
 )
-from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix
+from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix, Vector3
+from semantic_digital_twin.spatial_types.derivatives import DerivativeMap
 from semantic_digital_twin.spatial_types.spatial_types import Pose
 from semantic_digital_twin.world import World
-from semantic_digital_twin.world_description.connections import (
-    DifferentialDrive,
-    FixedConnection,
+from semantic_digital_twin.world_description.degree_of_freedom import (
+    DegreeOfFreedomLimits,
 )
 from semantic_digital_twin.world_description.geometry import Scale
-from semantic_digital_twin.world_description.world_entity import Body
 
 CEREAL_NAME = "cheeze_it.obj"
 """
@@ -60,15 +68,13 @@ Name of the transported body, which also marks whether the scene was already spa
 """
 
 
-def apartment_mesh(mesh_file_name: str):
+def apartment_mesh_path(mesh_file_name: str) -> str:
     """
-    Parse one of the apartment's visual meshes into its own world.
+    Resolve one of the apartment's visual meshes to a local file path.
     """
-    return STLParser(
-        file_path=CompositePathResolver().resolve(
-            f"package://iai_apartment/meshes/visual/{mesh_file_name}"
-        )
-    ).parse()
+    return CompositePathResolver().resolve(
+        f"package://iai_apartment/meshes/visual/{mesh_file_name}"
+    )
 
 
 @dataclass
@@ -81,21 +87,19 @@ class StretchApartmentDemonstration(RobotDemonstration):
 
     def build_simulated_world(self) -> World:
         """
-        Build the Stretch from its URDF and put it on a drive relative to a map body.
+        Put the Stretch on its drive in a world holding nothing but a map body.
         """
-        world = URDFParser.from_file(Stretch.get_ros_file_path()).parse()
-        Stretch.from_world(world)
-        with world.modify_world():
-            world.add_kinematic_structure_entity(
-                map_body := Body(name=PrefixedName("map"))
-            )
-            world.add_connection(
-                drive := DifferentialDrive.create_with_dofs(world, map_body, world.root)
-            )
-        drive.origin = HomogeneousTransformationMatrix.from_xyz_rpy(
-            1, 1, reference_frame=world.root
-        )
-        return world
+        return WorldSpecification(
+            world=World.create_with_root_body(),
+            robots=[
+                RobotSpecification(
+                    semantic_annotation_type=Stretch,
+                    odom_T_robot_start=HomogeneousTransformationMatrix.from_xyz_rpy(
+                        1, 1
+                    ),
+                )
+            ],
+        ).to_domain_object()
 
     def is_scene_populated(self, world: World) -> bool:
         return world.is_kinematic_structure_entity_in_world_by_name(CEREAL_NAME)
@@ -156,128 +160,133 @@ class StretchApartmentDemonstration(RobotDemonstration):
 
         # %% bedside table
 
-        bedside_table_world = apartment_mesh("bedside_table.dae")
-        world.merge_world(
-            bedside_table_world,
-            FixedConnection.create_with_dofs(
-                world=world,
-                parent=world.root,
-                child=bedside_table_world.root,
-                parent_T_connection_expression=HomogeneousTransformationMatrix.from_xyz_rpy(
-                    x=1.92, y=2.68, yaw=17.8 * (-np.pi / 32), reference_frame=world.root
+        SideTable.get_specification(
+            "bedside_table.dae",
+            BodySpecification.mesh(
+                "bedside_table.dae",
+                apartment_mesh_path("bedside_table.dae"),
+                parent_T_self=HomogeneousTransformationMatrix.from_xyz_rpy(
+                    x=1.92, y=2.68, yaw=17.8 * (-np.pi / 32)
                 ),
             ),
-        )
+        ).spawn(world)
 
         # %% sofa
 
-        sofa_world = apartment_mesh("sofa_bed.obj")
-        sofa_height = (
-            sofa_world.root.collision.max_point[2]
-            - sofa_world.root.collision.min_point[2]
+        # The sofa rests on the floor, so its placement needs the height of its own
+        # geometry, which only the specification can measure.
+        sofa_body = BodySpecification.mesh(
+            "sofa_bed.obj", apartment_mesh_path("sofa_bed.obj")
         )
-        world.merge_world(
-            sofa_world,
-            FixedConnection.create_with_dofs(
-                world=world,
-                parent=world.root,
-                child=sofa_world.root,
-                parent_T_connection_expression=HomogeneousTransformationMatrix.from_xyz_rpy(
-                    x=1.0,
-                    y=3.15,
-                    z=sofa_height / 2,
-                    yaw=17.75 * (-np.pi / 32),
-                    reference_frame=world.root,
-                ),
+        Sofa.get_specification("sofa_bed.obj", sofa_body).spawn(
+            world,
+            parent_T_self=HomogeneousTransformationMatrix.from_xyz_rpy(
+                x=1.0, y=3.15, z=sofa_body.scale.z / 2, yaw=17.75 * (-np.pi / 32)
             ),
         )
 
         # %% walls
 
-        wall_world = apartment_mesh("walls.dae")
-        world.merge_world(
-            wall_world,
-            FixedConnection.create_with_dofs(
-                world=world,
-                parent=world.root,
-                child=wall_world.root,
-                parent_T_connection_expression=HomogeneousTransformationMatrix.from_xyz_rpy(
-                    x=-7.34, y=1.43, z=-0.2, yaw=0, reference_frame=world.root
+        Wall.get_specification(
+            "walls.dae",
+            BodySpecification.mesh(
+                "walls.dae",
+                apartment_mesh_path("walls.dae"),
+                parent_T_self=HomogeneousTransformationMatrix.from_xyz_rpy(
+                    x=-7.34, y=1.43, z=-0.2, yaw=0
                 ),
             ),
-        )
+        ).spawn(world)
 
         # %% wardrobe
 
-        wardrobe_world = apartment_mesh("wardrobe.dae")
+        door_definitions = [
+            ("left", "wardrobe_door_left.dae", -0.460513, 0.5, -np.pi / 2),
+            ("right", "wardrobe_door_right.dae", 0.460513, -0.5, np.pi / 2),
+        ]
 
-        for side, door_mesh, handle_y, door_y in [
-            ("left", "wardrobe_door_left.dae", -0.460513, 0.5),
-            ("right", "wardrobe_door_right.dae", 0.460513, -0.5),
-        ]:
-            door_world = apartment_mesh(door_mesh)
-
-            handle_world = apartment_mesh("wardrobe_door_handle.dae")
-            handle_world.root.name.name = f"wardrobe_door_handle_{side}"
-            door_world.merge_world(
-                handle_world,
-                FixedConnection.create_with_dofs(
-                    world=door_world,
-                    parent=door_world.root,
-                    child=handle_world.root,
-                    parent_T_connection_expression=HomogeneousTransformationMatrix.from_xyz_rpy(
-                        -0.032089,
-                        handle_y,
-                        0.973703,
-                        reference_frame=door_world.root,
+        doors = [
+            Door.get_specification(
+                door_mesh,
+                BodySpecification.mesh(
+                    door_mesh,
+                    apartment_mesh_path(door_mesh),
+                    parent_T_self=HomogeneousTransformationMatrix.from_xyz_rpy(
+                        -0.3246, door_y
                     ),
                 ),
+                part_specifications={
+                    "handle": Handle.get_specification(
+                        f"wardrobe_door_handle_{side}",
+                        BodySpecification.mesh(
+                            f"wardrobe_door_handle_{side}",
+                            apartment_mesh_path("wardrobe_door_handle.dae"),
+                            parent_T_self=HomogeneousTransformationMatrix.from_xyz_rpy(
+                                -0.032089, handle_y, 0.973703
+                            ),
+                        ),
+                    )
+                },
             )
+            for side, door_mesh, handle_y, door_y, _ in door_definitions
+        ]
 
-            wardrobe_world.merge_world(
-                door_world,
-                FixedConnection.create_with_dofs(
-                    world=wardrobe_world,
-                    parent=wardrobe_world.root,
-                    child=door_world.root,
-                    parent_T_connection_expression=HomogeneousTransformationMatrix.from_xyz_rpy(
-                        -0.3246, door_y, reference_frame=wardrobe_world.root
-                    ),
-                ),
-            )
-
-        world.merge_world(
-            wardrobe_world,
-            FixedConnection.create_with_dofs(
-                world=world,
-                parent=world.root,
-                child=wardrobe_world.root,
-                parent_T_connection_expression=HomogeneousTransformationMatrix.from_xyz_rpy(
-                    x=2, y=-0.17, yaw=-np.pi / 2, reference_frame=world.root
+        wardrobe = Wardrobe.get_specification(
+            "wardrobe.dae",
+            BodySpecification.mesh(
+                "wardrobe.dae",
+                apartment_mesh_path("wardrobe.dae"),
+                parent_T_self=HomogeneousTransformationMatrix.from_xyz_rpy(
+                    x=2, y=-0.17, yaw=-np.pi / 2
                 ),
             ),
-        )
+            part_specifications={"doors": doors},
+        ).spawn(world)
+
+        # The hinges are mounted after the doors are on the wardrobe: mounting a part
+        # moves it under the whole, which would undo a joint inserted beforehand.
+        #
+        # Each door mesh has its origin on the edge it hangs from, so a hinge placed at
+        # the door's own frame already sits on the rotation axis. Both leaves swing about
+        # the shared vertical axis, in opposite directions, to open towards -x.
+        doors_by_name = {door.root.name.name: door for door in wardrobe.doors}
+        hinge_poses = {
+            door_mesh: doors_by_name[door_mesh].root.global_transform
+            for _, door_mesh, _, _, _ in door_definitions
+        }
+        with world.modify_world():
+            for side, door_mesh, _, _, opening_angle in door_definitions:
+                doors_by_name[door_mesh].add(
+                    Hinge.create_with_new_body_in_world(
+                        world=world,
+                        name=f"wardrobe_hinge_{side}",
+                        world_root_T_self=hinge_poses[door_mesh],
+                        parent_connection_specification=Hinge.parent_connection_specification(
+                            axis=Vector3.Z(),
+                            dof_limits=DegreeOfFreedomLimits(
+                                lower=DerivativeMap[float](
+                                    position=min(0.0, opening_angle)
+                                ),
+                                upper=DerivativeMap[float](
+                                    position=max(0.0, opening_angle)
+                                ),
+                            ),
+                        ),
+                    )
+                )
 
         # %% cereal
 
-        cereal = apartment_mesh(CEREAL_NAME)
-
-        with world.modify_world():
-            parent = world.get_body_by_name("shelf_layer2")
-            world.merge_world(
-                cereal,
-                FixedConnection.create_with_dofs(
-                    world=world,
-                    parent=parent,
-                    child=cereal.root,
-                    parent_T_connection_expression=HomogeneousTransformationMatrix.from_xyz_rpy(
-                        x=-0.05,
-                        y=0.0,
-                        z=0.115,
-                        reference_frame=parent,
-                    ),
+        CheezeIt.get_specification(
+            CEREAL_NAME,
+            BodySpecification.mesh(
+                CEREAL_NAME,
+                apartment_mesh_path(CEREAL_NAME),
+                parent_T_self=HomogeneousTransformationMatrix.from_xyz_rpy(
+                    x=-0.05, y=0.0, z=0.115
                 ),
-            )
+            ),
+        ).spawn(world, parent=world.get_body_by_name("shelf_layer2"))
 
     def build_context(self, world: World) -> Context:
         """

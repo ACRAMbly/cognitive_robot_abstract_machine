@@ -6797,8 +6797,10 @@ class RobotDemonstrationDAO(
     }
 
 
-class RosSessionDAO(Base, DataAccessObject[experiments.demonstration.RobotDemonstrationRosSession]):
-    __tablename__ = "RosSessionDAO"
+class RobotDemonstrationRosSessionDAO(
+    Base, DataAccessObject[experiments.demonstration.RobotDemonstrationRosSession]
+):
+    __tablename__ = "RobotDemonstrationRosSessionDAO"
 
     database_id: Mapped[builtins.int] = mapped_column(
         Integer, primary_key=True, use_existing_column=True
