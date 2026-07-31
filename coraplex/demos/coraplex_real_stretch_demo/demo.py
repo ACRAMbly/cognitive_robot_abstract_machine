@@ -85,18 +85,22 @@ else:
 if not world.is_kinematic_structure_entity_in_world_by_name("cheeze_it.obj"):
     # ------------------------------------------------------------------ shelf
     with world.modify_world():
-        shelf = Shelf.create_with_new_body_in_world(
-            world=world,
-            name=PrefixedName("shelf"),
-            world_root_T_self=HomogeneousTransformationMatrix.from_xyz_rpy(
+        # The hollow-case geometry parameters live on the root specification, so the
+        # shelf is spawned from a specification rather than the plain body factory.
+        shelf = Shelf.get_specification(
+            "shelf",
+            Shelf.get_default_root_specification(
+                scale=Scale(0.305, 0.85, 1.9), wall_thickness=0.035
+            ),
+        ).spawn(
+            world,
+            parent_T_self=HomogeneousTransformationMatrix.from_xyz_rpy(
                 0.455 + (0.85 / 2),
                 -0.17,
                 1.9 / 2,
                 yaw=-np.pi / 2,
                 reference_frame=world.root,
             ),
-            scale=Scale(0.305, 0.85, 1.9),
-            wall_thickness=0.035,
         )
         for layer_name, layer_height in [
             ("shelf_layer1", 0.283),
@@ -107,7 +111,7 @@ if not world.is_kinematic_structure_entity_in_world_by_name("cheeze_it.obj"):
             shelf.add(
                 ShelfLayer.create_with_new_body_in_world(
                     world=world,
-                    name=PrefixedName(layer_name),
+                    name=layer_name,
                     world_root_T_self=HomogeneousTransformationMatrix.from_xyz_rpy(
                         0.455 + (0.85 / 2),
                         -0.17,
@@ -121,7 +125,7 @@ if not world.is_kinematic_structure_entity_in_world_by_name("cheeze_it.obj"):
 
         Wall.create_with_new_body_in_world(
             world=world,
-            name=PrefixedName("wall"),
+            name="wall",
             world_root_T_self=HomogeneousTransformationMatrix.from_xyz_rpy(
                 0, (2.81 / 2), 0, reference_frame=world.root
             ),
