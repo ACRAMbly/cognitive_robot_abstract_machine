@@ -162,3 +162,8 @@ class_diagram.pdf
 # Personal, per-user Claude Code memory (populated by .claude/hooks/session-start.sh
 # from the claude/personal-notes branch). Never committed on any branch.
 CLAUDE.local.md
+
+# Stamp recording the personal-notes commit this clone last read plan state
+# at (written by session-start.sh, read/advanced by plan-updates-since.sh).
+# Never committed - it's a per-clone baseline, not shared state.
+.claude/.plan-state-sync-sha
