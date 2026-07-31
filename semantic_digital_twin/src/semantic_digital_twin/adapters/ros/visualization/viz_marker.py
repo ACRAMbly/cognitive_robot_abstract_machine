@@ -1,23 +1,20 @@
 from __future__ import annotations
+
 import time
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Optional
-from uuid import UUID
 
-import rclpy
 from rclpy.node import Node
+from rclpy.publisher import Publisher
 from rclpy.qos import QoSProfile, DurabilityPolicy
-from visualization_msgs.msg import MarkerArray
-
 from semantic_digital_twin.adapters.ros.msg_converter import SemDTToRos2Converter
 from semantic_digital_twin.adapters.ros.tf_publisher import TFPublisher
+from semantic_digital_twin.adapters.ros.visualization.collision_viz_marker import (
+    CollisionVisualizationMarkerPublisher,
+)
 from semantic_digital_twin.callbacks.callback import ModelChangeCallback
-
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from ....world import World
+from visualization_msgs.msg import MarkerArray
 
 
 class ShapeSource(Enum):
@@ -76,6 +73,12 @@ class VizMarkerPublisher(ModelChangeCallback):
     Marker transparency in [0.0, 1.0]. 0.0 is fully transparent.
     """
 
+    region_alpha: float = field(kw_only=True, default=0.2)
+    """
+    Marker transparency forced onto every Region marker, in [0.0, 1.0]. Regions are
+    always rendered at this alpha, regardless of the color their shapes were assigned.
+    """
+
     markers: MarkerArray = field(init=False, default_factory=MarkerArray)
     """Maker message to be published."""
     qos_profile: QoSProfile = field(
@@ -86,11 +89,26 @@ class VizMarkerPublisher(ModelChangeCallback):
     """QoS profile for the publisher."""
 
     _tf_publisher: Optional[TFPublisher] = field(init=False, default=None)
+    """
+    Reference to a tf publisher created by this class.
+    """
+
+    _collision_publisher: Optional[CollisionVisualizationMarkerPublisher] = field(
+        init=False, default=None
+    )
+    """
+    Reference to a collision marker publisher created by this class.
+    """
+
+    _publisher: Publisher = field(init=False)
+    """
+    The ROS publisher for the marker.
+    """
 
     def __post_init__(self):
         super().__post_init__()
 
-        self.pub = self.node.create_publisher(
+        self.publisher = self.node.create_publisher(
             MarkerArray, self.topic_name, self.qos_profile
         )
         time.sleep(0.2)
@@ -102,6 +120,23 @@ class VizMarkerPublisher(ModelChangeCallback):
         Launches a tf publisher in conjunction with the VizMarkerPublisher.
         """
         self._tf_publisher = TFPublisher(_world=self._world, node=self.node)
+
+    def with_collision_visualization(self, **kwargs):
+        """
+        Launches a publisher for closest-points collision results alongside the VizMarkerPublisher.
+
+        :param kwargs: Forwarded to :class:`CollisionVisualizationMarkerPublisher`.
+        """
+        self._collision_publisher = CollisionVisualizationMarkerPublisher(
+            node=self.node, world=self._world, **kwargs
+        )
+
+    def with_tf_and_collision_visualization(self):
+        """
+        Create a publisher for tf and collision checks.
+        """
+        self.with_tf_publisher()
+        self.with_collision_visualization()
 
     def _select_shapes(self, body):
         if self.shape_source is ShapeSource.VISUAL_ONLY:
@@ -119,16 +154,22 @@ class VizMarkerPublisher(ModelChangeCallback):
             self._add_markers_for_shapes(shapes, str(body.name))
 
         for region in self._world.regions:
-            self._add_markers_for_shapes(region.area.shapes, str(region.name))
+            self._add_markers_for_shapes(
+                region.area.shapes, str(region.name), force_alpha=self.region_alpha
+            )
 
-        self.pub.publish(self.markers)
+        self.publisher.publish(self.markers)
 
-    def _add_markers_for_shapes(self, shapes, marker_ns):
+    def _add_markers_for_shapes(
+        self, shapes, marker_ns, force_alpha: Optional[float] = None
+    ):
         if not shapes:
             return
         for i, shape in enumerate(shapes):
             marker = SemDTToRos2Converter.convert(shape)
-            if not marker.mesh_use_embedded_materials:
+            if force_alpha is not None:
+                marker.color.a = force_alpha
+            elif not marker.mesh_use_embedded_materials:
                 marker.color.a *= self.alpha
             marker.frame_locked = True
             marker.id = i

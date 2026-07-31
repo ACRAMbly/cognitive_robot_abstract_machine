@@ -3,10 +3,9 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import field, dataclass
 from functools import cached_property
-from typing import Optional, ClassVar
 
 import numpy as np
-from typing_extensions import List
+from typing_extensions import ClassVar, List
 
 import krrood.symbolic_math.symbolic_math as sm
 from giskardpy.motion_statechart.binding_policy import (
@@ -18,11 +17,12 @@ from giskardpy.motion_statechart.data_types import (
     DefaultWeights,
     ObservationStateValues,
 )
-from giskardpy.motion_statechart.exceptions import NodeInitializationError
+from giskardpy.motion_statechart.exceptions import GoalPointsReferenceFrameMismatchError
 from giskardpy.motion_statechart.goals.templates import Parallel
 from giskardpy.motion_statechart.graph_node import (
     NodeArtifacts,
     MotionStatechartNode,
+    DebugExpression,
 )
 from giskardpy.motion_statechart.graph_node import Task
 from krrood.symbolic_math.float_variable_data import FloatVariableData
@@ -34,7 +34,8 @@ from semantic_digital_twin.spatial_types import (
     RotationMatrix,
     HomogeneousTransformationMatrix,
 )
-from semantic_digital_twin.spatial_types.spatial_types import Pose
+from semantic_digital_twin.spatial_types.spatial_types import Pose, SpatialType
+from semantic_digital_twin.world_description.geometry import Color
 from semantic_digital_twin.world_description.degree_of_freedom import PositionVariable
 from semantic_digital_twin.world_description.world_entity import (
     KinematicStructureEntity,
@@ -60,31 +61,35 @@ class CartesianTask(Task, ABC):
     )
     """Describes when the goal is computed. See GoalBindingPolicy for more information."""
 
-    root_T_goal_reference_frame: HomogeneousTransformationMatrix = field(
-        kw_only=True, init=False
-    )
+    root_T_goal_reference_frame: HomogeneousTransformationMatrix = field(init=False)
     """Transformation matrix from root to goal_reference_frame link."""
 
-    _fk_binding: ForwardKinematicsBinding = field(kw_only=True, init=False)
+    _forward_kinematics_binding: ForwardKinematicsBinding = field(init=False)
     """Binding for the goal pose."""
+
+    GOAL_COLOR: ClassVar[Color] = Color(R=0.0, G=1.0, B=0.0, A=1.0)
+    """The color of the goal debug expression marker (green)."""
+
+    CURRENT_COLOR: ClassVar[Color] = Color(R=1.0, G=0.0, B=0.0, A=1.0)
+    """The color of the current debug expression marker (red)."""
 
     def build(self, context: MotionStatechartContext) -> NodeArtifacts:
         artifacts = NodeArtifacts()
 
-        self._fk_binding = ForwardKinematicsBinding(
+        self._forward_kinematics_binding = ForwardKinematicsBinding(
             name=PrefixedName("root_T_goal_ref", str(self.name)),
             root=self.root_link,
             tip=self.goal_reference_frame,
             float_variable_data=context.float_variable_data,
         )
-        self._fk_binding.bind(context.world)
-        self.root_T_goal_reference_frame = self._fk_binding.root_T_tip
+        self._forward_kinematics_binding.bind(context.world)
+        self.root_T_goal_reference_frame = self._forward_kinematics_binding.root_T_tip
 
         return artifacts
 
     def on_start(self, context: MotionStatechartContext):
         if self.binding_policy == GoalBindingPolicy.Bind_on_start:
-            self._fk_binding.bind(context.world)
+            self._forward_kinematics_binding.bind(context.world)
 
     @property
     @abstractmethod
@@ -92,6 +97,29 @@ class CartesianTask(Task, ABC):
         """
         :return: Reference frame for the goal.
         """
+
+    def add_goal_and_current_debug_expressions(
+        self,
+        artifacts: NodeArtifacts,
+        goal: SpatialType,
+        current: SpatialType,
+    ) -> None:
+        """
+        Register a goal and a current spatial expression for visualization.
+
+        The expressions are named ``<task name>/goal`` and ``<task name>/current``
+        and colored green and red respectively, so they can be told apart in RViz.
+
+        :param artifacts: The node artifacts the debug expressions are appended to.
+        :param goal: The spatial expression describing the desired state.
+        :param current: The spatial expression describing the current state.
+        """
+        artifacts.debug_expressions.append(
+            DebugExpression(f"{self.name}/goal", goal, color=self.GOAL_COLOR)
+        )
+        artifacts.debug_expressions.append(
+            DebugExpression(f"{self.name}/current", current, color=self.CURRENT_COLOR)
+        )
 
 
 @dataclass(eq=False, repr=False)
@@ -111,7 +139,7 @@ class CartesianPosition(CartesianTask):
     threshold: float = field(default=0.01, kw_only=True)
     """Distance threshold for goal achievement in meters."""
 
-    reference_velocity: Optional[float] = field(
+    reference_velocity: float = field(
         default_factory=lambda: CartesianPosition.default_reference_velocity,
         kw_only=True,
     )
@@ -149,6 +177,10 @@ class CartesianPosition(CartesianTask):
         distance_to_goal = root_P_goal.euclidean_distance(root_P_current)
         artifacts.observation = distance_to_goal < self.threshold
 
+        self.add_goal_and_current_debug_expressions(
+            artifacts, goal=root_P_goal, current=root_P_current
+        )
+
         return artifacts
 
 
@@ -180,7 +212,7 @@ class CartesianPositionTrajectory(CartesianTask):
     Increasing this value can increase the tracking velocity, but might reduce tracking accuracy.
     """
 
-    reference_velocity: Optional[float] = field(
+    reference_velocity: float | None = field(
         default_factory=lambda: CartesianPosition.default_reference_velocity,
         kw_only=True,
     )
@@ -202,9 +234,10 @@ class CartesianPositionTrajectory(CartesianTask):
         reference_frame = self.goal_points[0].reference_frame
         for point in self.goal_points[1:]:
             if point.reference_frame != reference_frame:
-                raise NodeInitializationError(
-                    self,
-                    f"All goal points must have the same reference frame, but got {point.reference_frame} and {reference_frame}.",
+                raise GoalPointsReferenceFrameMismatchError(
+                    node=self,
+                    reference_frame_a=point.reference_frame,
+                    reference_frame_b=reference_frame,
                 )
         return reference_frame
 
@@ -236,6 +269,10 @@ class CartesianPositionTrajectory(CartesianTask):
             frame_P_current=root_P_current,
             reference_velocity=self.reference_velocity,
             quadratic_weight=self.weight,
+        )
+
+        self.add_goal_and_current_debug_expressions(
+            artifacts, goal=root_P_goal, current=root_P_current
         )
 
         self.compile_current_point_on_tick(context)
@@ -323,7 +360,7 @@ class CartesianPositionTrajectory(CartesianTask):
 
     def on_tick(
         self, context: MotionStatechartContext
-    ) -> Optional[ObservationStateValues]:
+    ) -> ObservationStateValues | None:
         """
         Update the target point on the trajectory and return true if we have reached the end of the trajectory.
         """
@@ -464,11 +501,17 @@ class CartesianPositionStraight(CartesianTask):
                 name=name,
                 reference_velocity=self.reference_velocity,
                 equality_bound=bound,
-                quadratic_weight=DefaultWeights.WEIGHT_ABOVE_CA * weight_mult,
+                quadratic_weight=DefaultWeights.WEIGHT_ABOVE_COLLISION_AVOIDANCE
+                * weight_mult,
                 task_expression=expr_p[i],
             )
 
         artifacts.observation = dist < self.threshold
+
+        self.add_goal_and_current_debug_expressions(
+            artifacts, goal=root_P_goal, current=root_P_tip
+        )
+
         return artifacts
 
 
@@ -528,6 +571,11 @@ class CartesianOrientation(CartesianTask):
         # Success condition: rotation error below threshold
         rotation_error = root_R_current.rotational_error(root_R_goal)
         artifacts.observation = sm.abs(rotation_error) < self.threshold
+
+        self.add_goal_and_current_debug_expressions(
+            artifacts, goal=root_R_goal, current=root_R_current
+        )
+
         return artifacts
 
 
@@ -611,7 +659,11 @@ class CartesianPose(CartesianTask):
             sm.abs(rotation_error) < self.threshold,
             distance_to_goal < self.threshold,
         )
-
+        self.add_goal_and_current_debug_expressions(
+            artifacts,
+            goal=self.root_T_goal_reference_frame @ self.goal_pose,
+            current=root_T_current,
+        )
         return artifacts
 
 
@@ -648,7 +700,9 @@ class CartesianPositionVelocityLimit(Task):
     Default: 0.1 m/s. The enforcement ensures the Euclidean norm of the
     tip-frame translational velocity does not exceed this value.
     """
-    weight: float = field(default=DefaultWeights.WEIGHT_ABOVE_CA, kw_only=True)
+    weight: float = field(
+        default=DefaultWeights.WEIGHT_ABOVE_COLLISION_AVOIDANCE, kw_only=True
+    )
     """
     Optimization weight determining how strongly the linear velocity
     limit is enforced. Higher weights give this constraint soft priority
@@ -704,7 +758,9 @@ class CartesianRotationVelocityLimit(Task):
     """Maximum allowed angular speed. Interpreted in radians per second (rad/s).
     The enforcement ensures the magnitude of the instantaneous
     rotation rate does not exceed this threshold."""
-    weight: float = field(default=DefaultWeights.WEIGHT_ABOVE_CA, kw_only=True)
+    weight: float = field(
+        default=DefaultWeights.WEIGHT_ABOVE_COLLISION_AVOIDANCE, kw_only=True
+    )
     """Optimization weight determining how strongly the rotational velocity
     limit is enforced. Higher weights give this constraint soft priority
     over lower weighted constraints when conflicts occur."""
@@ -760,7 +816,9 @@ class CartesianVelocityLimit(Parallel):
     """Maximum allowed angular speed. Interpreted in radians per second (rad/s).
     Default: 0.5 rad/s. The enforcement ensures the magnitude of the instantaneous
     rotation rate does not exceed this threshold."""
-    weight: float = field(default=DefaultWeights.WEIGHT_ABOVE_CA, kw_only=True)
+    weight: float = field(
+        default=DefaultWeights.WEIGHT_ABOVE_COLLISION_AVOIDANCE, kw_only=True
+    )
     """Optimization weight determining how strongly both velocity
     limits are enforced. Higher weights give these constraints soft priority
     over lower weighted constraints when conflicts occur."""

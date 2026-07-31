@@ -14,22 +14,46 @@ from semantic_digital_twin.world_description.world_entity import (
 class AlignPlanes(Task):
     """
     Will orient the tip plane to align with the goal plane.
+
     The planes are represented as normal vectors.
     """
 
     root_link: KinematicStructureEntity = field(kw_only=True)
-    """root link of the kinematic chain."""
+    """
+    Root link of the kinematic chain.
+    """
+
     tip_link: KinematicStructureEntity = field(kw_only=True)
-    """tip link of the kinematic chain."""
+    """
+    Tip link of the kinematic chain.
+    """
 
     goal_normal: Vector3 = field(kw_only=True)
-    """normal vector of the goal plane."""
+    """
+    Normal vector of the goal plane.
+    """
+
     tip_normal: Vector3 = field(kw_only=True)
-    """normal vector of the tip plane."""
+    """
+    Normal vector of the tip plane.
+    """
 
     threshold: float = field(default=0.01, kw_only=True)
+    """
+    Angle in radians below which the planes are considered aligned.
+    """
+
     reference_velocity: float = field(default=0.5, kw_only=True)
-    weight: float = field(default=DefaultWeights.WEIGHT_ABOVE_CA, kw_only=True)
+    """
+    Reference angular velocity for normalization in rad/s.
+    """
+
+    weight: float = field(
+        default=DefaultWeights.WEIGHT_ABOVE_COLLISION_AVOIDANCE, kw_only=True
+    )
+    """
+    Priority weight relative to other tasks.
+    """
 
     def build(self, context: MotionStatechartContext) -> NodeArtifacts:
         artifacts = NodeArtifacts()
@@ -49,7 +73,7 @@ class AlignPlanes(Task):
         root_V_tip_normal = root_R_tip @ tip_V_tip_normal
         root_V_tip_normal.scale(1)
 
-        root_V_tip_normal.vis_frame = self.tip_link
+        root_V_tip_normal.visualisation_frame = self.tip_link
         current_dbg = DebugExpression(
             name=f"{self.name}/current_normal",
             expression=root_V_tip_normal,
