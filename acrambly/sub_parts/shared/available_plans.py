@@ -30,6 +30,7 @@ from semantic_digital_twin.datastructures.definitions import GripperState
 from coraplex.view_manager import ViewManager
 from coraplex.plans.attachment_nodes import DetachNode
 from coraplex.plans.attachment_nodes import AttachNode
+from sub_parts.shared.utils import select_arm
 
 def build_plan_cubes(
     world: World,
@@ -42,21 +43,9 @@ def build_plan_cubes(
     stack_pos_x = 1
     stack_pos_y = 0
 
-    def select_arm(cube: Body):
-        cube_y = float(
-            cube.global_pose.position.to_np().reshape(-1)[1]
-        )
-
-        end_effectors = Tracy.get_end_effectors(tracy)
-
-        if cube_y > 0:
-            return Arms.LEFT, end_effectors[0]
-        else:
-            return Arms.RIGHT, end_effectors[1]
-
-    red_arm, red_end_effector = select_arm(red_box)
-    yellow_arm, yellow_end_effector = select_arm(yellow_box)
-    blue_arm, blue_end_effector = select_arm(blue_box)
+    red_arm, red_end_effector = select_arm(red_box, tracy)
+    yellow_arm, yellow_end_effector = select_arm(yellow_box, tracy)
+    blue_arm, blue_end_effector = select_arm(blue_box, tracy)
 
     return sequential(
         [
@@ -65,7 +54,7 @@ def build_plan_cubes(
                 red_box,
                 red_arm,
                 GraspDescription(
-                    ApproachDirection.FRONT,
+                    ApproachDirection.RIGHT,
                     VerticalAlignment.TOP,
                     red_end_effector,
                 ),

@@ -7,7 +7,7 @@ from sub_parts.real.cube_perception import query_colored_block_poses_from_roboku
 from coraplex.datastructures.dataclasses import Context
 from coraplex.plans.plan import Plan
 from sub_parts.shared.available_plans import build_handover_object_plan
-from sub_parts.shared.utils import spawn_cube
+from sub_parts.shared.utils import spawn_body
 
 def setup_and_build_plan(
     world: World, tracy: Tracy, context: Context, node: Node
@@ -25,8 +25,9 @@ def setup_and_build_plan(
 
     print("[Setup] Spawning boxes in simulation world...")
 
-    obj = spawn_cube(
-        world, "box3", red_box_pos, 0.0, color=Color(0.0, 0.0, 1.0, 1.0)
+    obj = spawn_body(
+        world, red_box_pos, (0.0, 0.0, 0.0), "box",
+        name="box3", color=Color(0.0, 0.0, 1.0, 1.0),
     )
 
     return build_handover_object_plan(world, tracy, context, obj)

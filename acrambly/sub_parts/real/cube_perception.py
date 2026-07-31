@@ -11,12 +11,19 @@ import rclpy
 from rclpy.action import ActionClient
 from typing_extensions import TYPE_CHECKING
 
-from robokudo_msgs.action import Query
+try:
+    from robokudo_msgs.action import Query
+except:
+    Query = None
 
 if TYPE_CHECKING:
     from rclpy.node import Node
     from rclpy.task import Future
-    from robokudo_msgs.msg import ShapeSize
+
+    try:
+        from robokudo_msgs.msg import ShapeSize
+    except:
+        ShapeSize = None
 
 
 class BlockColor(str, Enum):

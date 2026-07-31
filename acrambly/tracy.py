@@ -56,6 +56,7 @@ from sub_parts.real.task_cubes import setup_and_build_plan as cubes_real_task
 from sub_parts.shared.task_park_arms import setup_and_build_plan as park_arms_task
 from sub_parts.sim.task_cubes import setup_and_build_plan as cubes_sim_task
 from sub_parts.sim.task_handover import setup_and_build_plan as hand_over_task
+from sub_parts.sim.task_tetris import setup_and_build_plan as task_tetris_task
 
 # Enable runtime action logging (fires only during actual robot execution)
 logging.getLogger("coraplex.plans.executables").setLevel(logging.INFO)
@@ -72,6 +73,8 @@ TASKS: dict[tuple[str, str], TaskFactory] = {
     ("park_arms", "sim"): park_arms_task,
     ("hand_over", "sim"): hand_over_task,
     ("hand_over", "real"): hand_over_task,
+    ("task_tetris", "sim"): task_tetris_task,
+    ("task_tetris", "real"): task_tetris_task,
 }
 
 
@@ -122,7 +125,7 @@ def setup_sim(node: Node) -> tuple[World, object, Context]:
 # ---------------------------------------------------------------------------
 def main(
     env: Annotated[Literal["real", "sim"], typer.Option("--env", "-e")],
-    task: Annotated[Literal["park_arms", "cubes", "hand_over"], typer.Option("--task", "-t")],
+    task: Annotated[Literal["park_arms", "cubes", "hand_over", "task_tetris"], typer.Option("--task", "-t")],
 ):
     rclpy.init()
 

@@ -18,13 +18,14 @@ Callable signature
 from rclpy.node import Node
 from semantic_digital_twin.robots.tracy import Tracy
 from semantic_digital_twin.world import World
+from semantic_digital_twin.world_description.geometry import Color
 
 from coraplex.datastructures.dataclasses import Context
 from coraplex.plans.plan import Plan
 
 from sub_parts.real.cube_perception import query_colored_block_poses_from_robokudo
 from sub_parts.shared.available_plans import build_plan_cubes
-from sub_parts.shared.utils import spawn_cube
+from sub_parts.shared.utils import spawn_body
 
 def setup_and_build_plan(world: World, tracy: Tracy, context: Context, node: Node) -> Plan | None:
     """
@@ -50,8 +51,17 @@ def setup_and_build_plan(world: World, tracy: Tracy, context: Context, node: Nod
     print("=======================================\n")
 
     print("[Perception] Adding cubes to world")
-    red = spawn_cube(world, "red", red_box_pos, 0, scale, 1.0, 0.0, 0.0)
-    green = spawn_cube(world, "green", green_box_pos, 0, scale, 0.0, 1.0, 0.0)
-    blue = spawn_cube(world, "blue", blue_box_pos, 0, scale, 0.0, 0.0, 1.0)
+    red = spawn_body(
+        world, red_box_pos, (0.0, 0.0, 0.0), "box",
+        name="red", scale=scale, color=Color(1.0, 0.0, 0.0, 1.0),
+    )
+    green = spawn_body(
+        world, green_box_pos, (0.0, 0.0, 0.0), "box",
+        name="green", scale=scale, color=Color(0.0, 1.0, 0.0, 1.0),
+    )
+    blue = spawn_body(
+        world, blue_box_pos, (0.0, 0.0, 0.0), "box",
+        name="blue", scale=scale, color=Color(0.0, 0.0, 1.0, 1.0),
+    )
 
     return build_plan_cubes(world, tracy, context, red, green, blue)
