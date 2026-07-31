@@ -395,15 +395,20 @@ def test_two_goals(pr2_world_state_reset: World):
     assert np.allclose(pr2_world_state_reset.state.jerks, 0)
 
 
-def test_joint_position_list_tolerate_stall(pr2_world_state_reset: World):
+def test_parallel_local_minimum_reached_tolerates_stall(pr2_world_state_reset: World):
     """
-    JointPositionList(tolerate_stall=True) must finish once the commanded joint's
-    velocity has settled near zero, even though it never reaches its nominal target --
-    simulating a joint that got physically stopped (e.g. a gripper finger against a
-    grasped object) before arriving. Capping the joint's own velocity limit to a tiny
-    value makes it provably unable to traverse the requested distance within the tick
-    budget, while its tracked velocity still settles below the stall threshold almost
-    immediately.
+    A :class:`JointPositionList` goal and a :class:`LocalMinimumReached` monitor
+    combined via ``Parallel(..., minimum_success=1)`` must finish once the commanded
+    joint's velocity has settled near zero, even though the goal task itself never
+    reaches its nominal target -- simulating a joint that got physically stopped (e.g.
+    a gripper finger against a grasped object) before arriving. Capping the joint's own
+    velocity limit to a tiny value makes it provably unable to traverse the requested
+    distance within the tick budget, while its tracked velocity still settles below the
+    stall threshold almost immediately.
+
+    This is the pattern that replaces baking stall-tolerance into a task's own
+    observation: the goal's observation still means "goal reached", nothing else, and
+    the ``Parallel`` node is what tolerates the stall.
     """
     torso_joint = pr2_world_state_reset.get_connection_by_name("torso_lift_joint")
     torso_joint.raw_dof.limits.lower.velocity = -1e-3
@@ -411,13 +416,21 @@ def test_joint_position_list_tolerate_stall(pr2_world_state_reset: World):
 
     msc = MotionStatechart()
     msc.add_node(
-        joint_goal := JointPositionList(
-            goal_state=JointState.from_mapping({torso_joint: 1.0}),
-            tolerate_stall=True,
-            stall_minimum_time=0.2,
+        combined := Parallel(
+            [
+                joint_goal := JointPositionList(
+                    goal_state=JointState.from_mapping({torso_joint: 1.0}),
+                ),
+                LocalMinimumReached(
+                    degrees_of_freedom=[torso_joint.raw_dof],
+                    minimum_time=0.2,
+                    measure_from_own_start=True,
+                ),
+            ],
+            minimum_success=1,
         )
     )
-    msc.add_node(EndMotion.when_true(joint_goal))
+    msc.add_node(EndMotion.when_true(combined))
 
     kin_sim = Executor(MotionStatechartContext(world=pr2_world_state_reset))
     kin_sim.compile(motion_statechart=msc)
@@ -428,15 +441,20 @@ def test_joint_position_list_tolerate_stall(pr2_world_state_reset: World):
         "was capped far too low to traverse the distance within the timeout, "
         "this test is only meaningful if it stayed far away"
     )
+    assert msc.observation_state[joint_goal] == ObservationStateValues.FALSE, (
+        "the goal task's own observation must still mean 'goal reached' -- it must "
+        "not be the thing that turned true here, only the surrounding Parallel"
+    )
 
 
-def test_joint_position_list_without_tolerate_stall_times_out(
+def test_joint_position_list_alone_times_out_on_stall(
     pr2_world_state_reset: World,
 ):
     """
-    Regression control for test_joint_position_list_tolerate_stall: with
-    tolerate_stall left False (the default), the same stalled scenario must never reach
-    EndMotion -- proving tolerate_stall is what unblocks it, not some unrelated change.
+    Regression control for test_parallel_local_minimum_reached_tolerates_stall: a bare
+    :class:`JointPositionList`, without the surrounding ``Parallel`` +
+    :class:`LocalMinimumReached`, must never reach EndMotion in the same stalled
+    scenario -- proving the monitor is what unblocks it, not some unrelated change.
     """
     torso_joint = pr2_world_state_reset.get_connection_by_name("torso_lift_joint")
     torso_joint.raw_dof.limits.lower.velocity = -1e-3
@@ -446,7 +464,6 @@ def test_joint_position_list_without_tolerate_stall_times_out(
     msc.add_node(
         joint_goal := JointPositionList(
             goal_state=JointState.from_mapping({torso_joint: 1.0}),
-            tolerate_stall=False,
         )
     )
     msc.add_node(EndMotion.when_true(joint_goal))
@@ -2109,7 +2126,7 @@ class TestMaxManipulability:
         fk = pr2_world_state_reset.compute_forward_kinematics_np(
             pr2_world_state_reset.root, tip
         )
-        assert np.allclose(fk, goal_pose.to_np(), atol=cart_goal.threshold)
+        assert np.allclose(fk, goal_pose.to_np(), atol=cart_goal.translation_threshold)
 
 
 class TestEagerStateVariables:

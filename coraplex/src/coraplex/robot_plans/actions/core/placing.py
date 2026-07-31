@@ -69,26 +69,34 @@ class PlaceAction(ActionDescription):
 
     placing_linear_velocity: Optional[float] = None
     """
-    Linear reference velocity (in m/s) for the final descent onto the target location.
-    ``None`` keeps the default velocity.
+    Maximum linear speed (in m/s) for the final descent onto the target location,
+    enforced via
+    :class:`~giskardpy.motion_statechart.tasks.cartesian_tasks.CartesianPositionVelocityLimit`.
+    ``None`` leaves the speed unconstrained.
     """
 
     transport_linear_velocity: Optional[float] = None
     """
-    Linear reference velocity (in m/s) for carrying the held object above the target
-    location, before the final descent. ``None`` keeps the default velocity.
+    Maximum linear speed (in m/s) for carrying the held object above the target
+    location, before the final descent, enforced via
+    :class:`~giskardpy.motion_statechart.tasks.cartesian_tasks.CartesianPositionVelocityLimit`.
+    ``None`` leaves the speed unconstrained.
     """
 
     release_opening_velocity: Optional[float] = None
     """
-    Finger joint velocity (in m/s) used while opening the gripper to release the
-    object. ``None`` keeps the default velocity.
+    Maximum finger joint velocity (in m/s) used while opening the gripper to release
+    the object, enforced via
+    :class:`~giskardpy.motion_statechart.tasks.joint_tasks.JointVelocityLimit`. ``None``
+    leaves the speed unconstrained.
     """
 
     retract_linear_velocity: Optional[float] = None
     """
-    Linear reference velocity (in m/s) for retracting the end effector away from the
-    placed object. ``None`` keeps the default velocity.
+    Maximum linear speed (in m/s) for retracting the end effector away from the placed
+    object, enforced via
+    :class:`~giskardpy.motion_statechart.tasks.cartesian_tasks.CartesianPositionVelocityLimit`.
+    ``None`` leaves the speed unconstrained.
     """
 
     max_release_attempts: Optional[int] = None
@@ -148,13 +156,13 @@ class PlaceAction(ActionDescription):
                     transport_pose,
                     self.arm,
                     allow_gripper_collision=False,
-                    reference_linear_velocity=self.transport_linear_velocity,
+                    max_linear_velocity=self.transport_linear_velocity,
                 ),
                 MoveToolCenterPointMotion(
                     placing_pose,
                     self.arm,
                     allow_gripper_collision=False,
-                    reference_linear_velocity=self.placing_linear_velocity,
+                    max_linear_velocity=self.placing_linear_velocity,
                 ),
             ],
         )
@@ -170,7 +178,7 @@ class PlaceAction(ActionDescription):
                 MoveToolCenterPointMotion(
                     retract_pose,
                     self.arm,
-                    reference_linear_velocity=self.retract_linear_velocity,
+                    max_linear_velocity=self.retract_linear_velocity,
                 ),
             ],
         )

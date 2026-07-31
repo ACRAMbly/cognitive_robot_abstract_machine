@@ -3,7 +3,12 @@ from typing import Optional
 
 from typing_extensions import List
 
-from giskardpy.motion_statechart.tasks.joint_tasks import JointPositionList, JointState
+from giskardpy.motion_statechart.goals.templates import Parallel
+from giskardpy.motion_statechart.tasks.joint_tasks import (
+    JointPositionList,
+    JointState,
+    JointVelocityLimit,
+)
 from giskardpy.motion_statechart.tasks.pointing import Pointing
 from coraplex.robot_plans.motions.base import BaseMotion
 from semantic_digital_twin.robots.robot_parts import Camera
@@ -55,8 +60,9 @@ class MoveJointsMotion(BaseMotion):
 
     max_velocity: Optional[float] = None
     """
-    Joint velocity (in rad/s or m/s, per joint) to command. ``None`` keeps the default
-    velocity.
+    Maximum joint velocity (in rad/s or m/s, per joint), enforced via
+    :class:`~giskardpy.motion_statechart.tasks.joint_tasks.JointVelocityLimit`. ``None``
+    leaves the speed unconstrained.
     """
 
     def perform(self):
@@ -65,12 +71,16 @@ class MoveJointsMotion(BaseMotion):
     @property
     def _motion_chart(self):
         dofs = [self.world.get_connection_by_name(name) for name in self.names]
-        keyword_arguments = {}
-        if self.max_velocity is not None:
-            keyword_arguments["max_velocity"] = self.max_velocity
-        return JointPositionList(
+        joint_task = JointPositionList(
             goal_state=JointState.from_mapping(dict(zip(dofs, self.positions))),
-            **keyword_arguments,
+        )
+        if self.max_velocity is None:
+            return joint_task
+        return Parallel(
+            [
+                joint_task,
+                JointVelocityLimit(connections=dofs, max_velocity=self.max_velocity),
+            ]
         )
 
 

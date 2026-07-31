@@ -3,8 +3,17 @@ from copy import deepcopy
 import numpy as np
 import pytest
 
-from giskardpy.motion_statechart.tasks.cartesian_tasks import CartesianPose
-from giskardpy.motion_statechart.tasks.joint_tasks import JointPositionList
+from giskardpy.motion_statechart.goals.templates import Parallel
+from giskardpy.motion_statechart.monitors.monitors import LocalMinimumReached
+from giskardpy.motion_statechart.tasks.cartesian_tasks import (
+    CartesianPose,
+    CartesianPositionVelocityLimit,
+    CartesianRotationVelocityLimit,
+)
+from giskardpy.motion_statechart.tasks.joint_tasks import (
+    JointPositionList,
+    JointVelocityLimit,
+)
 from coraplex.datastructures.dataclasses import Context
 from coraplex.datastructures.enums import (
     ApproachDirection,
@@ -120,7 +129,10 @@ def test_move_tool_center_point_motion_uses_tight_threshold(immutable_model_worl
     )
     execute_single(cartesian_motion, context=context)
     assert isinstance(cartesian_motion.motion_chart, CartesianPose)
-    assert cartesian_motion.motion_chart.threshold == DEFAULT_TCP_POSITION_THRESHOLD
+    assert (
+        cartesian_motion.motion_chart.translation_threshold
+        == DEFAULT_TCP_POSITION_THRESHOLD
+    )
 
     translation_motion = MoveToolCenterPointMotion(
         target, Arms.LEFT, movement_type=MovementType.TRANSLATION
@@ -129,33 +141,167 @@ def test_move_tool_center_point_motion_uses_tight_threshold(immutable_model_worl
     assert translation_motion.motion_chart.threshold == DEFAULT_TCP_POSITION_THRESHOLD
 
 
+def test_move_tool_center_point_motion_without_max_velocity_returns_bare_task(
+    immutable_model_world,
+):
+    """
+    MoveToolCenterPointMotion must not add any velocity-limit constraint when neither
+    ``max_linear_velocity`` nor ``max_angular_velocity`` is set, so a caller that never
+    mentions them keeps relying on the robot's own hardware velocity limits only.
+    """
+    world, view, context = immutable_model_world
+    target = Pose(Point3.from_iterable([1, 1, 1]), reference_frame=world.root)
+
+    motion = MoveToolCenterPointMotion(
+        target, Arms.LEFT, movement_type=MovementType.CARTESIAN
+    )
+    execute_single(motion, context=context)
+    assert isinstance(motion.motion_chart, CartesianPose)
+
+
+def test_move_tool_center_point_motion_max_linear_velocity_adds_real_limit(
+    immutable_model_world,
+):
+    """
+    An explicit ``max_linear_velocity`` must add a real
+    :class:`CartesianPositionVelocityLimit` constraint alongside the goal task via
+    ``Parallel``, instead of tuning the goal task's own reference velocity -- per
+    review feedback, reference velocities are for QP normalization only and must not
+    be exposed as a caller-tunable speed limit.
+    """
+    world, view, context = immutable_model_world
+    target = Pose(Point3.from_iterable([1, 1, 1]), reference_frame=world.root)
+
+    motion = MoveToolCenterPointMotion(
+        target,
+        Arms.LEFT,
+        movement_type=MovementType.CARTESIAN,
+        max_linear_velocity=0.05,
+    )
+    execute_single(motion, context=context)
+    assert isinstance(motion.motion_chart, Parallel)
+    node_types = [type(node) for node in motion.motion_chart.nodes]
+    assert CartesianPose in node_types
+    assert CartesianPositionVelocityLimit in node_types
+    velocity_limit_node = next(
+        node
+        for node in motion.motion_chart.nodes
+        if isinstance(node, CartesianPositionVelocityLimit)
+    )
+    assert velocity_limit_node.max_linear_velocity == 0.05
+
+
+def test_move_tool_center_point_motion_max_angular_velocity_adds_real_limit(
+    immutable_model_world,
+):
+    """
+    An explicit ``max_angular_velocity`` must add a real
+    :class:`CartesianRotationVelocityLimit` constraint, only meaningful for the
+    non-translation (full 6D pose) movement type.
+    """
+    world, view, context = immutable_model_world
+    target = Pose(Point3.from_iterable([1, 1, 1]), reference_frame=world.root)
+
+    motion = MoveToolCenterPointMotion(
+        target,
+        Arms.LEFT,
+        movement_type=MovementType.CARTESIAN,
+        max_angular_velocity=0.2,
+    )
+    execute_single(motion, context=context)
+    assert isinstance(motion.motion_chart, Parallel)
+    velocity_limit_node = next(
+        node
+        for node in motion.motion_chart.nodes
+        if isinstance(node, CartesianRotationVelocityLimit)
+    )
+    assert velocity_limit_node.max_angular_velocity == 0.2
+
+
+def test_move_gripper_motion_finger_velocity_adds_real_limit(immutable_model_world):
+    """
+    An explicit ``finger_velocity`` must add a real
+    :class:`~giskardpy.motion_statechart.tasks.joint_tasks.JointVelocityLimit`
+    constraint alongside the goal task, instead of tuning the goal task's own
+    reference/normalization velocity.
+    """
+    world, view, context = immutable_model_world
+
+    close_motion = MoveGripperMotion(
+        motion=GripperState.CLOSE, gripper=Arms.LEFT, finger_velocity=0.03
+    )
+    execute_single(close_motion, context=context)
+    assert isinstance(close_motion.motion_chart, Parallel)
+    node_types = [type(node) for node in close_motion.motion_chart.nodes]
+    assert JointPositionList in node_types
+    assert JointVelocityLimit in node_types
+    velocity_limit_node = next(
+        node
+        for node in close_motion.motion_chart.nodes
+        if isinstance(node, JointVelocityLimit)
+    )
+    assert velocity_limit_node.max_velocity == 0.03
+
+
+def test_move_gripper_motion_tolerate_stall_and_finger_velocity_combine(
+    immutable_model_world,
+):
+    """
+    ``tolerate_stall`` and ``finger_velocity`` set together must nest correctly: the
+    motion is done once (goal reached OR stalled) AND the finger velocity stayed
+    within its limit -- not a single flat ``Parallel`` that conflates OR and AND
+    semantics.
+    """
+    world, view, context = immutable_model_world
+
+    close_motion = MoveGripperMotion(
+        motion=GripperState.CLOSE,
+        gripper=Arms.LEFT,
+        tolerate_stall=True,
+        finger_velocity=0.03,
+    )
+    execute_single(close_motion, context=context)
+    assert isinstance(close_motion.motion_chart, Parallel)
+    outer_node_types = [type(node) for node in close_motion.motion_chart.nodes]
+    assert JointVelocityLimit in outer_node_types
+    inner_parallel = next(
+        node for node in close_motion.motion_chart.nodes if isinstance(node, Parallel)
+    )
+    assert inner_parallel.minimum_success == 1
+    inner_node_types = [type(node) for node in inner_parallel.nodes]
+    assert JointPositionList in inner_node_types
+    assert LocalMinimumReached in inner_node_types
+
+
 def test_move_gripper_motion_tolerate_stall_defaults_to_false(immutable_model_world):
     """
     MoveGripperMotion must not tolerate a stall by default, for either OPEN or CLOSE --
     stalling before reaching the target is a real failure that should be surfaced,
     unless a caller (e.g. PickUpAction, grasping a real object) explicitly opts in via
     ``tolerate_stall=True``. A caller that never mentions this field must keep relying
-    on the original, unmodified default behaviour.
+    on the original, unmodified default behaviour: the plain goal task, not wrapped in
+    any stall-tolerant monitor.
     """
     world, view, context = immutable_model_world
 
     close_motion = MoveGripperMotion(motion=GripperState.CLOSE, gripper=Arms.LEFT)
     execute_single(close_motion, context=context)
-    assert close_motion.motion_chart.tolerate_stall is False
+    assert isinstance(close_motion.motion_chart, JointPositionList)
 
     open_motion = MoveGripperMotion(motion=GripperState.OPEN, gripper=Arms.LEFT)
     execute_single(open_motion, context=context)
-    assert open_motion.motion_chart.tolerate_stall is False
+    assert isinstance(open_motion.motion_chart, JointPositionList)
 
 
 def test_move_gripper_motion_tolerate_stall_can_be_explicitly_enabled(
     immutable_model_world,
 ):
     """
-    An explicit ``tolerate_stall=True`` must reach the underlying
-    JointPositionList task, so a caller that does want stall tolerance (e.g.
-    PickUpAction's own grasp-closing motion) can opt into it without affecting any
-    other MoveGripperMotion's default behaviour.
+    An explicit ``tolerate_stall=True`` must wrap the goal task together with a
+    :class:`LocalMinimumReached` monitor in a :class:`Parallel` (with
+    ``minimum_success=1``), so the motion is considered done as soon as either the
+    goal is reached or the fingers have stalled -- without changing what the goal
+    task's own observation means (goal reached, nothing else).
     """
     world, view, context = immutable_model_world
 
@@ -163,7 +309,11 @@ def test_move_gripper_motion_tolerate_stall_can_be_explicitly_enabled(
         motion=GripperState.CLOSE, gripper=Arms.LEFT, tolerate_stall=True
     )
     execute_single(close_motion, context=context)
-    assert close_motion.motion_chart.tolerate_stall is True
+    assert isinstance(close_motion.motion_chart, Parallel)
+    assert close_motion.motion_chart.minimum_success == 1
+    node_types = [type(node) for node in close_motion.motion_chart.nodes]
+    assert JointPositionList in node_types
+    assert LocalMinimumReached in node_types
 
 
 def test_pick_up_action_close_motion_tolerates_stall(immutable_model_world):

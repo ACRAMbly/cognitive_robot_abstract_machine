@@ -103,10 +103,11 @@ class ParkArmsAction(ActionDescription):
     Entry from the enum for which arm should be parked.
     """
 
-    joint_velocity: Optional[float] = None
+    max_velocity: Optional[float] = None
     """
-    Joint velocity (in rad/s) to command for the parking motion. ``None`` keeps the
-    default velocity.
+    Maximum joint velocity (in rad/s) for the parking motion, enforced via
+    :class:`~giskardpy.motion_statechart.tasks.joint_tasks.JointVelocityLimit`. ``None``
+    leaves the speed unconstrained.
     """
 
     @property
@@ -117,7 +118,7 @@ class ParkArmsAction(ActionDescription):
             MoveJointsMotion(
                 names=joint_names,
                 positions=joint_poses,
-                max_velocity=self.joint_velocity,
+                max_velocity=self.max_velocity,
             )
         )
 

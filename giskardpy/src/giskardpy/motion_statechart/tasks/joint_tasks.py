@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import field, dataclass
-from typing_extensions import Optional
+from typing_extensions import List
 
 import krrood.symbolic_math.symbolic_math as sm
 from giskardpy.motion_statechart.context import MotionStatechartContext
@@ -9,8 +9,6 @@ from giskardpy.motion_statechart.data_types import DefaultWeights
 from giskardpy.motion_statechart.exceptions import EmptyGoalStateError
 from giskardpy.motion_statechart.graph_node import NodeArtifacts
 from giskardpy.motion_statechart.graph_node import Task
-from giskardpy.motion_statechart.monitors.monitors import build_local_minimum_expression
-from krrood.symbolic_math.symbolic_math import FloatVariable
 from semantic_digital_twin.datastructures.joint_state import JointState
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 from semantic_digital_twin.spatial_types.derivatives import Derivatives
@@ -51,43 +49,6 @@ class JointPositionList(Task):
     The maximum velocity of the joints.
     """
 
-    tolerate_stall: bool = field(default=False, kw_only=True)
-    """
-    If True, the task is also considered done once the commanded joints' velocities
-    settle near zero for ``stall_minimum_time`` seconds, even if the position error
-    has not converged below ``threshold``.
-    """
-
-    stall_minimum_time: float = field(default=1.0, kw_only=True)
-    """
-    Minimum elapsed control time before a stall can count as "done" (see
-    ``tolerate_stall``).
-    """
-
-    stall_velocity_threshold: float = field(default=0.01, kw_only=True)
-    """
-    Fraction of each joint's max velocity below which it counts as stalled (see
-    ``tolerate_stall``); forwarded as
-    :func:`~giskardpy.motion_statechart.monitors.monitors.build_local_minimum_expression`'s
-    ``joint_convergence_threshold``.
-    """
-
-    _start_cycle_variable: Optional[FloatVariable] = field(
-        init=False, default=None, repr=False
-    )
-    """
-    Control-cycle count at which this task actually started running, set in
-    ``on_start`` so stall detection measures elapsed time from there instead of from
-    the start of the whole motion chart.
-    """
-
-    def on_start(self, context: MotionStatechartContext):
-        if self._start_cycle_variable is not None:
-            context.float_variable_data.set_value(
-                self._start_cycle_variable,
-                context.control_cycle_variable.evaluate()[0],
-            )
-
     def build(self, context: MotionStatechartContext) -> NodeArtifacts:
         if len(self.goal_state) == 0:
             raise EmptyGoalStateError(node=self)
@@ -114,25 +75,7 @@ class JointPositionList(Task):
                 task_expression=current,
             )
             errors.append(sm.abs(error) < self.threshold)
-        position_reached = sm.logic_all(sm.Vector(errors))
-
-        if not self.tolerate_stall:
-            artifacts.observation = position_reached
-            return artifacts
-
-        self._start_cycle_variable = FloatVariable(f"{self.name}_start_cycle")
-        context.float_variable_data.register_expression(self._start_cycle_variable)
-
-        stalled = build_local_minimum_expression(
-            degrees_of_freedom=[
-                connection.raw_dof for connection in self.goal_state.connections
-            ],
-            context=context,
-            joint_convergence_threshold=self.stall_velocity_threshold,
-            minimum_time=self.stall_minimum_time,
-            reference_cycle_variable=self._start_cycle_variable,
-        )
-        artifacts.observation = sm.trinary_logic_or(position_reached, stalled)
+        artifacts.observation = sm.logic_all(sm.Vector(errors))
         return artifacts
 
     def apply_limits_to_target(
@@ -150,3 +93,47 @@ class JointPositionList(Task):
         ul_vel = connection.dof.limits.upper.velocity
         ll_vel = connection.dof.limits.lower.velocity
         return sm.limit(velocity, ll_vel, ul_vel)
+
+
+@dataclass(eq=False, repr=False)
+class JointVelocityLimit(Task):
+    """
+    Limits the velocity of a set of joints to a maximum value.
+
+    The joint-space equivalent of
+    :class:`~giskardpy.motion_statechart.tasks.cartesian_tasks.CartesianPositionVelocityLimit`:
+    enforcement is performed by adding a real inequality constraint to the optimizer
+    for each given joint, not by tuning a reference/normalization velocity.
+    """
+
+    connections: List[ActiveConnection1DOF] = field(kw_only=True)
+    """The joints whose velocity is constrained."""
+
+    max_velocity: float = field(default=0.1, kw_only=True)
+    """Maximum allowed velocity (in rad/s or m/s, per joint)."""
+
+    weight: float = field(
+        default=DefaultWeights.WEIGHT_ABOVE_COLLISION_AVOIDANCE, kw_only=True
+    )
+    """
+    Optimization weight determining how strongly the velocity limit is enforced.
+    """
+
+    def build(self, context: MotionStatechartContext) -> NodeArtifacts:
+        artifacts = NodeArtifacts()
+        velocities = []
+        for connection in self.connections:
+            position = connection.dof.variables.position
+            artifacts.constraints.add_velocity_constraint(
+                upper_velocity_limit=self.max_velocity,
+                lower_velocity_limit=-self.max_velocity,
+                quadratic_weight=self.weight,
+                task_expression=position,
+                velocity_limit=self.max_velocity,
+                name=str(connection.name),
+            )
+            velocities.append(connection.dof.variables.velocity)
+        artifacts.observation = sm.logic_all(
+            sm.abs(sm.Vector(velocities)) <= self.max_velocity
+        )
+        return artifacts

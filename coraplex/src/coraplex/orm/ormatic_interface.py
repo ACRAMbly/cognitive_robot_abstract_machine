@@ -770,6 +770,25 @@ class CartesianPositionTrajectoryDAO_goal_points_association(
     )
 
 
+class JointVelocityLimitDAO_connections_association(Base, AssociationDataAccessObject):
+    __tablename__ = "_11480049394418622606289718541011175037037367177055418340100070"
+
+    database_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+
+    source_jointvelocitylimitdao_id: Mapped[int] = mapped_column(
+        ForeignKey("JointVelocityLimitDAO.database_id")
+    )
+    target_activeconnection1dofdao_id: Mapped[int] = mapped_column(
+        ForeignKey("ActiveConnection1DOFDAO.database_id")
+    )
+
+    target: Mapped[ActiveConnection1DOFDAO] = relationship(
+        "ActiveConnection1DOFDAO",
+        foreign_keys=[target_activeconnection1dofdao_id],
+        lazy="selectin",
+    )
+
+
 class EnforcementStrategyDAO_degrees_of_freedom_association(
     Base, AssociationDataAccessObject
 ):
@@ -5989,7 +6008,7 @@ class ParkArmsActionDAO(
         use_existing_column=True,
     )
 
-    joint_velocity: Mapped[typing.Optional[builtins.float]] = mapped_column(
+    max_velocity: Mapped[typing.Optional[builtins.float]] = mapped_column(
         use_existing_column=True
     )
 
@@ -6361,10 +6380,10 @@ class MoveToolCenterPointMotionDAO(
     allow_gripper_collision: Mapped[typing.Optional[builtins.bool]] = mapped_column(
         use_existing_column=True
     )
-    reference_linear_velocity: Mapped[typing.Optional[builtins.float]] = mapped_column(
+    max_linear_velocity: Mapped[typing.Optional[builtins.float]] = mapped_column(
         use_existing_column=True
     )
-    reference_angular_velocity: Mapped[typing.Optional[builtins.float]] = mapped_column(
+    max_angular_velocity: Mapped[typing.Optional[builtins.float]] = mapped_column(
         use_existing_column=True
     )
     position_threshold: Mapped[builtins.float] = mapped_column(use_existing_column=True)
@@ -10601,6 +10620,9 @@ class LocalMinimumReachedDAO(
     maximum_threshold: Mapped[builtins.float] = mapped_column(use_existing_column=True)
     windows_size: Mapped[builtins.int] = mapped_column(use_existing_column=True)
     minimum_time: Mapped[builtins.float] = mapped_column(use_existing_column=True)
+    measure_from_own_start: Mapped[builtins.bool] = mapped_column(
+        use_existing_column=True
+    )
 
     __mapper_args__ = {
         "polymorphic_identity": "LocalMinimumReachedDAO",
@@ -11848,8 +11870,10 @@ class CartesianPoseDAO(
     reference_angular_velocity: Mapped[builtins.float] = mapped_column(
         use_existing_column=True
     )
-    threshold: Mapped[builtins.float] = mapped_column(use_existing_column=True)
-    orientation_threshold: Mapped[typing.Optional[builtins.float]] = mapped_column(
+    translation_threshold: Mapped[builtins.float] = mapped_column(
+        use_existing_column=True
+    )
+    orientation_threshold: Mapped[builtins.float] = mapped_column(
         use_existing_column=True
     )
 
@@ -12343,11 +12367,6 @@ class JointPositionListDAO(
 
     threshold: Mapped[builtins.float] = mapped_column(use_existing_column=True)
     max_velocity: Mapped[builtins.float] = mapped_column(use_existing_column=True)
-    tolerate_stall: Mapped[builtins.bool] = mapped_column(use_existing_column=True)
-    stall_minimum_time: Mapped[builtins.float] = mapped_column(use_existing_column=True)
-    stall_velocity_threshold: Mapped[builtins.float] = mapped_column(
-        use_existing_column=True
-    )
 
     goal_state_id: Mapped[int] = mapped_column(
         ForeignKey("JointStateDAO.database_id", use_alter=True),
@@ -12361,6 +12380,35 @@ class JointPositionListDAO(
 
     __mapper_args__ = {
         "polymorphic_identity": "JointPositionListDAO",
+        "inherit_condition": database_id == TaskDAO.database_id,
+        "polymorphic_load": "selectin",
+    }
+
+
+class JointVelocityLimitDAO(
+    TaskDAO,
+    DataAccessObject[giskardpy.motion_statechart.tasks.joint_tasks.JointVelocityLimit],
+):
+    __tablename__ = "JointVelocityLimitDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(TaskDAO.database_id), primary_key=True, use_existing_column=True
+    )
+
+    max_velocity: Mapped[builtins.float] = mapped_column(use_existing_column=True)
+
+    connections: Mapped[
+        builtins.list[JointVelocityLimitDAO_connections_association]
+    ] = relationship(
+        "JointVelocityLimitDAO_connections_association",
+        collection_class=builtins.list,
+        cascade="all, delete-orphan",
+        foreign_keys="[JointVelocityLimitDAO_connections_association.source_jointvelocitylimitdao_id]",
+        lazy="selectin",
+    )
+
+    __mapper_args__ = {
+        "polymorphic_identity": "JointVelocityLimitDAO",
         "inherit_condition": database_id == TaskDAO.database_id,
         "polymorphic_load": "selectin",
     }

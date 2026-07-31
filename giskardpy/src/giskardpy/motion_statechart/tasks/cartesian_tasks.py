@@ -598,17 +598,17 @@ class CartesianPose(CartesianTask):
     )
     """Unit: rad/s. This is used for normalization, for real limits use CartesianVelocityLimit."""
 
-    threshold: float = field(default=0.01, kw_only=True)
-    """If the error falls below this threshold, the goal is achieved. This is used for both position and orientation. Units are m and rad."""
+    translation_threshold: float = field(default=0.01, kw_only=True)
+    """If the position error falls below this threshold (in meters), that half of the goal is achieved."""
 
-    orientation_threshold: Optional[float] = field(default=None, kw_only=True)
+    orientation_threshold: float = field(default=0.01, kw_only=True)
     """
-    Separate tolerance for the orientation error in rad; falls back to ``threshold``
-    when ``None``.
+    If the orientation error falls below this threshold (in rad), that half of the goal
+    is achieved.
 
-    ..note:: A physically tracked arm settles with a residual orientation error, so
-        reusing a position tolerance meant for meters as a rotation tolerance in
-        radians may never be reached.
+    ..note:: A physically tracked arm settles with a residual orientation error, so a
+        rotation tolerance as tight as a typical translation tolerance in meters may
+        never be reached -- set this independently of :attr:`translation_threshold`.
     """
 
     @property
@@ -665,14 +665,9 @@ class CartesianPose(CartesianTask):
         )
 
         rotation_error = root_R_current.rotational_error(root_R_goal)
-        orientation_threshold = (
-            self.orientation_threshold
-            if self.orientation_threshold is not None
-            else self.threshold
-        )
         artifacts.observation = sm.logic_and(
-            sm.abs(rotation_error) < orientation_threshold,
-            distance_to_goal < self.threshold,
+            sm.abs(rotation_error) < self.orientation_threshold,
+            distance_to_goal < self.translation_threshold,
         )
         self.add_goal_and_current_debug_expressions(
             artifacts,

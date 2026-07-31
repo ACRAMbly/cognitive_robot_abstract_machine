@@ -81,14 +81,17 @@ class ReachAction(ActionDescription):
 
     pre_approach_linear_velocity: Optional[float] = None
     """
-    Linear reference velocity (in m/s) for the initial pre-pose approach. ``None`` keeps
-    the default velocity.
+    Maximum linear speed (in m/s) for the initial pre-pose approach, enforced via
+    :class:`~giskardpy.motion_statechart.tasks.cartesian_tasks.CartesianPositionVelocityLimit`.
+    ``None`` leaves the speed unconstrained.
     """
 
     final_approach_linear_velocity: Optional[float] = None
     """
-    Linear reference velocity (in m/s) for the final approach onto the target pose.
-    ``None`` keeps the default velocity.
+    Maximum linear speed (in m/s) for the final approach onto the target pose, enforced
+    via
+    :class:`~giskardpy.motion_statechart.tasks.cartesian_tasks.CartesianPositionVelocityLimit`.
+    ``None`` leaves the speed unconstrained.
     """
 
     open_gripper_at_pre_pose: bool = False
@@ -114,7 +117,7 @@ class ReachAction(ActionDescription):
                 target_pre_pose,
                 self.arm,
                 allow_gripper_collision=False,
-                reference_linear_velocity=self.pre_approach_linear_velocity,
+                max_linear_velocity=self.pre_approach_linear_velocity,
             ),
         ]
         if self.open_gripper_at_pre_pose:
@@ -127,7 +130,7 @@ class ReachAction(ActionDescription):
                 self.arm,
                 allow_gripper_collision=False,
                 movement_type=MovementType.CARTESIAN,
-                reference_linear_velocity=self.final_approach_linear_velocity,
+                max_linear_velocity=self.final_approach_linear_velocity,
             )
         )
         return sequential(children=children)
@@ -209,26 +212,34 @@ class PickUpAction(ActionDescription):
 
     pre_approach_linear_velocity: Optional[float] = None
     """
-    Linear reference velocity (in m/s) for the initial reach towards the object's
-    pre-grasp standoff. ``None`` keeps the default velocity.
+    Maximum linear speed (in m/s) for the initial reach towards the object's pre-grasp
+    standoff, enforced via
+    :class:`~giskardpy.motion_statechart.tasks.cartesian_tasks.CartesianPositionVelocityLimit`.
+    ``None`` leaves the speed unconstrained.
     """
 
     grasp_linear_velocity: Optional[float] = None
     """
-    Linear reference velocity (in m/s) for the final approach onto the grasp pose.
-    ``None`` keeps the default velocity.
+    Maximum linear speed (in m/s) for the final approach onto the grasp pose, enforced
+    via
+    :class:`~giskardpy.motion_statechart.tasks.cartesian_tasks.CartesianPositionVelocityLimit`.
+    ``None`` leaves the speed unconstrained.
     """
 
     grasp_closing_velocity: Optional[float] = None
     """
-    Finger joint velocity (in m/s) used while closing onto the object. ``None`` keeps
-    the default velocity.
+    Maximum finger joint velocity (in m/s) used while closing onto the object, enforced
+    via
+    :class:`~giskardpy.motion_statechart.tasks.joint_tasks.JointVelocityLimit`. ``None``
+    leaves the speed unconstrained.
     """
 
     lift_linear_velocity: Optional[float] = None
     """
-    Linear reference velocity (in m/s) for lifting the object clear of the table after
-    grasping. ``None`` keeps the default velocity.
+    Maximum linear speed (in m/s) for lifting the object clear of the table after
+    grasping, enforced via
+    :class:`~giskardpy.motion_statechart.tasks.cartesian_tasks.CartesianPositionVelocityLimit`.
+    ``None`` leaves the speed unconstrained.
     """
 
     grasp_stall_minimum_time: Optional[float] = None
@@ -308,7 +319,7 @@ class PickUpAction(ActionDescription):
             self.arm,
             allow_gripper_collision=True,
             movement_type=MovementType.TRANSLATION,
-            reference_linear_velocity=self.lift_linear_velocity,
+            max_linear_velocity=self.lift_linear_velocity,
         )
 
     def _grasp_succeeded(self) -> bool:

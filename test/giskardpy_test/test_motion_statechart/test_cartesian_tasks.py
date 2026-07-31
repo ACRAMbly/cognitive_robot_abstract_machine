@@ -315,7 +315,7 @@ class TestCartesianTasks:
         assert np.allclose(
             cylinder_bot_world.compute_forward_kinematics(cylinder_bot_world.root, tip),
             goal.goal_pose,
-            atol=goal.threshold,
+            atol=goal.translation_threshold,
         )
 
     def test_orientation_threshold_decouples_rotation_tolerance(
@@ -342,14 +342,14 @@ class TestCartesianTasks:
                     root_link=cylinder_bot_world.root,
                     tip_link=tip,
                     goal_pose=goal_pose,
-                    threshold=0.01,
+                    translation_threshold=0.01,
                     name="strict",
                 ),
                 loose := CartesianPose(
                     root_link=cylinder_bot_world.root,
                     tip_link=tip,
                     goal_pose=goal_pose,
-                    threshold=0.01,
+                    translation_threshold=0.01,
                     orientation_threshold=0.1,
                     name="loose",
                 ),
@@ -384,7 +384,7 @@ class TestCartesianTasks:
                     goal_pose=Pose.from_xyz_rpy(
                         x=1, reference_frame=cylinder_bot_world.root
                     ),
-                    threshold=0.5,
+                    translation_threshold=0.5,
                 ),
             ]
         )
@@ -506,7 +506,7 @@ class TestCartesianTasks:
         assert np.allclose(
             executor.context.world.compute_forward_kinematics(root, tip),
             expected,
-            atol=cart_goal.threshold,
+            atol=cart_goal.translation_threshold,
         )
 
     def test_front_facing_orientation(self, _hsr_world_setup: World):
@@ -612,7 +612,7 @@ class TestCartesianTasks:
             root, tip
         )
         assert np.allclose(
-            forward_kinematics, tip_goal2.to_np(), atol=cart_goal2.threshold
+            forward_kinematics, tip_goal2.to_np(), atol=cart_goal2.translation_threshold
         )
 
     def test_cart_goal_sequence_on_start(self, pr2_world_state_reset: World):
@@ -665,7 +665,9 @@ class TestCartesianTasks:
             root, tip
         )
         expected = np.eye(4)
-        assert np.allclose(forward_kinematics, expected, atol=cart_goal2.threshold)
+        assert np.allclose(
+            forward_kinematics, expected, atol=cart_goal2.translation_threshold
+        )
 
     def test_CartesianOrientation(self, pr2_world_state_reset: World):
         """

@@ -6,7 +6,7 @@ from giskardpy.motion_statechart.data_types import (
     LifeCycleValues,
     ObservationStateValues,
 )
-from giskardpy.motion_statechart.goals.templates import Sequence
+from giskardpy.motion_statechart.goals.templates import Parallel, Sequence
 from giskardpy.motion_statechart.graph_node import (
     EndMotion,
 )
@@ -17,7 +17,11 @@ from giskardpy.motion_statechart.monitors.overwrite_state_monitors import (
 from giskardpy.motion_statechart.motion_statechart import (
     MotionStatechart,
 )
-from giskardpy.motion_statechart.tasks.joint_tasks import JointPositionList, JointState
+from giskardpy.motion_statechart.tasks.joint_tasks import (
+    JointPositionList,
+    JointState,
+    JointVelocityLimit,
+)
 from giskardpy.motion_statechart.nodes_for_testing.nodes_for_testing import (
     ConstTrueNode,
 )
@@ -264,6 +268,40 @@ def test_revolute_joint(pr2_world_state_reset):
     kin_sim.tick_until_end()
     assert np.isclose(head_pan_joint.position, 0.042, atol=1e-3)
     assert np.isclose(head_tilt_joint.position, -0.37, atol=1e-2)
+
+
+def test_joint_velocity_limit_caps_a_fast_goal(pr2_world_state_reset):
+    """
+    JointVelocityLimit must genuinely slow down a joint's approach towards a distant
+    target, unlike a reference/normalization velocity which is only a QP-optimization
+    hint -- capping the DOF far below its own hardware limit and a large target
+    distance should leave the joint clearly short of the target after a fixed number
+    of ticks.
+    """
+    head_pan_joint = pr2_world_state_reset.get_connection_by_name("head_pan_joint")
+
+    msc = MotionStatechart()
+    msc.add_nodes(
+        [
+            joint_goal := JointPositionList(
+                goal_state=JointState.from_mapping({head_pan_joint: 2.0}),
+            ),
+            JointVelocityLimit(connections=[head_pan_joint], max_velocity=0.01),
+        ]
+    )
+    end = EndMotion()
+    msc.add_node(end)
+    end.start_condition = joint_goal.observation_variable
+
+    kin_sim = Executor(MotionStatechartContext(world=pr2_world_state_reset))
+    kin_sim.compile(motion_statechart=msc)
+    for _ in range(5):
+        kin_sim.tick()
+
+    assert abs(head_pan_joint.position) < 0.05, (
+        "the joint should still be far short of the 2.0 rad target after only 5 "
+        "ticks under a 0.01 rad/s cap -- otherwise the limit isn't being enforced"
+    )
 
 
 def test_joint_sequence(pr2_world_state_reset):
