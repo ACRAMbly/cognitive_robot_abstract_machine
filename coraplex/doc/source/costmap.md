@@ -39,14 +39,7 @@ occupancy = OccupancyCostmap(
 )
 ```
 
-The given parameter are:
-
-* `resolution`: how many metre a single cell of the costmap represents (0.02 translates to 2 centimetre).
-* `width` / `height`: the dimensions of the costmap in cells. Costmaps are usually created as a square.
-* `origin`: the pose around which the costmap is centered.
-* `world`: the semantic digital twin world the costmap is built from.
-* `robot_view`: the robot semantic annotation used to create the map.
-* `distance_to_obstacle`: the inflation radius around obstacles in metre.
+See {class}`~coraplex.locations.costmaps.OccupancyCostmap` for the full parameter reference.
 
 For the common case of a costmap centered on a target pose with the inflation radius derived from the robot base, there
 is the convenience classmethod {meth}`~coraplex.locations.costmaps.OccupancyCostmap.default_map`.
@@ -83,15 +76,7 @@ visibility = VisibilityCostmap(
 )
 ```
 
-The parameter for the constructor are:
-
-* `min_height` / `max_height`: the lowest and highest position of the camera from the ground. This accounts for
-  a movable camera, for example when the torso moves. If the camera height is fixed, set both to the same value.
-* `resolution`: how many metre a cell of the costmap represents.
-* `width` / `height`: the dimensions of the resulting costmap in cells.
-* `origin`: the position the costmap is centered around as well as the position for which the visibility is
-  calculated.
-* `world`: the semantic digital twin world.
+See {class}`~coraplex.locations.costmaps.VisibilityCostmap` for the full parameter reference.
 
 A simple visibility costmap with two objects can be seen below.
 
@@ -121,12 +106,7 @@ gauss = GaussianCostmap(
 )
 ```
 
-The parameter given to the gaussian costmap are:
-
-* `mean`: the mean of the gaussian distribution. This also specifies the side length of the resulting (square)
-  costmap.
-* `sigma`: the sigma of the gaussian distribution.
-* `resolution` / `origin` / `world`: the same as for the other costmaps.
+See {class}`~coraplex.locations.costmaps.GaussianCostmap` for the full parameter reference.
 
 A plot of the gaussian costmap can be seen below. This is a matplotlib plot of the costmap to better show the
 distribution.
@@ -154,12 +134,7 @@ ring = RingCostmap(
 )
 ```
 
-The parameter given to the ring costmap are:
-
-* `std`: the standard deviation of the gaussian distribution that forms the ring.
-* `distance`: the distance between the center of the costmap and the center of the ring. A distance of `0`
-  results in a gaussian costmap.
-* `resolution` / `width` / `height` / `origin` / `world`: the same as for the other costmaps.
+See {class}`~coraplex.locations.costmaps.RingCostmap` for the full parameter reference.
 
 ## Visualization of Costmaps
 
