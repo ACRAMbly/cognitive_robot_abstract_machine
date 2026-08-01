@@ -33,9 +33,9 @@ class SetSeedConfiguration(MotionStatechartNode):
         return NodeArtifacts(observation=sm.Scalar.const_true())
 
     def on_start(self, context: MotionStatechartContext):
-        # TODO does notify state change too often
-        for connection, value in self.seed_configuration.items():
-            connection.position = value
+        with context.world.batch_state_changes():
+            for connection, value in self.seed_configuration.items():
+                connection.position = value
 
 
 @dataclass(eq=False, repr=False)

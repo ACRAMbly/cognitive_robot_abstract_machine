@@ -24,6 +24,7 @@ from giskardpy.middleware.ros2.rospy import wait_for_future_to_complete
 from giskardpy.middleware.ros2.utils.utils import load_xacro
 from giskardpy.middleware.ros2.utils.utils_for_tests import (
     GiskardTester,
+    compare_points,
 )
 from giskardpy.motion_statechart.data_types import (
     DefaultWeights,
@@ -1120,47 +1121,53 @@ class TestCollisionAvoidanceGoals:
         )
 
     def test_avoid_collision_box_between_3_boxes(self, pocky_pose_setup: PR2Tester):
+        r_tip = pocky_pose_setup.r_tip
+        poses_relative_to_r_tip = {
+            "box": HomogeneousTransformationMatrix.from_xyz_rpy(
+                x=0.08, reference_frame=r_tip
+            ),
+            "b1": HomogeneousTransformationMatrix.from_xyz_rpy(
+                x=0.2, reference_frame=r_tip
+            ),
+            "bl": HomogeneousTransformationMatrix.from_xyz_rpy(
+                x=0.15, y=0.04, reference_frame=r_tip
+            ),
+            "br": HomogeneousTransformationMatrix.from_xyz_rpy(
+                x=0.15, y=-0.04, reference_frame=r_tip
+            ),
+        }
         pocky_pose_setup.add_box_to_world(
             name="box",
             size=(0.2, 0.05, 0.05),
-            parent_link=pocky_pose_setup.r_tip,
-            pose=HomogeneousTransformationMatrix.from_xyz_rpy(
-                x=0.08, reference_frame=pocky_pose_setup.r_tip
-            ),
+            parent_link=r_tip,
+            pose=poses_relative_to_r_tip["box"],
         )
         pocky_pose_setup.add_box_to_world(
-            "b1",
-            (0.01, 0.2, 0.2),
-            pose=HomogeneousTransformationMatrix.from_xyz_rpy(
-                x=0.2, reference_frame=pocky_pose_setup.r_tip
-            ),
+            "b1", (0.01, 0.2, 0.2), pose=poses_relative_to_r_tip["b1"]
         )
         pocky_pose_setup.add_box_to_world(
-            "bl",
-            (0.1, 0.01, 0.2),
-            pose=HomogeneousTransformationMatrix.from_xyz_rpy(
-                x=0.15, y=0.04, reference_frame=pocky_pose_setup.r_tip
-            ),
+            "bl", (0.1, 0.01, 0.2), pose=poses_relative_to_r_tip["bl"]
         )
         pocky_pose_setup.add_box_to_world(
-            "br",
-            (0.1, 0.01, 0.2),
-            pose=HomogeneousTransformationMatrix.from_xyz_rpy(
-                x=0.15, y=-0.04, reference_frame=pocky_pose_setup.r_tip
-            ),
+            "br", (0.1, 0.01, 0.2), pose=poses_relative_to_r_tip["br"]
         )
-        pocky_pose_setup.giskard.world_config.world.get_kinematic_structure_entity_by_name(
-            "box"
+
+        # The obstacles are placed relative to the gripper, so a world that is behind on
+        # the state of the robot scatters them somewhere else entirely and leaves the
+        # gripper nothing to avoid.
+        server_world = pocky_pose_setup.world
+        server_r_tip = server_world.get_kinematic_structure_entity_by_name(
+            "r_gripper_tool_frame"
         )
-        pocky_pose_setup.giskard.world_config.world.get_kinematic_structure_entity_by_name(
-            "b1"
-        )
-        pocky_pose_setup.giskard.world_config.world.get_kinematic_structure_entity_by_name(
-            "bl"
-        )
-        pocky_pose_setup.giskard.world_config.world.get_kinematic_structure_entity_by_name(
-            "br"
-        )
+        for name, pose in poses_relative_to_r_tip.items():
+            body = server_world.get_kinematic_structure_entity_by_name(name)
+            compare_points(
+                actual_point=server_world.compute_forward_kinematics(
+                    server_r_tip, body
+                ).to_position(),
+                desired_point=pose.to_position(),
+                decimal=4,
+            )
 
         box = pocky_pose_setup.api.world.get_kinematic_structure_entity_by_name("box")
 

@@ -28,6 +28,7 @@ from giskardpy.motion_statechart.monitors.payload_monitors import (
 from giskardpy.motion_statechart.motion_statechart import MotionStatechart
 from giskardpy.qp.qp_controller_config import QPControllerConfig
 from krrood.adapters.json_serializer import from_json
+from semantic_digital_twin.adapters.ros.messages import MetaData, StateWatermark
 from semantic_digital_twin.callbacks.callback import StateChangeCallback
 from semantic_digital_twin.world import World
 
@@ -169,6 +170,38 @@ class WorldUpdatesMimic:
 
 
 @dataclass
+class PublicationProgressMimic:
+    """
+    Stands in for the synchronizer that publishes the changes of the world, reporting
+    how far it has published.
+    """
+
+    published_sequence_number: int = 0
+    """
+    Sequence number of the message that was published last.
+    """
+
+    origin: MetaData = field(
+        default_factory=lambda: MetaData(node_name="mimic", process_id=0)
+    )
+    """
+    The publisher the sequence numbers belong to.
+    """
+
+    def publish_one_update(self) -> None:
+        """
+        Pretend that one more change of the world went out.
+        """
+        self.published_sequence_number += 1
+
+    @property
+    def latest_published_watermark(self) -> StateWatermark:
+        return StateWatermark(
+            origin=self.origin, sequence_number=self.published_sequence_number
+        )
+
+
+@dataclass
 class RecordingInputSynchronizer(InputSynchronizer):
     """
     Records in which order inputs are read relative to the control cycles.
@@ -226,6 +259,25 @@ class RecordingCommandPublisher(CommandPublisher):
 
     def stop(self) -> None:
         self.stop_count += 1
+
+
+@dataclass
+class PublishingCommandPublisher(CommandPublisher):
+    """
+    Advances the publication progress once per control cycle, standing in for a goal
+    whose changes to the world are published to the other processes.
+    """
+
+    publication_progress: PublicationProgressMimic = None
+    """
+    The progress that is advanced on every publish.
+    """
+
+    def publish(self) -> None:
+        self.publication_progress.publish_one_update()
+
+    def stop(self) -> None:
+        pass
 
 
 @dataclass
@@ -420,6 +472,7 @@ class MotionServerFixture:
     executor: Executor
     action_server: GoalQueueMimic
     world_updates: WorldUpdatesMimic
+    publication_progress: PublicationProgressMimic
     motion_server: MotionServer
     control_loop: ControlLoop
     command_publisher: RecordingCommandPublisher
@@ -452,11 +505,13 @@ def motion_server(init_rospy) -> MotionServerFixture:
     )
     idle_input = RecordingInputSynchronizer(world=world, executor=executor)
     plotter = RecordingPlotter(executor=executor)
+    publication_progress = PublicationProgressMimic()
     server = MotionServer(
         executor=executor,
         action_server=action_server,
         control_loop=control_loop,
         world_updates=world_updates,
+        world_synchronizer=publication_progress,
         feedback_publisher=feedback_publisher,
         inputs=WorldStateInputs(world=world, synchronizers=[idle_input]),
         cycle_counter=cycle_counter,
@@ -466,6 +521,7 @@ def motion_server(init_rospy) -> MotionServerFixture:
         executor=executor,
         action_server=action_server,
         world_updates=world_updates,
+        publication_progress=publication_progress,
         motion_server=server,
         control_loop=control_loop,
         command_publisher=command_publisher,
@@ -491,6 +547,48 @@ class TestGoalResult:
 
         assert motion_server.action_server.outcome == GoalOutcome.SUCCEEDED
         assert len(motion_server.action_server.sent_results) == 1
+
+    def test_a_goal_that_changed_the_world_reports_how_far_it_published(
+        self, motion_server: MotionServerFixture
+    ):
+        """
+        The client reads the world once the goal is answered, so it has to be told what
+        to catch up with first.
+        """
+        motion_server.action_server.goal_json = create_goal_json()
+        motion_server.publication_progress.publish_one_update()
+        published_before_goal = (
+            motion_server.publication_progress.published_sequence_number
+        )
+        motion_server.control_loop.command_publishers.append(
+            PublishingCommandPublisher(
+                publication_progress=motion_server.publication_progress
+            )
+        )
+
+        motion_server.motion_server.run_idle_cycle()
+
+        result = json.loads(motion_server.action_server.sent_results[0].result)
+        watermark = from_json(result["state_watermark"])
+        assert watermark.sequence_number > published_before_goal
+        assert (
+            watermark.sequence_number
+            == motion_server.publication_progress.published_sequence_number
+        )
+
+    def test_a_goal_that_changed_nothing_reports_no_watermark(
+        self, motion_server: MotionServerFixture
+    ):
+        """
+        There is nothing to catch up with when the world published nothing, and waiting
+        for a watermark that was already passed before the goal would never return.
+        """
+        motion_server.action_server.goal_json = create_goal_json()
+
+        motion_server.motion_server.run_idle_cycle()
+
+        result = json.loads(motion_server.action_server.sent_results[0].result)
+        assert "state_watermark" not in result
 
     def test_canceled_goal_is_reported_as_canceled(
         self, motion_server: MotionServerFixture

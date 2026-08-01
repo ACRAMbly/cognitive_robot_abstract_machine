@@ -78,6 +78,7 @@ import giskardpy.executor
 import giskardpy.middleware.ros2.action_server
 import giskardpy.middleware.ros2.command_publishing
 import giskardpy.middleware.ros2.control_loop
+import giskardpy.middleware.ros2.control_loop_profiler
 import giskardpy.middleware.ros2.cycle_counter
 import giskardpy.middleware.ros2.exceptions
 import giskardpy.middleware.ros2.feedback_publisher
@@ -87,12 +88,14 @@ import giskardpy.middleware.ros2.motion_server
 import giskardpy.middleware.ros2.post_goal_plotters
 import giskardpy.middleware.ros2.python_interface
 import giskardpy.middleware.ros2.qp_data_publisher
+import giskardpy.middleware.ros2.scripts.iai_robots.daisy.configs
 import giskardpy.middleware.ros2.scripts.iai_robots.hsr.configs
 import giskardpy.middleware.ros2.scripts.iai_robots.pr2.configs
 import giskardpy.middleware.ros2.scripts.iai_robots.stretch.configs
 import giskardpy.middleware.ros2.scripts.iai_robots.tracy.configs
 import giskardpy.middleware.ros2.scripts.tools.interactive_marker
 import giskardpy.middleware.ros2.server_config
+import giskardpy.middleware.ros2.utils.control_loop_benchmark
 import giskardpy.middleware.ros2.utils.utils_for_tests
 import giskardpy.middleware.ros2.world_updates
 import giskardpy.model.world_config
@@ -614,6 +617,27 @@ class ControlLoopDAO_command_publishers_association(Base, AssociationDataAccessO
     target: Mapped[CommandPublisherDAO] = relationship(
         "CommandPublisherDAO",
         foreign_keys=[target_commandpublisherdao_id],
+        lazy="selectin",
+    )
+
+
+class ControlLoopProfilerDAO_phase_definitions_association(
+    Base, AssociationDataAccessObject
+):
+    __tablename__ = "_46119469330005635918832626263934281939469583075283618022217907"
+
+    database_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+
+    source_controlloopprofilerdao_id: Mapped[int] = mapped_column(
+        ForeignKey("ControlLoopProfilerDAO.database_id")
+    )
+    target_phasedefinitiondao_id: Mapped[int] = mapped_column(
+        ForeignKey("PhaseDefinitionDAO.database_id")
+    )
+
+    target: Mapped[PhaseDefinitionDAO] = relationship(
+        "PhaseDefinitionDAO",
+        foreign_keys=[target_phasedefinitiondao_id],
         lazy="selectin",
     )
 
@@ -8746,6 +8770,109 @@ class ControlLoopDAO(
     )
 
 
+class CallTreeProfileDAO(
+    Base,
+    DataAccessObject[giskardpy.middleware.ros2.control_loop_profiler.CallTreeProfile],
+):
+    __tablename__ = "CallTreeProfileDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
+
+    scenario_name: Mapped[builtins.str] = mapped_column(
+        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
+    )
+    control_dt: Mapped[builtins.float] = mapped_column(use_existing_column=True)
+    wall_time: Mapped[builtins.float] = mapped_column(use_existing_column=True)
+    compile_duration: Mapped[builtins.float] = mapped_column(use_existing_column=True)
+
+
+class ControlLoopProfilerDAO(
+    Base,
+    DataAccessObject[
+        giskardpy.middleware.ros2.control_loop_profiler.ControlLoopProfiler
+    ],
+):
+    __tablename__ = "ControlLoopProfilerDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
+
+    scenario_name: Mapped[builtins.str] = mapped_column(
+        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
+    )
+    control_dt: Mapped[builtins.float] = mapped_column(use_existing_column=True)
+
+    phase_definitions: Mapped[
+        builtins.tuple[ControlLoopProfilerDAO_phase_definitions_association]
+    ] = relationship(
+        "ControlLoopProfilerDAO_phase_definitions_association",
+        collection_class=builtins.tuple,
+        cascade="all, delete-orphan",
+        foreign_keys="[ControlLoopProfilerDAO_phase_definitions_association.source_controlloopprofilerdao_id]",
+        lazy="selectin",
+    )
+
+
+class PhaseDefinitionDAO(
+    Base,
+    DataAccessObject[giskardpy.middleware.ros2.control_loop_profiler.PhaseDefinition],
+):
+    __tablename__ = "PhaseDefinitionDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
+
+    method_name: Mapped[builtins.str] = mapped_column(
+        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
+    )
+    phase_name: Mapped[builtins.str] = mapped_column(
+        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
+    )
+
+    owner: Mapped[TypeType] = mapped_column(
+        TypeType, nullable=False, use_existing_column=True
+    )
+
+
+class PhaseSamplesDAO(
+    Base, DataAccessObject[giskardpy.middleware.ros2.control_loop_profiler.PhaseSamples]
+):
+    __tablename__ = "PhaseSamplesDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
+
+    inclusive_durations: Mapped[typing.List[builtins.float]] = mapped_column(
+        JSON, nullable=False, use_existing_column=True
+    )
+    exclusive_durations: Mapped[typing.List[builtins.float]] = mapped_column(
+        JSON, nullable=False, use_existing_column=True
+    )
+
+
+class _OpenPhaseDAO(
+    Base, DataAccessObject[giskardpy.middleware.ros2.control_loop_profiler._OpenPhase]
+):
+    __tablename__ = "_OpenPhaseDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
+
+    name: Mapped[builtins.str] = mapped_column(
+        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
+    )
+    started_at: Mapped[builtins.float] = mapped_column(use_existing_column=True)
+    time_spent_in_children: Mapped[builtins.float] = mapped_column(
+        use_existing_column=True
+    )
+
+
 class CycleCounterDAO(
     Base, DataAccessObject[giskardpy.middleware.ros2.cycle_counter.CycleCounter]
 ):
@@ -9459,6 +9586,11 @@ class MotionServerDAO(
         nullable=True,
         use_existing_column=True,
     )
+    world_synchronizer_id: Mapped[int] = mapped_column(
+        ForeignKey("WorldSynchronizerDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
+    )
     feedback_publisher_id: Mapped[int] = mapped_column(
         ForeignKey("ActionFeedbackPublisherDAO.database_id", use_alter=True),
         nullable=True,
@@ -9494,6 +9626,12 @@ class MotionServerDAO(
         "IncomingWorldUpdatesDAO",
         uselist=False,
         foreign_keys=[world_updates_id],
+        post_update=True,
+    )
+    world_synchronizer: Mapped[WorldSynchronizerDAO] = relationship(
+        "WorldSynchronizerDAO",
+        uselist=False,
+        foreign_keys=[world_synchronizer_id],
         post_update=True,
     )
     feedback_publisher: Mapped[ActionFeedbackPublisherDAO] = relationship(
@@ -9681,6 +9819,9 @@ class GiskardWrapperNodeDAO(
         sqlalchemy.sql.sqltypes.Text, use_existing_column=True
     )
     avoid_name_conflict: Mapped[builtins.bool] = mapped_column(use_existing_column=True)
+    namespace: Mapped[typing.Optional[builtins.str]] = mapped_column(
+        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
+    )
     use_global_arguments: Mapped[builtins.bool] = mapped_column(
         use_existing_column=True
     )
@@ -9696,6 +9837,16 @@ class GiskardWrapperNodeDAO(
     )
     enable_logger_service: Mapped[builtins.bool] = mapped_column(
         use_existing_column=True
+    )
+
+    context_id: Mapped[typing.Optional[builtins.int]] = mapped_column(
+        ForeignKey("ContextDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
+    )
+
+    context: Mapped[ContextDAO] = relationship(
+        "ContextDAO", uselist=False, foreign_keys=[context_id], post_update=True
     )
 
     __mapper_args__ = {
@@ -9855,6 +10006,166 @@ class GiskardServerConfigDAO(
     )
 
 
+class BenchmarkScenarioDAO(
+    Base,
+    DataAccessObject[
+        giskardpy.middleware.ros2.utils.control_loop_benchmark.BenchmarkScenario
+    ],
+):
+    __tablename__ = "BenchmarkScenarioDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
+
+    polymorphic_type: Mapped[str] = mapped_column(
+        String(255), nullable=False, use_existing_column=True
+    )
+
+    __mapper_args__ = {
+        "polymorphic_on": "polymorphic_type",
+        "polymorphic_identity": "BenchmarkScenarioDAO",
+    }
+
+
+class ApartmentDrivingScenarioDAO(
+    BenchmarkScenarioDAO,
+    DataAccessObject[
+        giskardpy.middleware.ros2.utils.control_loop_benchmark.ApartmentDrivingScenario
+    ],
+):
+    __tablename__ = "ApartmentDrivingScenarioDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(BenchmarkScenarioDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
+    )
+
+    __mapper_args__ = {
+        "polymorphic_identity": "ApartmentDrivingScenarioDAO",
+        "inherit_condition": database_id == BenchmarkScenarioDAO.database_id,
+        "polymorphic_load": "selectin",
+    }
+
+
+class CartesianGoalScenarioDAO(
+    BenchmarkScenarioDAO,
+    DataAccessObject[
+        giskardpy.middleware.ros2.utils.control_loop_benchmark.CartesianGoalScenario
+    ],
+):
+    __tablename__ = "CartesianGoalScenarioDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(BenchmarkScenarioDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
+    )
+
+    __mapper_args__ = {
+        "polymorphic_identity": "CartesianGoalScenarioDAO",
+        "inherit_condition": database_id == BenchmarkScenarioDAO.database_id,
+        "polymorphic_load": "selectin",
+    }
+
+
+class CollisionAvoidanceScenarioDAO(
+    BenchmarkScenarioDAO,
+    DataAccessObject[
+        giskardpy.middleware.ros2.utils.control_loop_benchmark.CollisionAvoidanceScenario
+    ],
+):
+    __tablename__ = "CollisionAvoidanceScenarioDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(BenchmarkScenarioDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
+    )
+
+    __mapper_args__ = {
+        "polymorphic_identity": "CollisionAvoidanceScenarioDAO",
+        "inherit_condition": database_id == BenchmarkScenarioDAO.database_id,
+        "polymorphic_load": "selectin",
+    }
+
+
+class IsolatedBenchmarkSessionDAO(
+    Base,
+    DataAccessObject[
+        giskardpy.middleware.ros2.utils.control_loop_benchmark.IsolatedBenchmarkSession
+    ],
+):
+    __tablename__ = "IsolatedBenchmarkSessionDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
+
+    node_name: Mapped[builtins.str] = mapped_column(
+        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
+    )
+
+
+class KitchenPointingScenarioDAO(
+    BenchmarkScenarioDAO,
+    DataAccessObject[
+        giskardpy.middleware.ros2.utils.control_loop_benchmark.KitchenPointingScenario
+    ],
+):
+    __tablename__ = "KitchenPointingScenarioDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(BenchmarkScenarioDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
+    )
+
+    __mapper_args__ = {
+        "polymorphic_identity": "KitchenPointingScenarioDAO",
+        "inherit_condition": database_id == BenchmarkScenarioDAO.database_id,
+        "polymorphic_load": "selectin",
+    }
+
+
+class LongSequenceScenarioDAO(
+    BenchmarkScenarioDAO,
+    DataAccessObject[
+        giskardpy.middleware.ros2.utils.control_loop_benchmark.LongSequenceScenario
+    ],
+):
+    __tablename__ = "LongSequenceScenarioDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(BenchmarkScenarioDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
+    )
+
+    __mapper_args__ = {
+        "polymorphic_identity": "LongSequenceScenarioDAO",
+        "inherit_condition": database_id == BenchmarkScenarioDAO.database_id,
+        "polymorphic_load": "selectin",
+    }
+
+
+class ScenarioRunnerDAO(
+    Base,
+    DataAccessObject[
+        giskardpy.middleware.ros2.utils.control_loop_benchmark.ScenarioRunner
+    ],
+):
+    __tablename__ = "ScenarioRunnerDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
+
+    debug_mode: Mapped[builtins.bool] = mapped_column(use_existing_column=True)
+    target_frequency: Mapped[builtins.float] = mapped_column(use_existing_column=True)
+
+
 class GiskardTesterDAO(
     Base,
     DataAccessObject[giskardpy.middleware.ros2.utils.utils_for_tests.GiskardTester],
@@ -9864,6 +10175,43 @@ class GiskardTesterDAO(
     database_id: Mapped[builtins.int] = mapped_column(
         Integer, primary_key=True, use_existing_column=True
     )
+
+    default_env_name: Mapped[typing.Optional[builtins.str]] = mapped_column(
+        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
+    )
+
+    polymorphic_type: Mapped[str] = mapped_column(
+        String(255), nullable=False, use_existing_column=True
+    )
+
+    __mapper_args__ = {
+        "polymorphic_on": "polymorphic_type",
+        "polymorphic_identity": "GiskardTesterDAO",
+    }
+
+
+class BenchmarkRobotDAO(
+    GiskardTesterDAO,
+    DataAccessObject[
+        giskardpy.middleware.ros2.utils.control_loop_benchmark.BenchmarkRobot
+    ],
+):
+    __tablename__ = "BenchmarkRobotDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(GiskardTesterDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
+    )
+
+    debug_mode: Mapped[builtins.bool] = mapped_column(use_existing_column=True)
+    target_frequency: Mapped[builtins.float] = mapped_column(use_existing_column=True)
+
+    __mapper_args__ = {
+        "polymorphic_identity": "BenchmarkRobotDAO",
+        "inherit_condition": database_id == GiskardTesterDAO.database_id,
+        "polymorphic_load": "selectin",
+    }
 
 
 class IncomingWorldUpdatesDAO(
@@ -9880,11 +10228,22 @@ class IncomingWorldUpdatesDAO(
         nullable=True,
         use_existing_column=True,
     )
+    model_reload_synchronizer_id: Mapped[typing.Optional[builtins.int]] = mapped_column(
+        ForeignKey("ModelReloadSynchronizerDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
+    )
 
     world_synchronizer: Mapped[WorldSynchronizerDAO] = relationship(
         "WorldSynchronizerDAO",
         uselist=False,
         foreign_keys=[world_synchronizer_id],
+        post_update=True,
+    )
+    model_reload_synchronizer: Mapped[ModelReloadSynchronizerDAO] = relationship(
+        "ModelReloadSynchronizerDAO",
+        uselist=False,
+        foreign_keys=[model_reload_synchronizer_id],
         post_update=True,
     )
 
@@ -10080,6 +10439,27 @@ class WorldWithFixedRobotDAO(
     __mapper_args__ = {
         "polymorphic_identity": "WorldWithFixedRobotDAO",
         "inherit_condition": database_id == WorldConfigDAO.database_id,
+        "polymorphic_load": "selectin",
+    }
+
+
+class WorldWithDaisyConfigDAO(
+    WorldWithFixedRobotDAO,
+    DataAccessObject[
+        giskardpy.middleware.ros2.scripts.iai_robots.daisy.configs.WorldWithDaisyConfig
+    ],
+):
+    __tablename__ = "WorldWithDaisyConfigDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(WorldWithFixedRobotDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
+    )
+
+    __mapper_args__ = {
+        "polymorphic_identity": "WorldWithDaisyConfigDAO",
+        "inherit_condition": database_id == WorldWithFixedRobotDAO.database_id,
         "polymorphic_load": "selectin",
     }
 
@@ -17882,6 +18262,8 @@ class MessageDAO(
         Integer, primary_key=True, use_existing_column=True
     )
 
+    sequence_number: Mapped[builtins.int] = mapped_column(use_existing_column=True)
+
     publication_event_id: Mapped[uuid.UUID] = mapped_column(
         sqlalchemy.sql.sqltypes.UUID, nullable=False, use_existing_column=True
     )
@@ -17970,6 +18352,28 @@ class ModificationBlockDAO(
         "inherit_condition": database_id == MessageDAO.database_id,
         "polymorphic_load": "selectin",
     }
+
+
+class StateWatermarkDAO(
+    Base, DataAccessObject[semantic_digital_twin.adapters.ros.messages.StateWatermark]
+):
+    __tablename__ = "StateWatermarkDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
+
+    sequence_number: Mapped[builtins.int] = mapped_column(use_existing_column=True)
+
+    origin_id: Mapped[int] = mapped_column(
+        ForeignKey("MetaDataDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
+    )
+
+    origin: Mapped[MetaDataDAO] = relationship(
+        "MetaDataDAO", uselist=False, foreign_keys=[origin_id], post_update=True
+    )
 
 
 class WorldModelSnapshotDAO(
@@ -22369,6 +22773,43 @@ class StateUpdateContainsUnknownDegreesOfFreedomErrorDAO(
     }
 
 
+class StateWatermarkTimeoutErrorDAO(
+    UsageErrorDAO,
+    DataAccessObject[semantic_digital_twin.exceptions.StateWatermarkTimeoutError],
+):
+    __tablename__ = "StateWatermarkTimeoutErrorDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(UsageErrorDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
+    )
+
+    applied_sequence_number: Mapped[typing.Optional[builtins.int]] = mapped_column(
+        use_existing_column=True
+    )
+    timeout: Mapped[builtins.float] = mapped_column(use_existing_column=True)
+
+    watermark_id: Mapped[int] = mapped_column(
+        ForeignKey("StateWatermarkDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
+    )
+
+    watermark: Mapped[StateWatermarkDAO] = relationship(
+        "StateWatermarkDAO",
+        uselist=False,
+        foreign_keys=[watermark_id],
+        post_update=True,
+    )
+
+    __mapper_args__ = {
+        "polymorphic_identity": "StateWatermarkTimeoutErrorDAO",
+        "inherit_condition": database_id == UsageErrorDAO.database_id,
+        "polymorphic_load": "selectin",
+    }
+
+
 class UnknownPartWholeRelationshipFieldDAO(
     UsageErrorDAO,
     DataAccessObject[
@@ -22631,6 +23072,42 @@ class WorldEntityWithIDNotInKwargsDAO(
     world_entity_id: Mapped[uuid.UUID] = mapped_column(
         sqlalchemy.sql.sqltypes.UUID, nullable=False, use_existing_column=True
     )
+
+
+class WorldUpdateSequenceGapErrorDAO(
+    UsageErrorDAO,
+    DataAccessObject[semantic_digital_twin.exceptions.WorldUpdateSequenceGapError],
+):
+    __tablename__ = "WorldUpdateSequenceGapErrorDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(UsageErrorDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
+    )
+
+    expected_sequence_number: Mapped[builtins.int] = mapped_column(
+        use_existing_column=True
+    )
+    received_sequence_number: Mapped[builtins.int] = mapped_column(
+        use_existing_column=True
+    )
+
+    origin_id: Mapped[int] = mapped_column(
+        ForeignKey("MetaDataDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
+    )
+
+    origin: Mapped[MetaDataDAO] = relationship(
+        "MetaDataDAO", uselist=False, foreign_keys=[origin_id], post_update=True
+    )
+
+    __mapper_args__ = {
+        "polymorphic_identity": "WorldUpdateSequenceGapErrorDAO",
+        "inherit_condition": database_id == UsageErrorDAO.database_id,
+        "polymorphic_load": "selectin",
+    }
 
 
 class WorldValidationErrorDAO(
@@ -24724,6 +25201,28 @@ class WorldModelManagerDAO(
         cascade="all, delete-orphan",
         foreign_keys="[WorldModelManagerDAO_model_modification_blocks_association.source_worldmodelmanagerdao_id]",
         lazy="selectin",
+    )
+
+
+class WorldStateBatchContextManagerDAO(
+    Base, DataAccessObject[semantic_digital_twin.world.WorldStateBatchContextManager]
+):
+    __tablename__ = "WorldStateBatchContextManagerDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
+
+    publish_changes: Mapped[builtins.bool] = mapped_column(use_existing_column=True)
+
+    world_id: Mapped[int] = mapped_column(
+        ForeignKey("WorldMappingDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
+    )
+
+    world: Mapped[WorldMappingDAO] = relationship(
+        "WorldMappingDAO", uselist=False, foreign_keys=[world_id], post_update=True
     )
 
 
