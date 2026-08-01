@@ -3166,6 +3166,18 @@ class MissingWaypointsDAO(Base, DataAccessObject[coraplex.exceptions.MissingWayp
     )
 
 
+class NothingDetectedDAO(Base, DataAccessObject[coraplex.exceptions.NothingDetected]):
+    __tablename__ = "NothingDetectedDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
+
+    requested_annotation: Mapped[builtins.str] = mapped_column(
+        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
+    )
+
+
 class PerceivedObjectNotInWorldDAO(
     Base, DataAccessObject[coraplex.exceptions.PerceivedObjectNotInWorld]
 ):
@@ -3223,6 +3235,21 @@ class TipLinkDoesNotMatchAnyArmDAO(
     robot: Mapped[AbstractRobotDAO] = relationship(
         "AbstractRobotDAO", uselist=False, foreign_keys=[robot_id], post_update=True
     )
+
+
+class UnidentifiedDetectionsDAO(
+    Base, DataAccessObject[coraplex.exceptions.UnidentifiedDetections]
+):
+    __tablename__ = "UnidentifiedDetectionsDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
+
+    requested_annotation: Mapped[builtins.str] = mapped_column(
+        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
+    )
+    candidate_count: Mapped[builtins.int] = mapped_column(use_existing_column=True)
 
 
 class UnknownExecutionTypeDAO(

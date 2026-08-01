@@ -21,8 +21,10 @@ from typing_extensions import Optional, Type, List, TYPE_CHECKING
 from coraplex.datastructures.enums import ExecutionType
 from coraplex.exceptions import (
     AmbiguousDetection,
+    NothingDetected,
     PerceivedObjectNotInWorld,
     PerceptionSourceUnavailable,
+    UnidentifiedDetections,
     UnknownExecutionType,
 )
 from coraplex.ros import create_action_client
@@ -267,23 +269,59 @@ class RoboKudoPerception(PerceptionInterface):
             obj=ObjectDesignator(type=query.semantic_annotation.__name__.lower())
         )
         result = client.send_goal(goal).result
-        return [
-            self._to_detection(designator, query.world)
+        detections = [
+            self._to_detection(designator, query)
             for designator in result.res
-            if designator.pose
+            if designator.pose and self._can_be_requested_object(designator, query)
         ]
 
-    def _to_detection(self, designator: ObjectDesignator, world: World) -> Detection:
+        requested_annotation = query.semantic_annotation.__name__
+        if not detections:
+            raise NothingDetected(requested_annotation)
+        if len(detections) > 1:
+            raise UnidentifiedDetections(requested_annotation, len(detections))
+        return detections
+
+    @staticmethod
+    def _can_be_requested_object(
+        designator: ObjectDesignator, query: PerceptionQuery
+    ) -> bool:
+        """
+        Whether a reported designator could be the object the query asked for.
+
+        A pipeline that only localizes reports no class label, and every object it found
+        is then a candidate. One that classifies lets the objects that were not asked
+        for be discarded here.
+
+        :param designator: The designator the pipeline reported.
+        :param query: The query it was answering.
+        :return: True if the designator is a candidate for the requested object.
+        """
+        if not designator.type:
+            return True
+        return (
+            designator.type.strip().lower()
+            == query.semantic_annotation.__name__.lower()
+        )
+
+    def _to_detection(
+        self, designator: ObjectDesignator, query: PerceptionQuery
+    ) -> Detection:
         """
         Convert one RoboKudo object designator into a detection.
 
+        Falls back to the requested annotation's name when the pipeline reported no class
+        label: it answered where an object is, and the query says which one was asked for.
+
         :param designator: The designator RoboKudo reported.
-        :param world: World whose frames the designator's pose is resolved against.
+        :param query: The query it was answering, supplying the frame and the fallback
+            label.
         :return: The detection carrying the designator's label and pose.
         """
+        world = query.world
         pose_stamped = designator.pose[0]
         return Detection(
-            class_label=designator.type,
+            class_label=designator.type or query.semantic_annotation.__name__,
             pose=Pose.from_xyz_quaternion(
                 pose_stamped.pose.position.x,
                 pose_stamped.pose.position.y,

@@ -223,6 +223,62 @@ class AmbiguousDetection(DataclassException):
 
 
 @dataclass
+class NothingDetected(DataclassException):
+    """
+    Raised when a perception source answers a query without reporting any object.
+
+    Treated as a failure rather than an empty answer: a plan that carried on would act on
+    the pose the object was spawned with while believing perception had confirmed it.
+    """
+
+    requested_annotation: str
+    """
+    Name of the annotation that was asked for.
+    """
+
+    def error_message(self) -> str:
+        return f"The perception source reported no {self.requested_annotation}."
+
+    def suggest_correction(self) -> str:
+        return (
+            "check that the object is in view and that the pipeline's crop and plane "
+            "parameters cover it."
+        )
+
+
+@dataclass
+class UnidentifiedDetections(DataclassException):
+    """
+    Raised when a perception source reports several candidates it cannot tell apart.
+
+    A pipeline that localizes without classifying gives no way to choose between them,
+    so the choice is refused rather than made arbitrarily.
+    """
+
+    requested_annotation: str
+    """
+    Name of the annotation that was asked for.
+    """
+
+    candidate_count: int
+    """
+    How many indistinguishable candidates were reported.
+    """
+
+    def error_message(self) -> str:
+        return (
+            f"The perception source reported {self.candidate_count} candidates for "
+            f"{self.requested_annotation} and none of them carry a class label."
+        )
+
+    def suggest_correction(self) -> str:
+        return (
+            "add a classifying annotator to the perception pipeline, or narrow what is "
+            "in view so a single object is reported."
+        )
+
+
+@dataclass
 class PerceptionSourceUnavailable(DataclassException):
     """
     Raised when the perception pipeline does not answer within the configured timeout.

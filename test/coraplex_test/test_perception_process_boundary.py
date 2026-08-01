@@ -48,9 +48,12 @@ discovery latency for an absent server.
 
 
 @pytest.fixture
-def perception_pipeline_process(rclpy_node):
+def pipeline_process_reporting(rclpy_node):
     """
-    A perception pipeline serving the query action from its own process.
+    Start a perception pipeline in its own process, reporting the given label.
+
+    Pass an empty label for a pipeline that localizes without recognizing, which is what
+    the plane-and-cluster annotators of the real Stretch engine produce.
     """
     pytest.importorskip("robokudo_msgs")
 
@@ -60,17 +63,34 @@ def perception_pipeline_process(rclpy_node):
             for name, _ in get_action_names_and_types(rclpy_node)
         )
 
-    with StandaloneProcess(
-        launcher_path=PERCEPTION_PIPELINE_STAND_IN_PATH,
-        is_ready=is_serving_queries,
-        arguments=[
-            "--class-label",
-            REPORTED_CLASS_LABEL,
-            "--position",
-            *(str(coordinate) for coordinate in REPORTED_POSITION),
-        ],
-    ) as process:
-        yield process
+    started = []
+
+    def start(class_label: str) -> StandaloneProcess:
+        process = StandaloneProcess(
+            launcher_path=PERCEPTION_PIPELINE_STAND_IN_PATH,
+            is_ready=is_serving_queries,
+            arguments=[
+                "--class-label",
+                class_label,
+                "--position",
+                *(str(coordinate) for coordinate in REPORTED_POSITION),
+            ],
+        )
+        process.start()
+        started.append(process)
+        return process
+
+    yield start
+    for process in started:
+        process.stop()
+
+
+@pytest.fixture
+def perception_pipeline_process(pipeline_process_reporting):
+    """
+    A perception pipeline serving the query action from its own process.
+    """
+    return pipeline_process_reporting(REPORTED_CLASS_LABEL)
 
 
 def test_detection_crosses_a_process_boundary(
@@ -108,3 +128,24 @@ def test_absent_perception_source_is_reported(
         RoboKudoPerception(
             ros_node=rclpy_node, server_timeout=MISSING_SOURCE_TIMEOUT
         ).detect(query)
+
+
+def test_untyped_detection_crosses_a_process_boundary(
+    immutable_model_world, whole_scene_region, rclpy_node, pipeline_process_reporting
+):
+    """
+    The shape the real Stretch engine produces: a pipeline in another process that
+    localizes without recognizing, so the label has to come from what was asked for.
+    """
+    world, view, context = immutable_model_world
+    pipeline_process_reporting("")
+    query = PerceptionQuery(Milk, whole_scene_region, view, world)
+
+    detections = RoboKudoPerception(ros_node=rclpy_node).detect(query)
+
+    assert [detection.class_label for detection in detections] == [Milk.__name__]
+    np.testing.assert_allclose(
+        detections[0].pose.to_position().to_np().flatten()[:3],
+        REPORTED_POSITION,
+        atol=1e-9,
+    )

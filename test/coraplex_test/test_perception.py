@@ -10,12 +10,14 @@ applying a detection moves the annotated body.
 from __future__ import annotations
 
 import threading
+from dataclasses import dataclass
 
 import numpy as np
 import pytest
 import rclpy
 from rclpy.action import ActionServer
 from rclpy.executors import SingleThreadedExecutor
+from typing_extensions import List, Tuple
 
 from coraplex.datastructures.enums import (
     ApproachDirection,
@@ -24,7 +26,12 @@ from coraplex.datastructures.enums import (
     VerticalAlignment,
 )
 from coraplex.datastructures.grasp import GraspDescription
-from coraplex.exceptions import AmbiguousDetection, PerceivedObjectNotInWorld
+from coraplex.exceptions import (
+    AmbiguousDetection,
+    NothingDetected,
+    PerceivedObjectNotInWorld,
+    UnidentifiedDetections,
+)
 from coraplex.perception import (
     Detection,
     PerceptionInterface,
@@ -270,19 +277,40 @@ def test_detection_corrects_a_grasp_planned_before_it(immutable_model_world):
 # %% reading detections off the robokudo action
 
 
+@dataclass
+class ReportedObject:
+    """
+    One object a stand-in perception pipeline claims to have seen.
+    """
+
+    class_label: str
+    """
+    Label to report it under; empty for a pipeline that localizes without recognizing.
+    """
+
+    position: Tuple[float, float, float]
+    """
+    Where to report it.
+    """
+
+
 class RecordedQueryServer:
     """
-    Action server that answers every perception query with one canned object designator.
+    Action server answering every perception query with a fixed set of object
+    designators.
 
     Stands in for a running perception pipeline so the conversion from its message
-    format into a :class:`~coraplex.perception.Detection` is exercised without one.
+    format into a :class:`~coraplex.perception.Detection` is exercised without one, and
+    so the cases a real pipeline produces — nothing found, several candidates, no class
+    label — can each be reproduced.
     """
 
-    def __init__(self, node_name: str, action_name: str, class_label: str, position):
+    def __init__(
+        self, node_name: str, action_name: str, reports: List[ReportedObject]
+    ) -> None:
         from robokudo_msgs.action import Query
 
-        self.class_label = class_label
-        self.position = position
+        self.reports = reports
         self.received_types = []
         self.node = rclpy.create_node(node_name)
         self.server = ActionServer(self.node, Query, action_name, self.execute_callback)
@@ -302,16 +330,19 @@ class RecordedQueryServer:
         self.received_types.append(goal_handle.request.obj.type)
         goal_handle.succeed()
 
-        pose_stamped = PoseStamped(header=Header(frame_id="map"))
-        (
-            pose_stamped.pose.position.x,
-            pose_stamped.pose.position.y,
-            pose_stamped.pose.position.z,
-        ) = self.position
-        pose_stamped.pose.orientation.w = 1.0
-        return Query.Result(
-            res=[ObjectDesignator(type=self.class_label, pose=[pose_stamped])]
-        )
+        designators = []
+        for report in self.reports:
+            pose_stamped = PoseStamped(header=Header(frame_id="map"))
+            (
+                pose_stamped.pose.position.x,
+                pose_stamped.pose.position.y,
+                pose_stamped.pose.position.z,
+            ) = report.position
+            pose_stamped.pose.orientation.w = 1.0
+            designators.append(
+                ObjectDesignator(type=report.class_label, pose=[pose_stamped])
+            )
+        return Query.Result(res=designators)
 
     def stop(self):
         self.server.destroy()
@@ -329,11 +360,32 @@ def robokudo_query_server(rclpy_node):
     server = RecordedQueryServer(
         node_name="robokudo_stand_in",
         action_name="robokudo/query",
-        class_label="Milk",
-        position=PERCEIVED_MILK_POSITION,
+        reports=[ReportedObject("Milk", PERCEIVED_MILK_POSITION)],
     )
     yield server
     server.stop()
+
+
+@pytest.fixture
+def query_server_reporting(rclpy_node):
+    """
+    Start a stand-in pipeline reporting whatever a test asks it to.
+    """
+    pytest.importorskip("robokudo_msgs")
+    started = []
+
+    def start(reports: List[ReportedObject]) -> RecordedQueryServer:
+        server = RecordedQueryServer(
+            node_name="robokudo_stand_in",
+            action_name="robokudo/query",
+            reports=reports,
+        )
+        started.append(server)
+        return server
+
+    yield start
+    for server in started:
+        server.stop()
 
 
 def test_robokudo_detection_is_named_and_placed_by_the_pipeline(
@@ -378,3 +430,83 @@ def test_robokudo_detection_moves_the_body_in_the_world(
         PERCEIVED_MILK_POSITION,
         atol=1e-9,
     )
+
+
+# %% pipelines that localize without recognizing
+
+
+def test_untyped_detection_is_labelled_from_the_query(
+    immutable_model_world, whole_scene_region, rclpy_node, query_server_reporting
+):
+    """
+    A pipeline of plane and cluster annotators reports where an object is but not what
+    it is, so the label comes from what was asked for.
+    """
+    world, view, context = immutable_model_world
+    query_server_reporting([ReportedObject("", PERCEIVED_MILK_POSITION)])
+    query = PerceptionQuery(Milk, whole_scene_region, view, world)
+
+    detections = RoboKudoPerception(ros_node=rclpy_node).detect(query)
+
+    assert [detection.class_label for detection in detections] == ["Milk"]
+    np.testing.assert_allclose(
+        detections[0].pose.to_position().to_np().flatten()[:3],
+        PERCEIVED_MILK_POSITION,
+        atol=1e-9,
+    )
+
+
+def test_pipeline_reporting_nothing_is_an_error(
+    immutable_model_world, whole_scene_region, rclpy_node, query_server_reporting
+):
+    """
+    Finding nothing must not pass as "saw nothing worth moving": the plan would then
+    grasp at the pose the object was spawned with, believing it was confirmed.
+    """
+    world, view, context = immutable_model_world
+    query_server_reporting([])
+    query = PerceptionQuery(Milk, whole_scene_region, view, world)
+
+    with pytest.raises(NothingDetected):
+        RoboKudoPerception(ros_node=rclpy_node).detect(query)
+
+
+def test_several_untyped_candidates_are_not_guessed_between(
+    immutable_model_world, whole_scene_region, rclpy_node, query_server_reporting
+):
+    """
+    Without a class label there is nothing to tell two clusters apart, so the ambiguity
+    is reported rather than resolved by picking one.
+    """
+    world, view, context = immutable_model_world
+    query_server_reporting(
+        [
+            ReportedObject("", PERCEIVED_MILK_POSITION),
+            ReportedObject("", (1.0, 1.0, 1.0)),
+        ]
+    )
+    query = PerceptionQuery(Milk, whole_scene_region, view, world)
+
+    with pytest.raises(UnidentifiedDetections):
+        RoboKudoPerception(ros_node=rclpy_node).detect(query)
+
+
+def test_labelled_candidates_are_narrowed_to_the_requested_type(
+    immutable_model_world, whole_scene_region, rclpy_node, query_server_reporting
+):
+    """
+    Once a classifying annotator is in the pipeline its labels are used to discard the
+    objects that were not asked for, instead of reporting them as ambiguous.
+    """
+    world, view, context = immutable_model_world
+    query_server_reporting(
+        [
+            ReportedObject("Milk", PERCEIVED_MILK_POSITION),
+            ReportedObject("Spoon", (1.0, 1.0, 1.0)),
+        ]
+    )
+    query = PerceptionQuery(Milk, whole_scene_region, view, world)
+
+    detections = RoboKudoPerception(ros_node=rclpy_node).detect(query)
+
+    assert [detection.class_label for detection in detections] == ["Milk"]

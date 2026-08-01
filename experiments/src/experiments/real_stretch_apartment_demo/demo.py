@@ -12,6 +12,19 @@ needed.
     :class:`~coraplex.exceptions.PerceptionSourceUnavailable` rather than grasping at the
     pose it was spawned with. Simulated runs read the world model instead and need
     neither.
+
+Start the controller and the pipeline separately, as on the robot. RoboKudo's entry point
+takes its arguments with an underscore prefix::
+
+    python3 -m robokudo.scripts.main _ae stretch_demo _headless
+
+That engine localizes whatever stands on the dominant plane in front of the Stretch's
+RealSense but does not recognize it, so it reports poses without class labels and the
+detection is labelled with what the plan asked for. Two consequences: a second object on the
+same shelf layer aborts the run with
+:class:`~coraplex.exceptions.UnidentifiedDetections` rather than risking the wrong grasp,
+and an empty scene aborts with :class:`~coraplex.exceptions.NothingDetected`. Adding a
+classifying annotator to that engine removes both without changing this demo.
 """
 
 from dataclasses import dataclass

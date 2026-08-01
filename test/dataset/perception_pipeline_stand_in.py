@@ -41,6 +41,9 @@ class CannedDetectionPipeline:
     class_label: str
     """
     Label to report the object under.
+
+    Empty reproduces a pipeline that localizes without recognizing, which is what the
+    plane-and-cluster annotators produce.
     """
 
     position: tuple[float, float, float]
@@ -84,7 +87,11 @@ def main() -> None:
     cleanly when the test that launched it is done.
     """
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--class-label", required=True)
+    parser.add_argument(
+        "--class-label",
+        default="",
+        help="Label to report; omit for a pipeline that localizes without recognizing.",
+    )
     parser.add_argument("--position", required=True, type=float, nargs=3)
     parser.add_argument("--frame-id", default="map")
     arguments = parser.parse_args()
