@@ -352,6 +352,14 @@ class EvaluationContext:
     Caches each nested subquery's result stream for the current evaluation pass.
     """
 
+    def is_child_of_truth_value_operator(self, expression: SymbolicExpression) -> bool:
+        """
+        :param expression: The symbolic expression to test.
+        :return: ``True`` if *expression* was evaluated as a direct child of a
+            ``TruthValueOperator`` during the current evaluation pass.
+        """
+        return expression._id_ in self.truth_value_operator_children
+
     def on_evaluate_enter(
         self,
         *,

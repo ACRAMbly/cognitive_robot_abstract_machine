@@ -32,51 +32,35 @@ from krrood.entity_query_language.operators.core_logical_operators import (
 from krrood.entity_query_language.predicate import Predicate
 from krrood.entity_query_language.query.query import Query
 
-_PARENT_NOT_SUPPLIED = object()
-"""
-Sentinel distinguishing "the caller does not know *expr*'s relevant parent" from "the
-caller knows *expr* has no relevant parent" (``None``) in
-:func:`is_condition_participant`.
-"""
-
 
 def is_condition_participant(
-    expr: SymbolicExpression,
-    parent: Optional[SymbolicExpression] = _PARENT_NOT_SUPPLIED,
+    expression: SymbolicExpression,
+    parent: Optional[SymbolicExpression] = None,
 ) -> bool:
     """
     Check whether the expression participates in condition evaluation.
 
-    :param expr: The symbolic expression to test.
+    :param expression: The symbolic expression to test.
     :param parent: The parent relevant to the caller's own traversal, when the caller
-        already knows it (for example a graph walk that reached *expr* through one of its
-        own children edges). Takes precedence over both of the fallbacks below.
-    :return: ``True`` if *expr* is a :class:`~krrood.entity_query_language.operators.comparator.Comparator`,
+        already knows it (for example a graph walk that reached *expression* through one
+        of its own children edges). Takes precedence over both of the fallbacks below.
+    :return: ``True`` if *expression* is a :class:`~krrood.entity_query_language.operators.comparator.Comparator`,
         :class:`~krrood.entity_query_language.predicate.Predicate`, or
         :class:`~krrood.entity_query_language.operators.core_logical_operators.LogicalOperator`,
         or if it was evaluated (or, per *parent*, reached) as a direct child of a
         :class:`~krrood.entity_query_language.core.base_expressions.TruthValueOperator`.
-
-    ..note:: A node reused elsewhere in the DAG keeps a direct parent per position, but
-        only one of them is its structural, first-attachment-wins ``_parent_`` — which may
-        belong to an unrelated position. When *parent* is not supplied, this is resolved
-        from context instead of reading that structural pointer: within an active
-        evaluation pass, from the pass's own record of which nodes were evaluated as a
-        ``TruthValueOperator`` child (see
-        :class:`~krrood.entity_query_language.evaluation_context.TruthValueOperatorChildren`).
-        Outside an active evaluation and without an explicit *parent* (for example when
-        coloring a :class:`~krrood.entity_query_language.query_graph.QueryGraph` from an
-        already-finished evaluation), the structural ``_parent_`` is the only signal left.
     """
-    if isinstance(expr, (Comparator, Predicate, LogicalOperator)):
+    if isinstance(expression, (Comparator, Predicate, LogicalOperator)):
         return True
-    if parent is not _PARENT_NOT_SUPPLIED:
-        return parent is not None and isinstance(parent, TruthValueOperator)
+    if parent is not None:
+        return isinstance(parent, TruthValueOperator)
     evaluation_context = get_evaluation_context()
     if evaluation_context is not None:
-        return expr._id_ in evaluation_context.truth_value_operator_children
-    parent = expr._parent_
-    return parent is not None and isinstance(parent, TruthValueOperator)
+        return evaluation_context.is_child_of_truth_value_operator(expression)
+    structural_parent = expression._parent_
+    return structural_parent is not None and isinstance(
+        structural_parent, TruthValueOperator
+    )
 
 
 class EvaluationTracker(EvaluationObserver):
@@ -170,20 +154,20 @@ class SatisfiedConditionTracker(EvaluationObserver):
             node = node.previous_operation_result
 
         satisfied = OrderedSet()
-        for expr_id in evaluated:
+        for evaluated_id in evaluated:
             try:
-                expr = expression._get_expression_by_id_(expr_id)
+                evaluated_expression = expression._get_expression_by_id_(evaluated_id)
             except NoExpressionFoundForGivenID:
                 continue
-            if not is_condition_participant(expr):
+            if not is_condition_participant(evaluated_expression):
                 continue
-            if isinstance(expr, LogicalOperator):
+            if isinstance(evaluated_expression, LogicalOperator):
                 # An operator not present in the chain was short-circuited: not satisfied.
-                if not chain_truth_map.get(expr_id, True):
-                    satisfied.add(expr_id)
-            elif expr_id in result.bindings:
-                if result.bindings[expr_id]:
-                    satisfied.add(expr_id)
+                if not chain_truth_map.get(evaluated_id, True):
+                    satisfied.add(evaluated_id)
+            elif evaluated_id in result.bindings:
+                if result.bindings[evaluated_id]:
+                    satisfied.add(evaluated_id)
 
         result.satisfied_condition_ids = satisfied
         evaluation_context.satisfied_condition_ids = satisfied
