@@ -49,22 +49,6 @@ Offset from where the fixture spawns it (2.37, 2.0, 1.05) so that a body which d
 move fails the assertions.
 """
 
-
-def whole_scene_region(world) -> BoundingBox:
-    """
-    A region large enough to contain the whole fixture apartment.
-    """
-    return BoundingBox(
-        origin=HomogeneousTransformationMatrix(reference_frame=world.root),
-        min_x=-10,
-        min_y=-10,
-        min_z=-10,
-        max_x=10,
-        max_y=10,
-        max_z=10,
-    )
-
-
 # %% choosing a source
 
 
@@ -174,7 +158,9 @@ def test_several_annotations_on_one_body_are_not_ambiguous(mutable_model_world):
 # %% reading detections out of the world
 
 
-def test_world_perception_reports_the_pose_the_world_holds(immutable_model_world):
+def test_world_perception_reports_the_pose_the_world_holds(
+    immutable_model_world, whole_scene_region
+):
     """
     The simulated source stands in for a perfect sensor, so its detection must match the
     body's current pose rather than any stored or spawned value.
@@ -184,7 +170,7 @@ def test_world_perception_reports_the_pose_the_world_holds(immutable_model_world
     milk_body.parent_connection.origin = HomogeneousTransformationMatrix.from_xyz_rpy(
         *PERCEIVED_MILK_POSITION, reference_frame=world.root
     )
-    query = PerceptionQuery(Milk, whole_scene_region(world), view, world)
+    query = PerceptionQuery(Milk, whole_scene_region, view, world)
 
     detections = WorldPerception().detect(query)
 
@@ -339,6 +325,7 @@ def robokudo_query_server(rclpy_node):
     """
     A stand-in perception pipeline serving the query action on its own node.
     """
+    pytest.importorskip("robokudo_msgs")
     server = RecordedQueryServer(
         node_name="robokudo_stand_in",
         action_name="robokudo/query",
@@ -350,14 +337,14 @@ def robokudo_query_server(rclpy_node):
 
 
 def test_robokudo_detection_is_named_and_placed_by_the_pipeline(
-    immutable_model_world, rclpy_node, robokudo_query_server
+    immutable_model_world, whole_scene_region, rclpy_node, robokudo_query_server
 ):
     """
     The real source contributes the label and the pose; everything downstream treats it
     the same as a simulated one.
     """
     world, view, context = immutable_model_world
-    query = PerceptionQuery(Milk, whole_scene_region(world), view, world)
+    query = PerceptionQuery(Milk, whole_scene_region, view, world)
 
     detections = RoboKudoPerception(ros_node=rclpy_node).detect(query)
 
@@ -371,14 +358,14 @@ def test_robokudo_detection_is_named_and_placed_by_the_pipeline(
 
 
 def test_robokudo_detection_moves_the_body_in_the_world(
-    immutable_model_world, rclpy_node, robokudo_query_server
+    immutable_model_world, whole_scene_region, rclpy_node, robokudo_query_server
 ):
     """
     End to end for the real path: what the pipeline reports is what the world ends up
     holding, which is what the grasp is later planned against.
     """
     world, view, context = immutable_model_world
-    query = PerceptionQuery(Milk, whole_scene_region(world), view, world)
+    query = PerceptionQuery(Milk, whole_scene_region, view, world)
 
     for detection in RoboKudoPerception(ros_node=rclpy_node).detect(query):
         detection.apply_to(world)

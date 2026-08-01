@@ -30,16 +30,17 @@ from one that missed the furniture without being tight enough to chase controlle
 
 
 def test_demonstration_runs_against_a_controller_in_another_process(
-    stretch_controller_process,
+    stretch_controller_process, cereal_perception_process
 ):
     """
-    The demonstration drives a controller it shares no interpreter state with, so every
-    exchange crosses a real process boundary: fetching the world, synchronizing the
-    furniture it spawns, and executing each action.
+    The demonstration drives a controller and a perception pipeline it shares no
+    interpreter state with, so every exchange crosses a real process boundary: fetching
+    the world, synchronizing the furniture it spawns, detecting the cereal, and
+    executing each action.
 
-    The result is read back by fetching the world from the controller again, which proves
-    the furniture and the transported object landed in the controller's own process rather
-    than only in the demonstration's copy.
+    The result is read back by fetching the world from the controller again, which
+    proves the furniture and the transported object landed in the controller's own
+    process rather than only in the demonstration's copy.
     """
     StretchApartmentDemonstration(execution_type=ExecutionType.REAL).run()
 

@@ -5,6 +5,13 @@ Running with :attr:`~coraplex.datastructures.enums.ExecutionType.REAL` drives th
 robot and fetches the world from the running world server. The default runs the whole plan
 in simulation against a world built from the Stretch URDF, so nothing on the network is
 needed.
+
+..warning:: A real run needs a perception pipeline answering
+    :data:`~coraplex.perception.ROBOKUDO_QUERY_ACTION_NAME` as well as the world server:
+    the plan detects the cereal before grasping it, and raises
+    :class:`~coraplex.exceptions.PerceptionSourceUnavailable` rather than grasping at the
+    pose it was spawned with. Simulated runs read the world model instead and need
+    neither.
 """
 
 from dataclasses import dataclass
@@ -68,6 +75,20 @@ from semantic_digital_twin.world_description.geometry import Scale
 CEREAL_NAME = "cheeze_it.obj"
 """
 Name of the transported body, which also marks whether the scene was already spawned.
+"""
+
+CEREAL_SHELF_LAYER_NAME = "shelf_layer2"
+"""
+Name of the shelf layer the cereal starts on.
+"""
+
+CEREAL_SHELF_LAYER_T_CEREAL = HomogeneousTransformationMatrix.from_xyz_rpy(
+    x=-0.05, y=0.0, z=0.115
+)
+"""
+Where the cereal starts, relative to its shelf layer.
+
+Only a prior: a detection before the pick-up overwrites it with a perceived pose.
 """
 
 WARDROBE_DOOR_VELOCITY_LIMIT = np.pi / 2
@@ -283,12 +304,10 @@ class StretchApartmentDemonstration(RobotDemonstration):
             BodySpecification.mesh(
                 CEREAL_NAME,
                 apartment_mesh_path(CEREAL_NAME),
-                parent_T_self=HomogeneousTransformationMatrix.from_xyz_rpy(
-                    x=-0.05, y=0.0, z=0.115
-                ),
+                parent_T_self=CEREAL_SHELF_LAYER_T_CEREAL,
             ),
             parent_connection_specification=Connection6DoFSpecification(),
-        ).spawn(world, parent=world.get_body_by_name("shelf_layer2"))
+        ).spawn(world, parent=world.get_body_by_name(CEREAL_SHELF_LAYER_NAME))
 
     def build_context(self, world: World) -> Context:
         """
@@ -325,7 +344,7 @@ class StretchApartmentDemonstration(RobotDemonstration):
         )
 
         cereal_body = world.get_body_by_name(CEREAL_NAME)
-        shelf_layer_body = world.get_body_by_name("shelf_layer2")
+        shelf_layer_body = world.get_body_by_name(CEREAL_SHELF_LAYER_NAME)
         bedside_table_body = world.get_body_by_name("bedside_table.dae")
 
         return sequential(

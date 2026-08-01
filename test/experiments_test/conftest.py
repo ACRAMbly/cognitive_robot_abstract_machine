@@ -4,32 +4,29 @@ Fixtures for running demonstrations against a controller in its own process.
 
 from __future__ import annotations
 
-import os
-import signal
-import subprocess
-import sys
-import time
 from dataclasses import dataclass, field
 from importlib.resources import files
 from pathlib import Path
 
 import pytest
+from rclpy.action import get_action_names_and_types
 
+from coraplex.perception import ROBOKUDO_QUERY_ACTION_NAME
 from experiments.demonstration import RobotDemonstrationRosSession
+from experiments.real_stretch_apartment_demo.demo import (
+    CEREAL_SHELF_LAYER_NAME,
+    CEREAL_SHELF_LAYER_T_CEREAL,
+)
+from semantic_digital_twin.semantic_annotations.semantic_annotations import CheezeIt
+
+from ..dataset import PERCEPTION_PIPELINE_STAND_IN_PATH
+from ..standalone_process import StandaloneProcess
 
 # %% standalone controller process
 
-CONTROLLER_READY_TIMEOUT = 180.0
+WORLD_FETCH_SERVICE_SUFFIX = "fetch_world"
 """
-How long to wait for a controller to advertise its world service.
-
-Start-up parses the robot description and builds the collision model, which is slow on a
-loaded machine; the wait polls rather than sleeping so it costs only what it needs.
-"""
-
-CONTROLLER_SHUTDOWN_TIMEOUT = 60.0
-"""
-How long to let a controller shut down after SIGINT before killing it.
+Suffix of the service a controller announces once it is serving its world.
 """
 
 
@@ -47,21 +44,6 @@ class StandaloneControllerProcess:
     Standalone controller script to run.
     """
 
-    ready_timeout: float = CONTROLLER_READY_TIMEOUT
-    """
-    How long to wait for the controller to advertise its world service.
-    """
-
-    shutdown_timeout: float = CONTROLLER_SHUTDOWN_TIMEOUT
-    """
-    How long to let the controller shut down after SIGINT before killing it.
-    """
-
-    process: subprocess.Popen | None = field(init=False, default=None)
-    """
-    The controller process, once started.
-    """
-
     session: RobotDemonstrationRosSession | None = field(init=False, default=None)
     """
     Session watching the controller's services.
@@ -70,54 +52,35 @@ class StandaloneControllerProcess:
     controller finds a context it did not create and leaves it alone.
     """
 
+    process: StandaloneProcess | None = field(init=False, default=None)
+    """
+    The controller's process, once started.
+    """
+
     def start(self) -> None:
         """
         Launch the controller and block until it serves its world.
         """
-        # Output is discarded rather than piped: an undrained pipe blocks the child once
-        # it fills. start_new_session gives the controller its own process group, so it
-        # can be signalled without hitting the test runner.
-        self.process = subprocess.Popen(
-            [sys.executable, str(self.launcher_path)],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            start_new_session=True,
-            env={**os.environ, "PYTHONPATH": os.pathsep.join(sys.path)},
-        )
         self.session = RobotDemonstrationRosSession.start("controller_process_probe")
-        self.wait_until_ready()
+        self.process = StandaloneProcess(
+            launcher_path=self.launcher_path, is_ready=self.is_serving_world
+        )
+        self.process.start()
 
-    def wait_until_ready(self) -> None:
+    def is_serving_world(self) -> bool:
         """
-        Block until the controller advertises a world-fetch service.
-
-        :raises TimeoutError: If no such service appears in time.
+        Whether the controller advertises its world-fetch service yet.
         """
-        deadline = time.monotonic() + self.ready_timeout
-        while time.monotonic() < deadline:
-            if self.process.poll() is not None:
-                pytest.fail(
-                    f"controller died during start-up, rc={self.process.returncode}"
-                )
-            if any(
-                name.endswith("fetch_world")
-                for name, _ in self.session.node.get_service_names_and_types()
-            ):
-                return
-            time.sleep(0.5)
-        raise TimeoutError("controller never advertised a fetch_world service")
+        return any(
+            name.endswith(WORLD_FETCH_SERVICE_SUFFIX)
+            for name, _ in self.session.node.get_service_names_and_types()
+        )
 
     def stop(self) -> None:
         """
-        Interrupt the controller, killing it if it outstays its shutdown budget.
+        Stop the controller and release the ROS context.
         """
-        if self.process.poll() is None:
-            os.killpg(os.getpgid(self.process.pid), signal.SIGINT)
-            try:
-                self.process.wait(timeout=self.shutdown_timeout)
-            except subprocess.TimeoutExpired:
-                self.process.kill()
-                self.process.wait()
+        self.process.stop()
         self.session.stop()
 
     def __enter__(self) -> StandaloneControllerProcess:
@@ -138,3 +101,41 @@ def stretch_controller_process():
     )
     with StandaloneControllerProcess(launcher_path=Path(str(launcher))) as controller:
         yield controller
+
+
+# %% standalone perception pipeline
+
+
+@pytest.fixture()
+def cereal_perception_process(stretch_controller_process):
+    """
+    A perception pipeline reporting the demonstration's cereal, in its own process.
+
+    The demonstration detects before it grasps, so a real run needs a pipeline answering
+    queries. Reporting the cereal in its shelf layer's frame, at the offset the
+    demonstration itself spawns it with, keeps the perceived pose and the scene from
+    drifting apart as one or the other is retuned.
+    """
+    pytest.importorskip("robokudo_msgs")
+    probe_node = stretch_controller_process.session.node
+
+    def is_serving_queries() -> bool:
+        return any(
+            name.lstrip("/") == ROBOKUDO_QUERY_ACTION_NAME
+            for name, _ in get_action_names_and_types(probe_node)
+        )
+
+    position = CEREAL_SHELF_LAYER_T_CEREAL.to_position().to_np().flatten()[:3]
+    with StandaloneProcess(
+        launcher_path=PERCEPTION_PIPELINE_STAND_IN_PATH,
+        is_ready=is_serving_queries,
+        arguments=[
+            "--class-label",
+            CheezeIt.__name__,
+            "--frame-id",
+            CEREAL_SHELF_LAYER_NAME,
+            "--position",
+            *(str(coordinate) for coordinate in position),
+        ],
+    ) as process:
+        yield process
