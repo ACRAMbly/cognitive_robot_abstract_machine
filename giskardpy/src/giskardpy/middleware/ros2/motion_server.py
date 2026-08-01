@@ -114,7 +114,7 @@ class MotionServer:
         if self.world.world_is_being_modified:
             return
         self.world_updates.apply_all()
-        self.inputs.synchronize()
+        self.inputs.synchronize_and_announce()
         self.cycle_counter.tick()
         if not self.action_server.has_goal():
             return
@@ -154,6 +154,7 @@ class MotionServer:
             json.loads(self.action_server.goal_msg.goal), **kwargs
         )
         self.executor.compile(motion_statechart)
+        self.feedback_publisher.publish_structure()
         rospy.node.get_logger().info("Done parsing goal message.")
 
     def finish_goal(self, error: Exception | None) -> None:

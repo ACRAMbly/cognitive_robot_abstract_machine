@@ -26,33 +26,39 @@ class ActionFeedbackPublisher:
     The action server the feedback is sent through.
     """
 
-    last_goal_id: int = field(init=False, default=-1)
-    """
-    Goal id of the most recent feedback, used to detect a new goal.
-    """
-
     last_history_length: int = field(init=False, default=-1)
     """
     Length of the statechart history at the most recent feedback, used to detect state
     changes.
     """
 
-    def publish_if_changed(self) -> None:
+    def publish_structure(self) -> None:
         """
-        Send feedback only when the goal or the statechart state changed.
+        Send the state of the motion statechart together with its structure.
+
+        Serializing the structure is expensive, so it is sent once while the goal is
+        compiled instead of from inside a control cycle.
         """
         if self.executor.motion_statechart is None:
             return
-        has_new_goal = self.last_goal_id != self.action_server.goal_id
         data = self.create_states()
-        if has_new_goal:
-            self.last_goal_id = self.action_server.goal_id
-            data["motion_statechart"] = (
-                self.executor.motion_statechart.create_structure_copy().to_json()
-            )
-        data["goal_id"] = self.last_goal_id
-        if not self.has_state_changed() and not has_new_goal:
+        data["motion_statechart"] = (
+            self.executor.motion_statechart.create_structure_copy().to_json()
+        )
+        data["goal_id"] = self.action_server.goal_id
+        self.last_history_length = len(self.executor.motion_statechart.history)
+        self.send(data)
+
+    def publish_if_changed(self) -> None:
+        """
+        Send feedback only when the state of the motion statechart changed.
+        """
+        if self.executor.motion_statechart is None:
             return
+        if not self.has_state_changed():
+            return
+        data = self.create_states()
+        data["goal_id"] = self.action_server.goal_id
         self.send(data)
 
     def publish(self) -> None:

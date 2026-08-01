@@ -184,8 +184,20 @@ class RecordingInputSynchronizer(InputSynchronizer):
     The control cycle count at the time of every apply.
     """
 
-    def apply(self) -> None:
+    def apply(self) -> bool:
         self.applied_at_control_cycles.append(self.executor.control_cycles)
+        return False
+
+
+@dataclass
+class WritingInputSynchronizer(InputSynchronizer):
+    """
+    Reports that it wrote into the world state, standing in for an input that received a
+    message.
+    """
+
+    def apply(self) -> bool:
+        return True
 
 
 @dataclass
@@ -222,7 +234,7 @@ class FailingInputSynchronizer(InputSynchronizer):
     Fails while reading its input, standing in for a broken robot interface.
     """
 
-    def apply(self) -> None:
+    def apply(self) -> bool:
         raise BrokenInputError()
 
 
@@ -259,10 +271,35 @@ class CycleWatchingGoalCanceler(InputSynchronizer):
     How many ticks were observed while the goal was running.
     """
 
-    def apply(self) -> None:
+    def apply(self) -> bool:
         self.observed_ticks = self.cycle_counter.completed_cycles
         if self.observed_ticks >= self.ticks_until_cancel:
             self.action_server.cancel_requested = True
+        return False
+
+
+@dataclass
+class FeedbackCountingSynchronizer(InputSynchronizer):
+    """
+    Records how much feedback was already published when a control cycle read its
+    inputs.
+    """
+
+    action_server: Optional[GoalQueueMimic] = None
+    """
+    The action server whose published feedback is counted.
+    """
+
+    published_feedback_per_cycle: List[int] = field(default_factory=list)
+    """
+    Number of feedback messages published before each control cycle.
+    """
+
+    def apply(self) -> bool:
+        self.published_feedback_per_cycle.append(
+            len(self.action_server.feedback_messages)
+        )
+        return False
 
 
 @dataclass(eq=False)
@@ -303,10 +340,11 @@ class PendingModelChangeInjector(InputSynchronizer):
     How many control cycles were observed so far.
     """
 
-    def apply(self) -> None:
+    def apply(self) -> bool:
         self.observed_cycles += 1
         if self.observed_cycles >= self.cycles_until_model_change:
             self.world_updates.pending_model_change = True
+        return False
 
 
 @dataclass
@@ -354,6 +392,13 @@ def create_executor() -> Executor:
         ),
         pacer=NoPacing(),
     )
+
+
+def feedback_data(message: Any) -> dict:
+    """
+    The payload of a published feedback message.
+    """
+    return json.loads(message.feedback)
 
 
 def create_goal_json(seconds: float = 0.5) -> str:
@@ -616,6 +661,105 @@ class TestCleanupAfterGoal:
         assert motion_server.plotter.plotted_goal_ids == [
             motion_server.action_server.goal_id
         ]
+
+
+class TestGoalStructureFeedback:
+    """
+    The client learns the structure of a motion statechart once per goal.
+
+    Serializing the structure is expensive, so it happens while the goal is compiled and
+    not from inside a control cycle, whose duration is budgeted.
+    """
+
+    def test_the_structure_is_published_before_the_first_control_cycle(
+        self, motion_server: MotionServerFixture
+    ):
+        watcher = FeedbackCountingSynchronizer(
+            world=motion_server.executor.context.world,
+            action_server=motion_server.action_server,
+        )
+        motion_server.control_loop.inputs.synchronizers = [watcher]
+        motion_server.action_server.goal_json = create_goal_json()
+
+        motion_server.motion_server.run_idle_cycle()
+
+        assert watcher.published_feedback_per_cycle[0] == 1
+        first_feedback = feedback_data(motion_server.action_server.feedback_messages[0])
+        assert "motion_statechart" in first_feedback
+
+    def test_the_structure_is_published_once_per_goal(
+        self, motion_server: MotionServerFixture
+    ):
+        motion_server.action_server.goal_json = create_goal_json()
+
+        motion_server.motion_server.run_idle_cycle()
+
+        structures = [
+            message
+            for message in motion_server.action_server.feedback_messages
+            if "motion_statechart" in feedback_data(message)
+        ]
+        assert len(structures) == 1
+
+    def test_every_goal_publishes_its_own_structure(
+        self, motion_server: MotionServerFixture
+    ):
+        motion_server.action_server.goal_json = create_goal_json()
+        motion_server.motion_server.run_idle_cycle()
+        motion_server.action_server.goal_json = create_goal_json()
+        motion_server.motion_server.run_idle_cycle()
+
+        goal_ids_with_structure = [
+            feedback_data(message)["goal_id"]
+            for message in motion_server.action_server.feedback_messages
+            if "motion_statechart" in feedback_data(message)
+        ]
+        assert goal_ids_with_structure == [0, 1]
+
+
+# %% input synchronization
+
+
+class TestStateChangeAnnouncement:
+    """
+    Announcing a state change recomputes the forward kinematics and reaches every
+    observer of the world, so it is only worth doing when an input wrote something.
+    """
+
+    def test_nothing_is_announced_when_no_input_wrote(self, init_rospy):
+        world = World()
+        inputs = WorldStateInputs(world=world, synchronizers=[])
+        recorder = StateChangeRecorder(_world=world)
+
+        inputs.synchronize()
+
+        assert recorder.announced_changes == 0
+
+    def test_the_change_is_announced_when_an_input_wrote(self, init_rospy):
+        world = World()
+        inputs = WorldStateInputs(
+            world=world, synchronizers=[WritingInputSynchronizer(world=world)]
+        )
+        recorder = StateChangeRecorder(_world=world)
+
+        inputs.synchronize()
+
+        assert recorder.announced_changes == 1
+
+    def test_the_state_is_announced_on_request_even_when_no_input_wrote(
+        self, init_rospy
+    ):
+        """
+        The idle loop needs this: nothing else announces while no goal is running, so
+        the observers of the world would go stale.
+        """
+        world = World()
+        inputs = WorldStateInputs(world=world, synchronizers=[])
+        recorder = StateChangeRecorder(_world=world)
+
+        inputs.synchronize_and_announce()
+
+        assert recorder.announced_changes == 1
 
 
 # %% control loop

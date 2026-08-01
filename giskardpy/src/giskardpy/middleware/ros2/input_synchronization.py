@@ -39,9 +39,11 @@ class InputSynchronizer(ABC):
     """
 
     @abstractmethod
-    def apply(self) -> None:
+    def apply(self) -> bool:
         """
         Write the most recent input into the world state.
+
+        :return: Whether anything was written.
         """
 
     def close(self) -> None:
@@ -66,15 +68,46 @@ class WorldStateInputs:
     The inputs, applied in the order they were added.
     """
 
+    def apply_inputs(self) -> bool:
+        """
+        Write all inputs into the world state, in the order they were added.
+
+        :return: Whether any of them wrote something.
+        """
+        wrote_something = False
+        for synchronizer in self.synchronizers:
+            wrote_something |= synchronizer.apply()
+        return wrote_something
+
     def synchronize(self) -> None:
         """
         Write all inputs into the world state and announce the change.
 
-        The change is not announced while the world model is being modified, because the
+        Nothing is announced when no input wrote, because announcing recomputes the
+        forward kinematics and reaches every observer of the world.
+        """
+        if not self.apply_inputs():
+            return
+        self.announce_state()
+
+    def synchronize_and_announce(self) -> None:
+        """
+        Write all inputs into the world state and announce the state even if no input
+        wrote.
+
+        Use this where nothing else announces, so that the observers of the world do not
+        go stale.
+        """
+        self.apply_inputs()
+        self.announce_state()
+
+    def announce_state(self) -> None:
+        """
+        Hand the current world state to the observers of the world.
+
+        Nothing is announced while the world model is being modified, because the
         observers would see an inconsistent model.
         """
-        for synchronizer in self.synchronizers:
-            synchronizer.apply()
         if self.world.world_is_being_modified:
             return
         self.world.notify_state_change()
@@ -152,11 +185,12 @@ class JointStateSynchronizer(JointStateInputSynchronizer):
     Applies every joint state message exactly once.
     """
 
-    def apply(self) -> None:
+    def apply(self) -> bool:
         if self.latest_message is None:
-            return
+            return False
         self.write_positions(self.latest_message)
         self.latest_message = None
+        return True
 
 
 @dataclass
@@ -168,10 +202,11 @@ class JointPositionSynchronizer(JointStateInputSynchronizer):
     new message arrived since the last cycle.
     """
 
-    def apply(self) -> None:
+    def apply(self) -> bool:
         if self.latest_message is None:
-            return
+            return False
         self.write_positions(self.latest_message)
+        return True
 
 
 # %% base pose
@@ -190,9 +225,9 @@ class OdometrySynchronizer(TopicInputSynchronizer):
     The drive connection whose origin follows the odometry.
     """
 
-    def apply(self) -> None:
+    def apply(self) -> bool:
         if self.latest_message is None:
-            return
+            return False
         pose = self.latest_message.pose.pose
         self.connection.origin = HomogeneousTransformationMatrix.from_xyz_quaternion(
             pos_x=pose.position.x,
@@ -203,6 +238,7 @@ class OdometrySynchronizer(TopicInputSynchronizer):
             quat_y=pose.orientation.y,
             quat_z=pose.orientation.z,
         )
+        return True
 
 
 @dataclass
@@ -249,7 +285,7 @@ class TfFrameSynchronizer(InputSynchronizer):
             )
         self.connection_to_frames[connection] = (tf_parent_frame, tf_child_frame)
 
-    def apply(self) -> None:
+    def apply(self) -> bool:
         for connection, (
             tf_parent_frame,
             tf_child_frame,
@@ -266,3 +302,4 @@ class TfFrameSynchronizer(InputSynchronizer):
                 quat_y=parent_T_child.orientation.y,
                 quat_z=parent_T_child.orientation.z,
             )
+        return bool(self.connection_to_frames)

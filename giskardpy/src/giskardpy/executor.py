@@ -165,7 +165,11 @@ class Executor:
 
     @property
     def control_cycles(self) -> float:
-        return float(self.context.control_cycle_variable.evaluate()[0])
+        return float(
+            self.context.float_variable_data.get_value(
+                self.context.control_cycle_variable
+            )
+        )
 
     @control_cycles.setter
     def control_cycles(self, value):
