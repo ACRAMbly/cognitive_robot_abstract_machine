@@ -2,17 +2,13 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from threading import Thread
 from time import sleep
-from typing import Tuple, Union, Iterable
+from typing import Tuple, Iterable
 
 import numpy as np
 
 import semantic_digital_twin.spatial_types.spatial_types as cas
 from giskardpy.middleware.ros2.giskard import Giskard
 from giskardpy.middleware.ros2.python_interface import GiskardWrapperNode
-from semantic_digital_twin.adapters.ros import (
-    Ros2ToSemDTConverter,
-    SemDTToRos2Converter,
-)
 from semantic_digital_twin.adapters.urdf import URDFParser
 from semantic_digital_twin.collision_checking.collision_detector import (
     CollisionCheckingResult,
@@ -21,12 +17,11 @@ from semantic_digital_twin.collision_checking.collision_rules import AvoidAllCol
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 from semantic_digital_twin.exceptions import WorldEntityNotFoundError
 from semantic_digital_twin.robots.robot_parts import AbstractRobot
-from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix, Quaternion
+from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix
 from semantic_digital_twin.world import World
 from semantic_digital_twin.world_description.connections import (
     OmniDrive,
     FixedConnection,
-    ActiveConnection1DOF,
 )
 from semantic_digital_twin.world_description.geometry import (
     Box,
@@ -38,43 +33,70 @@ from semantic_digital_twin.world_description.world_entity import (
     KinematicStructureEntity,
 )
 
-
+# %% comparing spatial types
 
 
 def compare_poses(
     actual_pose: cas.HomogeneousTransformationMatrix,
     desired_pose: cas.HomogeneousTransformationMatrix,
-    rtol: float = 1e-2,
+    decimal: int = 2,
 ) -> None:
+    """
+    Assert that two transformations describe the same position and orientation.
+
+    :param decimal: Number of decimal places the two have to agree on.
+    """
     compare_points(
         actual_point=actual_pose.to_position(),
         desired_point=desired_pose.to_position(),
-        rtol=rtol,
+        decimal=decimal,
     )
     compare_orientations(
         actual_orientation=actual_pose.to_quaternion(),
         desired_orientation=desired_pose.to_quaternion(),
-        rtol=rtol,
+        decimal=decimal,
     )
 
 
 def compare_points(
     actual_point: cas.Point3,
     desired_point: cas.Point3,
-    rtol: float = 1e-2,
+    decimal: int = 2,
 ) -> None:
-    assert np.allclose(actual_point, desired_point, rtol=rtol)
+    """
+    Assert that two points are the same up to an absolute tolerance.
+
+    .. note:: The tolerance is absolute because coordinates near the origin of their
+        reference frame are common, and a relative one degenerates into an exact
+        comparison for them.
+
+    :param decimal: Number of decimal places the two have to agree on.
+    """
+    np.testing.assert_array_almost_equal(
+        actual_point, desired_point, decimal=decimal
+    )
 
 
 def compare_orientations(
-    actual_orientation: Quaternion,
-    desired_orientation: Quaternion,
-    rtol: float = 1e-2,
+    actual_orientation: cas.Quaternion,
+    desired_orientation: cas.Quaternion,
+    decimal: int = 2,
 ) -> None:
-    try:
-        assert np.allclose(actual_orientation, desired_orientation, rtol=rtol)
-    except:
-        assert np.allclose(actual_orientation, -desired_orientation, rtol=rtol)
+    """
+    Assert that two quaternions describe the same orientation.
+
+    A quaternion and its negation are the same orientation, so the desired one is
+    flipped onto the hemisphere of the actual one before they are compared.
+
+    :param decimal: Number of decimal places the two have to agree on.
+    """
+    actual_quaternion = actual_orientation.to_np()
+    desired_quaternion = desired_orientation.to_np()
+    if np.dot(actual_quaternion, desired_quaternion) < 0:
+        desired_quaternion = -desired_quaternion
+    np.testing.assert_array_almost_equal(
+        actual_quaternion, desired_quaternion, decimal=decimal
+    )
 
 
 @dataclass
@@ -108,7 +130,7 @@ class GiskardTester(ABC):
     def has_odometry_joint(self) -> bool:
         try:
             joint = self.get_odometry_joint()
-        except WorldEntityNotFoundError as e:
+        except WorldEntityNotFoundError:
             return False
         return isinstance(joint, (OmniDrive,))
 
@@ -185,17 +207,13 @@ class GiskardTester(ABC):
         name: str,
         height: float,
         radius: float,
-        pose: HomogeneousTransformationMatrix = None,
-        parent_link: str | PrefixedName | None = None,
+        pose: HomogeneousTransformationMatrix,
+        parent_link: KinematicStructureEntity | None = None,
     ) -> None:
-        if parent_link is None:
-            parent_link = self.api.world.root
-        else:
-            parent_link = self.api.world.get_kinematic_structure_entity_by_name(
-                parent_link
-            )
+        parent_link = parent_link or self.api.world.root
+
         parent_T_pose = self.api.world.transform(
-            spatial_object=Ros2ToSemDTConverter.convert(pose, self.api.world),
+            spatial_object=pose,
             target_frame=parent_link,
         )
         with self.api.world.modify_world():

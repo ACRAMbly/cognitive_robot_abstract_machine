@@ -43,7 +43,9 @@ class GiskardWrapper:
     _result_future: Future | None = None
     world: World = None
     _client: MyActionClient = None
-    _motion_statechart: MotionStatechart = field(init=False)
+    _motion_statechart: MotionStatechart | None = field(
+        init=False, default=None, repr=False
+    )
 
     def __post_init__(self):
         if self.world is None:

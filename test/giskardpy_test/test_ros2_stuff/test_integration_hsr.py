@@ -422,10 +422,7 @@ class TestCartGoals:
             )
         )
         root_link = default_pose_giskard.api.world.search_for_link_name(link_name="map")
-        hole_point = PointStamped()
-        hole_point.header.frame_id = "map"
-        hole_point.point.x = 0.5
-        hole_point.point.z = 0.3
+        hole_point = Point3(x=0.5, z=0.3, reference_frame=default_pose_giskard.map)
         wiggle = "wiggle"
         default_pose_giskard.api.motion_goals.add_wiggle_insert(
             name=wiggle,
@@ -434,10 +431,9 @@ class TestCartGoals:
             hole_point=hole_point,
             end_condition=wiggle,
         )
-        resistence_point = PointStamped()
-        resistence_point.header.frame_id = "map"
-        resistence_point.point.x = 0.5
-        resistence_point.point.z = 0.4
+        resistence_point = Point3(
+            x=0.5, z=0.4, reference_frame=default_pose_giskard.map
+        )
         timer = default_pose_giskard.api.monitors.add_sleep(5)
         default_pose_giskard.api.motion_goals.add_cartesian_position(
             root_link=root_link,
