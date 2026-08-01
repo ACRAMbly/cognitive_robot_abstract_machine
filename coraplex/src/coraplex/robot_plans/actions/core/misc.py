@@ -12,7 +12,7 @@ from coraplex.plans.plan_node import PlanNode
 from coraplex.robot_plans.actions.base import ActionDescription
 from coraplex.robot_plans.actions.core.navigation import NavigateAction
 from coraplex.robot_plans.actions.core.robot_body import MoveManipulatorAction
-from coraplex.robot_plans.motions.misc import DetectingMotion
+from coraplex.plans.perception_nodes import PerceptionNode
 from semantic_digital_twin.spatial_types import (
     HomogeneousTransformationMatrix,
     RotationMatrix,
@@ -67,7 +67,7 @@ class DetectAction(ActionDescription):
 
     @property
     def _action_plan(self) -> PlanNode:
-        return execute_single(DetectingMotion(query=self._build_query()))
+        return execute_single(PerceptionNode(query=self._build_query()))
 
     def _build_query(self) -> PerceptionQuery:
         """

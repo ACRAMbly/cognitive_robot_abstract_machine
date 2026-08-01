@@ -171,3 +171,70 @@ class UnknownExecutionType(DataclassException):
 
     def suggest_correction(self) -> str:
         return ""
+
+
+@dataclass
+class PerceivedObjectNotInWorld(DataclassException):
+    """
+    Raised when a detection names an object the world does not hold, so there is nothing
+    to write the perceived pose to.
+    """
+
+    class_label: str
+    """
+    The label the perception source reported.
+    """
+
+    def error_message(self) -> str:
+        return f"No annotation in the world matches the perceived label '{self.class_label}'."
+
+    def suggest_correction(self) -> str:
+        return (
+            "spawn the object before detecting it, and make sure its annotation class "
+            "is a subclass of IsPerceivable whose name is contained in the label."
+        )
+
+
+@dataclass
+class AmbiguousDetection(DataclassException):
+    """
+    Raised when a detection's label matches several bodies, so the perceived pose cannot
+    be assigned to one of them.
+    """
+
+    class_label: str
+    """
+    The label the perception source reported.
+    """
+
+    body_count: int
+    """
+    How many distinct bodies the label matched.
+    """
+
+    def error_message(self) -> str:
+        return (
+            f"The perceived label '{self.class_label}' matches {self.body_count} "
+            f"bodies."
+        )
+
+    def suggest_correction(self) -> str:
+        return "narrow the query's semantic annotation so it names a single object."
+
+
+@dataclass
+class PerceptionSourceUnavailable(DataclassException):
+    """
+    Raised when the perception pipeline does not answer within the configured timeout.
+    """
+
+    action_name: str
+    """
+    The action the source was expected on.
+    """
+
+    def error_message(self) -> str:
+        return f"No perception source is serving '{self.action_name}'."
+
+    def suggest_correction(self) -> str:
+        return "start the perception pipeline before running the plan."

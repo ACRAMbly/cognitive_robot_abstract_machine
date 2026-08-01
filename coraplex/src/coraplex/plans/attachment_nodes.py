@@ -29,6 +29,10 @@ class ModelChangeNode(PlanNode):
     def __post_init__(self):
         self.new_parent = self.new_parent or self.body._world.root
 
+    @property
+    def is_execution_boundary(self) -> bool:
+        return True
+
     def notify(self):
         pass
 

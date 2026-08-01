@@ -1,17 +1,41 @@
-from dataclasses import dataclass
+from __future__ import annotations
 
+from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
+from datetime import timedelta
+
+from rclpy.node import Node
 from semantic_digital_twin.reasoning.predicates import visible
+from semantic_digital_twin.reasoning.queries import annotation_class_by_label
 from semantic_digital_twin.robots.robot_parts import Camera, AbstractRobot
-
+from semantic_digital_twin.semantic_annotations.mixins import IsPerceivable
+from semantic_digital_twin.spatial_types.spatial_types import Pose
 from semantic_digital_twin.world import World
 from semantic_digital_twin.world_description.geometry import BoundingBox
 from semantic_digital_twin.world_description.world_entity import (
     SemanticAnnotation,
-    Region,
-    KinematicStructureEntity,
     Body,
 )
-from typing_extensions import Type, List
+from typing_extensions import Optional, Type, List, TYPE_CHECKING
+
+from coraplex.datastructures.enums import ExecutionType
+from coraplex.exceptions import (
+    AmbiguousDetection,
+    PerceivedObjectNotInWorld,
+    PerceptionSourceUnavailable,
+    UnknownExecutionType,
+)
+from coraplex.ros import create_action_client
+
+if TYPE_CHECKING:
+    from robokudo_msgs.msg import ObjectDesignator
+
+ROBOKUDO_QUERY_ACTION_NAME = "robokudo/query"
+"""
+Name of the action RoboKudo answers perception queries on.
+"""
+
+# %% queries
 
 
 @dataclass
@@ -23,7 +47,7 @@ class PerceptionQuery:
 
     region: BoundingBox
     """
-    The region in which the object should be detected
+    The region in which the object should be detected.
     """
 
     robot: AbstractRobot
@@ -37,6 +61,12 @@ class PerceptionQuery:
     """
 
     def from_world(self) -> List[Body]:
+        """
+        Answer this query from the world model alone.
+
+        :return: The bodies of the queried annotation that lie inside the region and are
+            visible to the robot's camera.
+        """
         result = []
         sem_instances = self.world.get_semantic_annotations_by_type(
             self.semantic_annotation
@@ -73,5 +103,197 @@ class PerceptionQuery:
                 result.append(body)
         return result
 
-    def from_robokudo(self):
-        pass
+
+# %% detections
+
+
+@dataclass
+class Detection:
+    """
+    One object reported by a perception source.
+    """
+
+    class_label: str
+    """
+    Label the perception source named the object with, e.g. ``"cheezeit"``.
+    """
+
+    pose: Pose
+    """
+    Where the perception source saw the object.
+    """
+
+    def apply_to(self, world: World) -> List[IsPerceivable]:
+        """
+        Write this detection into ``world``, moving the perceived body to where it was
+        seen.
+
+        :param world: The world holding the annotations this detection refers to.
+        :return: The annotations that were updated.
+        :raises PerceivedObjectNotInWorld: If no annotation matches the label.
+        :raises AmbiguousDetection: If the label names more than one body.
+        """
+        annotations = self.resolve_annotations(world)
+        for annotation in annotations:
+            annotation.class_label = self.class_label
+        body = annotations[0].root
+        body.parent_connection.origin = world.transform(
+            self.pose, body.parent_connection.parent
+        )
+        return annotations
+
+    def resolve_annotations(self, world: World) -> List[IsPerceivable]:
+        """
+        Find the annotations in ``world`` that this detection's label names.
+
+        Several annotations may describe the same body, which is not ambiguous; only a
+        label naming more than one body is.
+
+        :param world: The world to search.
+        :return: The matching annotations, all sharing one root body.
+        :raises PerceivedObjectNotInWorld: If the label names no annotation class known
+            to the world, or the world holds no instance of it.
+        :raises AmbiguousDetection: If the matching annotations sit on different bodies.
+        """
+        annotation_class = annotation_class_by_label(self.class_label)
+        if annotation_class is None:
+            raise PerceivedObjectNotInWorld(self.class_label)
+
+        candidates = world.get_semantic_annotations_by_type(annotation_class)
+        if not candidates:
+            raise PerceivedObjectNotInWorld(self.class_label)
+
+        bodies = {annotation.root for annotation in candidates}
+        if len(bodies) > 1:
+            raise AmbiguousDetection(self.class_label, len(bodies))
+        return candidates
+
+
+# %% perception sources
+
+
+class PerceptionInterface(ABC):
+    """
+    A source of detections.
+    """
+
+    @abstractmethod
+    def detect(self, query: PerceptionQuery) -> List[Detection]:
+        """
+        Answer a perception query.
+
+        :param query: What to look for and where.
+        :return: The objects this source saw.
+        """
+
+    @staticmethod
+    def for_execution_type(
+        execution_type: ExecutionType, ros_node: Optional[Node] = None
+    ) -> PerceptionInterface:
+        """
+        Pick the source that matches how the plan is being executed.
+
+        :param execution_type: Whether the plan drives the real robot or a simulated
+            one.
+        :param ros_node: Node a real source reaches its perception pipeline through.
+        :return: The source to answer queries with.
+        :raises UnknownExecutionType: If the execution type has no source.
+        """
+        if execution_type in (ExecutionType.SIMULATED, ExecutionType.NO_EXECUTION):
+            return WorldPerception()
+        if execution_type == ExecutionType.REAL:
+            return RoboKudoPerception(ros_node=ros_node)
+        raise UnknownExecutionType(execution_type)
+
+
+@dataclass
+class WorldPerception(PerceptionInterface):
+    """
+    Source that reads the objects straight out of the world model.
+
+    Reports what a perfect sensor would see: every body of the queried annotation that
+    lies inside the region and is visible to the robot's camera, at the pose the world
+    already holds.
+    """
+
+    def detect(self, query: PerceptionQuery) -> List[Detection]:
+        label_by_body = {}
+        for annotation in query.world.get_semantic_annotations_by_type(
+            query.semantic_annotation
+        ):
+            for body in annotation.bodies:
+                label_by_body.setdefault(body, type(annotation).__name__)
+
+        return [
+            Detection(class_label=label_by_body[body], pose=body.global_pose)
+            for body in query.from_world()
+            if body in label_by_body
+        ]
+
+
+@dataclass
+class RoboKudoPerception(PerceptionInterface):
+    """
+    Source that asks a running RoboKudo pipeline over its query action.
+    """
+
+    ros_node: Node
+    """
+    Node the action client is created on.
+    """
+
+    action_name: str = ROBOKUDO_QUERY_ACTION_NAME
+    """
+    Action RoboKudo answers queries on.
+    """
+
+    server_timeout: timedelta = field(default=timedelta(seconds=10))
+    """
+    How long to wait for the action server before giving up.
+    """
+
+    def detect(self, query: PerceptionQuery) -> List[Detection]:
+        # RoboKudo's messages only exist where its pipeline is installed, so they are
+        # imported here rather than at module level: reading the world in simulation must
+        # not depend on them.
+        from robokudo_msgs.action import Query
+        from robokudo_msgs.msg import ObjectDesignator
+
+        client = create_action_client(self.action_name, Query, self.ros_node)
+        if not client.wait_for_server(timeout_sec=self.server_timeout.total_seconds()):
+            raise PerceptionSourceUnavailable(self.action_name)
+
+        goal = Query.Goal(
+            obj=ObjectDesignator(type=query.semantic_annotation.__name__.lower())
+        )
+        result = client.send_goal(goal).result
+        return [
+            self._to_detection(designator, query.world)
+            for designator in result.res
+            if designator.pose
+        ]
+
+    def _to_detection(self, designator: ObjectDesignator, world: World) -> Detection:
+        """
+        Convert one RoboKudo object designator into a detection.
+
+        :param designator: The designator RoboKudo reported.
+        :param world: World whose frames the designator's pose is resolved against.
+        :return: The detection carrying the designator's label and pose.
+        """
+        pose_stamped = designator.pose[0]
+        return Detection(
+            class_label=designator.type,
+            pose=Pose.from_xyz_quaternion(
+                pose_stamped.pose.position.x,
+                pose_stamped.pose.position.y,
+                pose_stamped.pose.position.z,
+                pose_stamped.pose.orientation.x,
+                pose_stamped.pose.orientation.y,
+                pose_stamped.pose.orientation.z,
+                pose_stamped.pose.orientation.w,
+                reference_frame=world.get_kinematic_structure_entity_by_name(
+                    pose_stamped.header.frame_id
+                ),
+            ),
+        )

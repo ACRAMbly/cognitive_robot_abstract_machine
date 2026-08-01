@@ -40,6 +40,7 @@ import coraplex.plans.condition_nodes
 import coraplex.plans.designator
 import coraplex.plans.executables
 import coraplex.plans.failures
+import coraplex.plans.perception_nodes
 import coraplex.plans.plan_callbacks
 import coraplex.plans.plan_entity
 import coraplex.plans.plan_node
@@ -3088,6 +3089,21 @@ class PoseTrajectoryDAO(
     )
 
 
+class AmbiguousDetectionDAO(
+    Base, DataAccessObject[coraplex.exceptions.AmbiguousDetection]
+):
+    __tablename__ = "AmbiguousDetectionDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
+
+    class_label: Mapped[builtins.str] = mapped_column(
+        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
+    )
+    body_count: Mapped[builtins.int] = mapped_column(use_existing_column=True)
+
+
 class ContextIsUnavailableDAO(
     Base, DataAccessObject[coraplex.exceptions.ContextIsUnavailable]
 ):
@@ -3147,6 +3163,34 @@ class MissingWaypointsDAO(Base, DataAccessObject[coraplex.exceptions.MissingWayp
 
     instance: Mapped[DesignatorDAO] = relationship(
         "DesignatorDAO", uselist=False, foreign_keys=[instance_id], post_update=True
+    )
+
+
+class PerceivedObjectNotInWorldDAO(
+    Base, DataAccessObject[coraplex.exceptions.PerceivedObjectNotInWorld]
+):
+    __tablename__ = "PerceivedObjectNotInWorldDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
+
+    class_label: Mapped[builtins.str] = mapped_column(
+        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
+    )
+
+
+class PerceptionSourceUnavailableDAO(
+    Base, DataAccessObject[coraplex.exceptions.PerceptionSourceUnavailable]
+):
+    __tablename__ = "PerceptionSourceUnavailableDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
+
+    action_name: Mapped[builtins.str] = mapped_column(
+        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
     )
 
 
@@ -3664,6 +3708,28 @@ class PlanEdgeDAO(Base, DataAccessObject[coraplex.orm.model.PlanEdge]):
     )
 
 
+class DetectionDAO(Base, DataAccessObject[coraplex.perception.Detection]):
+    __tablename__ = "DetectionDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
+
+    class_label: Mapped[builtins.str] = mapped_column(
+        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
+    )
+
+    pose_id: Mapped[int] = mapped_column(
+        ForeignKey("PoseMappingDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
+    )
+
+    pose: Mapped[PoseMappingDAO] = relationship(
+        "PoseMappingDAO", uselist=False, foreign_keys=[pose_id], post_update=True
+    )
+
+
 class PerceptionQueryDAO(Base, DataAccessObject[coraplex.perception.PerceptionQuery]):
     __tablename__ = "PerceptionQueryDAO"
 
@@ -3699,6 +3765,28 @@ class PerceptionQueryDAO(Base, DataAccessObject[coraplex.perception.PerceptionQu
     )
     world: Mapped[WorldMappingDAO] = relationship(
         "WorldMappingDAO", uselist=False, foreign_keys=[world_id], post_update=True
+    )
+
+
+class RoboKudoPerceptionDAO(
+    Base, DataAccessObject[coraplex.perception.RoboKudoPerception]
+):
+    __tablename__ = "RoboKudoPerceptionDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
+
+    action_name: Mapped[builtins.str] = mapped_column(
+        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
+    )
+
+
+class WorldPerceptionDAO(Base, DataAccessObject[coraplex.perception.WorldPerception]):
+    __tablename__ = "WorldPerceptionDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
     )
 
 
@@ -3859,6 +3947,34 @@ class ModelChangeExecutableDAO(
 
     __mapper_args__ = {
         "polymorphic_identity": "ModelChangeExecutableDAO",
+        "inherit_condition": database_id == ExecutableDAO.database_id,
+        "polymorphic_load": "selectin",
+    }
+
+
+class PerceptionExecutableDAO(
+    ExecutableDAO, DataAccessObject[coraplex.plans.executables.PerceptionExecutable]
+):
+    __tablename__ = "PerceptionExecutableDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(ExecutableDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
+    )
+
+    query_id: Mapped[int] = mapped_column(
+        ForeignKey("PerceptionQueryDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
+    )
+
+    query: Mapped[PerceptionQueryDAO] = relationship(
+        "PerceptionQueryDAO", uselist=False, foreign_keys=[query_id], post_update=True
+    )
+
+    __mapper_args__ = {
+        "polymorphic_identity": "PerceptionExecutableDAO",
         "inherit_condition": database_id == ExecutableDAO.database_id,
         "polymorphic_load": "selectin",
     }
@@ -4620,6 +4736,32 @@ class ConditionNodeDAO(
 
     __mapper_args__ = {
         "polymorphic_identity": "ConditionNodeDAO",
+        "inherit_condition": database_id == PlanNodeDAO.database_id,
+        "polymorphic_load": "selectin",
+    }
+
+
+class PerceptionNodeDAO(
+    PlanNodeDAO, DataAccessObject[coraplex.plans.perception_nodes.PerceptionNode]
+):
+    __tablename__ = "PerceptionNodeDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(PlanNodeDAO.database_id), primary_key=True, use_existing_column=True
+    )
+
+    query_id: Mapped[int] = mapped_column(
+        ForeignKey("PerceptionQueryDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
+    )
+
+    query: Mapped[PerceptionQueryDAO] = relationship(
+        "PerceptionQueryDAO", uselist=False, foreign_keys=[query_id], post_update=True
+    )
+
+    __mapper_args__ = {
+        "polymorphic_identity": "PerceptionNodeDAO",
         "inherit_condition": database_id == PlanNodeDAO.database_id,
         "polymorphic_load": "selectin",
     }
@@ -32598,6 +32740,10 @@ class CheezeItDAO(
 
     database_id: Mapped[builtins.int] = mapped_column(
         ForeignKey(FoodDAO.database_id), primary_key=True, use_existing_column=True
+    )
+
+    class_label: Mapped[typing.Optional[builtins.str]] = mapped_column(
+        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
     )
 
     __mapper_args__ = {

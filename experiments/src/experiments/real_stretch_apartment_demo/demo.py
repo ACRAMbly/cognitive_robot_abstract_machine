@@ -22,12 +22,14 @@ from coraplex.datastructures.dataclasses import Context
 from coraplex.datastructures.enums import (
     ApproachDirection,
     Arms,
+    DetectionTechnique,
     ExecutionType,
     VerticalAlignment,
 )
 from coraplex.datastructures.grasp import GraspDescription
 from coraplex.plans.factories import sequential
 from coraplex.plans.plan_node import PlanNode
+from coraplex.robot_plans.actions.core.misc import DetectAction
 from coraplex.robot_plans.actions.core.navigation import LookAtAction, NavigateAction
 from coraplex.robot_plans.actions.core.pick_up import PickUpAction
 from coraplex.robot_plans.actions.core.placing import PlaceAction
@@ -37,6 +39,7 @@ from experiments.demonstration import RobotDemonstration
 from semantic_digital_twin.adapters.package_resolver import CompositePathResolver
 from semantic_digital_twin.api import (
     BodySpecification,
+    Connection6DoFSpecification,
     RobotSpecification,
     WorldSpecification,
 )
@@ -272,6 +275,9 @@ class StretchApartmentDemonstration(RobotDemonstration):
 
         # %% cereal
 
+        # The cereal is the one body perception moves, and a pose can only be written to
+        # a connection that has the degrees of freedom to carry it, so it hangs off a
+        # 6DoF connection rather than the default fixed one.
         CheezeIt.get_specification(
             CEREAL_NAME,
             BodySpecification.mesh(
@@ -281,6 +287,7 @@ class StretchApartmentDemonstration(RobotDemonstration):
                     x=-0.05, y=0.0, z=0.115
                 ),
             ),
+            parent_connection_specification=Connection6DoFSpecification(),
         ).spawn(world, parent=world.get_body_by_name("shelf_layer2"))
 
     def build_context(self, world: World) -> Context:
@@ -330,6 +337,10 @@ class StretchApartmentDemonstration(RobotDemonstration):
                     )
                 ),
                 LookAtAction(Pose.from_xyz_rpy(reference_frame=shelf_layer_body)),
+                # Correct the cereal's pose before grasping it. The plan is identical in
+                # simulation and on the real robot; only the source of the detections
+                # differs, so the grasp is planned against a perceived pose either way.
+                DetectAction(DetectionTechnique.TYPES, object_sem_annotation=CheezeIt),
                 PickUpAction(cereal_body, Arms.LEFT, grasp_description),
                 ParkArmsAction(Arms.BOTH),
                 NavigateAction(

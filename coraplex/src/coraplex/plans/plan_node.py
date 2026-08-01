@@ -14,6 +14,7 @@ from krrood.entity_query_language.query.match import Match
 from coraplex.datastructures.enums import TaskStatus
 from coraplex.datastructures.execution_data import ExecutionData
 from coraplex.plans.executables import (
+    ConditionExecutable,
     Executable,
     GiskardExecutable,
     UnderspecifiedExecutable,
@@ -24,6 +25,7 @@ from coraplex.utils import split_list_by_type
 
 if TYPE_CHECKING:
     from giskardpy.motion_statechart.graph_node import Task
+    from coraplex.plans.condition_nodes import ConditionNode
     from coraplex.robot_plans.actions.base import ActionDescription
     from coraplex.robot_plans.motions.base import BaseMotion
 
@@ -150,6 +152,20 @@ class PlanNode(PlanEntity):
         :return: True if this node is a leaf node
         """
         return self.children == []
+
+    @property
+    def is_execution_boundary(self) -> bool:
+        """
+        Whether this node interrupts the merging of surrounding motions into one chart.
+
+        A boundary parses into something other than a
+        :class:`~coraplex.plans.executables.GiskardExecutable`, so the motions before it
+        have to run (and their effect on the world has to land) before the ones after it
+        are built.
+
+        :return: True if the plan must be split at this node.
+        """
+        return False
 
     @property
     def siblings(self) -> List[PlanNode]:
@@ -411,6 +427,10 @@ class UnderspecifiedNode(PlanNode):
     """
 
     @property
+    def is_execution_boundary(self) -> bool:
+        return True
+
+    @property
     def designator_type(self) -> Type:
         return self.underspecified_action.type
 
@@ -621,9 +641,47 @@ class ActionNode(DesignatorNode):
             for executable in child_execs[0].execution_list
             if isinstance(executable, GiskardExecutable)
         ]
+        if not giskard_child_execs:
+            # The action body holds no motion state chart to carry the conditions as
+            # monitors (e.g. an action that only perceives), so they are evaluated as
+            # their own executables around it.
+            return Executable(
+                execution_list=self._with_conditions_around(
+                    merged, pre_condition_node, post_condition_node
+                ),
+                context=self.plan.context,
+            )
+
         giskard_child_execs[0].pre_condition_node = pre_condition_node
         giskard_child_execs[-1].post_condition_node = post_condition_node
         return child_execs[0]
+
+    def _with_conditions_around(
+        self,
+        body: List[Executable],
+        pre_condition_node: ConditionNode,
+        post_condition_node: ConditionNode,
+    ) -> List[Executable]:
+        """
+        Bracket the body with executables that evaluate this action's conditions.
+
+        :param body: The executables the action itself parses into.
+        :param pre_condition_node: Condition that has to hold before the body runs.
+        :param post_condition_node: Condition that has to hold after it.
+        :return: The body, preceded and followed by its conditions when the context
+            evaluates them at all.
+        """
+        if not self.plan.context.evaluate_conditions:
+            return list(body)
+        return [
+            ConditionExecutable(
+                condition_node=pre_condition_node, context=self.plan.context
+            ),
+            *body,
+            ConditionExecutable(
+                condition_node=post_condition_node, context=self.plan.context
+            ),
+        ]
 
     def execute(self):
         self.parse().execute()

@@ -1029,7 +1029,7 @@ class Bread(Food):
 
 
 @dataclass(eq=False)
-class CheezeIt(Food):
+class CheezeIt(Food, IsPerceivable):
     """
     Some type of cracker.
     """
