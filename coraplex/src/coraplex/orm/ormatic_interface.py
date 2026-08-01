@@ -8458,11 +8458,6 @@ class MotionServerDAO(
         nullable=True,
         use_existing_column=True,
     )
-    world_synchronizer_id: Mapped[int] = mapped_column(
-        ForeignKey("WorldSynchronizerDAO.database_id", use_alter=True),
-        nullable=True,
-        use_existing_column=True,
-    )
     feedback_publisher_id: Mapped[int] = mapped_column(
         ForeignKey("ActionFeedbackPublisherDAO.database_id", use_alter=True),
         nullable=True,
@@ -8498,12 +8493,6 @@ class MotionServerDAO(
         "IncomingWorldUpdatesDAO",
         uselist=False,
         foreign_keys=[world_updates_id],
-        post_update=True,
-    )
-    world_synchronizer: Mapped[WorldSynchronizerDAO] = relationship(
-        "WorldSynchronizerDAO",
-        uselist=False,
-        foreign_keys=[world_synchronizer_id],
         post_update=True,
     )
     feedback_publisher: Mapped[ActionFeedbackPublisherDAO] = relationship(
@@ -17134,8 +17123,6 @@ class MessageDAO(
         Integer, primary_key=True, use_existing_column=True
     )
 
-    sequence_number: Mapped[builtins.int] = mapped_column(use_existing_column=True)
-
     publication_event_id: Mapped[uuid.UUID] = mapped_column(
         sqlalchemy.sql.sqltypes.UUID, nullable=False, use_existing_column=True
     )
@@ -17224,28 +17211,6 @@ class ModificationBlockDAO(
         "inherit_condition": database_id == MessageDAO.database_id,
         "polymorphic_load": "selectin",
     }
-
-
-class StateWatermarkDAO(
-    Base, DataAccessObject[semantic_digital_twin.adapters.ros.messages.StateWatermark]
-):
-    __tablename__ = "StateWatermarkDAO"
-
-    database_id: Mapped[builtins.int] = mapped_column(
-        Integer, primary_key=True, use_existing_column=True
-    )
-
-    sequence_number: Mapped[builtins.int] = mapped_column(use_existing_column=True)
-
-    origin_id: Mapped[int] = mapped_column(
-        ForeignKey("MetaDataDAO.database_id", use_alter=True),
-        nullable=True,
-        use_existing_column=True,
-    )
-
-    origin: Mapped[MetaDataDAO] = relationship(
-        "MetaDataDAO", uselist=False, foreign_keys=[origin_id], post_update=True
-    )
 
 
 class WorldModelSnapshotDAO(
@@ -21645,43 +21610,6 @@ class StateUpdateContainsUnknownDegreesOfFreedomErrorDAO(
     }
 
 
-class StateWatermarkTimeoutErrorDAO(
-    UsageErrorDAO,
-    DataAccessObject[semantic_digital_twin.exceptions.StateWatermarkTimeoutError],
-):
-    __tablename__ = "StateWatermarkTimeoutErrorDAO"
-
-    database_id: Mapped[builtins.int] = mapped_column(
-        ForeignKey(UsageErrorDAO.database_id),
-        primary_key=True,
-        use_existing_column=True,
-    )
-
-    applied_sequence_number: Mapped[typing.Optional[builtins.int]] = mapped_column(
-        use_existing_column=True
-    )
-    timeout: Mapped[builtins.float] = mapped_column(use_existing_column=True)
-
-    watermark_id: Mapped[int] = mapped_column(
-        ForeignKey("StateWatermarkDAO.database_id", use_alter=True),
-        nullable=True,
-        use_existing_column=True,
-    )
-
-    watermark: Mapped[StateWatermarkDAO] = relationship(
-        "StateWatermarkDAO",
-        uselist=False,
-        foreign_keys=[watermark_id],
-        post_update=True,
-    )
-
-    __mapper_args__ = {
-        "polymorphic_identity": "StateWatermarkTimeoutErrorDAO",
-        "inherit_condition": database_id == UsageErrorDAO.database_id,
-        "polymorphic_load": "selectin",
-    }
-
-
 class UnknownPartWholeRelationshipFieldDAO(
     UsageErrorDAO,
     DataAccessObject[
@@ -21944,42 +21872,6 @@ class WorldEntityWithIDNotInKwargsDAO(
     world_entity_id: Mapped[uuid.UUID] = mapped_column(
         sqlalchemy.sql.sqltypes.UUID, nullable=False, use_existing_column=True
     )
-
-
-class WorldUpdateSequenceGapErrorDAO(
-    UsageErrorDAO,
-    DataAccessObject[semantic_digital_twin.exceptions.WorldUpdateSequenceGapError],
-):
-    __tablename__ = "WorldUpdateSequenceGapErrorDAO"
-
-    database_id: Mapped[builtins.int] = mapped_column(
-        ForeignKey(UsageErrorDAO.database_id),
-        primary_key=True,
-        use_existing_column=True,
-    )
-
-    expected_sequence_number: Mapped[builtins.int] = mapped_column(
-        use_existing_column=True
-    )
-    received_sequence_number: Mapped[builtins.int] = mapped_column(
-        use_existing_column=True
-    )
-
-    origin_id: Mapped[int] = mapped_column(
-        ForeignKey("MetaDataDAO.database_id", use_alter=True),
-        nullable=True,
-        use_existing_column=True,
-    )
-
-    origin: Mapped[MetaDataDAO] = relationship(
-        "MetaDataDAO", uselist=False, foreign_keys=[origin_id], post_update=True
-    )
-
-    __mapper_args__ = {
-        "polymorphic_identity": "WorldUpdateSequenceGapErrorDAO",
-        "inherit_condition": database_id == UsageErrorDAO.database_id,
-        "polymorphic_load": "selectin",
-    }
 
 
 class WorldValidationErrorDAO(
