@@ -142,6 +142,7 @@ class Giskard:
             action_server=action_server,
             control_loop=control_loop,
             world_updates=world_updates,
+            world_synchronizer=self.world_synchronizer,
             feedback_publisher=feedback_publisher,
             inputs=WorldStateInputs(world=world),
             cycle_counter=cycle_counter,

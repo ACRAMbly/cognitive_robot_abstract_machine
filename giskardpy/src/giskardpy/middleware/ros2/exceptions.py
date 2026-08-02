@@ -102,6 +102,72 @@ class WorldModelModifiedDuringMotionError(ExecutionException, DontPrintStackTrac
 
 
 @dataclass
+class RequiredWorldUpdateNotReceivedError(ExecutionException, DontPrintStackTrace):
+    """
+    Raised when a goal names a change of the client's world that never arrived.
+
+    The goal refers to a world the client already changed, so executing it against the
+    world Giskard has would act on something else than what was asked for.
+    """
+
+    publisher_name: str
+    """
+    The node whose change was waited for.
+    """
+
+    awaited_sequence_number: int
+    """
+    The position in that node's stream that was waited for.
+    """
+
+    timeout: float
+    """
+    Seconds that were spent waiting.
+    """
+
+    def error_message(self) -> str:
+        return (
+            f"Update #{self.awaited_sequence_number} of '{self.publisher_name}' did not "
+            f"arrive within {self.timeout}s."
+        )
+
+    def suggest_correction(self) -> str:
+        return (
+            "Check that the world of the client is still connected to the world sync "
+            "topic, then send the goal again."
+        )
+
+
+@dataclass
+class GiskardWorldUpdateNotReceivedError(ExecutionException, DontPrintStackTrace):
+    """
+    Raised when the changes Giskard made during a goal never reached the client.
+
+    Reading the world of the client after such a goal would show a world that Giskard
+    has already moved on from.
+    """
+
+    awaited_sequence_number: int
+    """
+    The position in Giskard's stream that was waited for.
+    """
+
+    timeout: float
+    """
+    Seconds that were spent waiting.
+    """
+
+    def error_message(self) -> str:
+        return (
+            f"Update #{self.awaited_sequence_number} of Giskard did not arrive within "
+            f"{self.timeout}s."
+        )
+
+    def suggest_correction(self) -> str:
+        return "Check that this world is still connected to the world sync topic."
+
+
+@dataclass
 class ExecutionPreemptedException(ExecutionException):
     """
     Raised when the execution of a goal is preempted.

@@ -11,7 +11,9 @@ from json_msgs.action import JsonAction
 from json_msgs.action._json_action import JsonAction_Result
 from giskardpy.middleware.ros2 import rospy
 from giskardpy.middleware.ros2.exceptions import NoActiveGoalToCancelError
+from giskardpy.middleware.ros2.motion_goal import MotionGoal
 from giskardpy.middleware.ros2.ros2_interface import MyActionClient
+from giskardpy.middleware.ros2.world_updates import ClientWorldUpdates
 from giskardpy.motion_statechart.motion_statechart import (
     MotionStatechart,
     LifeCycleState,
@@ -43,6 +45,12 @@ class GiskardWrapper:
     _result_future: Future | None = None
     world: World = None
     _client: MyActionClient = None
+
+    world_updates: ClientWorldUpdates = field(init=False, default=None)
+    """
+    Keeps this world in step with the world Giskard controls around a goal.
+    """
+
     _motion_statechart: MotionStatechart | None = field(
         init=False, default=None, repr=False
     )
@@ -54,9 +62,10 @@ class GiskardWrapper:
             )
             self.world = fetch_world_from_service(self.node_handle, timeout_seconds=300)
             self.node_handle.get_logger().info("world synced")
-            self.world_synchronizer = WorldSynchronizer(
-                _world=self.world, node=self.node_handle, synchronous=True
-            )
+            WorldSynchronizer(_world=self.world, node=self.node_handle)
+        self.world_updates = ClientWorldUpdates(
+            world_synchronizer=WorldSynchronizer.for_world(self.world)
+        )
         giskard_topic = f"{self.giskard_node_name}/command"
         self._client = MyActionClient(self.node_handle, JsonAction, giskard_topic)
         sleep(0.3)
@@ -96,6 +105,7 @@ class GiskardWrapper:
         awaited.
         """
         result_json = json.loads(result.result.result)
+        self.world_updates.wait_for_the_changes_of_a_goal(result_json)
         parsed_life_cycle_state = LifeCycleState.from_json(
             result_json["life_cycle_state"], motion_statechart=motion_statechart
         )
@@ -106,17 +116,30 @@ class GiskardWrapper:
         motion_statechart.observation_state.data = parsed_observation_state.data
         assert motion_statechart.is_end_motion()
 
-    def _send_action_goal_async(self, motion_statechart: MotionStatechart) -> Future:
+    def _create_goal_message(
+        self, motion_statechart: MotionStatechart
+    ) -> JsonAction.Goal:
+        """
+        Wrap the motion statechart into a goal that names the change of this world it
+        was built on.
+        """
         goal_msg = JsonAction.Goal()
-        goal_msg.goal = json.dumps(motion_statechart.to_json())
-        return self._client.send_goal_async(goal_msg)
+        goal = MotionGoal.for_motion_statechart(
+            motion_statechart,
+            required_watermark=self.world_updates.required_watermark(),
+        )
+        goal_msg.goal = json.dumps(goal.to_json())
+        return goal_msg
+
+    def _send_action_goal_async(self, motion_statechart: MotionStatechart) -> Future:
+        return self._client.send_goal_async(
+            self._create_goal_message(motion_statechart)
+        )
 
     def _send_action_goal(
         self, motion_statechart: MotionStatechart
     ) -> JsonAction_Result:
-        goal_msg = JsonAction.Goal()
-        goal_msg.goal = json.dumps(motion_statechart.to_json())
-        return self._client.send_goal(goal_msg)
+        return self._client.send_goal(self._create_goal_message(motion_statechart))
 
     def cancel_goal_async(self) -> Future:
         """

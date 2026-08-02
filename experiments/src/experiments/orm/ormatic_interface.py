@@ -84,6 +84,7 @@ import giskardpy.middleware.ros2.exceptions
 import giskardpy.middleware.ros2.feedback_publisher
 import giskardpy.middleware.ros2.giskard
 import giskardpy.middleware.ros2.input_synchronization
+import giskardpy.middleware.ros2.motion_goal
 import giskardpy.middleware.ros2.motion_server
 import giskardpy.middleware.ros2.post_goal_plotters
 import giskardpy.middleware.ros2.python_interface
@@ -9209,6 +9210,32 @@ class FollowJointTrajectory_PATH_TOLERANCE_VIOLATEDDAO(
     }
 
 
+class GiskardWorldUpdateNotReceivedErrorDAO(
+    ExecutionExceptionDAO,
+    DataAccessObject[
+        giskardpy.middleware.ros2.exceptions.GiskardWorldUpdateNotReceivedError
+    ],
+):
+    __tablename__ = "GiskardWorldUpdateNotReceivedErrorDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(ExecutionExceptionDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
+    )
+
+    awaited_sequence_number: Mapped[builtins.int] = mapped_column(
+        use_existing_column=True
+    )
+    timeout: Mapped[builtins.float] = mapped_column(use_existing_column=True)
+
+    __mapper_args__ = {
+        "polymorphic_identity": "GiskardWorldUpdateNotReceivedErrorDAO",
+        "inherit_condition": database_id == ExecutionExceptionDAO.database_id,
+        "polymorphic_load": "selectin",
+    }
+
+
 class NoActiveGoalToCancelErrorDAO(
     ExecutionExceptionDAO,
     DataAccessObject[giskardpy.middleware.ros2.exceptions.NoActiveGoalToCancelError],
@@ -9223,6 +9250,35 @@ class NoActiveGoalToCancelErrorDAO(
 
     __mapper_args__ = {
         "polymorphic_identity": "NoActiveGoalToCancelErrorDAO",
+        "inherit_condition": database_id == ExecutionExceptionDAO.database_id,
+        "polymorphic_load": "selectin",
+    }
+
+
+class RequiredWorldUpdateNotReceivedErrorDAO(
+    ExecutionExceptionDAO,
+    DataAccessObject[
+        giskardpy.middleware.ros2.exceptions.RequiredWorldUpdateNotReceivedError
+    ],
+):
+    __tablename__ = "RequiredWorldUpdateNotReceivedErrorDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(ExecutionExceptionDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
+    )
+
+    publisher_name: Mapped[builtins.str] = mapped_column(
+        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
+    )
+    awaited_sequence_number: Mapped[builtins.int] = mapped_column(
+        use_existing_column=True
+    )
+    timeout: Mapped[builtins.float] = mapped_column(use_existing_column=True)
+
+    __mapper_args__ = {
+        "polymorphic_identity": "RequiredWorldUpdateNotReceivedErrorDAO",
         "inherit_condition": database_id == ExecutionExceptionDAO.database_id,
         "polymorphic_load": "selectin",
     }
@@ -9555,6 +9611,29 @@ class WorldStateInputsDAO(
     )
 
 
+class MotionGoalDAO(
+    Base, DataAccessObject[giskardpy.middleware.ros2.motion_goal.MotionGoal]
+):
+    __tablename__ = "MotionGoalDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
+
+    required_watermark_id: Mapped[typing.Optional[builtins.int]] = mapped_column(
+        ForeignKey("StateWatermarkDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
+    )
+
+    required_watermark: Mapped[StateWatermarkDAO] = relationship(
+        "StateWatermarkDAO",
+        uselist=False,
+        foreign_keys=[required_watermark_id],
+        post_update=True,
+    )
+
+
 class MotionServerDAO(
     Base, DataAccessObject[giskardpy.middleware.ros2.motion_server.MotionServer]
 ):
@@ -9565,6 +9644,9 @@ class MotionServerDAO(
     )
 
     idle_frequency: Mapped[builtins.float] = mapped_column(use_existing_column=True)
+    world_update_timeout: Mapped[builtins.float] = mapped_column(
+        use_existing_column=True
+    )
 
     executor_id: Mapped[int] = mapped_column(
         ForeignKey("ExecutorDAO.database_id", use_alter=True),
@@ -10201,6 +10283,32 @@ class BenchmarkRobotDAO(
         "inherit_condition": database_id == GiskardTesterDAO.database_id,
         "polymorphic_load": "selectin",
     }
+
+
+class ClientWorldUpdatesDAO(
+    Base, DataAccessObject[giskardpy.middleware.ros2.world_updates.ClientWorldUpdates]
+):
+    __tablename__ = "ClientWorldUpdatesDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
+
+    timeout: Mapped[builtins.float] = mapped_column(use_existing_column=True)
+    poll_interval: Mapped[builtins.float] = mapped_column(use_existing_column=True)
+
+    world_synchronizer_id: Mapped[int] = mapped_column(
+        ForeignKey("WorldSynchronizerDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
+    )
+
+    world_synchronizer: Mapped[WorldSynchronizerDAO] = relationship(
+        "WorldSynchronizerDAO",
+        uselist=False,
+        foreign_keys=[world_synchronizer_id],
+        post_update=True,
+    )
 
 
 class IncomingWorldUpdatesDAO(
@@ -18218,30 +18326,6 @@ class RoboCasaObjectResolverDAO(
     }
 
 
-class AcknowledgmentDAO(
-    Base, DataAccessObject[semantic_digital_twin.adapters.ros.messages.Acknowledgment]
-):
-    __tablename__ = "AcknowledgmentDAO"
-
-    database_id: Mapped[builtins.int] = mapped_column(
-        Integer, primary_key=True, use_existing_column=True
-    )
-
-    publication_event_id: Mapped[uuid.UUID] = mapped_column(
-        sqlalchemy.sql.sqltypes.UUID, nullable=False, use_existing_column=True
-    )
-
-    node_meta_data_id: Mapped[int] = mapped_column(
-        ForeignKey("MetaDataDAO.database_id", use_alter=True),
-        nullable=True,
-        use_existing_column=True,
-    )
-
-    node_meta_data: Mapped[MetaDataDAO] = relationship(
-        "MetaDataDAO", uselist=False, foreign_keys=[node_meta_data_id], post_update=True
-    )
-
-
 class MessageDAO(
     Base, DataAccessObject[semantic_digital_twin.adapters.ros.messages.Message]
 ):
@@ -18251,9 +18335,8 @@ class MessageDAO(
         Integer, primary_key=True, use_existing_column=True
     )
 
-    publication_event_id: Mapped[uuid.UUID] = mapped_column(
-        sqlalchemy.sql.sqltypes.UUID, nullable=False, use_existing_column=True
-    )
+    sequence_number: Mapped[builtins.int] = mapped_column(use_existing_column=True)
+
     polymorphic_type: Mapped[str] = mapped_column(
         String(255), nullable=False, use_existing_column=True
     )
@@ -18339,6 +18422,28 @@ class ModificationBlockDAO(
         "inherit_condition": database_id == MessageDAO.database_id,
         "polymorphic_load": "selectin",
     }
+
+
+class StateWatermarkDAO(
+    Base, DataAccessObject[semantic_digital_twin.adapters.ros.messages.StateWatermark]
+):
+    __tablename__ = "StateWatermarkDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
+
+    sequence_number: Mapped[builtins.int] = mapped_column(use_existing_column=True)
+
+    origin_id: Mapped[int] = mapped_column(
+        ForeignKey("MetaDataDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
+    )
+
+    origin: Mapped[MetaDataDAO] = relationship(
+        "MetaDataDAO", uselist=False, foreign_keys=[origin_id], post_update=True
+    )
 
 
 class WorldModelSnapshotDAO(
@@ -23002,6 +23107,68 @@ class WorldEntityWithIDNotInKwargsDAO(
     )
 
 
+class WorldHasMultipleSynchronizersErrorDAO(
+    UsageErrorDAO,
+    DataAccessObject[
+        semantic_digital_twin.exceptions.WorldHasMultipleSynchronizersError
+    ],
+):
+    __tablename__ = "WorldHasMultipleSynchronizersErrorDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(UsageErrorDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
+    )
+
+    synchronizer_count: Mapped[builtins.int] = mapped_column(use_existing_column=True)
+
+    world_id: Mapped[int] = mapped_column(
+        ForeignKey("WorldMappingDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
+    )
+
+    world: Mapped[WorldMappingDAO] = relationship(
+        "WorldMappingDAO", uselist=False, foreign_keys=[world_id], post_update=True
+    )
+
+    __mapper_args__ = {
+        "polymorphic_identity": "WorldHasMultipleSynchronizersErrorDAO",
+        "inherit_condition": database_id == UsageErrorDAO.database_id,
+        "polymorphic_load": "selectin",
+    }
+
+
+class WorldHasNoSynchronizerErrorDAO(
+    UsageErrorDAO,
+    DataAccessObject[semantic_digital_twin.exceptions.WorldHasNoSynchronizerError],
+):
+    __tablename__ = "WorldHasNoSynchronizerErrorDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(UsageErrorDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
+    )
+
+    world_id: Mapped[int] = mapped_column(
+        ForeignKey("WorldMappingDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
+    )
+
+    world: Mapped[WorldMappingDAO] = relationship(
+        "WorldMappingDAO", uselist=False, foreign_keys=[world_id], post_update=True
+    )
+
+    __mapper_args__ = {
+        "polymorphic_identity": "WorldHasNoSynchronizerErrorDAO",
+        "inherit_condition": database_id == UsageErrorDAO.database_id,
+        "polymorphic_load": "selectin",
+    }
+
+
 class WorldValidationErrorDAO(
     LogicalErrorDAO,
     DataAccessObject[semantic_digital_twin.exceptions.WorldValidationError],
@@ -26383,13 +26550,6 @@ class SynchronizerDAO(
 
     topic_name: Mapped[typing.Optional[builtins.str]] = mapped_column(
         sqlalchemy.sql.sqltypes.Text, use_existing_column=True
-    )
-    synchronous: Mapped[builtins.bool] = mapped_column(use_existing_column=True)
-    acknowledge_topic_name: Mapped[typing.Optional[builtins.str]] = mapped_column(
-        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
-    )
-    wait_for_synchronization_timeout: Mapped[builtins.float] = mapped_column(
-        use_existing_column=True
     )
 
     __mapper_args__ = {

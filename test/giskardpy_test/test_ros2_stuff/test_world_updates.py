@@ -8,11 +8,17 @@ import pytest
 from giskardpy.executor import Executor, NoPacing
 from giskardpy.middleware.ros2 import rospy
 from giskardpy.middleware.ros2.control_loop import ControlLoop
-from giskardpy.middleware.ros2.exceptions import WorldModelModifiedDuringMotionError
+from giskardpy.middleware.ros2.exceptions import (
+    GiskardWorldUpdateNotReceivedError,
+    WorldModelModifiedDuringMotionError,
+)
 from giskardpy.middleware.ros2.feedback_publisher import ActionFeedbackPublisher
 from giskardpy.middleware.ros2.cycle_counter import CycleCounter
 from giskardpy.middleware.ros2.input_synchronization import WorldStateInputs
-from giskardpy.middleware.ros2.world_updates import IncomingWorldUpdates
+from giskardpy.middleware.ros2.world_updates import (
+    ClientWorldUpdates,
+    IncomingWorldUpdates,
+)
 from giskardpy.motion_statechart.context import MotionStatechartContext
 from giskardpy.motion_statechart.graph_node import EndMotion
 from giskardpy.motion_statechart.monitors.payload_monitors import (
@@ -20,6 +26,8 @@ from giskardpy.motion_statechart.monitors.payload_monitors import (
 )
 from giskardpy.motion_statechart.motion_statechart import MotionStatechart
 from giskardpy.qp.qp_controller_config import QPControllerConfig
+from krrood.adapters.json_serializer import to_json
+from semantic_digital_twin.adapters.ros.messages import MetaData, StateWatermark
 from semantic_digital_twin.adapters.ros.world_synchronizer import WorldSynchronizer
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 from semantic_digital_twin.spatial_types import Vector3
@@ -58,9 +66,14 @@ class BufferingSynchronizerMimic:
     How often the whole buffer was applied.
     """
 
-    acknowledged_message_batches: int = 0
+    caught_up: bool = False
     """
-    How often the receipt of the buffered messages was acknowledged.
+    The answer this mimic gives about every position it is asked about.
+    """
+
+    asked_about_watermarks: List[StateWatermark] = field(default_factory=list)
+    """
+    Every position this mimic was asked about.
     """
 
     @property
@@ -74,8 +87,43 @@ class BufferingSynchronizerMimic:
         self.applied_message_batches += 1
         self.buffered_model_modification = False
 
-    def acknowledge_missed_messages(self) -> None:
-        self.acknowledged_message_batches += 1
+    def has_applied(self, watermark: StateWatermark) -> bool:
+        self.asked_about_watermarks.append(watermark)
+        return self.caught_up
+
+
+@dataclass
+class PublishingSynchronizerMimic:
+    """
+    Stands in for the synchronizer of a client: it publishes the changes of that world
+    and reports how far it caught up with another publisher.
+    """
+
+    published_sequence_number: int = 0
+    """
+    Position of the change this world published last.
+    """
+
+    origin: MetaData = field(
+        default_factory=lambda: MetaData(node_name="client", process_id=0)
+    )
+    """
+    The publisher the positions of this world belong to.
+    """
+
+    applied_sequence_number: int = 0
+    """
+    The position this world caught up with, for every publisher it is asked about.
+    """
+
+    @property
+    def latest_published_watermark(self) -> StateWatermark:
+        return StateWatermark(
+            origin=self.origin, sequence_number=self.published_sequence_number
+        )
+
+    def has_applied(self, watermark: StateWatermark) -> bool:
+        return self.applied_sequence_number >= watermark.sequence_number
 
 
 @dataclass
@@ -159,6 +207,107 @@ class TestPendingModelChange:
         world_updates.apply_all()
 
         assert world_synchronizer.applied_message_batches == 1
+
+
+# %% catching up with another process
+
+
+class TestCatchingUp:
+    """
+    Whoever waits for a change of another process asks the world updates, so it has to
+    pass the question on to the synchronizer that received it.
+    """
+
+    def test_the_position_to_catch_up_with_reaches_the_synchronizer(self):
+        world_synchronizer = BufferingSynchronizerMimic(caught_up=True)
+        world_updates = IncomingWorldUpdates(world_synchronizer=world_synchronizer)
+        watermark = StateWatermark(
+            origin=MetaData(node_name="publisher", process_id=1), sequence_number=7
+        )
+
+        assert world_updates.has_applied(watermark)
+        assert world_synchronizer.asked_about_watermarks == [watermark]
+
+    def test_a_position_that_was_not_reached_is_reported_as_such(self):
+        world_updates = IncomingWorldUpdates(
+            world_synchronizer=BufferingSynchronizerMimic(caught_up=False)
+        )
+
+        assert not world_updates.has_applied(
+            StateWatermark(
+                origin=MetaData(node_name="publisher", process_id=1), sequence_number=7
+            )
+        )
+
+
+# %% the world of a client around a goal
+
+
+class TestClientWorldUpdates:
+    """
+    A goal is built against a world the client may just have changed, and running it
+    changes that world again, so both sides are told what to catch up with.
+    """
+
+    def test_a_world_that_published_nothing_requires_nothing(self):
+        world_updates = ClientWorldUpdates(
+            world_synchronizer=PublishingSynchronizerMimic()
+        )
+
+        assert world_updates.required_watermark() is None
+
+    def test_a_goal_requires_the_last_change_of_this_world(self):
+        synchronizer = PublishingSynchronizerMimic(published_sequence_number=4)
+        world_updates = ClientWorldUpdates(world_synchronizer=synchronizer)
+
+        assert world_updates.required_watermark() == StateWatermark(
+            origin=synchronizer.origin, sequence_number=4
+        )
+
+    def test_a_result_without_changes_is_not_waited_for(self):
+        world_updates = ClientWorldUpdates(
+            world_synchronizer=PublishingSynchronizerMimic(), timeout=0.0
+        )
+
+        world_updates.wait_for_the_changes_of_a_goal({})
+
+    def test_the_changes_of_a_goal_are_waited_for(self):
+        synchronizer = PublishingSynchronizerMimic(applied_sequence_number=9)
+        world_updates = ClientWorldUpdates(
+            world_synchronizer=synchronizer, timeout=0.0, poll_interval=0.0
+        )
+
+        world_updates.wait_for_the_changes_of_a_goal(
+            {
+                "state_watermark": to_json(
+                    StateWatermark(
+                        origin=MetaData(node_name="giskard", process_id=1),
+                        sequence_number=9,
+                    )
+                )
+            }
+        )
+
+    def test_changes_that_never_arrive_are_reported(self):
+        world_updates = ClientWorldUpdates(
+            world_synchronizer=PublishingSynchronizerMimic(applied_sequence_number=8),
+            timeout=0.05,
+            poll_interval=0.01,
+        )
+
+        with pytest.raises(GiskardWorldUpdateNotReceivedError) as raised:
+            world_updates.wait_for_the_changes_of_a_goal(
+                {
+                    "state_watermark": to_json(
+                        StateWatermark(
+                            origin=MetaData(node_name="giskard", process_id=1),
+                            sequence_number=9,
+                        )
+                    )
+                }
+            )
+
+        assert raised.value.awaited_sequence_number == 9
 
 
 # %% against a real synchronizer

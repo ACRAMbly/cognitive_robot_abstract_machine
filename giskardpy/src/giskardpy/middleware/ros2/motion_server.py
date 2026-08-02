@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import time
 import traceback
 from dataclasses import dataclass, field
 from typing import Any, Dict, List
@@ -13,14 +14,19 @@ from giskardpy.executor import Executor, RealTimePacer
 from giskardpy.middleware.ros2 import rospy
 from giskardpy.middleware.ros2.action_server import ActionServerHandler
 from giskardpy.middleware.ros2.control_loop import ControlLoop
-from giskardpy.middleware.ros2.exceptions import ExecutionCanceledException
+from giskardpy.middleware.ros2.exceptions import (
+    ExecutionCanceledException,
+    RequiredWorldUpdateNotReceivedError,
+)
 from giskardpy.middleware.ros2.feedback_publisher import ActionFeedbackPublisher
 from giskardpy.middleware.ros2.cycle_counter import CycleCounter
 from giskardpy.middleware.ros2.input_synchronization import WorldStateInputs
+from giskardpy.middleware.ros2.motion_goal import MotionGoal
 from giskardpy.middleware.ros2.post_goal_plotters import PostGoalPlotter
 from giskardpy.middleware.ros2.world_updates import IncomingWorldUpdates
-from giskardpy.motion_statechart.motion_statechart import MotionStatechart
 from krrood.adapters.json_serializer import to_json
+from semantic_digital_twin.adapters.ros.messages import StateWatermark
+from semantic_digital_twin.adapters.ros.world_synchronizer import PublicationProgress
 from semantic_digital_twin.adapters.world_entity_kwargs_tracker import (
     WorldEntityWithIDKwargsTracker,
 )
@@ -57,6 +63,11 @@ class MotionServer:
     Applies the world updates of other processes that the control loop could not.
     """
 
+    world_synchronizer: PublicationProgress
+    """
+    Reports how far the changes of this world were published to the other processes.
+    """
+
     feedback_publisher: ActionFeedbackPublisher
     """
     Reports the state of the motion statechart to the action client.
@@ -77,6 +88,11 @@ class MotionServer:
     Frequency in hertz at which the idle loop runs.
     """
 
+    world_update_timeout: float = 30.0
+    """
+    Seconds a goal waits for the change of the world it was built on.
+    """
+
     post_goal_plotters: List[PostGoalPlotter] = field(default_factory=list)
     """
     Debug plots that are written once a goal is finished.
@@ -85,6 +101,11 @@ class MotionServer:
     idle_pacer: RealTimePacer = field(init=False)
     """
     Paces the idle loop to ``idle_frequency``.
+    """
+
+    _published_sequence_number_before_goal: int = field(init=False, default=0)
+    """
+    How far this world had published when the running goal was accepted.
     """
 
     def __post_init__(self):
@@ -127,9 +148,14 @@ class MotionServer:
         """
         Execute the accepted goal and answer the client, whatever happens.
         """
+        self._published_sequence_number_before_goal = (
+            self.world_synchronizer.published_sequence_number
+        )
         error: Exception | None = None
         try:
-            self.compile_goal()
+            goal = MotionGoal.from_json(json.loads(self.action_server.goal_msg.goal))
+            self.wait_for_required_world_updates(goal.required_watermark)
+            self.compile_goal(goal)
             self.control_loop.run()
         except Exception as exception:
             if not isinstance(
@@ -140,7 +166,31 @@ class MotionServer:
         finally:
             self.finish_goal(error)
 
-    def compile_goal(self) -> None:
+    def wait_for_required_world_updates(
+        self, required_watermark: StateWatermark | None
+    ) -> None:
+        """
+        Wait until the world contains the change the goal was built on.
+
+        :raises RequiredWorldUpdateNotReceivedError: If that change does not arrive
+            within ``world_update_timeout``.
+        """
+        if required_watermark is None:
+            return
+        deadline = time.monotonic() + self.world_update_timeout
+        while True:
+            self.world_updates.apply_all()
+            if self.world_updates.has_applied(required_watermark):
+                return
+            if time.monotonic() >= deadline:
+                raise RequiredWorldUpdateNotReceivedError(
+                    publisher_name=required_watermark.origin.node_name,
+                    awaited_sequence_number=required_watermark.sequence_number,
+                    timeout=self.world_update_timeout,
+                )
+            self.idle_pacer.sleep()
+
+    def compile_goal(self, goal: MotionGoal) -> None:
         """
         Turn the goal message into a compiled motion statechart.
         """
@@ -150,9 +200,7 @@ class MotionServer:
         tracker = WorldEntityWithIDKwargsTracker.from_world(self.world)
         kwargs = tracker.create_kwargs()
         kwargs["world"] = self.world
-        motion_statechart = MotionStatechart.from_json(
-            json.loads(self.action_server.goal_msg.goal), **kwargs
-        )
+        motion_statechart = goal.parse_motion_statechart(**kwargs)
         self.executor.compile(motion_statechart)
         self.feedback_publisher.publish_structure()
         rospy.node.get_logger().info("Done parsing goal message.")
@@ -197,9 +245,24 @@ class MotionServer:
         states = self.create_states()
         if error is not None:
             states["error"] = to_json(error)
+        published_watermark = self.published_watermark_of_goal()
+        if published_watermark is not None:
+            states["state_watermark"] = to_json(published_watermark)
         result = JsonAction.Result()
         result.result = json.dumps(states)
         return result
+
+    def published_watermark_of_goal(self) -> StateWatermark | None:
+        """
+        The position this world published up to while the goal was running, or ``None``
+        if the goal published nothing.
+        """
+        if (
+            self.world_synchronizer.published_sequence_number
+            == self._published_sequence_number_before_goal
+        ):
+            return None
+        return self.world_synchronizer.latest_published_watermark
 
     def create_states(self) -> Dict[str, Any]:
         """

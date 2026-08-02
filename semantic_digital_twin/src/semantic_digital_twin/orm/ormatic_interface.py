@@ -82,6 +82,8 @@ import semantic_digital_twin.pipeline.mesh_decomposition.coacd
 import semantic_digital_twin.pipeline.mesh_decomposition.vhacd
 import semantic_digital_twin.pipeline.pipeline
 import semantic_digital_twin.reasoning.predicates
+import semantic_digital_twin.reasoning.reasoner
+import semantic_digital_twin.reasoning.world_reasoner
 import semantic_digital_twin.robots.armar7
 import semantic_digital_twin.robots.daisy
 import semantic_digital_twin.robots.garmi
@@ -4356,30 +4358,6 @@ class RoboCasaObjectResolverDAO(
     }
 
 
-class AcknowledgmentDAO(
-    Base, DataAccessObject[semantic_digital_twin.adapters.ros.messages.Acknowledgment]
-):
-    __tablename__ = "AcknowledgmentDAO"
-
-    database_id: Mapped[builtins.int] = mapped_column(
-        Integer, primary_key=True, use_existing_column=True
-    )
-
-    publication_event_id: Mapped[uuid.UUID] = mapped_column(
-        sqlalchemy.sql.sqltypes.UUID, nullable=False, use_existing_column=True
-    )
-
-    node_meta_data_id: Mapped[int] = mapped_column(
-        ForeignKey("MetaDataDAO.database_id", use_alter=True),
-        nullable=True,
-        use_existing_column=True,
-    )
-
-    node_meta_data: Mapped[MetaDataDAO] = relationship(
-        "MetaDataDAO", uselist=False, foreign_keys=[node_meta_data_id], post_update=True
-    )
-
-
 class MessageDAO(
     Base, DataAccessObject[semantic_digital_twin.adapters.ros.messages.Message]
 ):
@@ -4389,9 +4367,8 @@ class MessageDAO(
         Integer, primary_key=True, use_existing_column=True
     )
 
-    publication_event_id: Mapped[uuid.UUID] = mapped_column(
-        sqlalchemy.sql.sqltypes.UUID, nullable=False, use_existing_column=True
-    )
+    sequence_number: Mapped[builtins.int] = mapped_column(use_existing_column=True)
+
     polymorphic_type: Mapped[str] = mapped_column(
         String(255), nullable=False, use_existing_column=True
     )
@@ -4477,6 +4454,28 @@ class ModificationBlockDAO(
         "inherit_condition": database_id == MessageDAO.database_id,
         "polymorphic_load": "selectin",
     }
+
+
+class StateWatermarkDAO(
+    Base, DataAccessObject[semantic_digital_twin.adapters.ros.messages.StateWatermark]
+):
+    __tablename__ = "StateWatermarkDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
+
+    sequence_number: Mapped[builtins.int] = mapped_column(use_existing_column=True)
+
+    origin_id: Mapped[int] = mapped_column(
+        ForeignKey("MetaDataDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
+    )
+
+    origin: Mapped[MetaDataDAO] = relationship(
+        "MetaDataDAO", uselist=False, foreign_keys=[origin_id], post_update=True
+    )
 
 
 class WorldModelSnapshotDAO(
@@ -9130,6 +9129,68 @@ class WorldEntityWithIDNotInKwargsDAO(
     )
 
 
+class WorldHasMultipleSynchronizersErrorDAO(
+    UsageErrorDAO,
+    DataAccessObject[
+        semantic_digital_twin.exceptions.WorldHasMultipleSynchronizersError
+    ],
+):
+    __tablename__ = "WorldHasMultipleSynchronizersErrorDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(UsageErrorDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
+    )
+
+    synchronizer_count: Mapped[builtins.int] = mapped_column(use_existing_column=True)
+
+    world_id: Mapped[int] = mapped_column(
+        ForeignKey("WorldMappingDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
+    )
+
+    world: Mapped[WorldMappingDAO] = relationship(
+        "WorldMappingDAO", uselist=False, foreign_keys=[world_id], post_update=True
+    )
+
+    __mapper_args__ = {
+        "polymorphic_identity": "WorldHasMultipleSynchronizersErrorDAO",
+        "inherit_condition": database_id == UsageErrorDAO.database_id,
+        "polymorphic_load": "selectin",
+    }
+
+
+class WorldHasNoSynchronizerErrorDAO(
+    UsageErrorDAO,
+    DataAccessObject[semantic_digital_twin.exceptions.WorldHasNoSynchronizerError],
+):
+    __tablename__ = "WorldHasNoSynchronizerErrorDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(UsageErrorDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
+    )
+
+    world_id: Mapped[int] = mapped_column(
+        ForeignKey("WorldMappingDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
+    )
+
+    world: Mapped[WorldMappingDAO] = relationship(
+        "WorldMappingDAO", uselist=False, foreign_keys=[world_id], post_update=True
+    )
+
+    __mapper_args__ = {
+        "polymorphic_identity": "WorldHasNoSynchronizerErrorDAO",
+        "inherit_condition": database_id == UsageErrorDAO.database_id,
+        "polymorphic_load": "selectin",
+    }
+
+
 class WorldValidationErrorDAO(
     LogicalErrorDAO,
     DataAccessObject[semantic_digital_twin.exceptions.WorldValidationError],
@@ -10317,6 +10378,40 @@ class RightOfDAO(
         "inherit_condition": database_id == ViewDependentSpatialRelationDAO.database_id,
         "polymorphic_load": "selectin",
     }
+
+
+class CaseReasonerDAO(
+    Base, DataAccessObject[semantic_digital_twin.reasoning.reasoner.CaseReasoner]
+):
+    __tablename__ = "CaseReasonerDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
+
+    model_directory: Mapped[builtins.str] = mapped_column(
+        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
+    )
+
+
+class WorldReasonerDAO(
+    Base, DataAccessObject[semantic_digital_twin.reasoning.world_reasoner.WorldReasoner]
+):
+    __tablename__ = "WorldReasonerDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
+
+    world_id: Mapped[int] = mapped_column(
+        ForeignKey("WorldMappingDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
+    )
+
+    world: Mapped[WorldMappingDAO] = relationship(
+        "WorldMappingDAO", uselist=False, foreign_keys=[world_id], post_update=True
+    )
 
 
 class RobotPartMixinDAO(
@@ -12458,13 +12553,6 @@ class SynchronizerDAO(
 
     topic_name: Mapped[typing.Optional[builtins.str]] = mapped_column(
         sqlalchemy.sql.sqltypes.Text, use_existing_column=True
-    )
-    synchronous: Mapped[builtins.bool] = mapped_column(use_existing_column=True)
-    acknowledge_topic_name: Mapped[typing.Optional[builtins.str]] = mapped_column(
-        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
-    )
-    wait_for_synchronization_timeout: Mapped[builtins.float] = mapped_column(
-        use_existing_column=True
     )
 
     __mapper_args__ = {

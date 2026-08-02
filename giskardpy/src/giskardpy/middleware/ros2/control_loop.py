@@ -101,16 +101,12 @@ class ControlLoop:
         """
         Take over the state of other processes and stop on a model change.
 
-        Receipt is acknowledged even for the change that terminates the motion, so a
-        process publishing synchronously is not blocked by it.
-
         :raises WorldModelModifiedDuringMotionError: If another process modified the
             world model, or is in the middle of doing so.
         """
         if self.world.world_is_being_modified:
             raise WorldModelModifiedDuringMotionError()
         self.world_updates.apply_state_updates()
-        self.world_updates.acknowledge_receipt()
         if self.world_updates.has_pending_model_change:
             raise WorldModelModifiedDuringMotionError()
 

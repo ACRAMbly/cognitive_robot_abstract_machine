@@ -10,6 +10,7 @@ from giskardpy.middleware.ros2.command_publishing import CommandPublisher
 from giskardpy.middleware.ros2.control_loop import ControlLoop
 from giskardpy.middleware.ros2.exceptions import (
     ExecutionCanceledException,
+    RequiredWorldUpdateNotReceivedError,
     WorldModelModifiedDuringMotionError,
 )
 from giskardpy.middleware.ros2.feedback_publisher import ActionFeedbackPublisher
@@ -18,6 +19,7 @@ from giskardpy.middleware.ros2.input_synchronization import (
     InputSynchronizer,
     WorldStateInputs,
 )
+from giskardpy.middleware.ros2.motion_goal import MotionGoal
 from giskardpy.middleware.ros2.motion_server import MotionServer
 from giskardpy.middleware.ros2.post_goal_plotters import PostGoalPlotter
 from giskardpy.motion_statechart.context import MotionStatechartContext
@@ -131,7 +133,13 @@ class GoalMessageMimic:
 @dataclass
 class WorldUpdatesMimic:
     """
-    Stands in for the incoming world updates, counting how they are drained.
+    Stands in for the incoming world updates, counting how they are drained and
+    recording what the server had already done whenever it asked about a position.
+    """
+
+    executor: Optional[Executor] = None
+    """
+    The executor whose compiled motion statechart is observed while a goal waits.
     """
 
     applied_batches: int = 0
@@ -144,14 +152,25 @@ class WorldUpdatesMimic:
     How often the state up to the next model change was applied.
     """
 
-    acknowledged_batches: int = 0
-    """
-    How often the receipt of the pending updates was acknowledged.
-    """
-
     pending_model_change: bool = False
     """
     Whether a model change is waiting to be applied.
+    """
+
+    drains_until_caught_up: Optional[int] = None
+    """
+    How many drains it takes until an awaited position counts as applied, or ``None`` if
+    it never does.
+    """
+
+    awaited_watermarks: List[StateWatermark] = field(default_factory=list)
+    """
+    Every position this mimic was asked about.
+    """
+
+    compiled_while_waiting: List[bool] = field(default_factory=list)
+    """
+    Whether a motion statechart was already compiled, per position asked about.
     """
 
     def apply_all(self) -> None:
@@ -161,8 +180,14 @@ class WorldUpdatesMimic:
     def apply_state_updates(self) -> None:
         self.applied_state_update_batches += 1
 
-    def acknowledge_receipt(self) -> None:
-        self.acknowledged_batches += 1
+    def has_applied(self, watermark: StateWatermark) -> bool:
+        self.awaited_watermarks.append(watermark)
+        self.compiled_while_waiting.append(
+            self.executor is not None and self.executor.motion_statechart is not None
+        )
+        if self.drains_until_caught_up is None:
+            return False
+        return self.applied_batches >= self.drains_until_caught_up
 
     @property
     def has_pending_model_change(self) -> bool:
@@ -453,14 +478,19 @@ def feedback_data(message: Any) -> dict:
     return json.loads(message.feedback)
 
 
-def create_goal_json(seconds: float = 0.5) -> str:
+def create_goal_json(
+    seconds: float = 0.5, required_watermark: Optional[StateWatermark] = None
+) -> str:
     """
-    Build the json of a motion statechart that ends after the given simulated time.
+    Build the json of a goal whose motion ends after the given simulated time.
     """
     motion_statechart = MotionStatechart()
     motion_statechart.add_node(counter := CountSimulationTimeSeconds(seconds=seconds))
     motion_statechart.add_node(EndMotion.when_true(counter))
-    return json.dumps(motion_statechart.to_json())
+    goal = MotionGoal.for_motion_statechart(
+        motion_statechart, required_watermark=required_watermark
+    )
+    return json.dumps(goal.to_json())
 
 
 @dataclass
@@ -487,7 +517,7 @@ def motion_server(init_rospy) -> MotionServerFixture:
     executor = create_executor()
     world = executor.context.world
     action_server = GoalQueueMimic()
-    world_updates = WorldUpdatesMimic()
+    world_updates = WorldUpdatesMimic(executor=executor)
     feedback_publisher = ActionFeedbackPublisher(
         executor=executor, action_server=action_server
     )
@@ -1012,21 +1042,7 @@ class TestWorldUpdatesDuringGoals:
     State updates of other processes are applied while a goal runs, but a model
     modification invalidates the compiled motion statechart, so it terminates the motion
     instead of being applied under it.
-
-    Receipt is acknowledged either way, so a process that modifies the world
-    synchronously is never blocked until the motion is over.
     """
-
-    def test_receipt_is_acknowledged_once_per_control_cycle(
-        self, motion_server: MotionServerFixture
-    ):
-        motion_server.action_server.goal_json = create_goal_json()
-
-        motion_server.motion_server.run_idle_cycle()
-
-        control_cycles = len(motion_server.control_input.applied_at_control_cycles)
-        assert control_cycles > 1
-        assert motion_server.world_updates.acknowledged_batches == control_cycles
 
     def test_state_updates_are_applied_once_per_control_cycle(
         self, motion_server: MotionServerFixture
@@ -1083,3 +1099,82 @@ class TestWorldUpdatesDuringGoals:
         motion_server.motion_server.run_idle_cycle()
 
         assert not motion_server.world_updates.has_pending_model_change
+
+
+# %% waiting for the world the goal was built on
+
+
+class TestWaitingForTheWorldOfTheClient:
+    """
+    A goal refers to a world its client already changed, so Giskard executes it only
+    once that change reached the world it controls.
+    """
+
+    def test_a_goal_that_requires_nothing_is_not_delayed(
+        self, motion_server: MotionServerFixture
+    ):
+        motion_server.action_server.goal_json = create_goal_json()
+
+        motion_server.motion_server.run_idle_cycle()
+
+        assert motion_server.action_server.outcome == GoalOutcome.SUCCEEDED
+        assert motion_server.world_updates.awaited_watermarks == []
+
+    def test_a_goal_waits_until_the_change_it_requires_arrived(
+        self, motion_server: MotionServerFixture
+    ):
+        watermark = StateWatermark(
+            origin=MetaData(node_name="client", process_id=1), sequence_number=4
+        )
+        motion_server.world_updates.drains_until_caught_up = 3
+        motion_server.action_server.goal_json = create_goal_json(
+            required_watermark=watermark
+        )
+
+        motion_server.motion_server.run_idle_cycle()
+
+        assert motion_server.action_server.outcome == GoalOutcome.SUCCEEDED
+        assert motion_server.world_updates.awaited_watermarks[0] == watermark
+        assert motion_server.world_updates.applied_batches == 3
+
+    def test_the_goal_is_not_compiled_before_the_change_arrived(
+        self, motion_server: MotionServerFixture
+    ):
+        """
+        Compiling resolves the entities the goal refers to against the world, so a goal
+        compiled too early would refer to entities the change was supposed to bring.
+        """
+        motion_server.world_updates.drains_until_caught_up = 3
+        motion_server.action_server.goal_json = create_goal_json(
+            required_watermark=StateWatermark(
+                origin=MetaData(node_name="client", process_id=1), sequence_number=4
+            )
+        )
+
+        motion_server.motion_server.run_idle_cycle()
+
+        waiting_rounds = len(motion_server.world_updates.awaited_watermarks)
+        assert waiting_rounds > 0, "the goal did not wait at all"
+        assert (
+            motion_server.world_updates.compiled_while_waiting
+            == [False] * waiting_rounds
+        )
+
+    def test_a_change_that_never_arrives_aborts_the_goal(
+        self, motion_server: MotionServerFixture
+    ):
+        motion_server.motion_server.world_update_timeout = 0.2
+        motion_server.action_server.goal_json = create_goal_json(
+            required_watermark=StateWatermark(
+                origin=MetaData(node_name="client", process_id=1), sequence_number=4
+            )
+        )
+
+        motion_server.motion_server.run_idle_cycle()
+
+        assert motion_server.action_server.outcome == GoalOutcome.ABORTED
+        result = json.loads(motion_server.action_server.sent_results[0].result)
+        error = from_json(result["error"])
+        assert isinstance(error, RequiredWorldUpdateNotReceivedError)
+        assert error.publisher_name == "client"
+        assert error.awaited_sequence_number == 4
