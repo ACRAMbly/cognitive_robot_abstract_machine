@@ -9,7 +9,9 @@ applying a detection moves the annotated body.
 
 from __future__ import annotations
 
+import json
 import threading
+from copy import deepcopy
 from dataclasses import dataclass
 
 import numpy as np
@@ -33,7 +35,9 @@ from coraplex.exceptions import (
     PerceivedObjectNotInWorld,
     PerceptionSourceUnavailable,
     UnidentifiedDetections,
+    UnknownExecutionType,
 )
+from coraplex.execution_environment import simulated_robot
 from coraplex.perception import (
     ROBOKUDO_QUERY_ACTION_NAME,
     Detection,
@@ -46,8 +50,10 @@ from coraplex.plans.factories import execute_single
 from coraplex.plans.plan_node import MotionNode
 from coraplex.robot_plans import MoveToolCenterPointMotion
 from coraplex.robot_plans.actions.core.pick_up import PickUpAction
-from coraplex.robot_plans.motions.misc import PerceptionTask
+from coraplex.robot_plans.motions.misc import DetectingMotion, PerceptionTask
 from giskardpy.motion_statechart.context import MotionStatechartContext
+from giskardpy.motion_statechart.graph_node import EndMotion
+from giskardpy.motion_statechart.motion_statechart import MotionStatechart
 from krrood.adapters.json_serializer import from_json, to_json
 from semantic_digital_twin.adapters.world_entity_kwargs_tracker import (
     WorldEntityWithIDKwargsTracker,
@@ -584,8 +590,8 @@ class UnanswerablePerception(PerceptionInterface):
     """
     Source that cannot answer, standing in for any reason a query fails.
 
-    Lets the failure a task has to carry out of its background thread be chosen by the
-    test, instead of arranging the conditions that would provoke it.
+    Lets the test choose the failure a task has to surface, instead of arranging the
+    conditions that would provoke it.
     """
 
     failure: BaseException
@@ -604,8 +610,8 @@ def test_perception_task_reports_a_failed_query_as_itself(
     A detection that could not be made must reach the plan as the failure it was, not as
     a motion that merely did not finish, so failure handling can tell the reasons apart.
 
-    The failure is raised in the background thread the query is answered in, so it only
-    reaches the plan if the tick carries it there.
+    The source raises on the tick, which is the same way a
+    :class:`~giskardpy.motion_statechart.graph_node.CancelMotion` aborts a chart.
     """
     world, view, context = immutable_model_world
     query = PerceptionQuery(Milk, whole_scene_region, view, world)
@@ -637,27 +643,113 @@ def test_perception_task_answers_its_query_only_once(
     assert robokudo_query_server.received_types == ["milk"]
 
 
+def receiving_world_kwargs(world: World) -> dict:
+    """
+    Build the deserialization keyword arguments a controller receiving a chart builds.
+
+    :param world: The world the arriving chart is resolved against.
+    :return: The tracker and world keyword arguments.
+    """
+    tracker = WorldEntityWithIDKwargsTracker.from_world(world)
+    return {"world": world, **tracker.create_kwargs()}
+
+
 def test_perception_task_survives_a_json_round_trip(
     immutable_model_world, whole_scene_region
 ):
     """
-    On the real robot the chart is serialized to the controller, so a task that cannot
-    make the trip is a task that never runs there.
+    On the real robot the chart is serialized to a controller holding its own copy of
+    the world, so the query has to arrive pointing at that copy's entities rather than
+    at the ones it was built from.
+
+    Deserializing into a separate world is what makes this meaningful: resolving the robot
+    and the region's frame by id can only be seen to work when the objects behind those
+    ids are not the ones that were serialized.
     """
     world, view, context = immutable_model_world
+    receiving_world = deepcopy(world)
     query = PerceptionQuery(Milk, whole_scene_region, view, world)
     task = PerceptionTask(query=query, execution_type=ExecutionType.REAL)
 
-    tracker = WorldEntityWithIDKwargsTracker.from_world(world)
-    restored = from_json(to_json(task), world=world, **tracker.create_kwargs())
+    restored = from_json(to_json(task), **receiving_world_kwargs(receiving_world))
 
     assert restored.execution_type == ExecutionType.REAL
     assert restored.query.semantic_annotation is Milk
-    assert restored.query.robot is view
-    assert restored.query.world is world
-    assert restored.query.region.contains(
-        world.get_body_by_name("milk.stl").global_transform.to_position()
+    assert restored.query.world is receiving_world
+    assert restored.query.robot is receiving_world.get_world_entity_with_id_by_id(
+        view.id
     )
+    assert restored.query.region.origin.reference_frame is receiving_world.root
+
+
+def test_perception_task_without_an_execution_type_is_rejected(
+    immutable_model_world, whole_scene_region, rclpy_node
+):
+    """
+    A chart built while nothing is executing the plan has no source to answer with,
+    which has to be said plainly rather than silently defaulting to reading the world
+    model.
+    """
+    world, view, context = immutable_model_world
+    query = PerceptionQuery(Milk, whole_scene_region, view, world)
+    task = PerceptionTask(query=query, execution_type=None)
+
+    with pytest.raises(UnknownExecutionType):
+        build_perception_task(task, world, rclpy_node)
+
+
+def test_detecting_motion_takes_the_execution_type_of_the_environment(
+    immutable_model_world, whole_scene_region
+):
+    """
+    The motion is written once and run in both worlds, so which source answers it is
+    decided by the environment executing the plan rather than by the plan itself.
+    """
+    world, view, context = immutable_model_world
+    query = PerceptionQuery(Milk, whole_scene_region, view, world)
+    plan = execute_single(DetectingMotion(query=query), context=context)
+
+    with simulated_robot:
+        executable = plan.parse()
+
+    tasks = list(executable.motion_mappings.values())
+    assert [type(task) for task in tasks] == [PerceptionTask]
+    assert tasks[0].execution_type is ExecutionType.SIMULATED
+
+
+def test_perception_task_survives_a_chart_round_trip(
+    immutable_model_world, whole_scene_region
+):
+    """
+    What actually crosses to the controller is the whole motion state chart as JSON
+    text, not the task on its own, so the trip is only proven by making it as the chart.
+
+    Going through :func:`json.dumps` is part of the point: a value that survives
+    ``to_json`` but is not JSON at all would pass a round trip that skipped the text.
+    """
+    world, view, context = immutable_model_world
+    receiving_world = deepcopy(world)
+    query = PerceptionQuery(Milk, whole_scene_region, view, world)
+    chart = MotionStatechart()
+    chart.add_node(
+        task := PerceptionTask(query=query, execution_type=ExecutionType.REAL)
+    )
+    chart.add_node(EndMotion.when_true(task))
+
+    restored_chart = MotionStatechart.from_json(
+        json.loads(json.dumps(chart.to_json())),
+        **receiving_world_kwargs(receiving_world),
+    )
+
+    restored_tasks = [
+        node for node in restored_chart.nodes if isinstance(node, PerceptionTask)
+    ]
+    assert len(restored_tasks) == 1
+    assert restored_tasks[0].execution_type == ExecutionType.REAL
+    assert restored_tasks[0].query.world is receiving_world
+    assert restored_tasks[
+        0
+    ].query.robot is receiving_world.get_world_entity_with_id_by_id(view.id)
 
 
 def test_detection_in_a_chart_corrects_a_reach_planned_before_it(
