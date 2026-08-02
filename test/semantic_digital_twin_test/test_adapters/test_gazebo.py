@@ -1,5 +1,4 @@
 import os
-import subprocess
 from dataclasses import dataclass
 from math import pi
 
@@ -19,7 +18,6 @@ from semantic_digital_twin.exceptions import (
     UnsupportedJointType,
     UnsupportedPoseReference,
 )
-from semantic_digital_twin.utils import create_cache_dir
 from semantic_digital_twin.world_description.connections import (
     Connection6DoF,
     FixedConnection,
@@ -150,7 +148,7 @@ class TestModelUriResolution:
     def test_inferred_from_world_file_location(self, gazebo_paths, monkeypatch):
         """
         A world next to its models resolves without any configuration, which is what
-        makes a downloaded world parse as it is.
+        makes a world parse straight out of the package that ships it.
         """
         monkeypatch.delenv("GAZEBO_MODEL_PATH", raising=False)
         resolver = GazeboParser.resolver_for_file(gazebo_paths.mini_world)
@@ -456,69 +454,28 @@ class TestUnsupportedConstructs:
 
 
 @pytest.fixture(scope="module")
-def aws_warehouse_directory():
-    """
-    Fixture providing a checkout of the AWS RoboMaker small warehouse world, downloading
-    it into the user cache on first use.
-
-    The repository is archived, so the pinned branch does not move.
-    """
-    cache_directory = create_cache_dir("aws_robomaker_small_warehouse_world")
-    checkout = cache_directory / "repository"
-    if not (checkout / TestSmallWarehouseWorld.world_file).is_file():
-        try:
-            subprocess.run(
-                [
-                    "git",
-                    "clone",
-                    "--depth",
-                    "1",
-                    "--branch",
-                    TestSmallWarehouseWorld.branch,
-                    TestSmallWarehouseWorld.repository,
-                    str(checkout),
-                ],
-                check=True,
-                capture_output=True,
-                timeout=300,
-            )
-        except (subprocess.SubprocessError, OSError) as error:
-            pytest.skip(f"Could not download the AWS warehouse world: {error}")
-    return checkout
-
-
-@pytest.fixture(scope="module")
-def aws_warehouse_world(aws_warehouse_directory):
+def aws_warehouse_world():
     """
     Fixture providing the parsed AWS RoboMaker small warehouse world.
     """
-    return GazeboParser.from_file(
-        str(aws_warehouse_directory / TestSmallWarehouseWorld.world_file)
-    ).parse()
+    return GazeboParser.from_file(TestSmallWarehouseWorld.world_uri).parse()
 
 
 class TestSmallWarehouseWorld:
     """
     Parsing of the AWS RoboMaker small warehouse world, which is a world of SDF 1.6
     whose models are included by URI and drawn with COLLADA meshes.
+
+    Reads the world from the ``aws_robomaker_small_warehouse_world`` package, which has
+    to be built in the workspace.
     """
 
-    repository: ClassVar[str] = (
-        "https://github.com/aws-robotics/aws-robomaker-small-warehouse-world.git"
+    world_uri: ClassVar[str] = (
+        "package://aws_robomaker_small_warehouse_world/worlds/small_warehouse/"
+        "small_warehouse.world"
     )
     """
-    The repository holding the world, which is archived so the pinned branch does not
-    move.
-    """
-
-    branch: ClassVar[str] = "ros2"
-    """
-    The branch matching this test's assumptions about the world's layout and content.
-    """
-
-    world_file: ClassVar[str] = "worlds/small_warehouse/small_warehouse.world"
-    """
-    The path of the world file inside the repository.
+    The URI of the world file inside the package.
     """
 
     instance_count: ClassVar[int] = 26
