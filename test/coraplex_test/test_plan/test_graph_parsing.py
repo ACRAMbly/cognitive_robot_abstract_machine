@@ -2,7 +2,6 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from coraplex.datastructures.dataclasses import Context
 from coraplex.datastructures.enums import (
     Arms,
     ApproachDirection,
@@ -14,14 +13,11 @@ from coraplex.execution_environment import simulated_robot
 from coraplex.plans.attachment_nodes import ModelChangeNode
 from coraplex.perception import PerceptionQuery
 from coraplex.plans.executables import (
-    ConditionExecutable,
     Executable,
     GiskardExecutable,
     ModelChangeExecutable,
-    PerceptionExecutable,
 )
 from coraplex.plans.factories import execute_single, sequential
-from coraplex.plans.perception_nodes import PerceptionNode
 from coraplex.plans.plan_node import MotionNode, PlanNode
 from coraplex.robot_plans import MoveToolCenterPointMotion
 from coraplex.robot_plans.actions.composite.transporting import TransportAction
@@ -29,7 +25,9 @@ from coraplex.robot_plans.actions.core.misc import DetectAction
 from coraplex.robot_plans.actions.core.pick_up import ReachAction, PickUpAction
 from coraplex.robot_plans.actions.core.placing import PlaceAction
 from coraplex.robot_plans.actions.core.robot_body import MoveTorsoAction, ParkArmsAction
+from coraplex.robot_plans.motions.misc import DetectingMotion, PerceptionTask
 from coraplex.utils import split_list_by_type
+from giskardpy.motion_statechart.tasks.cartesian_tasks import CartesianPose
 from giskardpy.motion_statechart.tasks.joint_tasks import JointPositionList
 from semantic_digital_twin.adapters.ros.visualization.viz_marker import (
     VizMarkerPublisher,
@@ -317,10 +315,13 @@ def test_execution_boundary_splits_the_merged_motion_chart(immutable_model_world
     assert len(executable.execution_list[2].motion_mappings) == 1
 
 
-def test_perception_node_parses_to_a_perception_executable(immutable_model_world):
+# %% perception inside the merged chart
+
+
+def test_detecting_motion_merges_with_the_motions_around_it(immutable_model_world):
     """
-    Perception carries its query into execution and declares itself a boundary, so the
-    motions planned after it are built against the world it produced.
+    Perception is a motion like any other, so it does not interrupt the merging of the
+    motions around it: one chart holds the detection and both moves.
     """
     world, view, context = immutable_model_world
     query = PerceptionQuery(
@@ -337,21 +338,31 @@ def test_perception_node_parses_to_a_perception_executable(immutable_model_world
         view,
         world,
     )
-    node = PerceptionNode(query=query)
 
-    executable = execute_single(node, context=context).parse()
+    plan = sequential(
+        [
+            MoveToolCenterPointMotion(Pose(reference_frame=world.root), Arms.LEFT),
+            DetectingMotion(query=query),
+            MoveToolCenterPointMotion(Pose(reference_frame=world.root), Arms.RIGHT),
+        ],
+        context=context,
+    )
+    plan.notify()
+    executable = plan.parse()
 
-    assert node.is_execution_boundary
-    assert type(executable) == PerceptionExecutable
-    assert executable.query is query
+    assert type(executable) == GiskardExecutable
+    assert len(executable.motion_mappings) == 3
+    assert [type(task) for task in executable.motion_mappings.values()] == [
+        CartesianPose,
+        PerceptionTask,
+        CartesianPose,
+    ]
 
 
-def test_action_without_motions_evaluates_its_conditions_around_the_body(
-    immutable_model_world,
-):
+def test_detect_action_parses_to_a_single_motion_chart(immutable_model_world):
     """
-    An action whose body is only an execution boundary has no motion state chart to
-    carry its conditions as monitors, so they run as their own executables around it.
+    An action that only perceives still compiles to a motion chart, so its conditions
+    are carried by that chart rather than needing to run around it.
     """
     world, view, context = immutable_model_world
 
@@ -362,33 +373,12 @@ def test_action_without_motions_evaluates_its_conditions_around_the_body(
     plan.notify()
     executable = plan.parse()
 
-    assert [type(child) for child in executable.execution_list] == [
-        ConditionExecutable,
-        PerceptionExecutable,
-        ConditionExecutable,
+    assert type(executable) == GiskardExecutable
+    assert [type(task) for task in executable.motion_mappings.values()] == [
+        PerceptionTask
     ]
-
-
-def test_action_without_motions_drops_its_conditions_when_they_are_not_evaluated(
-    immutable_model_world,
-):
-    """
-    A context that does not evaluate conditions leaves the action's body on its own, so
-    nothing is run around it.
-    """
-    world, view, _ = immutable_model_world
-    context = Context(world, view, evaluate_conditions=False)
-
-    plan = execute_single(
-        DetectAction(DetectionTechnique.TYPES, object_sem_annotation=Milk),
-        context=context,
-    )
-    plan.notify()
-    executable = plan.parse()
-
-    assert [type(child) for child in executable.execution_list] == [
-        PerceptionExecutable
-    ]
+    assert executable.pre_condition_node
+    assert executable.post_condition_node
 
 
 # %% expansion-time pose capture

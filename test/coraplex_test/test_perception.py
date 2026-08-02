@@ -17,6 +17,7 @@ import pytest
 import rclpy
 from rclpy.action import ActionServer
 from rclpy.executors import SingleThreadedExecutor
+from rclpy.node import Node
 from typing_extensions import List, Tuple
 
 from coraplex.datastructures.enums import (
@@ -30,9 +31,11 @@ from coraplex.exceptions import (
     AmbiguousDetection,
     NothingDetected,
     PerceivedObjectNotInWorld,
+    PerceptionSourceUnavailable,
     UnidentifiedDetections,
 )
 from coraplex.perception import (
+    ROBOKUDO_QUERY_ACTION_NAME,
     Detection,
     PerceptionInterface,
     PerceptionQuery,
@@ -43,9 +46,19 @@ from coraplex.plans.factories import execute_single
 from coraplex.plans.plan_node import MotionNode
 from coraplex.robot_plans import MoveToolCenterPointMotion
 from coraplex.robot_plans.actions.core.pick_up import PickUpAction
+from coraplex.robot_plans.motions.misc import PerceptionTask
+from giskardpy.motion_statechart.context import MotionStatechartContext
+from krrood.adapters.json_serializer import from_json, to_json
+from semantic_digital_twin.adapters.world_entity_kwargs_tracker import (
+    WorldEntityWithIDKwargsTracker,
+)
+from giskardpy.motion_statechart.data_types import ObservationStateValues
+from giskardpy.motion_statechart.ros_context import RosContextExtension
+from giskardpy.motion_statechart.tasks.cartesian_tasks import CartesianPose
 from semantic_digital_twin.semantic_annotations.semantic_annotations import Milk
 from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix
 from semantic_digital_twin.spatial_types.spatial_types import Pose
+from semantic_digital_twin.world import World
 from semantic_digital_twin.world_description.geometry import BoundingBox
 
 PERCEIVED_MILK_POSITION = (2.6, 2.2, 1.05)
@@ -510,3 +523,169 @@ def test_labelled_candidates_are_narrowed_to_the_requested_type(
     detections = RoboKudoPerception(ros_node=rclpy_node).detect(query)
 
     assert [detection.class_label for detection in detections] == ["Milk"]
+
+
+# %% perception inside the motion chart
+
+
+def build_perception_task(
+    task: PerceptionTask, world: World, ros_node: Node
+) -> MotionStatechartContext:
+    """
+    Put a perception task through the build phase a motion state chart would give it.
+
+    :param task: The task to build.
+    :param world: The world the chart runs against.
+    :param ros_node: Node the task reaches a real perception pipeline through.
+    :return: The context it was built with.
+    """
+    context = MotionStatechartContext(world=world)
+    context.add_extension(RosContextExtension(ros_node))
+    task.build(context)
+    return context
+
+
+def run_perception_task(task: PerceptionTask, context: MotionStatechartContext) -> None:
+    """
+    Start a built perception task and tick it once, as its chart does.
+
+    :param task: The built task to run.
+    :param context: The context it was built with.
+    """
+    task.on_start(context)
+    assert task.on_tick(context) == ObservationStateValues.TRUE
+
+
+def test_perception_task_moves_the_detected_body(
+    immutable_model_world, whole_scene_region, rclpy_node, robokudo_query_server
+):
+    """
+    Answering the query inside the chart has to be worth as much as answering it between
+    charts: the body ends up where the pipeline saw it.
+    """
+    world, view, context = immutable_model_world
+    query = PerceptionQuery(Milk, whole_scene_region, view, world)
+    task = PerceptionTask(query=query, execution_type=ExecutionType.REAL)
+
+    run_perception_task(task, build_perception_task(task, world, rclpy_node))
+
+    np.testing.assert_allclose(
+        world.get_body_by_name("milk.stl")
+        .global_pose.to_position()
+        .to_np()
+        .flatten()[:3],
+        PERCEIVED_MILK_POSITION,
+        atol=1e-9,
+    )
+
+
+@dataclass
+class UnanswerablePerception(PerceptionInterface):
+    """
+    Source that cannot answer, standing in for any reason a query fails.
+
+    Lets the failure a task has to carry out of its background thread be chosen by the
+    test, instead of arranging the conditions that would provoke it.
+    """
+
+    failure: BaseException
+    """
+    What answering the query raises.
+    """
+
+    def detect(self, query: PerceptionQuery) -> List[Detection]:
+        raise self.failure
+
+
+def test_perception_task_reports_a_failed_query_as_itself(
+    immutable_model_world, whole_scene_region, rclpy_node
+):
+    """
+    A detection that could not be made must reach the plan as the failure it was, not as
+    a motion that merely did not finish, so failure handling can tell the reasons apart.
+
+    The failure is raised in the background thread the query is answered in, so it only
+    reaches the plan if the tick carries it there.
+    """
+    world, view, context = immutable_model_world
+    query = PerceptionQuery(Milk, whole_scene_region, view, world)
+    task = PerceptionTask(query=query, execution_type=ExecutionType.SIMULATED)
+    build_context = build_perception_task(task, world, rclpy_node)
+    task.perception_source = UnanswerablePerception(
+        PerceptionSourceUnavailable(ROBOKUDO_QUERY_ACTION_NAME)
+    )
+
+    with pytest.raises(PerceptionSourceUnavailable):
+        run_perception_task(task, build_context)
+
+
+def test_perception_task_answers_its_query_only_once(
+    immutable_model_world, whole_scene_region, rclpy_node, robokudo_query_server
+):
+    """
+    The query is expensive, so a task that is ticked again after it answered must report
+    what it already found instead of asking the pipeline a second time.
+    """
+    world, view, context = immutable_model_world
+    query = PerceptionQuery(Milk, whole_scene_region, view, world)
+    task = PerceptionTask(query=query, execution_type=ExecutionType.REAL)
+    build_context = build_perception_task(task, world, rclpy_node)
+
+    run_perception_task(task, build_context)
+    assert task.on_tick(build_context) == ObservationStateValues.TRUE
+
+    assert robokudo_query_server.received_types == ["milk"]
+
+
+def test_perception_task_survives_a_json_round_trip(
+    immutable_model_world, whole_scene_region
+):
+    """
+    On the real robot the chart is serialized to the controller, so a task that cannot
+    make the trip is a task that never runs there.
+    """
+    world, view, context = immutable_model_world
+    query = PerceptionQuery(Milk, whole_scene_region, view, world)
+    task = PerceptionTask(query=query, execution_type=ExecutionType.REAL)
+
+    tracker = WorldEntityWithIDKwargsTracker.from_world(world)
+    restored = from_json(to_json(task), world=world, **tracker.create_kwargs())
+
+    assert restored.execution_type == ExecutionType.REAL
+    assert restored.query.semantic_annotation is Milk
+    assert restored.query.robot is view
+    assert restored.query.world is world
+    assert restored.query.region.contains(
+        world.get_body_by_name("milk.stl").global_transform.to_position()
+    )
+
+
+def test_detection_in_a_chart_corrects_a_reach_planned_before_it(
+    immutable_model_world, whole_scene_region, rclpy_node, robokudo_query_server
+):
+    """
+    Why perception belongs in the chart at all: a reach compiled alongside the detection
+    still binds its goal when it starts, so it follows the object to where the detection
+    put it rather than to the pose the plan was expanded against.
+    """
+    world, view, context = immutable_model_world
+    milk_body = world.get_body_by_name("milk.stl")
+    query = PerceptionQuery(Milk, whole_scene_region, view, world)
+    detection = PerceptionTask(query=query, execution_type=ExecutionType.REAL)
+    reach = CartesianPose(
+        root_link=world.root,
+        tip_link=view.right_arm.end_effector.tool_frame,
+        goal_pose=Pose(reference_frame=milk_body),
+        name="MoveTCP",
+    )
+    build_context = build_perception_task(detection, world, rclpy_node)
+    reach.build(build_context)
+
+    run_perception_task(detection, build_context)
+    reach.on_start(build_context)
+
+    np.testing.assert_allclose(
+        reach.root_T_goal_reference_frame.to_position().evaluate().flatten()[:3],
+        PERCEIVED_MILK_POSITION,
+        atol=1e-9,
+    )

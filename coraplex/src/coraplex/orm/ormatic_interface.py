@@ -40,7 +40,6 @@ import coraplex.plans.condition_nodes
 import coraplex.plans.designator
 import coraplex.plans.executables
 import coraplex.plans.failures
-import coraplex.plans.perception_nodes
 import coraplex.plans.plan_callbacks
 import coraplex.plans.plan_entity
 import coraplex.plans.plan_node
@@ -3979,34 +3978,6 @@ class ModelChangeExecutableDAO(
     }
 
 
-class PerceptionExecutableDAO(
-    ExecutableDAO, DataAccessObject[coraplex.plans.executables.PerceptionExecutable]
-):
-    __tablename__ = "PerceptionExecutableDAO"
-
-    database_id: Mapped[builtins.int] = mapped_column(
-        ForeignKey(ExecutableDAO.database_id),
-        primary_key=True,
-        use_existing_column=True,
-    )
-
-    query_id: Mapped[int] = mapped_column(
-        ForeignKey("PerceptionQueryDAO.database_id", use_alter=True),
-        nullable=True,
-        use_existing_column=True,
-    )
-
-    query: Mapped[PerceptionQueryDAO] = relationship(
-        "PerceptionQueryDAO", uselist=False, foreign_keys=[query_id], post_update=True
-    )
-
-    __mapper_args__ = {
-        "polymorphic_identity": "PerceptionExecutableDAO",
-        "inherit_condition": database_id == ExecutableDAO.database_id,
-        "polymorphic_load": "selectin",
-    }
-
-
 class UnderspecifiedExecutableDAO(
     ExecutableDAO, DataAccessObject[coraplex.plans.executables.UnderspecifiedExecutable]
 ):
@@ -4763,32 +4734,6 @@ class ConditionNodeDAO(
 
     __mapper_args__ = {
         "polymorphic_identity": "ConditionNodeDAO",
-        "inherit_condition": database_id == PlanNodeDAO.database_id,
-        "polymorphic_load": "selectin",
-    }
-
-
-class PerceptionNodeDAO(
-    PlanNodeDAO, DataAccessObject[coraplex.plans.perception_nodes.PerceptionNode]
-):
-    __tablename__ = "PerceptionNodeDAO"
-
-    database_id: Mapped[builtins.int] = mapped_column(
-        ForeignKey(PlanNodeDAO.database_id), primary_key=True, use_existing_column=True
-    )
-
-    query_id: Mapped[int] = mapped_column(
-        ForeignKey("PerceptionQueryDAO.database_id", use_alter=True),
-        nullable=True,
-        use_existing_column=True,
-    )
-
-    query: Mapped[PerceptionQueryDAO] = relationship(
-        "PerceptionQueryDAO", uselist=False, foreign_keys=[query_id], post_update=True
-    )
-
-    __mapper_args__ = {
-        "polymorphic_identity": "PerceptionNodeDAO",
         "inherit_condition": database_id == PlanNodeDAO.database_id,
         "polymorphic_load": "selectin",
     }
@@ -9856,6 +9801,14 @@ class PerceptionTaskDAO(
 
     database_id: Mapped[builtins.int] = mapped_column(
         ForeignKey(TaskDAO.database_id), primary_key=True, use_existing_column=True
+    )
+
+    execution_type: Mapped[
+        typing.Optional[coraplex.datastructures.enums.ExecutionType]
+    ] = mapped_column(
+        krrood.ormatic.custom_types.PolymorphicEnumType,
+        nullable=True,
+        use_existing_column=True,
     )
 
     query_id: Mapped[int] = mapped_column(

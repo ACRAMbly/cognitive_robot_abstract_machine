@@ -23,7 +23,6 @@ from giskardpy.qp.qp_controller_config import QPControllerConfig
 from giskardpy.ros_executor import Ros2Executor
 from krrood.entity_query_language.factories import evaluate_condition
 from coraplex.datastructures.enums import ExecutionType
-from coraplex.perception import PerceptionInterface, PerceptionQuery
 from coraplex.exceptions import (
     MotionDidNotFinish,
     ConditionNotSatisfied,
@@ -437,31 +436,6 @@ class ModelChangeExecutable(Executable):
             # )
             self.context.world.add_connection(connection)
             # connection.origin = obj_transform
-
-
-@dataclass
-class PerceptionExecutable(Executable):
-    """
-    Executable that answers a perception query and writes the detections into the world.
-
-    The source of the detections follows the execution type, so the same plan reads the
-    world model in simulation and a perception pipeline on the real robot.
-    """
-
-    query: PerceptionQuery = field(kw_only=True)
-    """
-    What to look for and where.
-    """
-
-    def execute(self) -> None:
-        """
-        Detect and move every reported object to where it was seen.
-        """
-        source = PerceptionInterface.for_execution_type(
-            GiskardExecutable.execution_type, self.context.ros_node
-        )
-        for detection in source.detect(self.query):
-            detection.apply_to(self.context.world)
 
 
 @dataclass

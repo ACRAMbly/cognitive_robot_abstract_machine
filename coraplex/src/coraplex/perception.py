@@ -4,7 +4,11 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import timedelta
 
+from krrood.adapters.json_serializer import SubclassJSONSerializer, from_json, to_json
 from rclpy.node import Node
+from semantic_digital_twin.adapters.world_entity_kwargs_tracker import (
+    WorldEntityWithIDKwargsTracker,
+)
 from semantic_digital_twin.reasoning.predicates import visible
 from semantic_digital_twin.reasoning.queries import annotation_class_by_label
 from semantic_digital_twin.robots.robot_parts import Camera, AbstractRobot
@@ -16,7 +20,7 @@ from semantic_digital_twin.world_description.world_entity import (
     SemanticAnnotation,
     Body,
 )
-from typing_extensions import Optional, Type, List, TYPE_CHECKING
+from typing_extensions import Any, Dict, Optional, Self, Type, List, TYPE_CHECKING
 
 from coraplex.datastructures.enums import ExecutionType
 from coraplex.exceptions import (
@@ -41,7 +45,14 @@ Name of the action RoboKudo answers perception queries on.
 
 
 @dataclass
-class PerceptionQuery:
+class PerceptionQuery(SubclassJSONSerializer):
+    """
+    What to look for and where.
+
+    Travels to whichever process answers it, so the world and the robot are carried by
+    reference and resolved against the world on the receiving side.
+    """
+
     semantic_annotation: Type[SemanticAnnotation]
     """
     The semantic annotation for which to perceive.
@@ -104,6 +115,23 @@ class PerceptionQuery:
             if visible(robot_camera, body):
                 result.append(body)
         return result
+
+    def to_json(self) -> Dict[str, Any]:
+        result = super().to_json()
+        result["semantic_annotation"] = to_json(self.semantic_annotation)
+        result["region"] = to_json(self.region)
+        result["robot_id"] = to_json(self.robot.id)
+        return result
+
+    @classmethod
+    def _from_json(cls, data: Dict[str, Any], **kwargs) -> Self:
+        tracker = WorldEntityWithIDKwargsTracker.from_kwargs(kwargs)
+        return cls(
+            semantic_annotation=from_json(data["semantic_annotation"], **kwargs),
+            region=from_json(data["region"], **kwargs),
+            robot=tracker.get_world_entity_with_id(id=from_json(data["robot_id"])),
+            world=kwargs["world"],
+        )
 
 
 # %% detections
@@ -190,13 +218,13 @@ class PerceptionInterface(ABC):
 
     @staticmethod
     def for_execution_type(
-        execution_type: ExecutionType, ros_node: Optional[Node] = None
+        execution_type: Optional[ExecutionType], ros_node: Optional[Node] = None
     ) -> PerceptionInterface:
         """
         Pick the source that matches how the plan is being executed.
 
         :param execution_type: Whether the plan drives the real robot or a simulated
-            one.
+            one; None when nothing is executing the plan.
         :param ros_node: Node a real source reaches its perception pipeline through.
         :return: The source to answer queries with.
         :raises UnknownExecutionType: If the execution type has no source.
