@@ -565,6 +565,22 @@ class TestSmallWarehouseWorld:
         )
         assert np.allclose(root_T_shelf[:3, 3], [4.73156, 0.57943, 0.0])
 
+    def test_instance_has_the_size_its_meshes_declare(self, aws_warehouse_world):
+        """
+        The models draw themselves with COLLADA meshes written in centimeters, so the
+        parsed shelf must come out at the size a warehouse shelf actually has rather
+        than a hundred times that.
+        """
+        shelf = [
+            body
+            for body in aws_warehouse_world.bodies
+            if body.name.prefix == "aws_robomaker_warehouse_ShelfE_01_001"
+        ][0]
+
+        extents = shelf.collision.combined_mesh.extents
+
+        assert extents == pytest.approx([3.918, 0.880, 2.613], abs=1e-3)
+
     def test_models_are_attached_rigidly(self, aws_warehouse_world):
         """
         Every model of the warehouse is static, so none of them may float freely.
