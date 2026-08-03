@@ -139,7 +139,11 @@ class StretchArm(Arm[StretchGripper]):
     def setup_joint_states(self) -> List[JointState]:
         arm_park = JointState.from_mapping(
             name=PrefixedName("arm_park", prefix=self.name.name),
-            mapping={self._world.get_connection_by_name("joint_lift"): 0.5},
+            mapping={self._world.get_connection_by_name("joint_lift"): 0.5,
+                     self._world.get_connection_by_name("joint_arm_l3"): 0.0,
+                     self._world.get_connection_by_name("joint_arm_l2"): 0.0,
+                     self._world.get_connection_by_name("joint_arm_l1"): 0.0,
+                     self._world.get_connection_by_name("joint_arm_l0"): 0.0},
             state_type=StaticJointState.PARK,
         )
 
