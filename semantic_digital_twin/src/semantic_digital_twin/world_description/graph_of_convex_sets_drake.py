@@ -3,9 +3,16 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 import numpy as np
-from pydrake.geometry.optimization import HPolyhedron, Iris, IrisOptions, Point
+from pydrake.geometry.optimization import (
+    ConvexSet,
+    HPolyhedron,
+    Iris,
+    IrisOptions,
+    Point,
+    VPolytope,
+)
 from pydrake.planning import GcsTrajectoryOptimization
-from typing_extensions import List, Optional, Sequence, Tuple
+from typing_extensions import TYPE_CHECKING, List, Optional, Sequence, Tuple
 
 from semantic_digital_twin.exceptions import (
     PointOccupiedError,
@@ -14,15 +21,23 @@ from semantic_digital_twin.exceptions import (
 from semantic_digital_twin.semantic_annotations.semantic_annotations import (
     SemanticEnvironmentAnnotation,
 )
-from semantic_digital_twin.spatial_types import Point3
+from semantic_digital_twin.spatial_types import (
+    HomogeneousTransformationMatrix,
+    Point3,
+)
 from semantic_digital_twin.world import World
-from semantic_digital_twin.world_description.geometry import BoundingBox
+from semantic_digital_twin.world_description.geometry import Shape
 from semantic_digital_twin.world_description.graph_of_convex_sets import (
     GraphOfConvexSets,
 )
 from semantic_digital_twin.world_description.shape_collection import (
     BoundingBoxCollection,
 )
+
+if TYPE_CHECKING:
+    from semantic_digital_twin.world_description.world_entity import (
+        KinematicStructureEntity,
+    )
 
 Subgraph = GcsTrajectoryOptimization.Subgraph
 """
@@ -75,32 +90,28 @@ class IrisSeedingSettings:
     Options forwarded to every :func:`pydrake.geometry.optimization.Iris` call.
     """
 
-    def coverage_grid_seeds(
-        self, lower: np.ndarray, upper: np.ndarray
-    ) -> List[np.ndarray]:
+    def coverage_grid_seeds(self, lower: Point3, upper: Point3) -> List[Point3]:
         """
-        Build a regular grid of candidate seed points strictly inside ``[lower,
-        upper]``.
+        Build a regular grid of candidate seed points strictly inside the axis-aligned
+        box spanned by ``lower`` and ``upper``.
 
-        :param lower: Lower corner of the axis-aligned region to seed.
-        :param upper: Upper corner of the axis-aligned region to seed.
+        :param lower: Lower corner of the region to seed.
+        :param upper: Upper corner of the region to seed, in ``lower``'s reference
+            frame.
         :return: ``grid_resolution`` candidate seed points per axis.
         """
+        reference_frame = lower.reference_frame
+        lower_array = lower.to_np()[:3]
+        upper_array = upper.to_np()[:3]
         axes = [
-            np.linspace(lower[i], upper[i], self.grid_resolution + 2)[1:-1]
+            np.linspace(lower_array[i], upper_array[i], self.grid_resolution + 2)[1:-1]
             for i in range(3)
         ]
         grid = np.meshgrid(*axes, indexing="ij")
-        return [np.array(point) for point in np.stack(grid, axis=-1).reshape(-1, 3)]
-
-
-def _box_to_hpolyhedron(box: BoundingBox) -> HPolyhedron:
-    """
-    Convert a semdt axis-aligned :class:`BoundingBox` into a Drake ``HPolyhedron``,
-    expressed in the world frame.
-    """
-    lower, upper = box.to_np_bounds()
-    return HPolyhedron.MakeBox(lower, upper)
+        return [
+            Point3(*point, reference_frame=reference_frame)
+            for point in np.stack(grid, axis=-1).reshape(-1, 3)
+        ]
 
 
 def _validate_and_convert_domain(search_space: BoundingBoxCollection) -> HPolyhedron:
@@ -115,9 +126,66 @@ def _validate_and_convert_domain(search_space: BoundingBoxCollection) -> HPolyhe
     boxes = search_space.bounding_boxes
     if len(boxes) != 1:
         raise UnboundedSearchSpaceError()
-    lower, upper = boxes[0].to_np_bounds()
+    lower, upper = boxes[0].to_array_bounds()
     if not (np.all(np.isfinite(lower)) and np.all(np.isfinite(upper))):
         raise UnboundedSearchSpaceError()
+    return HPolyhedron.MakeBox(lower, upper)
+
+
+def _bloat_convex_hull_points(
+    vertices: np.ndarray, bloat_x: float, bloat_y: float
+) -> np.ndarray:
+    """
+    Expand a convex point set by ``(bloat_x, bloat_y, 0)`` via a Minkowski sum with an
+    axis-aligned box.
+
+    The sum of two convex sets is the convex hull of the pairwise sums of their
+    vertices; since a ``VPolytope``'s vertices do not have to be minimal, returning the
+    union of four shifted copies (one per corner of the thin box) is sufficient without
+    computing the hull explicitly.
+
+    :param vertices: The point set to expand.
+    :param bloat_x: Half-extent to add in x.
+    :param bloat_y: Half-extent to add in y.
+    :return: The expanded point set.
+    """
+    if bloat_x == 0.0 and bloat_y == 0.0:
+        return vertices
+    offsets = [
+        (dx, dy, 0.0) for dx in (-bloat_x, bloat_x) for dy in (-bloat_y, bloat_y)
+    ]
+    return np.concatenate([vertices + offset for offset in offsets], axis=0)
+
+
+def _shape_to_convex_set(
+    shape: Shape,
+    target_frame: KinematicStructureEntity,
+    bloat_x: float,
+    bloat_y: float,
+) -> ConvexSet:
+    """
+    Convert a collision shape into an exact convex set when its mesh is convex, falling
+    back to its axis-aligned bounding box otherwise.
+
+    :param shape: The collision shape to convert.
+    :param target_frame: The frame to express the result in.
+    :param bloat_x: Amount to expand the result in x.
+    :param bloat_y: Amount to expand the result in y.
+    :return: A ``VPolytope`` built from the shape's own mesh if it is convex, or an
+        ``HPolyhedron`` bounding box otherwise.
+    """
+    world = shape.origin.reference_frame._world
+    world_mesh = shape.mesh.copy()
+    world_mesh.apply_transform(world.transform(shape.origin, target_frame).to_np())
+
+    if world_mesh.is_convex:
+        vertices = _bloat_convex_hull_points(world_mesh.vertices, bloat_x, bloat_y)
+        return VPolytope(vertices.T)
+
+    bounding_box = shape.local_frame_bounding_box.transform_to_origin(
+        HomogeneousTransformationMatrix(reference_frame=target_frame)
+    ).bloat(bloat_x, bloat_y, 0.01)
+    lower, upper = bounding_box.to_array_bounds()
     return HPolyhedron.MakeBox(lower, upper)
 
 
@@ -142,10 +210,13 @@ class DrakeGraphOfConvexSets(GraphOfConvexSets):
     and removed rather than rebuilding the whole graph.
     """
 
-    obstacles: List[BoundingBox] = field(default_factory=list)
+    obstacles: List[ConvexSet] = field(default_factory=list)
     """
-    The obstacle bounding boxes every region was grown to avoid, expressed relative to
+    The obstacle convex sets every region was grown to avoid, expressed relative to
     ``world.root``.
+
+    Each collision shape with a convex mesh is used exactly (as a ``VPolytope``); shapes
+    with a non-convex mesh fall back to an axis-aligned bounding box (``HPolyhedron``).
     """
 
     regions: List[HPolyhedron] = field(default_factory=list)
@@ -195,9 +266,9 @@ class DrakeGraphOfConvexSets(GraphOfConvexSets):
         :param search_space: The navigable search volume; must consist of exactly one
             finite bounding box (see
             :class:`~semantic_digital_twin.exceptions.UnboundedSearchSpaceError`).
-        :param bloat_obstacles: Amount to expand each obstacle bounding box in x/y,
-            closing gaps between the individual panel boxes that make up a single
-            piece of furniture (mirrors ``GraphOfBoundingBoxes``'s bloat parameter).
+        :param bloat_obstacles: Amount to expand each obstacle in x/y, closing gaps
+            between the individual panel shapes that make up a single piece of
+            furniture (mirrors ``GraphOfBoundingBoxes``'s bloat parameter).
         :param seeding_settings: IRIS seeding strategy and options; defaults to
             :class:`IrisSeedingSettings`'s defaults.
         :param extra_seed_points: Points to seed a region from first, before the
@@ -212,27 +283,29 @@ class DrakeGraphOfConvexSets(GraphOfConvexSets):
         semantic_annotation = SemanticEnvironmentAnnotation(
             root=world.root, _world=world
         )
-        bloated_obstacles = cls._build_bloated_obstacle_collection(
-            result.search_space, semantic_annotation, bloat_obstacles=bloat_obstacles
+        obstacle_entities = cls._obstacle_entities(
+            result.search_space, semantic_annotation
         )
-        result.obstacles = list(bloated_obstacles)
-        obstacle_polyhedra = [_box_to_hpolyhedron(box) for box in result.obstacles]
+        result.obstacles = [
+            _shape_to_convex_set(shape, world.root, bloat_obstacles, bloat_obstacles)
+            for entity in obstacle_entities
+            for shape in entity.collision.shapes
+        ]
 
-        lower, upper = result.search_space.bounding_boxes[0].to_np_bounds()
-        seeds = [
-            point.to_np_in_frame(world.root) for point in extra_seed_points
-        ] + settings.coverage_grid_seeds(lower, upper)
+        lower, upper = result.search_space.bounding_boxes[0].to_point3_bounds()
+        seeds = list(extra_seed_points) + settings.coverage_grid_seeds(lower, upper)
 
         regions: List[HPolyhedron] = []
-        for seed in seeds:
+        for seed_point in seeds:
             if len(regions) >= settings.max_regions:
                 break
-            if any(obstacle.PointInSet(seed) for obstacle in obstacle_polyhedra):
+            seed = seed_point.to_array_in_frame(world.root)
+            if any(obstacle.PointInSet(seed) for obstacle in result.obstacles):
                 continue
             if any(region.PointInSet(seed) for region in regions):
                 continue
             regions.append(
-                Iris(obstacle_polyhedra, seed, domain, settings.iris_options)
+                Iris(result.obstacles, seed, domain, settings.iris_options)
             )
 
         result.regions = regions
@@ -252,13 +325,13 @@ class DrakeGraphOfConvexSets(GraphOfConvexSets):
             covers a path between them.
         :raises PointOccupiedError: If ``start`` or ``goal`` lies inside an obstacle.
         """
-        if any(obstacle.contains(start) for obstacle in self.obstacles):
-            raise PointOccupiedError(start)
-        if any(obstacle.contains(goal) for obstacle in self.obstacles):
-            raise PointOccupiedError(goal)
+        start_array = start.to_array_in_frame(self.world.root)
+        goal_array = goal.to_array_in_frame(self.world.root)
 
-        start_array = start.to_np_in_frame(self.world.root)
-        goal_array = goal.to_np_in_frame(self.world.root)
+        if any(obstacle.PointInSet(start_array) for obstacle in self.obstacles):
+            raise PointOccupiedError(start)
+        if any(obstacle.PointInSet(goal_array) for obstacle in self.obstacles):
+            raise PointOccupiedError(goal)
 
         self._clear_previous_query()
         source_subgraph = self._trajectory_optimization.AddRegions(

@@ -1163,7 +1163,7 @@ class BoundingBox:
             Bound.CLOSED,
         )
 
-    def to_np_bounds(self) -> Tuple[np.ndarray, np.ndarray]:
+    def to_array_bounds(self) -> Tuple[np.ndarray, np.ndarray]:
         """
         Express this bounding box's lower and upper corners as plain-float 3-vectors.
 
@@ -1174,6 +1174,26 @@ class BoundingBox:
         )
         upper = np.array(
             [self.x_interval.upper, self.y_interval.upper, self.z_interval.upper]
+        )
+        return lower, upper
+
+    def to_point3_bounds(self) -> Tuple[Point3, Point3]:
+        """
+        Express this bounding box's lower and upper corners as ``Point3`` instances.
+
+        :return: The ``(lower, upper)`` corners, in the same frame as ``origin``.
+        """
+        lower = Point3(
+            self.x_interval.lower,
+            self.y_interval.lower,
+            self.z_interval.lower,
+            reference_frame=self.origin.reference_frame,
+        )
+        upper = Point3(
+            self.x_interval.upper,
+            self.y_interval.upper,
+            self.z_interval.upper,
+            reference_frame=self.origin.reference_frame,
         )
         return lower, upper
 

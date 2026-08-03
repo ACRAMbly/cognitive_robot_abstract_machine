@@ -1,5 +1,7 @@
 import numpy as np
 import pytest
+import trimesh
+from pydrake.geometry.optimization import HPolyhedron, VPolytope
 
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 from semantic_digital_twin.exceptions import (
@@ -9,7 +11,12 @@ from semantic_digital_twin.exceptions import (
 from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix, Point3
 from semantic_digital_twin.world import World
 from semantic_digital_twin.world_description.connections import FixedConnection
-from semantic_digital_twin.world_description.geometry import BoundingBox, Box, Scale
+from semantic_digital_twin.world_description.geometry import (
+    BoundingBox,
+    Box,
+    Mesh,
+    Scale,
+)
 from semantic_digital_twin.world_description.graph_of_convex_sets import (
     GraphOfConvexSets,
 )
@@ -60,6 +67,47 @@ def unit_box_gcs(
     unit_box_world: World, unit_box_search_space: BoundingBoxCollection
 ) -> DrakeGraphOfConvexSets:
     return DrakeGraphOfConvexSets.from_world(unit_box_world, unit_box_search_space)
+
+
+@pytest.fixture
+def non_convex_ring_world(tmp_path) -> World:
+    """
+    A world whose single obstacle is a non-convex ring (an annulus has a hole, so its
+    convex hull is not itself), used to exercise the bounding-box fallback in
+    :func:`~semantic_digital_twin.world_description.graph_of_convex_sets_drake._shape_to_convex_set`.
+    """
+    world = World()
+    with world.modify_world():
+        root = Body(name=PrefixedName("map"))
+        world.add_kinematic_structure_entity(root)
+        obstacle = Body(name=PrefixedName("ring"))
+        world.add_connection(FixedConnection.create_with_dofs(world, root, obstacle))
+        ring_mesh = trimesh.creation.annulus(r_min=0.3, r_max=0.5, height=0.2)
+        assert not ring_mesh.is_convex
+        obstacle.collision.append(
+            Mesh.from_trimesh(mesh=ring_mesh, dirname=str(tmp_path), file_type="stl")
+        )
+    return world
+
+
+@pytest.fixture
+def non_convex_ring_search_space(non_convex_ring_world: World) -> BoundingBoxCollection:
+    return BoundingBoxCollection(
+        [
+            BoundingBox(
+                min_x=-2,
+                max_x=3,
+                min_y=-2,
+                max_y=3,
+                min_z=-0.5,
+                max_z=0.5,
+                origin=HomogeneousTransformationMatrix(
+                    reference_frame=non_convex_ring_world.root
+                ),
+            )
+        ],
+        non_convex_ring_world.root,
+    )
 
 
 class TestDrakeGraphOfConvexSets:
@@ -150,3 +198,28 @@ class TestDrakeGraphOfConvexSets:
         )
         assert gcs.region_count == 1
         assert gcs.regions[0].PointInSet(np.array([-1.9, -1.9, 0.0]))
+
+    def test_convex_obstacle_uses_an_exact_vpolytope(
+        self, unit_box_gcs: DrakeGraphOfConvexSets
+    ):
+        assert len(unit_box_gcs.obstacles) == 1
+        assert isinstance(unit_box_gcs.obstacles[0], VPolytope)
+
+    def test_non_convex_obstacle_falls_back_to_a_bounding_box(
+        self,
+        non_convex_ring_world: World,
+        non_convex_ring_search_space: BoundingBoxCollection,
+    ):
+        gcs = DrakeGraphOfConvexSets.from_world(
+            non_convex_ring_world, non_convex_ring_search_space
+        )
+        assert len(gcs.obstacles) == 1
+        assert isinstance(gcs.obstacles[0], HPolyhedron)
+        # The ring's bounding box spans roughly [-0.5, 0.5] in x/y; its own hole at the
+        # center is not carved out by the bounding-box fallback, so the center must
+        # still be treated as occupied.
+        center = Point3(0.0, 0.0, 0.0, reference_frame=non_convex_ring_world.root)
+        with pytest.raises(PointOccupiedError):
+            gcs.path_from_to(
+                center, Point3(2.5, 2.5, 0.0, reference_frame=non_convex_ring_world.root)
+            )

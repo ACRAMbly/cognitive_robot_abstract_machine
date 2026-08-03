@@ -121,6 +121,39 @@ class GraphOfConvexSets(ABC):
         )
 
     @classmethod
+    def _obstacle_entities(
+        cls,
+        search_space: BoundingBoxCollection,
+        semantic_obstacle_annotation: SemanticAnnotation,
+    ) -> List[Body]:
+        """
+        Collect the obstacle bodies to consider from a semantic annotation.
+
+        Filters out agent entities so the robot does not treat itself as an obstacle,
+        and bodies without meaningful collision geometry.
+
+        :param search_space: The search space; its reference frame is used to look up
+            the owning world.
+        :param semantic_obstacle_annotation: The annotation containing obstacle
+            entities.
+        :return: The obstacle bodies to consider.
+        """
+        world = search_space.reference_frame._world
+
+        agents = world.get_semantic_annotations_by_type(Agent)
+        agent_entities = set()
+        for agent in agents:
+            agent_entities.update(agent.kinematic_structure_entities)
+
+        return [
+            entity
+            for entity in semantic_obstacle_annotation.kinematic_structure_entities
+            if isinstance(entity, Body)
+            and entity.has_collision()
+            and entity not in agent_entities
+        ]
+
+    @classmethod
     def _build_bloated_obstacle_collection(
         cls,
         search_space: BoundingBoxCollection,
@@ -132,7 +165,6 @@ class GraphOfConvexSets(ABC):
         """
         Collect and bloat obstacle bounding boxes from semantic annotations.
 
-        Filters out agent entities so the robot does not treat itself as an obstacle.
         Applies independent bloat amounts to obstacles and walls.
 
         :param search_space: The search space; its reference frame is used as the
@@ -149,20 +181,10 @@ class GraphOfConvexSets(ABC):
             boxes.
         """
         world_root = search_space.reference_frame
-        world = world_root._world
 
-        agents = world.get_semantic_annotations_by_type(Agent)
-        agent_entities = set()
-        for agent in agents:
-            agent_entities.update(agent.kinematic_structure_entities)
-
-        entities_to_consider = [
-            entity
-            for entity in semantic_obstacle_annotation.kinematic_structure_entities
-            if isinstance(entity, Body)
-            and entity.has_collision()
-            and entity not in agent_entities
-        ]
+        entities_to_consider = cls._obstacle_entities(
+            search_space, semantic_obstacle_annotation
+        )
 
         collections = [
             entity.collision.as_bounding_box_collection_at_origin(
