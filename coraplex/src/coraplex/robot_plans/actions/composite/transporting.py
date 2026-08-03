@@ -134,7 +134,7 @@ class TransportAction(ActionDescription):
                     grasp_description=self.grasp_description,
                 ),
                 ParkArmsAction(Arms.BOTH),
-                *self._make_raise_torso_actions(),
+                MoveTorsoAction(TorsoState.HIGH),
                 self._make_navigate_action_for_placing(self.grasp_description),
                 a(PlaceAction)(
                     object_designator=self.object_designator,
@@ -146,16 +146,6 @@ class TransportAction(ActionDescription):
         )
 
         return sequential(children)
-
-    def _make_raise_torso_actions(self) -> List:
-        """
-        :return: The action raising the torso to carry the object, empty for a robot that
-            cannot raise its torso.
-        """
-        torso = self.robot.get_torso_if_specified()
-        if torso is None or not torso.has_joint_state_of_type(TorsoState.HIGH):
-            return []
-        return [MoveTorsoAction(TorsoState.HIGH)]
 
     def _make_navigate_action_for_placing(self, grasp_description: GraspDescription):
         """

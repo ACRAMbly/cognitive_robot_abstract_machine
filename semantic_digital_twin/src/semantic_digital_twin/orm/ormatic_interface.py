@@ -16,8 +16,6 @@ from sqlalchemy import (
 from sqlalchemy.orm import relationship, Mapped, mapped_column, DeclarativeBase
 
 import builtins
-import coraplex.datastructures.enums
-import coraplex.orm.model
 import enum
 import krrood.adapters.json_serializer
 import krrood.ormatic.custom_types
@@ -2166,27 +2164,6 @@ class WorldModelModificationBlockDAO_modifications_association(
         "WorldModificationDAO",
         foreign_keys=[target_worldmodificationdao_id],
         lazy="selectin",
-    )
-
-
-class PlanMappingDAO(Base, DataAccessObject[coraplex.orm.model.PlanMapping]):
-    __tablename__ = "PlanMappingDAO"
-
-    database_id: Mapped[builtins.int] = mapped_column(
-        Integer, primary_key=True, use_existing_column=True
-    )
-
-    initial_world_id: Mapped[typing.Optional[builtins.int]] = mapped_column(
-        ForeignKey("WorldMappingDAO.database_id", use_alter=True),
-        nullable=True,
-        use_existing_column=True,
-    )
-
-    initial_world: Mapped[WorldMappingDAO] = relationship(
-        "WorldMappingDAO",
-        uselist=False,
-        foreign_keys=[initial_world_id],
-        post_update=True,
     )
 
 
@@ -7916,7 +7893,8 @@ class ParsingErrorDAO(
 
 
 class MalformedPoseDAO(
-    ParsingErrorDAO, DataAccessObject[semantic_digital_twin.exceptions.MalformedPose]
+    ParsingErrorDAO,
+    DataAccessObject[semantic_digital_twin.adapters.gazebo.MalformedPose],
 ):
     __tablename__ = "MalformedPoseDAO"
 
@@ -7939,7 +7917,7 @@ class MalformedPoseDAO(
 
 class MissingRootElementDAO(
     ParsingErrorDAO,
-    DataAccessObject[semantic_digital_twin.exceptions.MissingRootElement],
+    DataAccessObject[semantic_digital_twin.adapters.gazebo.MissingRootElement],
 ):
     __tablename__ = "MissingRootElementDAO"
 
@@ -7955,6 +7933,115 @@ class MissingRootElementDAO(
 
     __mapper_args__ = {
         "polymorphic_identity": "MissingRootElementDAO",
+        "inherit_condition": database_id == ParsingErrorDAO.database_id,
+        "polymorphic_load": "selectin",
+    }
+
+
+class UnsupportedAxisReferenceDAO(
+    ParsingErrorDAO,
+    DataAccessObject[semantic_digital_twin.adapters.gazebo.UnsupportedAxisReference],
+):
+    __tablename__ = "UnsupportedAxisReferenceDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(ParsingErrorDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
+    )
+
+    joint_name: Mapped[builtins.str] = mapped_column(
+        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
+    )
+    reference: Mapped[builtins.str] = mapped_column(
+        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
+    )
+
+    __mapper_args__ = {
+        "polymorphic_identity": "UnsupportedAxisReferenceDAO",
+        "inherit_condition": database_id == ParsingErrorDAO.database_id,
+        "polymorphic_load": "selectin",
+    }
+
+
+class UnsupportedGeometryTypeDAO(
+    ParsingErrorDAO,
+    DataAccessObject[semantic_digital_twin.adapters.gazebo.UnsupportedGeometryType],
+):
+    __tablename__ = "UnsupportedGeometryTypeDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(ParsingErrorDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
+    )
+
+    geometry_type: Mapped[builtins.str] = mapped_column(
+        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
+    )
+
+    supported_types: Mapped[typing.List[builtins.str]] = mapped_column(
+        JSON, nullable=False, use_existing_column=True
+    )
+
+    __mapper_args__ = {
+        "polymorphic_identity": "UnsupportedGeometryTypeDAO",
+        "inherit_condition": database_id == ParsingErrorDAO.database_id,
+        "polymorphic_load": "selectin",
+    }
+
+
+class UnsupportedJointTypeDAO(
+    ParsingErrorDAO,
+    DataAccessObject[semantic_digital_twin.adapters.gazebo.UnsupportedJointType],
+):
+    __tablename__ = "UnsupportedJointTypeDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(ParsingErrorDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
+    )
+
+    joint_name: Mapped[builtins.str] = mapped_column(
+        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
+    )
+    joint_type: Mapped[builtins.str] = mapped_column(
+        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
+    )
+
+    supported_types: Mapped[typing.List[builtins.str]] = mapped_column(
+        JSON, nullable=False, use_existing_column=True
+    )
+
+    __mapper_args__ = {
+        "polymorphic_identity": "UnsupportedJointTypeDAO",
+        "inherit_condition": database_id == ParsingErrorDAO.database_id,
+        "polymorphic_load": "selectin",
+    }
+
+
+class UnsupportedPoseReferenceDAO(
+    ParsingErrorDAO,
+    DataAccessObject[semantic_digital_twin.adapters.gazebo.UnsupportedPoseReference],
+):
+    __tablename__ = "UnsupportedPoseReferenceDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(ParsingErrorDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
+    )
+
+    attribute: Mapped[builtins.str] = mapped_column(
+        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
+    )
+    reference: Mapped[builtins.str] = mapped_column(
+        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
+    )
+
+    __mapper_args__ = {
+        "polymorphic_identity": "UnsupportedPoseReferenceDAO",
         "inherit_condition": database_id == ParsingErrorDAO.database_id,
         "polymorphic_load": "selectin",
     }
@@ -8096,115 +8183,6 @@ class UnknownWorldModificationDAO(
     database_id: Mapped[builtins.int] = mapped_column(
         Integer, primary_key=True, use_existing_column=True
     )
-
-
-class UnsupportedAxisReferenceDAO(
-    ParsingErrorDAO,
-    DataAccessObject[semantic_digital_twin.exceptions.UnsupportedAxisReference],
-):
-    __tablename__ = "UnsupportedAxisReferenceDAO"
-
-    database_id: Mapped[builtins.int] = mapped_column(
-        ForeignKey(ParsingErrorDAO.database_id),
-        primary_key=True,
-        use_existing_column=True,
-    )
-
-    joint_name: Mapped[builtins.str] = mapped_column(
-        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
-    )
-    reference: Mapped[builtins.str] = mapped_column(
-        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
-    )
-
-    __mapper_args__ = {
-        "polymorphic_identity": "UnsupportedAxisReferenceDAO",
-        "inherit_condition": database_id == ParsingErrorDAO.database_id,
-        "polymorphic_load": "selectin",
-    }
-
-
-class UnsupportedGeometryTypeDAO(
-    ParsingErrorDAO,
-    DataAccessObject[semantic_digital_twin.exceptions.UnsupportedGeometryType],
-):
-    __tablename__ = "UnsupportedGeometryTypeDAO"
-
-    database_id: Mapped[builtins.int] = mapped_column(
-        ForeignKey(ParsingErrorDAO.database_id),
-        primary_key=True,
-        use_existing_column=True,
-    )
-
-    geometry_type: Mapped[builtins.str] = mapped_column(
-        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
-    )
-
-    supported_types: Mapped[typing.List[builtins.str]] = mapped_column(
-        JSON, nullable=False, use_existing_column=True
-    )
-
-    __mapper_args__ = {
-        "polymorphic_identity": "UnsupportedGeometryTypeDAO",
-        "inherit_condition": database_id == ParsingErrorDAO.database_id,
-        "polymorphic_load": "selectin",
-    }
-
-
-class UnsupportedJointTypeDAO(
-    ParsingErrorDAO,
-    DataAccessObject[semantic_digital_twin.exceptions.UnsupportedJointType],
-):
-    __tablename__ = "UnsupportedJointTypeDAO"
-
-    database_id: Mapped[builtins.int] = mapped_column(
-        ForeignKey(ParsingErrorDAO.database_id),
-        primary_key=True,
-        use_existing_column=True,
-    )
-
-    joint_name: Mapped[builtins.str] = mapped_column(
-        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
-    )
-    joint_type: Mapped[builtins.str] = mapped_column(
-        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
-    )
-
-    supported_types: Mapped[typing.List[builtins.str]] = mapped_column(
-        JSON, nullable=False, use_existing_column=True
-    )
-
-    __mapper_args__ = {
-        "polymorphic_identity": "UnsupportedJointTypeDAO",
-        "inherit_condition": database_id == ParsingErrorDAO.database_id,
-        "polymorphic_load": "selectin",
-    }
-
-
-class UnsupportedPoseReferenceDAO(
-    ParsingErrorDAO,
-    DataAccessObject[semantic_digital_twin.exceptions.UnsupportedPoseReference],
-):
-    __tablename__ = "UnsupportedPoseReferenceDAO"
-
-    database_id: Mapped[builtins.int] = mapped_column(
-        ForeignKey(ParsingErrorDAO.database_id),
-        primary_key=True,
-        use_existing_column=True,
-    )
-
-    attribute: Mapped[builtins.str] = mapped_column(
-        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
-    )
-    reference: Mapped[builtins.str] = mapped_column(
-        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
-    )
-
-    __mapper_args__ = {
-        "polymorphic_identity": "UnsupportedPoseReferenceDAO",
-        "inherit_condition": database_id == ParsingErrorDAO.database_id,
-        "polymorphic_load": "selectin",
-    }
 
 
 class UsageErrorDAO(
@@ -11286,30 +11264,6 @@ class PoseMappingDAO(
     __mapper_args__ = {
         "polymorphic_identity": "PoseMappingDAO",
         "inherit_condition": database_id == SpatialTypeDAO.database_id,
-        "polymorphic_load": "selectin",
-    }
-
-
-class GrasPoseMappingDAO(
-    PoseMappingDAO, DataAccessObject[coraplex.orm.model.GrasPoseMapping]
-):
-    __tablename__ = "GrasPoseMappingDAO"
-
-    database_id: Mapped[builtins.int] = mapped_column(
-        ForeignKey(PoseMappingDAO.database_id),
-        primary_key=True,
-        use_existing_column=True,
-    )
-
-    arm: Mapped[typing.Optional[coraplex.datastructures.enums.Arms]] = mapped_column(
-        krrood.ormatic.custom_types.PolymorphicEnumType,
-        nullable=True,
-        use_existing_column=True,
-    )
-
-    __mapper_args__ = {
-        "polymorphic_identity": "GrasPoseMappingDAO",
-        "inherit_condition": database_id == PoseMappingDAO.database_id,
         "polymorphic_load": "selectin",
     }
 

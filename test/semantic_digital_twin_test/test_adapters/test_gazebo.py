@@ -10,13 +10,15 @@ from semantic_digital_twin.adapters.package_resolver import (
     CompositePathResolver,
     ModelUriResolver,
 )
-from semantic_digital_twin.adapters.gazebo import GazeboParser
+from semantic_digital_twin.adapters.gazebo import (
+    GazeboParser,
+    UnsupportedJointType,
+    UnsupportedGeometryType,
+    UnsupportedPoseReference,
+    UnsupportedAxisReference,
+)
 from semantic_digital_twin.exceptions import (
     PathResolutionError,
-    UnsupportedAxisReference,
-    UnsupportedGeometryType,
-    UnsupportedJointType,
-    UnsupportedPoseReference,
 )
 from semantic_digital_twin.world_description.connections import (
     Connection6DoF,

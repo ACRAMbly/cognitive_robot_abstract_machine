@@ -1,9 +1,10 @@
-from __future__ import annotations
+from __future__ import annotations, absolute_import
 
 import logging
 import os
 import xml.etree.ElementTree as ElementTree
 from dataclasses import dataclass, field
+from typing import List
 
 from typing_extensions import ClassVar, Dict, List, Optional, Tuple, Type
 
@@ -17,14 +18,9 @@ from semantic_digital_twin.adapters.package_resolver import (
 )
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 from semantic_digital_twin.exceptions import (
-    MalformedPose,
-    MissingRootElement,
     NegativeConnectionVelocity,
     PathResolutionError,
-    UnsupportedAxisReference,
-    UnsupportedGeometryType,
-    UnsupportedJointType,
-    UnsupportedPoseReference,
+    ParsingError,
 )
 from semantic_digital_twin.spatial_types.derivatives import DerivativeMap
 from semantic_digital_twin.spatial_types.spatial_types import (
@@ -1009,3 +1005,149 @@ class GazeboParser:
         """
         text = element.findtext(name)
         return float(text) if text is not None else None
+
+
+@dataclass
+class MissingRootElement(ParsingError):
+    """
+    Raised when a description file contains none of the expected root elements.
+    """
+
+    expected_elements: List[str] = field(kw_only=True, default_factory=list)
+    """
+    The element names that were searched for.
+    """
+
+    def error_message(self) -> str:
+        return f"None of the expected root elements {', '.join(self.expected_elements)} were found."
+
+    def suggest_correction(self) -> str:
+        return ""
+
+
+@dataclass
+class MalformedPose(ParsingError):
+    """
+    Raised when a pose does not consist of a position and roll-pitch-yaw triple.
+    """
+
+    text: str = field(kw_only=True)
+    """
+    The pose text that could not be interpreted.
+    """
+
+    def error_message(self) -> str:
+        return f"Pose '{self.text}' does not contain 6 values."
+
+    def suggest_correction(self) -> str:
+        return "Write the pose as 'x y z roll pitch yaw'."
+
+
+@dataclass
+class UnsupportedJointType(ParsingError):
+    """
+    Raised when a parsed joint uses a type that has no connection counterpart.
+    """
+
+    joint_name: str = field(kw_only=True)
+    """
+    The name of the joint that could not be mapped.
+    """
+
+    joint_type: str = field(kw_only=True)
+    """
+    The joint type that is not supported.
+    """
+
+    supported_types: List[str] = field(kw_only=True, default_factory=list)
+    """
+    The joint types that can be mapped to connections.
+    """
+
+    def error_message(self) -> str:
+        return f"Joint '{self.joint_name}' has unsupported type '{self.joint_type}'."
+
+    def suggest_correction(self) -> str:
+        if not self.supported_types:
+            return ""
+        return f"Use one of the supported types: {', '.join(sorted(self.supported_types))}."
+
+
+@dataclass
+class UnsupportedGeometryType(ParsingError):
+    """
+    Raised when a parsed geometry uses a shape that has no counterpart.
+    """
+
+    geometry_type: str = field(kw_only=True)
+    """
+    The geometry type that is not supported.
+    """
+
+    supported_types: List[str] = field(kw_only=True, default_factory=list)
+    """
+    The geometry types that can be mapped to shapes.
+    """
+
+    def error_message(self) -> str:
+        return f"Unsupported geometry type '{self.geometry_type}'."
+
+    def suggest_correction(self) -> str:
+        if not self.supported_types:
+            return ""
+        return f"Use one of the supported types: {', '.join(sorted(self.supported_types))}."
+
+
+@dataclass
+class UnsupportedPoseReference(ParsingError):
+    """
+    Raised when a pose is expressed relative to a named frame.
+
+    Poses are only supported with their default reference, which is the frame of the
+    element the pose belongs to.
+    """
+
+    attribute: str = field(kw_only=True)
+    """
+    The attribute carrying the frame reference, ``frame`` or ``relative_to``.
+    """
+
+    reference: str = field(kw_only=True)
+    """
+    The referenced frame.
+    """
+
+    def error_message(self) -> str:
+        return (
+            f"Pose is expressed relative to frame '{self.reference}' via "
+            f"'{self.attribute}', but only default frame semantics are supported."
+        )
+
+    def suggest_correction(self) -> str:
+        return f"Express the pose in its default frame and drop the '{self.attribute}' attribute."
+
+
+@dataclass
+class UnsupportedAxisReference(ParsingError):
+    """
+    Raised when a joint axis is expressed in a frame other than the joint frame.
+    """
+
+    joint_name: str = field(kw_only=True)
+    """
+    The name of the joint whose axis could not be interpreted.
+    """
+
+    reference: str = field(kw_only=True)
+    """
+    The frame the axis is expressed in.
+    """
+
+    def error_message(self) -> str:
+        return (
+            f"Axis of joint '{self.joint_name}' is expressed in '{self.reference}', "
+            f"but only the joint frame is supported."
+        )
+
+    def suggest_correction(self) -> str:
+        return "Express the axis in the joint frame."

@@ -689,67 +689,6 @@ def test_transport(mutable_multiple_robot_apartment, rclpy_node):
     plan.plan.validate()
 
 
-def expand_transport_plan(world, context):
-    """
-    :param world: The world holding the object to transport.
-    :param context: The context the plan is built in.
-    :return: The expanded plan of transporting the milk.
-    """
-    root = sequential(
-        [
-            TransportAction(
-                object_designator=world.get_body_by_name("milk.stl"),
-                target_location=Pose(
-                    Point3.from_iterable([3.1, 2.2, 0.95]),
-                    Quaternion.from_iterable([0.0, 0.0, 1.0, 0.0]),
-                    reference_frame=world.root,
-                ),
-                arm=Arms.RIGHT,
-            )
-        ],
-        context,
-    )
-    root.notify()
-    return root.plan
-
-
-def test_transport_raises_the_torso_when_the_robot_declares_the_state(
-    mutable_multiple_robot_apartment,
-):
-    """
-    A robot whose torso can be raised gets that step, which is what puts its arms at the
-    height a transport needs.
-    """
-    world, robot, context = mutable_multiple_robot_apartment
-
-    plan = expand_transport_plan(world, context)
-
-    assert plan.get_nodes_by_designator_type(MoveTorsoAction)
-
-
-def test_transport_leaves_the_torso_alone_when_the_robot_lacks_the_state(
-    mutable_multiple_robot_apartment,
-):
-    """
-    A robot whose torso declares no raised state is transported without that step.
-
-    A humanoid's torso height comes from its legs rather than its waist, so such a robot
-    has no torso state to command and must not be asked for one.
-    """
-    world, robot, context = mutable_multiple_robot_apartment
-    torso = robot.get_torso()
-    with world.modify_world():
-        torso.joint_states = [
-            joint_state
-            for joint_state in torso.joint_states
-            if joint_state.state_type != TorsoState.HIGH
-        ]
-
-    plan = expand_transport_plan(world, context)
-
-    assert not plan.get_nodes_by_designator_type(MoveTorsoAction)
-
-
 def test_move_to_reach(immutable_multiple_robot_apartment, rclpy_node):
     world, robot, context = immutable_multiple_robot_apartment
     move_to_reach = MoveToReach(
