@@ -1383,8 +1383,9 @@ class VideoRecordingError(MultiSimError):
 @dataclass
 class VideoRecordingAlreadyStartedError(VideoRecordingError):
     """
-    Raised when :meth:`~semantic_digital_twin.adapters.mujoco_video_recording.MujocoVideoRecorder.start` is
-    called on a recorder that is already recording.
+    Raised when
+    :meth:`~semantic_digital_twin.adapters.mujoco_video_recording.MujocoVideoRecorder.start`
+    is called on a recorder that is already recording.
     """
 
     world: World
@@ -1402,8 +1403,9 @@ class VideoRecordingAlreadyStartedError(VideoRecordingError):
 @dataclass
 class VideoRecordingNotStartedError(VideoRecordingError):
     """
-    Raised when :meth:`~semantic_digital_twin.adapters.mujoco_video_recording.MujocoVideoRecorder.stop` is
-    called on a recorder that was never started.
+    Raised when
+    :meth:`~semantic_digital_twin.adapters.mujoco_video_recording.MujocoVideoRecorder.stop`
+    is called on a recorder that was never started.
     """
 
     world: World
@@ -1531,3 +1533,26 @@ class ExerciseVerificationFailed(UsageError):
 
     def suggest_correction(self) -> str:
         return "revisit the task description of this exercise and adjust your solution."
+
+
+@dataclass
+class UnboundedSearchSpaceError(UsageError):
+    """
+    Raised when a
+    :class:`~semantic_digital_twin.world_description.graph_of_convex_sets_drake.DrakeGraphOfConvexSets`
+    is built with a search space that is not a single, finite bounding box.
+
+    IRIS grows regions within a bounded convex domain; unlike
+    :class:`~semantic_digital_twin.world_description.graph_of_convex_sets.GraphOfBoundingBoxes`,
+    which can decompose an unbounded or multi-box search space via the product algebra,
+    Drake's ``Iris`` function requires exactly one finite ``HPolyhedron`` domain.
+    """
+
+    def error_message(self) -> str:
+        return (
+            "DrakeGraphOfConvexSets requires a search space consisting of exactly one "
+            "finite bounding box."
+        )
+
+    def suggest_correction(self) -> str:
+        return "pass an explicit, finite search_space with a single bounding box."

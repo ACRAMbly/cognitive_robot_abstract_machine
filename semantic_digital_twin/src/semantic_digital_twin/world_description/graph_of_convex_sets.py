@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import time
+from abc import ABC, abstractmethod
 from functools import reduce
 from operator import or_
 
@@ -53,12 +54,25 @@ from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 logger = logging.getLogger(__name__)
 
 
-class GraphOfConvexSets:
+class GraphOfConvexSets(ABC):
     """
-    A graph that represents the connectivity between convex sets.
+    Abstract base for planning graphs whose nodes are convex sets of free space.
 
-    Every node in the graph is a convex set, represented by a bounding box. Every edge
-    in the graph represents the connectivity between two convex sets.
+    A graph of convex sets (GCS) represents the navigable free space of a world as a
+    collection of convex regions, connected by edges wherever two regions are adjacent
+    or overlapping. Concrete subclasses differ in how they represent those regions and
+    how they solve a shortest-path query over them: :class:`GraphOfBoundingBoxes`
+    decomposes free space into an exact, exhaustive partition of axis-aligned boxes via
+    the `random_events` product algebra; :class:`~semantic_digital_twin.world_description.graph_of_convex_sets_drake.DrakeGraphOfConvexSets`
+    covers free space with a handful of larger, IRIS-grown convex regions and solves
+    with Drake's `GcsTrajectoryOptimization`.
+
+    You can read more about GCS here: https://arxiv.org/abs/2101.11565.
+    """
+
+    world: World
+    """
+    The world that the graph is based on.
     """
 
     search_space: BoundingBoxCollection
@@ -66,6 +80,144 @@ class GraphOfConvexSets:
     The bounding box of the search space.
 
     Defaults to the entire three dimensional space.
+    """
+
+    def __init__(
+        self, world: World, search_space: Optional[BoundingBoxCollection] = None
+    ):
+        self.world = world
+        self.search_space = self._make_search_space(world, search_space)
+
+    @abstractmethod
+    def path_from_to(self, start: Point3, goal: Point3) -> Optional[List[Point3]]:
+        """
+        Calculate a connected path from a start pose to a goal pose.
+
+        :param start: The start pose.
+        :param goal: The goal pose.
+        :return: The path as a sequence of points to navigate to, or None if no path
+            exists.
+        :raises PointOccupiedError: If ``start`` or ``goal`` lies inside an obstacle.
+        """
+        raise NotImplementedError
+
+    @classmethod
+    def _make_search_space(
+        cls, world: World, search_space: Optional[BoundingBoxCollection] = None
+    ) -> BoundingBoxCollection:
+        """
+        Create the default search space if it is not given.
+        """
+        if search_space is None:
+            search_space = BoundingBoxCollection(
+                shapes=[
+                    BoundingBox(
+                        min_x=-np.inf,
+                        min_y=-np.inf,
+                        min_z=-np.inf,
+                        max_x=np.inf,
+                        max_y=np.inf,
+                        max_z=np.inf,
+                        origin=HomogeneousTransformationMatrix(
+                            reference_frame=world.root
+                        ),
+                    )
+                ],
+                reference_frame=world.root,
+            )
+        return search_space
+
+    @classmethod
+    def _build_bloated_obstacle_collection(
+        cls,
+        search_space: BoundingBoxCollection,
+        semantic_obstacle_annotation: SemanticAnnotation,
+        semantic_wall_annotation: Optional[SemanticAnnotation] = None,
+        bloat_obstacles: float = 0.0,
+        bloat_walls: float = 0.0,
+    ) -> BoundingBoxCollection:
+        """
+        Collect and bloat obstacle bounding boxes from semantic annotations.
+
+        Filters out agent entities so the robot does not treat itself as an obstacle.
+        Applies independent bloat amounts to obstacles and walls.
+
+        :param search_space: The search space; its reference frame is used as the
+            origin.
+        :param semantic_obstacle_annotation: The annotation containing obstacle
+            entities.
+        :param semantic_wall_annotation: An optional annotation containing wall
+            entities.
+        :param bloat_obstacles: Amount to expand each obstacle bounding box
+            symmetrically in x and y.
+        :param bloat_walls: Amount to expand wall bounding boxes in their thinner
+            dimension.
+        :return: A BoundingBoxCollection of the bloated obstacle and wall bounding
+            boxes.
+        """
+        world_root = search_space.reference_frame
+        world = world_root._world
+
+        agents = world.get_semantic_annotations_by_type(Agent)
+        agent_entities = set()
+        for agent in agents:
+            agent_entities.update(agent.kinematic_structure_entities)
+
+        entities_to_consider = [
+            entity
+            for entity in semantic_obstacle_annotation.kinematic_structure_entities
+            if isinstance(entity, Body)
+            and entity.has_collision()
+            and entity not in agent_entities
+        ]
+
+        collections = [
+            entity.collision.as_bounding_box_collection_at_origin(
+                HomogeneousTransformationMatrix(reference_frame=world_root)
+            )
+            for entity in entities_to_consider
+        ]
+
+        obstacle_bounding_boxes = BoundingBoxCollection([], world_root)
+        for bounding_box_collection in collections:
+            obstacle_bounding_boxes = obstacle_bounding_boxes.merge(
+                bounding_box_collection
+            )
+
+        bloated_obstacles = BoundingBoxCollection(
+            [
+                bounding_box.bloat(bloat_obstacles, bloat_obstacles, 0.01)
+                for bounding_box in obstacle_bounding_boxes
+            ],
+            world_root,
+        )
+
+        if semantic_wall_annotation is not None:
+            bloated_walls: BoundingBoxCollection = BoundingBoxCollection(
+                [
+                    (
+                        bounding_box.bloat(bloat_walls, 0, 0.01)
+                        if bounding_box.width > bounding_box.depth
+                        else bounding_box.bloat(0, bloat_walls, 0.01)
+                    )
+                    for bounding_box in semantic_wall_annotation.as_bounding_box_collection_at_origin(
+                        HomogeneousTransformationMatrix(reference_frame=world_root)
+                    )
+                ],
+                world_root,
+            )
+            bloated_obstacles.merge(bloated_walls)
+
+        return bloated_obstacles
+
+
+class GraphOfBoundingBoxes(GraphOfConvexSets):
+    """
+    A graph of convex sets whose nodes are axis-aligned bounding boxes.
+
+    Free space is decomposed into an exact, exhaustive partition of boxes via the
+    `random_events` product algebra (obstacles subtracted from the search space). Every
+    node is a box; every edge represents the adjacency between two boxes.
     """
 
     graph: rx.PyGraph[BoundingBox]
@@ -78,18 +230,12 @@ class GraphOfConvexSets:
     A mapping from bounding boxes to their indices in the graph.
     """
 
-    world: World
-    """
-    The world that the graph is based on.
-    """
-
     def __init__(
         self, world: World, search_space: Optional[BoundingBoxCollection] = None
     ):
-        self.search_space = self._make_search_space(world, search_space)
+        super().__init__(world, search_space)
         self.graph = rx.PyGraph(multigraph=False)
         self.box_to_index_map = {}
-        self.world = world
 
     def create_subgraph(self, nodes: Sequence[int]) -> Self:
         """
@@ -98,7 +244,7 @@ class GraphOfConvexSets:
         :param nodes: The nodes to include in the subgraph.
         :return: The subgraph.
         """
-        subgraph = GraphOfConvexSets(self.world, self.search_space)
+        subgraph = GraphOfBoundingBoxes(self.world, self.search_space)
         subgraph.graph = self.graph.subgraph(nodes)
         subgraph.box_to_index_map = {
             box: index for box, index in self.box_to_index_map.items() if index in nodes
@@ -232,6 +378,13 @@ class GraphOfConvexSets:
         """
         Calculate a connected path from a start pose to a goal pose.
 
+        .. note::
+            Uses a single-source Dijkstra search (unweighted, i.e. hop-count shortest
+            path) rather than enumerating all shortest paths and picking the first one.
+            Free-space decompositions with thousands of nodes routinely have an
+            exponential number of equally-short paths, which makes enumerating all of
+            them intractable; finding just one is not.
+
         :param start: The start pose.
         :param goal: The goal pose.
         :return: The path as a sequence of points to navigate to or None if no path
@@ -250,18 +403,16 @@ class GraphOfConvexSets:
         if start_node == goal_node:
             return [start, goal]
 
-        # get the shortest path (perhaps replace with a*?)
-        paths = rx.all_shortest_paths(
-            self.graph,
-            self.box_to_index_map[start_node],
-            self.box_to_index_map[goal_node],
-        )
+        start_index = self.box_to_index_map[start_node]
+        goal_index = self.box_to_index_map[goal_node]
+
+        paths = rx.dijkstra_shortest_paths(self.graph, start_index, target=goal_index)
 
         # if it is not possible to find a path
-        if len(paths) == 0:
+        if goal_index not in paths:
             return None
 
-        path = paths[0]
+        path = paths[goal_index]
 
         # build the path
         result = [start]
@@ -276,32 +427,6 @@ class GraphOfConvexSets:
 
         result.append(goal)
         return result
-
-    @classmethod
-    def _make_search_space(
-        cls, world: World, search_space: Optional[BoundingBoxCollection] = None
-    ):
-        """
-        Create the default search space if it is not given.
-        """
-        if search_space is None:
-            search_space = BoundingBoxCollection(
-                shapes=[
-                    BoundingBox(
-                        min_x=-np.inf,
-                        min_y=-np.inf,
-                        min_z=-np.inf,
-                        max_x=np.inf,
-                        max_y=np.inf,
-                        max_z=np.inf,
-                        origin=HomogeneousTransformationMatrix(
-                            reference_frame=world.root
-                        ),
-                    )
-                ],
-                reference_frame=world.root,
-            )
-        return search_space
 
     @classmethod
     def obstacles_from_semantic_annotations(
@@ -337,89 +462,6 @@ class GraphOfConvexSets:
         return cls.obstacles_from_bounding_boxes(
             bloated_obstacles, search_space.event, keep_z
         )
-
-    @classmethod
-    def _build_bloated_obstacle_collection(
-        cls,
-        search_space: BoundingBoxCollection,
-        semantic_obstacle_annotation: SemanticAnnotation,
-        semantic_wall_annotation: Optional[SemanticAnnotation] = None,
-        bloat_obstacles: float = 0.0,
-        bloat_walls: float = 0.0,
-    ) -> BoundingBoxCollection:
-        """
-        Collect and bloat obstacle bounding boxes from semantic annotations.
-
-        Filters out agent entities so the robot does not treat itself as an obstacle.
-        Applies independent bloat amounts to obstacles and walls.
-
-        :param search_space: The search space; its reference frame is used as the
-            origin.
-        :param semantic_obstacle_annotation: The annotation containing obstacle
-            entities.
-        :param semantic_wall_annotation: An optional annotation containing wall
-            entities.
-        :param bloat_obstacles: Amount to expand each obstacle bounding box
-            symmetrically in x and y.
-        :param bloat_walls: Amount to expand wall bounding boxes in their thinner
-            dimension.
-        :return: A BoundingBoxCollection of the bloated obstacle and wall bounding
-            boxes.
-        """
-        world_root = search_space.reference_frame
-        world = world_root._world
-
-        agents = world.get_semantic_annotations_by_type(Agent)
-        agent_entities = set()
-        for agent in agents:
-            agent_entities.update(agent.kinematic_structure_entities)
-
-        entities_to_consider = [
-            entity
-            for entity in semantic_obstacle_annotation.kinematic_structure_entities
-            if isinstance(entity, Body)
-            and entity.has_collision()
-            and entity not in agent_entities
-        ]
-
-        collections = [
-            entity.collision.as_bounding_box_collection_at_origin(
-                HomogeneousTransformationMatrix(reference_frame=world_root)
-            )
-            for entity in entities_to_consider
-        ]
-
-        obstacle_bounding_boxes = BoundingBoxCollection([], world_root)
-        for bounding_box_collection in collections:
-            obstacle_bounding_boxes = obstacle_bounding_boxes.merge(
-                bounding_box_collection
-            )
-
-        bloated_obstacles = BoundingBoxCollection(
-            [
-                bounding_box.bloat(bloat_obstacles, bloat_obstacles, 0.01)
-                for bounding_box in obstacle_bounding_boxes
-            ],
-            world_root,
-        )
-
-        if semantic_wall_annotation is not None:
-            bloated_walls: BoundingBoxCollection = BoundingBoxCollection(
-                [
-                    (
-                        bounding_box.bloat(bloat_walls, 0, 0.01)
-                        if bounding_box.width > bounding_box.depth
-                        else bounding_box.bloat(0, bloat_walls, 0.01)
-                    )
-                    for bounding_box in semantic_wall_annotation.as_bounding_box_collection_at_origin(
-                        HomogeneousTransformationMatrix(reference_frame=world_root)
-                    )
-                ],
-                world_root,
-            )
-            bloated_obstacles.merge(bloated_walls)
-
-        return bloated_obstacles
 
     @classmethod
     def obstacles_from_bounding_boxes(
@@ -811,7 +853,7 @@ def navigation_map_at_target(
     search_range_y: float = 2.0,
     max_height: float = 2.0,
     bloat_obstacles: float = 0.02,
-) -> GraphOfConvexSets:
+) -> GraphOfBoundingBoxes:
     """
     Create a navigation map around the target.
 
@@ -843,7 +885,7 @@ def navigation_map_at_target(
         ),
     )
 
-    gcs = GraphOfConvexSets.navigation_map_from_world(
+    gcs = GraphOfBoundingBoxes.navigation_map_from_world(
         world=target._world, search_space=search_space, bloat_obstacles=bloat_obstacles
     )
     return gcs
