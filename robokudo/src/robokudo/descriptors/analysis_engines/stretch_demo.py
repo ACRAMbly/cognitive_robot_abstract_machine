@@ -1,9 +1,9 @@
 """
 Analysis engine answering perception queries for the Stretch robot.
 
-Localizes objects standing on the dominant plane in view of the Stretch's RealSense and
-reports their poses in response to a
-:class:`~robokudo_msgs.action.Query`, so a plan can correct an object's pose before
+Localizes objects standing on the dominant plane within the apartment demo's second
+shelf layer, in view of the Stretch's RealSense, and reports their poses in response to
+a :class:`~robokudo_msgs.action.Query`, so a plan can correct an object's pose before
 grasping it.
 
 .. note::
@@ -42,6 +42,23 @@ applies unchanged. Pass overrides to
 if a particular robot publishes elsewhere.
 """
 
+TARGET_SHELF_LAYER_MIN_WORLD_Z = 0.4565
+"""
+Lower world-frame height bound of the crop, in metres.
+
+The apartment demo's shelf has layers at world heights 0.283m, 0.63m, 1.265m and 1.613m
+(see ``experiments.real_stretch_apartment_demo.demo``); this engine targets the second
+layer at 0.63m. The bound is the midpoint between that layer and the one below it, so
+the crop keeps whatever sits on the target layer while excluding its neighbours.
+"""
+
+TARGET_SHELF_LAYER_MAX_WORLD_Z = 0.9475
+"""
+Upper world-frame height bound of the crop, in metres.
+
+The midpoint between the target layer (0.63m) and the one above it (1.265m).
+"""
+
 
 class AnalysisEngine(AnalysisEngineInterface):
     """
@@ -70,6 +87,16 @@ class AnalysisEngine(AnalysisEngineInterface):
             CAMERA_CONFIG_NAME
         )
 
+        # Isolate the target shelf layer before clustering: without this the crop keeps
+        # its class defaults (an effectively unbounded height range), so the camera's
+        # wide RealSense field of view also picks up the other shelf layers, and the
+        # query answers with an untyped candidate per layer instead of just the one
+        # this engine is meant to find.
+        crop_descriptor = PointcloudCropAnnotator.Descriptor()
+        crop_descriptor.parameters.relative_to_world = True
+        crop_descriptor.parameters.min_z = TARGET_SHELF_LAYER_MIN_WORLD_Z
+        crop_descriptor.parameters.max_z = TARGET_SHELF_LAYER_MAX_WORLD_Z
+
         pipeline = Pipeline("StretchPipeline")
         pipeline.add_children(
             [
@@ -77,7 +104,7 @@ class AnalysisEngine(AnalysisEngineInterface):
                 QueryAnnotator(),
                 CollectionReaderAnnotator(descriptor=camera_descriptor),
                 ImagePreprocessorAnnotator("ImagePreprocessor"),
-                PointcloudCropAnnotator(),
+                PointcloudCropAnnotator(descriptor=crop_descriptor),
                 PlaneAnnotator(),
                 PointCloudClusterExtractor(),
                 ClusterPoseBBAnnotator(),
