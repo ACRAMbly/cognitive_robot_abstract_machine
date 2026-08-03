@@ -372,7 +372,15 @@ class StretchApartmentDemonstration(RobotDemonstration):
                 # Correct the cereal's pose before grasping it. The plan is identical in
                 # simulation and on the real robot; only the source of the detections
                 # differs, so the grasp is planned against a perceived pose either way.
-                DetectAction(DetectionTechnique.TYPES, object_sem_annotation=CheezeIt),
+                # Orientation is not trusted yet: stretch_demo's pose estimate comes from
+                # a cv2.minAreaRect fit on the object's 2D footprint, which is only
+                # stable for a footprint that is clearly elongated and fully in view --
+                # noise or partial occlusion can flip its reported angle by 90 degrees.
+                DetectAction(
+                    DetectionTechnique.TYPES,
+                    object_sem_annotation=CheezeIt,
+                    trust_detected_orientation=False,
+                ),
                 PickUpAction(cereal_body, Arms.LEFT, grasp_description),
                 ParkArmsAction(Arms.BOTH),
                 NavigateAction(

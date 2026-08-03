@@ -9,6 +9,7 @@ applying a detection moves the annotated body.
 
 from __future__ import annotations
 
+import inspect
 import json
 import threading
 from copy import deepcopy
@@ -178,6 +179,71 @@ def test_several_annotations_on_one_body_are_not_ambiguous(mutable_model_world):
         milk_body.global_pose.to_position().to_np().flatten()[:3],
         PERCEIVED_MILK_POSITION,
         atol=1e-9,
+    )
+
+
+# %% distrusting a source's orientation
+
+
+def test_untrusted_orientation_still_moves_the_body_to_the_perceived_position(
+    immutable_model_world,
+):
+    """
+    With ``trust_orientation=False``, the position still comes from the detection: only
+    the orientation is left alone.
+    """
+    world, view, context = immutable_model_world
+    milk_body = world.get_body_by_name("milk.stl")
+    perceived_pose = Pose.from_xyz_rpy(
+        *PERCEIVED_MILK_POSITION, yaw=np.pi / 2, reference_frame=world.root
+    )
+
+    Detection(class_label="Milk", pose=perceived_pose).apply_to(
+        world, trust_orientation=False
+    )
+
+    np.testing.assert_allclose(
+        milk_body.global_pose.to_position().to_np().flatten()[:3],
+        PERCEIVED_MILK_POSITION,
+        atol=1e-9,
+    )
+
+
+def test_untrusted_orientation_keeps_the_bodys_existing_orientation(
+    immutable_model_world,
+):
+    """
+    The detected rotation (a 90 degree yaw here) must not reach the body: it keeps
+    whatever rotation it already had before the detection was applied.
+    """
+    world, view, context = immutable_model_world
+    milk_body = world.get_body_by_name("milk.stl")
+    orientation_before_detection = (
+        milk_body.parent_connection.origin.to_rotation_matrix().to_np()
+    )
+    perceived_pose = Pose.from_xyz_rpy(
+        *PERCEIVED_MILK_POSITION, yaw=np.pi / 2, reference_frame=world.root
+    )
+
+    Detection(class_label="Milk", pose=perceived_pose).apply_to(
+        world, trust_orientation=False
+    )
+
+    np.testing.assert_allclose(
+        milk_body.parent_connection.origin.to_rotation_matrix().to_np(),
+        orientation_before_detection,
+        atol=1e-9,
+    )
+
+
+def test_trusting_orientation_is_the_default():
+    """
+    Existing callers of ``apply_to`` must keep getting the detected orientation applied
+    unless they explicitly opt out.
+    """
+    assert (
+        inspect.signature(Detection.apply_to).parameters["trust_orientation"].default
+        is True
     )
 
 

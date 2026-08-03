@@ -2,10 +2,16 @@
 Tests for the Stretch apartment demo's perception pipeline configuration.
 """
 
+import numpy as np
+
 from robokudo.annotators.pointcloud_crop import PointcloudCropAnnotator
 from robokudo.descriptors.analysis_engines.stretch_demo import (
     TARGET_SHELF_LAYER_MAX_WORLD_Z,
     TARGET_SHELF_LAYER_MIN_WORLD_Z,
+    TARGET_SHELF_MAX_WORLD_X,
+    TARGET_SHELF_MAX_WORLD_Y,
+    TARGET_SHELF_MIN_WORLD_X,
+    TARGET_SHELF_MIN_WORLD_Y,
     AnalysisEngine,
 )
 from test.robokudo_test.test_analysis_engine_query_composition import (
@@ -28,6 +34,10 @@ def test_pointcloud_crop_is_narrowed_to_the_target_shelf_layer():
     parameters = crop_annotator.descriptor.parameters
 
     assert parameters.relative_to_world is True
+    assert parameters.min_x == TARGET_SHELF_MIN_WORLD_X
+    assert parameters.max_x == TARGET_SHELF_MAX_WORLD_X
+    assert parameters.min_y == TARGET_SHELF_MIN_WORLD_Y
+    assert parameters.max_y == TARGET_SHELF_MAX_WORLD_Y
     assert parameters.min_z == TARGET_SHELF_LAYER_MIN_WORLD_Z
     assert parameters.max_z == TARGET_SHELF_LAYER_MAX_WORLD_Z
 
@@ -49,3 +59,39 @@ def test_target_shelf_layer_bounds_are_the_midpoints_to_its_neighbours():
         TARGET_SHELF_LAYER_MAX_WORLD_Z
         == (target_layer_height + shelf_layer_heights[2]) / 2
     )
+
+
+def shelf_world_footprint_corners() -> np.ndarray:
+    """
+    The shelf's four outer-footprint corners in world coordinates.
+
+    Reproduces the placement in ``experiments.real_stretch_apartment_demo.demo``: a
+    0.305m x 0.85m footprint centred at world (0.88, -0.17) with a -90 degree yaw.
+    """
+    center = np.array([0.455 + 0.85 / 2, -0.17])
+    yaw = -np.pi / 2
+    local_x_extent, local_y_extent = 0.305, 0.85
+    cos_yaw, sin_yaw = np.cos(yaw), np.sin(yaw)
+    local_x_axis_in_world = np.array([cos_yaw, sin_yaw]) * (local_x_extent / 2)
+    local_y_axis_in_world = np.array([-sin_yaw, cos_yaw]) * (local_y_extent / 2)
+    return np.array(
+        [
+            center + sign_x * local_x_axis_in_world + sign_y * local_y_axis_in_world
+            for sign_x in (-1, 1)
+            for sign_y in (-1, 1)
+        ]
+    )
+
+
+def test_shelf_lateral_bounds_contain_the_shelfs_actual_world_footprint():
+    """
+    The lateral crop bounds must not clip the shelf itself: pinned against the shelf's
+    real placement rather than duplicating the literal numbers a second time, so a
+    change to the shelf's position in the apartment demo is caught here too.
+    """
+    corners = shelf_world_footprint_corners()
+
+    assert TARGET_SHELF_MIN_WORLD_X < corners[:, 0].min()
+    assert TARGET_SHELF_MAX_WORLD_X > corners[:, 0].max()
+    assert TARGET_SHELF_MIN_WORLD_Y < corners[:, 1].min()
+    assert TARGET_SHELF_MAX_WORLD_Y > corners[:, 1].max()

@@ -59,6 +59,21 @@ Upper world-frame height bound of the crop, in metres.
 The midpoint between the target layer (0.63m) and the one above it (1.265m).
 """
 
+TARGET_SHELF_MIN_WORLD_X = 0.4
+TARGET_SHELF_MAX_WORLD_X = 1.35
+TARGET_SHELF_MIN_WORLD_Y = -0.35
+TARGET_SHELF_MAX_WORLD_Y = 0.05
+"""
+World-frame lateral bounds of the crop, in metres.
+
+The shelf (``experiments.real_stretch_apartment_demo.demo``) is a 0.305m x 0.85m
+footprint centred at world (0.88, -0.17) with a -90 degree yaw, which rotates its outer
+footprint to world X in [0.455, 1.305] and world Y in [-0.3225, -0.0175]. These bounds
+add roughly 5cm of margin on every side of that footprint, since the height bound alone
+left the shelf's own case (side walls, the layer's front lip) and, without a lateral
+bound at all, the rest of the room in view as further untyped candidates.
+"""
+
 
 class AnalysisEngine(AnalysisEngineInterface):
     """
@@ -94,6 +109,10 @@ class AnalysisEngine(AnalysisEngineInterface):
         # this engine is meant to find.
         crop_descriptor = PointcloudCropAnnotator.Descriptor()
         crop_descriptor.parameters.relative_to_world = True
+        crop_descriptor.parameters.min_x = TARGET_SHELF_MIN_WORLD_X
+        crop_descriptor.parameters.max_x = TARGET_SHELF_MAX_WORLD_X
+        crop_descriptor.parameters.min_y = TARGET_SHELF_MIN_WORLD_Y
+        crop_descriptor.parameters.max_y = TARGET_SHELF_MAX_WORLD_Y
         crop_descriptor.parameters.min_z = TARGET_SHELF_LAYER_MIN_WORLD_Z
         crop_descriptor.parameters.max_z = TARGET_SHELF_LAYER_MAX_WORLD_Z
 

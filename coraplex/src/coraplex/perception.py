@@ -13,6 +13,7 @@ from semantic_digital_twin.reasoning.predicates import visible
 from semantic_digital_twin.reasoning.queries import annotation_class_by_label
 from semantic_digital_twin.robots.robot_parts import Camera, AbstractRobot
 from semantic_digital_twin.semantic_annotations.mixins import IsPerceivable
+from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix
 from semantic_digital_twin.spatial_types.spatial_types import Pose
 from semantic_digital_twin.world import World
 from semantic_digital_twin.world_description.geometry import BoundingBox
@@ -73,6 +74,14 @@ class PerceptionQuery(SubclassJSONSerializer):
     The world in which the object should be detected.
     """
 
+    trust_detected_orientation: bool = True
+    """
+    Whether to also apply the perception source's detected orientation.
+
+    When False, only the detected position is applied to the world; the object's
+    existing orientation is kept. See :meth:`Detection.apply_to`.
+    """
+
     def from_world(self) -> List[Body]:
         """
         Answer this query from the world model alone.
@@ -121,6 +130,7 @@ class PerceptionQuery(SubclassJSONSerializer):
         result["semantic_annotation"] = to_json(self.semantic_annotation)
         result["region"] = to_json(self.region)
         result["robot_id"] = to_json(self.robot.id)
+        result["trust_detected_orientation"] = self.trust_detected_orientation
         return result
 
     @classmethod
@@ -131,6 +141,7 @@ class PerceptionQuery(SubclassJSONSerializer):
             region=from_json(data["region"], **kwargs),
             robot=tracker.get_world_entity_with_id(id=from_json(data["robot_id"])),
             world=kwargs["world"],
+            trust_detected_orientation=data.get("trust_detected_orientation", True),
         )
 
 
@@ -153,12 +164,18 @@ class Detection:
     Where the perception source saw the object.
     """
 
-    def apply_to(self, world: World) -> List[IsPerceivable]:
+    def apply_to(
+        self, world: World, trust_orientation: bool = True
+    ) -> List[IsPerceivable]:
         """
         Write this detection into ``world``, moving the perceived body to where it was
         seen.
 
         :param world: The world holding the annotations this detection refers to.
+        :param trust_orientation: Whether to also apply the detected orientation. When
+            False, only the detected position is applied and the body keeps its existing
+            orientation; useful while a perception source's orientation estimate is not
+            yet reliable enough for grasp planning.
         :return: The annotations that were updated.
         :raises PerceivedObjectNotInWorld: If no annotation matches the label.
         :raises AmbiguousDetection: If the label names more than one body.
@@ -167,9 +184,17 @@ class Detection:
         for annotation in annotations:
             annotation.class_label = self.class_label
         body = annotations[0].root
-        body.parent_connection.origin = world.transform(
-            self.pose, body.parent_connection.parent
-        )
+        detected_origin = world.transform(self.pose, body.parent_connection.parent)
+        if trust_orientation:
+            body.parent_connection.origin = detected_origin
+        else:
+            body.parent_connection.origin = (
+                HomogeneousTransformationMatrix.from_point_rotation_matrix(
+                    point=detected_origin.to_position(),
+                    rotation_matrix=body.parent_connection.origin.to_rotation_matrix(),
+                    reference_frame=body.parent_connection.parent,
+                )
+            )
         return annotations
 
     def resolve_annotations(self, world: World) -> List[IsPerceivable]:

@@ -3763,6 +3763,10 @@ class PerceptionQueryDAO(Base, DataAccessObject[coraplex.perception.PerceptionQu
         Integer, primary_key=True, use_existing_column=True
     )
 
+    trust_detected_orientation: Mapped[builtins.bool] = mapped_column(
+        use_existing_column=True
+    )
+
     semantic_annotation: Mapped[TypeType] = mapped_column(
         TypeType, nullable=False, use_existing_column=True
     )
@@ -5557,6 +5561,10 @@ class DetectActionDAO(
         ForeignKey(ActionDescriptionDAO.database_id),
         primary_key=True,
         use_existing_column=True,
+    )
+
+    trust_detected_orientation: Mapped[builtins.bool] = mapped_column(
+        use_existing_column=True
     )
 
     technique: Mapped[coraplex.datastructures.enums.DetectionTechnique] = mapped_column(

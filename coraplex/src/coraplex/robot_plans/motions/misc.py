@@ -71,7 +71,10 @@ class PerceptionTask(Task):
         if self._detections_applied:
             return ObservationStateValues.TRUE
         for detection in self.perception_source.detect(self.query):
-            detection.apply_to(self.query.world)
+            detection.apply_to(
+                self.query.world,
+                trust_orientation=self.query.trust_detected_orientation,
+            )
         self._detections_applied = True
         return ObservationStateValues.TRUE
 
