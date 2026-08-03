@@ -28,7 +28,6 @@ from semantic_digital_twin.api import (
     WorldSpecification,
 )
 from semantic_digital_twin.robots.unitree_g1 import UnitreeG1
-from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix
 from semantic_digital_twin.spatial_types.spatial_types import Pose
 from semantic_digital_twin.world import World
 from semantic_digital_twin.world_description.geometry import Color, Scale
@@ -51,7 +50,7 @@ The pelvis is the robot's root, so its ``odom`` has to be lifted by this much fo
 robot's feet to rest on the floor rather than sink through it.
 """
 
-ROBOT_START_POSITION = (4.5, 6.5)
+ROBOT_START_POSE = Pose.from_xyz_rpy(4.5, 6.5, PELVIS_HEIGHT_ABOVE_FLOOR)
 """
 Where the robot starts, in the aisle south of the two pallet stacks.
 """
@@ -61,23 +60,19 @@ PARCEL_SCALE = Scale(0.08, 0.08, 0.14)
 The extents of the transported parcel.
 """
 
-PICK_POSITION = (3.41, 7.66, 1.19)
+PICK_POSE = Pose.from_xyz_rpy(-0.77, 4.3, 0.785, yaw=np.pi / 2)
 """
-Where the parcel starts, on top of the western pallet stack.
-
-The stack's top face plus the parcel's own half height puts it at 1.19 m, and the
-position sits flush with the stack's front face at y = 7.62, so the robot can stand clear
-of the stack and still reach the parcel.
+Where the parcel starts. Rotated 90 degrees so a FRONT grasp approach can reach it.
 """
 
-PLACE_POSITION = (5.71, 7.66, 1.19)
+PLACE_POSE = Pose.from_xyz_rpy(2.6, 7.7, 0.8)
 """
-Where the parcel ends up, at the matching spot on the eastern pallet stack.
+Where the parcel ends up.
 """
 
 STANDING_DISTANCE = 0.51
 """
-How far south of a parcel the robot stands, in meters.
+How far the robot stands from a pose, in meters, opposite its FRONT-facing side.
 
 Within the G1's reach, and far enough from a pallet stack to leave its footprint free.
 """
@@ -94,9 +89,7 @@ def build_world() -> World:
         robots=[
             RobotSpecification(
                 semantic_annotation_type=UnitreeG1,
-                world_T_odom=HomogeneousTransformationMatrix.from_xyz_rpy(
-                    *ROBOT_START_POSITION, PELVIS_HEIGHT_ABOVE_FLOOR
-                ),
+                world_T_odom=ROBOT_START_POSE.to_homogeneous_matrix(),
             )
         ],
         objects=[
@@ -104,28 +97,24 @@ def build_world() -> World:
                 "parcel",
                 PARCEL_SCALE,
                 color=Color(0.85, 0.45, 0.1),
-                parent_T_self=HomogeneousTransformationMatrix.from_xyz_rpy(
-                    *PICK_POSITION
-                ),
+                parent_T_self=PICK_POSE.to_homogeneous_matrix(),
             )
         ],
     ).to_domain_object()
 
 
-def standing_pose_in_front_of(
-    position: tuple[float, float, float], world: World
-) -> Pose:
+def standing_pose_in_front_of(pose: Pose, world: World) -> Pose:
     """
-    :param position: The position the robot should face, as an xyz triple.
+    :param pose: The pose the robot should approach from its FRONT-facing side.
     :param world: The world the pose is expressed in.
-    :return: The pose the robot stands in to reach that position.
+    :return: The pose the robot stands in to reach that pose with a FRONT grasp.
     """
-    x, y, _ = position
+    yaw = float(pose.yaw)
     return Pose.from_xyz_rpy(
-        x,
-        y - STANDING_DISTANCE,
+        pose.x - STANDING_DISTANCE * np.cos(yaw),
+        pose.y - STANDING_DISTANCE * np.sin(yaw),
         PELVIS_HEIGHT_ABOVE_FLOOR,
-        yaw=np.pi / 2,
+        yaw=yaw,
         reference_frame=world.root,
     )
 
@@ -143,19 +132,18 @@ def build_plan(world: World, robot: UnitreeG1) -> Plan:
         ViewManager.get_end_effector_view(Arms.LEFT, robot),
     )
     context = Context(world=world, robot=robot, evaluate_conditions=False)
+    place_pose = Pose(
+        PLACE_POSE.to_position(), PLACE_POSE.to_quaternion(), reference_frame=world.root
+    )
 
     return sequential(
         [
             ParkArmsAction(Arms.BOTH),
-            NavigateAction(standing_pose_in_front_of(PICK_POSITION, world)),
+            NavigateAction(standing_pose_in_front_of(PICK_POSE, world)),
             PickUpAction(parcel, Arms.LEFT, grasp),
             ParkArmsAction(Arms.BOTH),
-            NavigateAction(standing_pose_in_front_of(PLACE_POSITION, world)),
-            PlaceAction(
-                parcel,
-                Pose.from_xyz_rpy(*PLACE_POSITION, reference_frame=world.root),
-                Arms.LEFT,
-            ),
+            NavigateAction(standing_pose_in_front_of(PLACE_POSE, world)),
+            PlaceAction(parcel, place_pose, Arms.LEFT),
             ParkArmsAction(Arms.BOTH),
         ],
         context=context,
@@ -191,6 +179,7 @@ start_visualization(world)
 with simulated_robot:
     build_plan(world, robot).perform()
 
-parcel_position = world.get_body_by_name("parcel").global_pose.to_np()[:3, 3]
-print(f"parcel delivered to {np.round(parcel_position, 3)}")
-assert np.allclose(parcel_position, PLACE_POSITION, atol=0.05)
+parcel_position = world.get_body_by_name("parcel").global_pose
+print(f"parcel delivered to {np.round(parcel_position.to_position(), 3)}")
+print(f"Expected parcel to be delivered to {np.round(PLACE_POSE.to_position(), 3)}")
+assert np.allclose(parcel_position, PLACE_POSE, atol=0.05)

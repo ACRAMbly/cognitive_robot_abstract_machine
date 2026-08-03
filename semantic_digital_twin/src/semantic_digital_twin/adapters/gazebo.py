@@ -150,13 +150,18 @@ class GazeboParser:
     The reserved link name that refers to the simulation world rather than a model link.
     """
 
-    truthy_values: ClassVar[frozenset] = frozenset({"1", "true"})
+    truthy_values: ClassVar[Tuple[str, ...]] = ("1", "true")
     """
     The texts that SDF accepts for a boolean element that is set.
     """
 
-    interpreted_elements: ClassVar[frozenset] = frozenset(
-        {"model", "include", "link", "joint", "pose", "static"}
+    interpreted_elements: ClassVar[Tuple[str, ...]] = (
+        "model",
+        "include",
+        "link",
+        "joint",
+        "pose",
+        "static",
     )
     """
     The child elements of a world or model that carry into the parsed world.
@@ -178,6 +183,10 @@ class GazeboParser:
     """
 
     model_element_cache: dict = field(default_factory=dict)
+    """
+    Maps a model description file path to its already parsed ``model`` element, so that
+    a world instantiating the same model many times parses its file only once.
+    """
 
     def __post_init__(self):
         self.root_element = ElementTree.fromstring(self.sdf)
