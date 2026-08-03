@@ -24,7 +24,7 @@ from robokudo.annotators.image_preprocessor import ImagePreprocessorAnnotator
 from robokudo.annotators.plane import PlaneAnnotator
 from robokudo.annotators.pointcloud_cluster_extractor import PointCloudClusterExtractor
 from robokudo.annotators.pointcloud_crop import PointcloudCropAnnotator
-from robokudo.annotators.query import QueryAnnotator, GenerateQueryResult, QueryReply
+from robokudo.annotators.query import QueryAnnotator, GenerateQueryResult
 from robokudo.descriptors.factories.cr_descriptor_factory import (
     CollectionReaderDescriptorFactory,
 )
@@ -88,7 +88,6 @@ class AnalysisEngine(AnalysisEngineInterface):
                 #     attribute shared by every instance, so overriding it here would
                 #     change the setting for other pipelines in the same process too.
                 GenerateQueryResult(),
-                QueryReply(),
             ]
         )
         return pipeline
