@@ -354,7 +354,20 @@ class Synchronizer(WorldEntityWithClassBasedID):
                 timeout=self.wait_for_synchronization_timeout,
             )
             if not success:
-                self.node.get_logger().warning("Message was not acknowledged, timeout")
+                self.node.get_logger().warning(
+                    f"World update {msg.publication_event_id} was not acknowledged by "
+                    f"all subscribers within {self.wait_for_synchronization_timeout}s: "
+                    f"received {len(self._received_acknowledgments)}/"
+                    f"{self._expected_acknowledgment_count} acknowledgments. The "
+                    f"update may not have reached every world model, e.g. a paused "
+                    f"synchronizer (such as Giskard's while it is executing a goal) "
+                    f"will not acknowledge until it resumes."
+                )
+            else:
+                self.node.get_logger().info(
+                    f"World update {msg.publication_event_id} acknowledged by all "
+                    f"{self._expected_acknowledgment_count} subscribers."
+                )
 
             self._current_publication_event_id = None
             self._expected_acknowledgment_count = 0
@@ -587,6 +600,10 @@ class WorldSynchronizer(Synchronizer, ModelChangeCallback, StateChangeCallback):
 
     def _subscription_callback(self, message: WorldUpdate):
         if self._is_paused:
+            self.node.get_logger().info(
+                f"World update {message.publication_event_id} received while paused, "
+                f"buffering it instead of applying and acknowledging it now."
+            )
             self.missed_messages.append(message)
         else:
             self.apply_message(message)
@@ -660,6 +677,10 @@ class WorldSynchronizer(Synchronizer, ModelChangeCallback, StateChangeCallback):
             return
         pending_messages = self.missed_messages
         self.missed_messages = []
+        self.node.get_logger().info(
+            f"Applying {len(pending_messages)} buffered world update(s): "
+            f"{[message.publication_event_id for message in pending_messages]}"
+        )
         # Hold the world lock across the whole batch so the buffered messages apply atomically: a
         # concurrent modify_world on another thread serializes behind it instead of interleaving.
         with self._world._world_lock:
