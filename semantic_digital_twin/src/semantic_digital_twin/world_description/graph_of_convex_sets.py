@@ -65,7 +65,7 @@ class GraphOfConvexSets(ABC):
     or overlapping. Concrete subclasses differ in how they represent those regions and
     how they solve a shortest-path query over them.
 
-    You can read more about GCS here: https://arxiv.org/abs/2101.11565.
+    You can read more about GCS in :cite:t:`marcucci2021motion`.
     """
 
     world: World

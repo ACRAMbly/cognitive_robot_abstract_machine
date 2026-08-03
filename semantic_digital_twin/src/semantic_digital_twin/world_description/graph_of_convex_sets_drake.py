@@ -1,23 +1,12 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 
 import numpy as np
-from pydrake.geometry.optimization import (
-    ConvexSet,
-    HPolyhedron,
-    Iris,
-    IrisOptions,
-    Point,
-    VPolytope,
-)
-from pydrake.planning import GcsTrajectoryOptimization
 from typing_extensions import TYPE_CHECKING, List, Optional, Sequence, Tuple
 
-from semantic_digital_twin.exceptions import (
-    PointOccupiedError,
-    UnboundedSearchSpaceError,
-)
+from semantic_digital_twin.exceptions import PointOccupiedError, UsageError
 from semantic_digital_twin.semantic_annotations.semantic_annotations import (
     SemanticEnvironmentAnnotation,
 )
@@ -39,11 +28,52 @@ if TYPE_CHECKING:
         KinematicStructureEntity,
     )
 
-Subgraph = GcsTrajectoryOptimization.Subgraph
-"""
-Type alias for the ``Subgraph`` handle returned by
-``GcsTrajectoryOptimization.AddRegions``.
-"""
+logger = logging.getLogger(__name__)
+
+try:
+    from pydrake.geometry.optimization import (
+        ConvexSet,
+        HPolyhedron,
+        Iris,
+        IrisOptions,
+        Point,
+        VPolytope,
+    )
+    from pydrake.planning import GcsTrajectoryOptimization
+
+    Subgraph = GcsTrajectoryOptimization.Subgraph
+    """
+    Type alias for the ``Subgraph`` handle returned by
+    ``GcsTrajectoryOptimization.AddRegions``.
+    """
+
+except ImportError:
+    logger.warning(
+        "drake is required for DrakeGraphOfConvexSets. Please install it using "
+        "'pip install drake'."
+    )
+
+
+@dataclass
+class UnboundedSearchSpaceError(UsageError):
+    """
+    Raised when a :class:`DrakeGraphOfConvexSets` is built with a search space that is
+    not a single, finite bounding box.
+
+    IRIS grows regions within a bounded convex domain; unlike
+    :class:`~semantic_digital_twin.world_description.graph_of_convex_sets.GraphOfBoundingBoxes`,
+    which can decompose an unbounded or multi-box search space via the product algebra,
+    Drake's ``Iris`` function requires exactly one finite ``HPolyhedron`` domain.
+    """
+
+    def error_message(self) -> str:
+        return (
+            "DrakeGraphOfConvexSets requires a search space consisting of exactly one "
+            "finite bounding box."
+        )
+
+    def suggest_correction(self) -> str:
+        return "pass an explicit, finite search_space with a single bounding box."
 
 
 def _default_iris_options() -> IrisOptions:
@@ -104,8 +134,10 @@ class IrisSeedingSettings:
         lower_array = lower.to_np()[:3]
         upper_array = upper.to_np()[:3]
         axes = [
-            np.linspace(lower_array[i], upper_array[i], self.grid_resolution + 2)[1:-1]
-            for i in range(3)
+            np.linspace(lower_array[axis], upper_array[axis], self.grid_resolution + 2)[
+                1:-1
+            ]
+            for axis in range(3)
         ]
         grid = np.meshgrid(*axes, indexing="ij")
         return [
@@ -126,10 +158,10 @@ def _validate_and_convert_domain(search_space: BoundingBoxCollection) -> HPolyhe
     boxes = search_space.bounding_boxes
     if len(boxes) != 1:
         raise UnboundedSearchSpaceError()
-    lower, upper = boxes[0].to_array_bounds()
-    if not (np.all(np.isfinite(lower)) and np.all(np.isfinite(upper))):
+    bounds = boxes[0].to_array_bounds()
+    if not (np.all(np.isfinite(bounds.lower)) and np.all(np.isfinite(bounds.upper))):
         raise UnboundedSearchSpaceError()
-    return HPolyhedron.MakeBox(lower, upper)
+    return HPolyhedron.MakeBox(bounds.lower, bounds.upper)
 
 
 def _bloat_convex_hull_points(
@@ -185,16 +217,15 @@ def _shape_to_convex_set(
     bounding_box = shape.local_frame_bounding_box.transform_to_origin(
         HomogeneousTransformationMatrix(reference_frame=target_frame)
     ).bloat(bloat_x, bloat_y, 0.01)
-    lower, upper = bounding_box.to_array_bounds()
-    return HPolyhedron.MakeBox(lower, upper)
+    bounds = bounding_box.to_array_bounds()
+    return HPolyhedron.MakeBox(bounds.lower, bounds.upper)
 
 
 @dataclass
 class DrakeGraphOfConvexSets(GraphOfConvexSets):
     """
-    A graph of convex sets whose regions are grown by Drake's IRIS algorithm and
-    solved with Drake's ``GcsTrajectoryOptimization`` (Marcucci et al.,
-    https://arxiv.org/abs/2205.04422).
+    A graph of convex sets whose regions are grown by Drake's IRIS algorithm and solved
+    with Drake's ``GcsTrajectoryOptimization`` (:cite:t:`marcucci2022shortest`).
 
     Unlike :class:`~semantic_digital_twin.world_description.graph_of_convex_sets.GraphOfBoundingBoxes`,
     which exhaustively partitions free space into many small axis-aligned boxes, IRIS
@@ -264,16 +295,15 @@ class DrakeGraphOfConvexSets(GraphOfConvexSets):
 
         :param world: The belief state to plan in.
         :param search_space: The navigable search volume; must consist of exactly one
-            finite bounding box (see
-            :class:`~semantic_digital_twin.exceptions.UnboundedSearchSpaceError`).
+            finite bounding box (see :class:`UnboundedSearchSpaceError`).
         :param bloat_obstacles: Amount to expand each obstacle in x/y, closing gaps
-            between the individual panel shapes that make up a single piece of
-            furniture (mirrors ``GraphOfBoundingBoxes``'s bloat parameter).
+            between the individual panel shapes that make up a single piece of furniture
+            (mirrors ``GraphOfBoundingBoxes``'s bloat parameter).
         :param seeding_settings: IRIS seeding strategy and options; defaults to
             :class:`IrisSeedingSettings`'s defaults.
-        :param extra_seed_points: Points to seed a region from first, before the
-            regular coverage grid -- e.g. known robot poses that should be covered by
-            a region even if the grid would otherwise miss them.
+        :param extra_seed_points: Points to seed a region from first, before the regular
+            coverage grid -- e.g. known robot poses that should be covered by a region
+            even if the grid would otherwise miss them.
         :return: A graph ready to answer repeated :meth:`path_from_to` queries.
         """
         result = cls(world, search_space)
@@ -292,14 +322,16 @@ class DrakeGraphOfConvexSets(GraphOfConvexSets):
             for shape in entity.collision.shapes
         ]
 
-        lower, upper = result.search_space.bounding_boxes[0].to_point3_bounds()
-        seeds = list(extra_seed_points) + settings.coverage_grid_seeds(lower, upper)
+        bounds = result.search_space.bounding_boxes[0].to_point3_bounds()
+        seeds = list(extra_seed_points) + settings.coverage_grid_seeds(
+            bounds.lower, bounds.upper
+        )
 
         regions: List[HPolyhedron] = []
         for seed_point in seeds:
             if len(regions) >= settings.max_regions:
                 break
-            seed = seed_point.to_array_in_frame(world.root)
+            seed = world.transform(seed_point, world.root).to_np()[:3]
             if any(obstacle.PointInSet(seed) for obstacle in result.obstacles):
                 continue
             if any(region.PointInSet(seed) for region in regions):
@@ -325,8 +357,8 @@ class DrakeGraphOfConvexSets(GraphOfConvexSets):
             covers a path between them.
         :raises PointOccupiedError: If ``start`` or ``goal`` lies inside an obstacle.
         """
-        start_array = start.to_array_in_frame(self.world.root)
-        goal_array = goal.to_array_in_frame(self.world.root)
+        start_array = self.world.transform(start, self.world.root).to_np()[:3]
+        goal_array = self.world.transform(goal, self.world.root).to_np()[:3]
 
         if any(obstacle.PointInSet(start_array) for obstacle in self.obstacles):
             raise PointOccupiedError(start)

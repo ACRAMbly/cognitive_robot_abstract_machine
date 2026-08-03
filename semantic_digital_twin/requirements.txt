@@ -1,5 +1,4 @@
 rustworkx
-drake
 nltk
 numpy
 trimesh>=4.11.1
