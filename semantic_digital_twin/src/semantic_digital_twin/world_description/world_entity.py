@@ -117,6 +117,15 @@ class WorldEntity(Symbol):
         self._world._world_entity_hash_table.pop(hash(self), None)
         self._world = None
 
+    @synchronized_attribute_modification
+    def update_name(self, name: PrefixedName) -> None:
+        """
+        Rename this world entity and record the change in the world's modification history.
+
+        :param name: The new name for this world entity.
+        """
+        self.name = name
+
 
 @dataclass(eq=False)
 class WorldEntityWithID(WorldEntity, SubclassJSONSerializer):
@@ -474,15 +483,6 @@ class Body(KinematicStructureEntity):
         self.collision.reference_frame = self
         self.collision.transform_all_shapes_to_own_frame()
         self.visual.transform_all_shapes_to_own_frame()
-
-    @synchronized_attribute_modification
-    def update_name(self, name: PrefixedName) -> None:
-        """
-        Rename this body and record the change in the world's modification history.
-
-        :param name: The new name for this body.
-        """
-        self.name = name
 
     @classmethod
     def from_shape_collection(
