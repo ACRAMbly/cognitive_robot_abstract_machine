@@ -305,10 +305,6 @@ class GiskardExecutable(Executable):
         if len(self.motion_mappings) == 0:
             return
 
-        logger.info(
-            f"Executing motions {[node.name for node in self.motion_mappings.values()]} "
-            f"as {GiskardExecutable.execution_type}"
-        )
         match GiskardExecutable.execution_type:
             case ExecutionType.SIMULATED:
                 self._execute_simulation()
@@ -375,20 +371,7 @@ class GiskardExecutable(Executable):
 
         giskard = GiskardWrapper(self.context.ros_node, world=self.context.world)
 
-        try:
-            giskard.execute(self.motion_state_chart)
-        except AssertionError:
-            logger.error(
-                f"Real-robot execution of "
-                f"{[node.name for node in self.motion_mappings.values()]} did not reach "
-                f"EndMotion, see the Giskard log above for the life cycle state of every "
-                f"node."
-            )
-            raise
-        logger.info(
-            f"Real-robot execution of "
-            f"{[node.name for node in self.motion_mappings.values()]} finished."
-        )
+        giskard.execute(self.motion_state_chart)
 
 
 @dataclass

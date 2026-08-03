@@ -77,10 +77,6 @@ class GiskardWrapper:
         Executes a MotionStatechart and syncs its state with the result of Giskard.
         """
         motion_statechart.sanity_check()
-        self.node_handle.get_logger().info(
-            f"Sending motion goal to Giskard: "
-            f"{[node.name for node in motion_statechart.nodes]}"
-        )
         result = self._send_action_goal(motion_statechart)
         result_json = json.loads(result.result.result)
         parsed_life_cycle_state = LifeCycleState.from_json(
@@ -91,15 +87,6 @@ class GiskardWrapper:
         )
         motion_statechart.life_cycle_state.data = parsed_life_cycle_state.data
         motion_statechart.observation_state.data = parsed_observation_state.data
-        if not motion_statechart.is_end_motion():
-            node_states = {
-                node.name: node.life_cycle_state for node in motion_statechart.nodes
-            }
-            self.node_handle.get_logger().error(
-                f"Giskard goal did not reach EndMotion. Life cycle states: {node_states}"
-            )
-        else:
-            self.node_handle.get_logger().info("Giskard goal reached EndMotion.")
         assert motion_statechart.is_end_motion()
 
     def _send_action_goal_async(self, motion_statechart: MotionStatechart) -> Future:

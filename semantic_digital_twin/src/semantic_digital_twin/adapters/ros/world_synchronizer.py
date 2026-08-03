@@ -366,24 +366,8 @@ class Synchronizer(WorldEntityWithClassBasedID):
                 >= self._expected_acknowledgment_count,
                 timeout=self.wait_for_synchronization_timeout,
             )
-            is_state_update = (
-                isinstance(msg, WorldUpdate) and msg.modification_block is None
-            )
             if not success:
-                self.node.get_logger().warning(
-                    f"World update {msg.publication_event_id} was not acknowledged by "
-                    f"all subscribers within {self.wait_for_synchronization_timeout}s: "
-                    f"received {len(self._received_acknowledgments)}/"
-                    f"{self._expected_acknowledgment_count} acknowledgments. The "
-                    f"update may not have reached every world model, e.g. a paused "
-                    f"synchronizer (such as Giskard's while it is executing a goal) "
-                    f"will not acknowledge until it resumes."
-                )
-            elif not is_state_update:
-                self.node.get_logger().info(
-                    f"World update {msg.publication_event_id} acknowledged by all "
-                    f"{self._expected_acknowledgment_count} subscribers."
-                )
+                self.node.get_logger().warning("Message was not acknowledged, timeout")
 
             self._current_publication_event_id = None
             self._expected_acknowledgment_count = 0
