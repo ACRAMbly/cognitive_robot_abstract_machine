@@ -144,10 +144,11 @@ class TruthValueOperatorChildren:
 
     Whether a node counts as a condition participant depends on which parent evaluated it
     in this pass, not on the node's construction history: a node reused elsewhere in the
-    DAG keeps a structural parent per position, but only the first-ever attachment is its
-    primary ``_parent_``, which may belong to an unrelated position. Recording the
-    dynamic, per-pass parent here instead of reading the node's primary ``_parent_``
-    avoids that ambiguity.
+    :class:`~krrood.entity_query_language.core.base_expressions.SymbolicExpression`'s own
+    directed acyclic graph of parents keeps a structural parent per position, but only
+    the first-ever attachment is its primary ``_parent_``, which may belong to an
+    unrelated position. Recording the dynamic, per-pass parent here instead of reading
+    the node's primary ``_parent_`` avoids that ambiguity.
     """
 
     _ids: Set[uuid.UUID] = field(default_factory=set, init=False)
