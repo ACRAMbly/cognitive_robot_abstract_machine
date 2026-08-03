@@ -118,7 +118,7 @@ class TestDrakeGraphOfConvexSets:
             assert path is not None
             # region subgraph + one source + one target subgraph, regardless of how
             # many queries have already been solved.
-            assert len(unit_box_gcs._gcs.GetSubgraphs()) == 3
+            assert len(unit_box_gcs._trajectory_optimization.GetSubgraphs()) == 3
 
     def test_from_world_rejects_a_default_unbounded_search_space(
         self, unit_box_world: World

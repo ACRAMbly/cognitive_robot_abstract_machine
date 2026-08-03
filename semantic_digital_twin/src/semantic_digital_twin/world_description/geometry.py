@@ -1163,6 +1163,20 @@ class BoundingBox:
             Bound.CLOSED,
         )
 
+    def to_np_bounds(self) -> Tuple[np.ndarray, np.ndarray]:
+        """
+        Express this bounding box's lower and upper corners as plain-float 3-vectors.
+
+        :return: The ``(lower, upper)`` corners, in the same frame as ``origin``.
+        """
+        lower = np.array(
+            [self.x_interval.lower, self.y_interval.lower, self.z_interval.lower]
+        )
+        upper = np.array(
+            [self.x_interval.upper, self.y_interval.upper, self.z_interval.upper]
+        )
+        return lower, upper
+
     @property
     def scale(self) -> Scale:
         """

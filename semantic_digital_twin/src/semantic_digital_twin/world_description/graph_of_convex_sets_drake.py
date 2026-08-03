@@ -75,23 +75,23 @@ class IrisSeedingSettings:
     Options forwarded to every :func:`pydrake.geometry.optimization.Iris` call.
     """
 
+    def coverage_grid_seeds(
+        self, lower: np.ndarray, upper: np.ndarray
+    ) -> List[np.ndarray]:
+        """
+        Build a regular grid of candidate seed points strictly inside ``[lower,
+        upper]``.
 
-def _world_frame_bounds(box: BoundingBox) -> Tuple[np.ndarray, np.ndarray]:
-    """
-    Compute a box's world-frame lower/upper corners as plain floats.
-
-    ``box.origin.x``/``y``/``z`` are symbolic
-    :class:`krrood.symbolic_math.symbolic_math.Scalar` objects; converting to ``float``
-    once here, rather than repeating the conversion inside a tight per-axis loop, avoids
-    a roughly two order-of-magnitude slowdown.
-
-    :param box: The bounding box to read.
-    :return: The box's ``(lower, upper)`` corners as plain-float 3-vectors.
-    """
-    origin = np.array([float(box.origin.x), float(box.origin.y), float(box.origin.z)])
-    lower = origin + np.array([box.min_x, box.min_y, box.min_z])
-    upper = origin + np.array([box.max_x, box.max_y, box.max_z])
-    return lower, upper
+        :param lower: Lower corner of the axis-aligned region to seed.
+        :param upper: Upper corner of the axis-aligned region to seed.
+        :return: ``grid_resolution`` candidate seed points per axis.
+        """
+        axes = [
+            np.linspace(lower[i], upper[i], self.grid_resolution + 2)[1:-1]
+            for i in range(3)
+        ]
+        grid = np.meshgrid(*axes, indexing="ij")
+        return [np.array(point) for point in np.stack(grid, axis=-1).reshape(-1, 3)]
 
 
 def _box_to_hpolyhedron(box: BoundingBox) -> HPolyhedron:
@@ -99,7 +99,7 @@ def _box_to_hpolyhedron(box: BoundingBox) -> HPolyhedron:
     Convert a semdt axis-aligned :class:`BoundingBox` into a Drake ``HPolyhedron``,
     expressed in the world frame.
     """
-    lower, upper = _world_frame_bounds(box)
+    lower, upper = box.to_np_bounds()
     return HPolyhedron.MakeBox(lower, upper)
 
 
@@ -115,33 +115,13 @@ def _validate_and_convert_domain(search_space: BoundingBoxCollection) -> HPolyhe
     boxes = search_space.bounding_boxes
     if len(boxes) != 1:
         raise UnboundedSearchSpaceError()
-    lower, upper = _world_frame_bounds(boxes[0])
+    lower, upper = boxes[0].to_np_bounds()
     if not (np.all(np.isfinite(lower)) and np.all(np.isfinite(upper))):
         raise UnboundedSearchSpaceError()
     return HPolyhedron.MakeBox(lower, upper)
 
 
-def _point_to_world_array(world: World, point: Point3) -> np.ndarray:
-    """
-    Express a point as a plain float 3-vector in ``world.root``.
-    """
-    point_in_world = world.transform(point, world.root)
-    return np.array(
-        [float(point_in_world.x), float(point_in_world.y), float(point_in_world.z)]
-    )
-
-
-def _coverage_grid_seeds(
-    lower: np.ndarray, upper: np.ndarray, resolution: int
-) -> List[np.ndarray]:
-    """
-    Build a regular grid of candidate seed points strictly inside ``[lower, upper]``.
-    """
-    axes = [np.linspace(lower[i], upper[i], resolution + 2)[1:-1] for i in range(3)]
-    grid = np.meshgrid(*axes, indexing="ij")
-    return [np.array(point) for point in np.stack(grid, axis=-1).reshape(-1, 3)]
-
-
+@dataclass
 class DrakeGraphOfConvexSets(GraphOfConvexSets):
     """
     A graph of convex sets whose regions are grown by Drake's IRIS algorithm and
@@ -162,43 +142,35 @@ class DrakeGraphOfConvexSets(GraphOfConvexSets):
     and removed rather than rebuilding the whole graph.
     """
 
-    obstacles: List[BoundingBox]
+    obstacles: List[BoundingBox] = field(default_factory=list)
     """
     The obstacle bounding boxes every region was grown to avoid, expressed relative to
     ``world.root``.
     """
 
-    regions: List[HPolyhedron]
+    regions: List[HPolyhedron] = field(default_factory=list)
     """
     The IRIS regions covering the search space.
     """
 
-    _gcs: GcsTrajectoryOptimization
+    _trajectory_optimization: GcsTrajectoryOptimization = field(
+        default_factory=lambda: GcsTrajectoryOptimization(3)
+    )
     """
     The persistent trajectory-optimization instance holding the region subgraph and,
     while a query is in flight, its source/target point subgraphs.
     """
 
-    _region_subgraph: Optional[Subgraph]
+    _region_subgraph: Optional[Subgraph] = None
     """
     The subgraph spanning ``regions``, built once in :meth:`from_world` and reused by
     every :meth:`path_from_to` query.
     """
 
-    _query_subgraphs: Optional[Tuple[Subgraph, Subgraph]]
+    _query_subgraphs: Optional[Tuple[Subgraph, Subgraph]] = None
     """
     The current query's ``(source, target)`` point subgraphs, or None between queries.
     """
-
-    def __init__(
-        self, world: World, search_space: Optional[BoundingBoxCollection] = None
-    ):
-        super().__init__(world, search_space)
-        self.obstacles = []
-        self.regions = []
-        self._gcs = GcsTrajectoryOptimization(3)
-        self._region_subgraph = None
-        self._query_subgraphs = None
 
     @property
     def region_count(self) -> int:
@@ -246,10 +218,10 @@ class DrakeGraphOfConvexSets(GraphOfConvexSets):
         result.obstacles = list(bloated_obstacles)
         obstacle_polyhedra = [_box_to_hpolyhedron(box) for box in result.obstacles]
 
-        lower, upper = _world_frame_bounds(result.search_space.bounding_boxes[0])
+        lower, upper = result.search_space.bounding_boxes[0].to_np_bounds()
         seeds = [
-            _point_to_world_array(world, point) for point in extra_seed_points
-        ] + _coverage_grid_seeds(lower, upper, settings.grid_resolution)
+            point.to_np_in_frame(world.root) for point in extra_seed_points
+        ] + settings.coverage_grid_seeds(lower, upper)
 
         regions: List[HPolyhedron] = []
         for seed in seeds:
@@ -264,8 +236,10 @@ class DrakeGraphOfConvexSets(GraphOfConvexSets):
             )
 
         result.regions = regions
-        result._region_subgraph = result._gcs.AddRegions(regions, order=1)
-        result._gcs.AddPathLengthCost()
+        result._region_subgraph = result._trajectory_optimization.AddRegions(
+            regions, order=1
+        )
+        result._trajectory_optimization.AddPathLengthCost()
         return result
 
     def path_from_to(self, start: Point3, goal: Point3) -> Optional[List[Point3]]:
@@ -283,17 +257,23 @@ class DrakeGraphOfConvexSets(GraphOfConvexSets):
         if any(obstacle.contains(goal) for obstacle in self.obstacles):
             raise PointOccupiedError(goal)
 
-        start_array = _point_to_world_array(self.world, start)
-        goal_array = _point_to_world_array(self.world, goal)
+        start_array = start.to_np_in_frame(self.world.root)
+        goal_array = goal.to_np_in_frame(self.world.root)
 
         self._clear_previous_query()
-        source_subgraph = self._gcs.AddRegions([Point(start_array)], order=0)
-        target_subgraph = self._gcs.AddRegions([Point(goal_array)], order=0)
-        self._gcs.AddEdges(source_subgraph, self._region_subgraph)
-        self._gcs.AddEdges(self._region_subgraph, target_subgraph)
+        source_subgraph = self._trajectory_optimization.AddRegions(
+            [Point(start_array)], order=0
+        )
+        target_subgraph = self._trajectory_optimization.AddRegions(
+            [Point(goal_array)], order=0
+        )
+        self._trajectory_optimization.AddEdges(source_subgraph, self._region_subgraph)
+        self._trajectory_optimization.AddEdges(self._region_subgraph, target_subgraph)
         self._query_subgraphs = (source_subgraph, target_subgraph)
 
-        trajectory, result = self._gcs.SolvePath(source_subgraph, target_subgraph)
+        trajectory, result = self._trajectory_optimization.SolvePath(
+            source_subgraph, target_subgraph
+        )
         if not result.is_success():
             return None
 
@@ -308,5 +288,5 @@ class DrakeGraphOfConvexSets(GraphOfConvexSets):
         if self._query_subgraphs is None:
             return
         for subgraph in self._query_subgraphs:
-            self._gcs.RemoveSubgraph(subgraph)
+            self._trajectory_optimization.RemoveSubgraph(subgraph)
         self._query_subgraphs = None

@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import time
 from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
 from functools import reduce
 from operator import or_
 
@@ -54,6 +55,7 @@ from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 logger = logging.getLogger(__name__)
 
 
+@dataclass
 class GraphOfConvexSets(ABC):
     """
     Abstract base for planning graphs whose nodes are convex sets of free space.
@@ -61,11 +63,7 @@ class GraphOfConvexSets(ABC):
     A graph of convex sets (GCS) represents the navigable free space of a world as a
     collection of convex regions, connected by edges wherever two regions are adjacent
     or overlapping. Concrete subclasses differ in how they represent those regions and
-    how they solve a shortest-path query over them: :class:`GraphOfBoundingBoxes`
-    decomposes free space into an exact, exhaustive partition of axis-aligned boxes via
-    the `random_events` product algebra; :class:`~semantic_digital_twin.world_description.graph_of_convex_sets_drake.DrakeGraphOfConvexSets`
-    covers free space with a handful of larger, IRIS-grown convex regions and solves
-    with Drake's `GcsTrajectoryOptimization`.
+    how they solve a shortest-path query over them.
 
     You can read more about GCS here: https://arxiv.org/abs/2101.11565.
     """
@@ -75,18 +73,17 @@ class GraphOfConvexSets(ABC):
     The world that the graph is based on.
     """
 
-    search_space: BoundingBoxCollection
+    search_space: Optional[BoundingBoxCollection] = None
     """
     The bounding box of the search space.
 
-    Defaults to the entire three dimensional space.
+    Pass ``None`` to default to the entire three-dimensional space; ``__post_init__``
+    resolves that default, so this attribute is never ``None`` once the object exists.
     """
 
-    def __init__(
-        self, world: World, search_space: Optional[BoundingBoxCollection] = None
-    ):
-        self.world = world
-        self.search_space = self._make_search_space(world, search_space)
+    def __post_init__(self):
+        if self.search_space is None:
+            self.search_space = self._default_search_space()
 
     @abstractmethod
     def path_from_to(self, start: Point3, goal: Point3) -> Optional[List[Point3]]:
@@ -101,31 +98,27 @@ class GraphOfConvexSets(ABC):
         """
         raise NotImplementedError
 
-    @classmethod
-    def _make_search_space(
-        cls, world: World, search_space: Optional[BoundingBoxCollection] = None
-    ) -> BoundingBoxCollection:
+    def _default_search_space(self) -> BoundingBoxCollection:
         """
-        Create the default search space if it is not given.
+        :return: A search space spanning the entire three-dimensional space around
+            ``self.world.root``.
         """
-        if search_space is None:
-            search_space = BoundingBoxCollection(
-                shapes=[
-                    BoundingBox(
-                        min_x=-np.inf,
-                        min_y=-np.inf,
-                        min_z=-np.inf,
-                        max_x=np.inf,
-                        max_y=np.inf,
-                        max_z=np.inf,
-                        origin=HomogeneousTransformationMatrix(
-                            reference_frame=world.root
-                        ),
-                    )
-                ],
-                reference_frame=world.root,
-            )
-        return search_space
+        return BoundingBoxCollection(
+            shapes=[
+                BoundingBox(
+                    min_x=-np.inf,
+                    min_y=-np.inf,
+                    min_z=-np.inf,
+                    max_x=np.inf,
+                    max_y=np.inf,
+                    max_z=np.inf,
+                    origin=HomogeneousTransformationMatrix(
+                        reference_frame=self.world.root
+                    ),
+                )
+            ],
+            reference_frame=self.world.root,
+        )
 
     @classmethod
     def _build_bloated_obstacle_collection(
@@ -211,6 +204,7 @@ class GraphOfConvexSets(ABC):
         return bloated_obstacles
 
 
+@dataclass
 class GraphOfBoundingBoxes(GraphOfConvexSets):
     """
     A graph of convex sets whose nodes are axis-aligned bounding boxes.
@@ -220,22 +214,17 @@ class GraphOfBoundingBoxes(GraphOfConvexSets):
     node is a box; every edge represents the adjacency between two boxes.
     """
 
-    graph: rx.PyGraph[BoundingBox]
+    graph: rx.PyGraph[BoundingBox] = field(
+        default_factory=lambda: rx.PyGraph(multigraph=False)
+    )
     """
     The connectivity graph of the convex sets.
     """
 
-    box_to_index_map: Dict[BoundingBox, int]
+    box_to_index_map: Dict[BoundingBox, int] = field(default_factory=dict)
     """
     A mapping from bounding boxes to their indices in the graph.
     """
-
-    def __init__(
-        self, world: World, search_space: Optional[BoundingBoxCollection] = None
-    ):
-        super().__init__(world, search_space)
-        self.graph = rx.PyGraph(multigraph=False)
-        self.box_to_index_map = {}
 
     def create_subgraph(self, nodes: Sequence[int]) -> Self:
         """

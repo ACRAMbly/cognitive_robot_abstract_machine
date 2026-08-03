@@ -1003,6 +1003,15 @@ class Point3(sm.SymbolicMathType, SpatialType, SubclassJSONSerializer):
     def norm(self) -> sm.Scalar:
         return sm.Scalar.from_casadi_sx(ca.norm_2(self[:3].casadi_sx))
 
+    def to_np_in_frame(self, frame: KinematicStructureEntity) -> np.ndarray:
+        """
+        Express this point as a plain, non-symbolic 3-vector in ``frame``.
+
+        :param frame: The frame to express this point in.
+        :return: This point's ``(x, y, z)`` coordinates in ``frame``.
+        """
+        return self.reference_frame._world.transform(self, frame).to_np()[:3]
+
     @property
     def x(self) -> sm.Scalar:
         return self[0]
