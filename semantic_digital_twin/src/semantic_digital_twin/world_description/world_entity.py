@@ -58,6 +58,9 @@ from semantic_digital_twin.world_description.shape_collection import (
     ShapeCollection,
     BoundingBoxCollection,
 )
+from semantic_digital_twin.world_description.world_modification import (
+    synchronized_attribute_modification,
+)
 
 if TYPE_CHECKING:
     from semantic_digital_twin.world_description.degree_of_freedom import (
@@ -471,6 +474,15 @@ class Body(KinematicStructureEntity):
         self.collision.reference_frame = self
         self.collision.transform_all_shapes_to_own_frame()
         self.visual.transform_all_shapes_to_own_frame()
+
+    @synchronized_attribute_modification
+    def update_name(self, name: PrefixedName) -> None:
+        """
+        Rename this body and record the change in the world's modification history.
+
+        :param name: The new name for this body.
+        """
+        self.name = name
 
     @classmethod
     def from_shape_collection(
