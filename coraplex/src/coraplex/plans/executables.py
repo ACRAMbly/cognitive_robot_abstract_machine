@@ -321,7 +321,7 @@ class GiskardExecutable(Executable):
         executor.compile(motion_state_chart)
 
         counter = 0
-        while counter < len(self.motion_mappings) * 2000:
+        while counter < len(self.motion_mappings) * 10000:
             # Interrupting and pausing are handled inside the motion state chart by
             # per-task monitors (see motion_state_chart): an interrupt ends the
             # motion via EndMotion, a pause holds the active task via its
