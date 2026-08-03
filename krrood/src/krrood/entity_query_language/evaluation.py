@@ -115,18 +115,21 @@ class SatisfiedConditionTracker(EvaluationObserver):
             result.satisfied_condition_ids = satisfied
 
     def on_conclusions_processed(self, expression, result):
-        # The caller (_evaluate_conclusions_and_update_bindings_) already established that
-        # `expression` is the active conditions root for this evaluation pass before invoking
-        # this hook, so no re-check is needed here.
+        """
+        Record on *result* which of this pass's conditions were satisfied.
+
+        :param expression: The pass's active conditions root.
+        :param result: The result whose conclusions were just processed.
+        """
         # The structural check comes first because reading a result's truth can be expensive
         # (a bound predicate evaluates itself), and an evaluation with no conditions to track
         # is dismissed without needing the truth at all.
-        if expression._conditions_root_ is expression._root_:
+        evaluation_context = get_evaluation_context()
+        if not evaluation_context.active_conditions_root.has_condition:
             return
         if result.is_false:
             return
 
-        evaluation_context = get_evaluation_context()
         evaluated = evaluation_context.evaluated_expression_ids
 
         # Every truth-bearing expression records its truth in the bindings of the result
