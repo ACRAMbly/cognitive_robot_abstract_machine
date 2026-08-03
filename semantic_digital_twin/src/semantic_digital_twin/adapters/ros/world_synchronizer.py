@@ -337,15 +337,19 @@ class Synchronizer(WorldEntityWithClassBasedID):
         :param msg: The message to publish.
         """
         if not self.synchronous:
-            kind = (
-                WorldSynchronizer._describe_update_kind(msg)
-                if isinstance(msg, WorldUpdate)
-                else type(msg).__name__
+            is_state_update = (
+                isinstance(msg, WorldUpdate) and msg.modification_block is None
             )
-            self.node.get_logger().info(
-                f"Publishing {msg.publication_event_id} ({kind}) asynchronously: "
-                f"delivery and application by subscribers is not confirmed."
-            )
+            if not is_state_update:
+                kind = (
+                    WorldSynchronizer._describe_update_kind(msg)
+                    if isinstance(msg, WorldUpdate)
+                    else type(msg).__name__
+                )
+                self.node.get_logger().info(
+                    f"Publishing {msg.publication_event_id} ({kind}) asynchronously: "
+                    f"delivery and application by subscribers is not confirmed."
+                )
             self.publisher.publish(std_msgs.msg.String(data=json.dumps(to_json(msg))))
             return
 
@@ -362,6 +366,9 @@ class Synchronizer(WorldEntityWithClassBasedID):
                 >= self._expected_acknowledgment_count,
                 timeout=self.wait_for_synchronization_timeout,
             )
+            is_state_update = (
+                isinstance(msg, WorldUpdate) and msg.modification_block is None
+            )
             if not success:
                 self.node.get_logger().warning(
                     f"World update {msg.publication_event_id} was not acknowledged by "
@@ -372,7 +379,7 @@ class Synchronizer(WorldEntityWithClassBasedID):
                     f"synchronizer (such as Giskard's while it is executing a goal) "
                     f"will not acknowledge until it resumes."
                 )
-            else:
+            elif not is_state_update:
                 self.node.get_logger().info(
                     f"World update {msg.publication_event_id} acknowledged by all "
                     f"{self._expected_acknowledgment_count} subscribers."
@@ -608,18 +615,21 @@ class WorldSynchronizer(Synchronizer, ModelChangeCallback, StateChangeCallback):
         }
 
     def _subscription_callback(self, message: WorldUpdate):
-        kind = self._describe_update_kind(message)
+        is_model_change = message.modification_block is not None
         if self._is_paused:
-            self.node.get_logger().info(
-                f"World update {message.publication_event_id} ({kind}) received while "
-                f"paused, buffering it instead of applying and acknowledging it now."
-            )
+            if is_model_change:
+                self.node.get_logger().info(
+                    f"World update {message.publication_event_id} "
+                    f"({self._describe_update_kind(message)}) received while paused, "
+                    f"buffering it instead of applying and acknowledging it now."
+                )
             self.missed_messages.append(message)
         else:
-            self.node.get_logger().info(
-                f"World update {message.publication_event_id} ({kind}) received, "
-                f"applying it now."
-            )
+            if is_model_change:
+                self.node.get_logger().info(
+                    f"World update {message.publication_event_id} "
+                    f"({self._describe_update_kind(message)}) received, applying it now."
+                )
             self.apply_message(message)
             self.acknowledge_message(message)
 
@@ -708,14 +718,21 @@ class WorldSynchronizer(Synchronizer, ModelChangeCallback, StateChangeCallback):
             return
         pending_messages = self.missed_messages
         self.missed_messages = []
-        self.node.get_logger().info(
-            f"Applying {len(pending_messages)} buffered world update(s): "
-            + ", ".join(
-                f"{message.publication_event_id} "
-                f"({self._describe_update_kind(message)})"
-                for message in pending_messages
+        model_change_messages = [
+            message
+            for message in pending_messages
+            if message.modification_block is not None
+        ]
+        if model_change_messages:
+            self.node.get_logger().info(
+                f"Applying {len(model_change_messages)} buffered model change(s) out of "
+                f"{len(pending_messages)} buffered world update(s): "
+                + ", ".join(
+                    f"{message.publication_event_id} "
+                    f"({self._describe_update_kind(message)})"
+                    for message in model_change_messages
+                )
             )
-        )
         # Hold the world lock across the whole batch so the buffered messages apply atomically: a
         # concurrent modify_world on another thread serializes behind it instead of interleaving.
         with self._world._world_lock:
