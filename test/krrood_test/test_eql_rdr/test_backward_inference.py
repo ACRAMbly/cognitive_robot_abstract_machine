@@ -17,6 +17,7 @@ from krrood.entity_query_language.factories import (
     refinement,
     variable,
 )
+from krrood.entity_query_language.core.base_expressions import OperationResult
 from krrood.entity_query_language.operators.core_logical_operators import Not
 from krrood.entity_query_language.rdr.backward_inference import (
     BackwardInferenceIndex,
@@ -256,6 +257,45 @@ def test_ambiguous_value_produces_one_sufficient_condition_set_per_path():
     knowledge = what_do_we_know_about(base_condition, Species.MAMMAL)
 
     assert len(knowledge.sufficient_condition_sets) == 2
+
+
+# ---------------------------------------------------------------------------
+# holds_for evaluation contract
+# ---------------------------------------------------------------------------
+
+
+def test_guard_condition_holds_for_a_not_wrapped_expression():
+    """A ``Not``-wrapped guard is satisfied exactly when its operand is False."""
+    animal = variable(Animal, domain=[])
+    guard = GuardCondition(Not(animal.has_fur), negated=False)
+
+    assert guard.holds_for(animal, Animal("snake", has_fur=False)) is True
+    assert guard.holds_for(animal, Animal("cat", has_fur=True)) is False
+
+
+def test_guard_expressions_evaluate_to_plain_values_never_operation_results():
+    """Guard expressions yield already-unwrapped values, so truth reads via ``bool``.
+
+    A leaf predicate yields exactly one boolean per case; a ``Not`` wrapper yields a
+    truthy binding row when it holds and nothing when it does not.
+    """
+    animal = variable(Animal, domain=[])
+    leaf = animal.has_fur
+    wrapped = Not(animal.has_fur)
+
+    animal._update_domain_([Animal("cat", has_fur=True)])
+    assert list(leaf.evaluate()) == [True]
+    assert list(wrapped.evaluate()) == []
+
+    animal._update_domain_([Animal("snake", has_fur=False)])
+    assert list(leaf.evaluate()) == [False]
+    assert [bool(result) for result in wrapped.evaluate()] == [True]
+
+    for expression in (leaf, wrapped):
+        animal._update_domain_([Animal("cat", has_fur=True)])
+        assert not any(
+            isinstance(result, OperationResult) for result in expression.evaluate()
+        )
 
 
 # ---------------------------------------------------------------------------

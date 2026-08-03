@@ -27,7 +27,6 @@ from typing_extensions import (
     Tuple,
 )
 
-from krrood.entity_query_language.core.base_expressions import OperationResult
 from krrood.entity_query_language.operators.core_logical_operators import Not
 from krrood.entity_query_language.rules.conclusion import Add
 from krrood.entity_query_language.rules.conclusion_selector import (
@@ -62,7 +61,12 @@ class GuardCondition:
     expression: SymbolicExpression
     """The leaf-level EQL predicate to evaluate (e.g. a ``Comparator``)."""
     negated: bool = False
-    """When ``True`` the guard is satisfied only if :attr:`expression` is False."""
+    """When ``True`` the guard is satisfied only if :attr:`expression` is False.
+
+    Polarity is carried here rather than applied to :attr:`expression`, because
+    negating an expression reparents it and :attr:`expression` belongs to the
+    live rule tree.
+    """
 
     def holds_for(
         self,
@@ -79,15 +83,10 @@ class GuardCondition:
         :return: ``True`` if the guard is satisfied.
         """
         shared_variable._update_domain_([case])
-        # self.expression is always a leaf Comparator or a Not() wrapping one (per
-        # _leaf_guards). A Comparator's evaluate() yields its own bound boolean payload
-        # directly; Not() has no id-keyed payload of its own, so it falls back to yielding
-        # the full binding row, which bool() reads as truthy. The isinstance(OperationResult)
-        # branch is a defensive fallback for expression types this module does not produce.
-        truth = any(
-            result.is_true if isinstance(result, OperationResult) else bool(result)
-            for result in self.expression.evaluate()
-        )
+        # A leaf predicate yields its own bound boolean per case; a Not() has no
+        # id-keyed payload of its own, so it yields the full binding row when it holds
+        # and nothing when it does not. Both read correctly through bool().
+        truth = any(bool(result) for result in self.expression.evaluate())
         return not truth if self.negated else truth
 
 
