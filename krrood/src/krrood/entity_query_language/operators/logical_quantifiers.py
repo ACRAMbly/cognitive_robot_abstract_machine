@@ -132,24 +132,34 @@ class Exists(QuantifiedConditional):
             ):
                 continue
             variable_result = variable_result.update(sources.bindings)
-            for condition_result in self._evaluate_child_as_condition_(
-                self.condition, variable_result
-            ):
-                if condition_result.is_true:
-                    yield self._build_operation_result_with_truth_(
-                        True,
-                        sources.bindings
-                        | {
-                            id_: variable_result.bindings[id_]
-                            for id_ in self._ids_of_variables_to_add_to_sources_
-                            if id_ in variable_result.bindings
-                        },
-                        variable_result,
-                    )
-                    return
+            if not self._condition_holds_for_(variable_result):
+                continue
+            yield self._build_operation_result_with_truth_(
+                True,
+                sources.bindings
+                | {
+                    id_: variable_result.bindings[id_]
+                    for id_ in self._ids_of_variables_to_add_to_sources_
+                    if id_ in variable_result.bindings
+                },
+                variable_result,
+            )
+            return
 
         # Negation as failure: no variable value satisfied the condition.
         yield self._build_operation_result_with_truth_(False, sources.bindings)
+
+    def _condition_holds_for_(self, variable_result: OperationResult) -> bool:
+        """
+        :param variable_result: A binding for this quantifier's variable.
+        :return: Whether the condition is true for any evaluation under *variable_result*.
+        """
+        return any(
+            condition_result.is_true
+            for condition_result in self._evaluate_child_as_condition_(
+                self.condition, variable_result
+            )
+        )
 
     @cached_property
     def _ids_of_variables_to_add_to_sources_(self):
