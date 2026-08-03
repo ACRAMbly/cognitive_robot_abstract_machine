@@ -936,6 +936,9 @@ class TruthValueOperator(SymbolicExpression, ABC):
         :param sources: The current OperationResult carrying bindings, or None.
         :return: An iterator of the child's results.
         """
+        evaluation_context = get_evaluation_context()
+        if evaluation_context is not None:
+            evaluation_context.truth_value_operator_children.record(child._id_)
         for result in child._evaluate_(sources):
             if result.has_value:
                 yield result._as_fresh_observation_()
