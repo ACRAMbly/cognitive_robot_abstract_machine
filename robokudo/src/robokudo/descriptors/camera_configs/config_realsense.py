@@ -46,5 +46,3 @@ class RealsenseCameraConfig(
     tf_to: str = "map"
 
     filterBlurredImages: bool = False
-
-    lookup_viewpoint: bool = False
