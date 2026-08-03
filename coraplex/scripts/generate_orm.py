@@ -14,6 +14,8 @@ from krrood.ormatic.ormatic import ORMatic
 from krrood.ormatic.utils import classes_of_package, classes_of_module
 from coraplex.orm.model import NumpyType
 import coraplex.orm.model
+import giskardpy.middleware.ros2.control_loop_profiler
+import giskardpy.middleware.ros2.utils.control_loop_benchmark
 import giskardpy.qp.solvers
 
 # ----------------------------------------------------------------------------------------------------------------------
@@ -25,6 +27,13 @@ import giskardpy.qp.solvers
 
 ignored_classes = set(classes_of_package(giskardpy.qp.solvers))
 ignored_classes |= set(classes_of_module(coraplex.locations.costmaps))
+# profiling and benchmarking measure a running system instead of describing it
+ignored_classes |= set(
+    classes_of_module(giskardpy.middleware.ros2.control_loop_profiler)
+)
+ignored_classes |= set(
+    classes_of_module(giskardpy.middleware.ros2.utils.control_loop_benchmark)
+)
 ignored_classes |= {SubclassJSONSerializer}
 
 dependencies = [semantic_digital_twin.orm.ormatic_interface]
