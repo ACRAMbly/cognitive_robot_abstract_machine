@@ -33,7 +33,7 @@ class TestMotionGoalPayload:
 
         restored = MotionGoal.from_json(json.loads(json.dumps(goal.to_json())))
 
-        assert restored.motion_statechart_data == motion_statechart.to_json()
+        assert restored.motion_statechart_json_data == motion_statechart.to_json()
 
     def test_a_goal_built_on_a_change_names_it(self):
         watermark = StateWatermark(
