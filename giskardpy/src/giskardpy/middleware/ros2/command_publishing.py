@@ -148,7 +148,7 @@ class StateVelocityReader:
     The world holding the commanded velocities.
     """
 
-    dofs: List[DegreeOfFreedom]
+    degrees_of_freedom: List[DegreeOfFreedom]
     """
     The degrees of freedom to read, in the order the velocities are returned in.
     """
@@ -176,7 +176,7 @@ class StateVelocityReader:
         """
         Resolve where the degrees of freedom live in the state data.
         """
-        self.columns = self.world.state.column_indices(self.dofs)
+        self.columns = self.world.state.column_indices(self.degrees_of_freedom)
         self.model_version = self.world.get_world_model_manager().version
 
 
@@ -314,7 +314,7 @@ class JointVelocityCommandPublisher(CommandPublisher):
         )
         self.velocity_reader = StateVelocityReader(
             world=self.world,
-            dofs=[connection.raw_dof for connection in self.connections],
+            degrees_of_freedom=[connection.raw_dof for connection in self.connections],
         )
 
     def publish(self) -> None:
@@ -342,7 +342,7 @@ class JointGroupVelocityCommandPublisher(CommandPublisher):
     The world holding the commanded velocities.
     """
 
-    cmd_topic: str
+    command_topic: str
     """
     Topic the velocity array is published on.
     """
@@ -374,14 +374,14 @@ class JointGroupVelocityCommandPublisher(CommandPublisher):
     The message reused for every publication.
     """
 
-    cmd_pub: Publisher = field(init=False)
+    command_publisher: Publisher = field(init=False)
     """
     The publisher for ``cmd_topic``.
     """
 
     def __post_init__(self):
-        self.cmd_pub = rospy.node.create_publisher(
-            Float64MultiArray, self.cmd_topic, 10
+        self.command_publisher = rospy.node.create_publisher(
+            Float64MultiArray, self.command_topic, 10
         )
         for connection in self.connections:
             connection.has_hardware_interface = True
@@ -390,10 +390,10 @@ class JointGroupVelocityCommandPublisher(CommandPublisher):
         )
         self.velocity_reader = StateVelocityReader(
             world=self.world,
-            dofs=[connection.raw_dof for connection in self.connections],
+            degrees_of_freedom=[connection.raw_dof for connection in self.connections],
         )
         rospy.node.get_logger().info(
-            f"Created publisher for {self.cmd_topic} for "
+            f"Created publisher for {self.command_topic} for "
             f"{[connection.name.name for connection in self.connections]}"
         )
 
@@ -404,11 +404,11 @@ class JointGroupVelocityCommandPublisher(CommandPublisher):
                 self.commands, self.velocity_reader.velocities()
             )
         ]
-        self.cmd_pub.publish(self.message)
+        self.command_publisher.publish(self.message)
 
     def stop(self) -> None:
         self.message.data = [0.0] * len(self.commands)
-        self.cmd_pub.publish(self.message)
+        self.command_publisher.publish(self.message)
 
 
 @dataclass
@@ -422,7 +422,7 @@ class DriveVelocityCommandPublisher(CommandPublisher):
     The world holding the commanded velocities.
     """
 
-    cmd_topic: str
+    command_topic: str
     """
     Topic the twist is published on.
     """
@@ -452,18 +452,21 @@ class DriveVelocityCommandPublisher(CommandPublisher):
     The message reused for every publication.
     """
 
-    vel_pub: Publisher = field(init=False)
+    velocity_publisher: Publisher = field(init=False)
     """
     The publisher for ``cmd_topic``.
     """
 
     def __post_init__(self):
-        self.vel_pub = rospy.node.create_publisher(Twist, self.cmd_topic, 10)
+        self.velocity_publisher = rospy.node.create_publisher(
+            Twist, self.command_topic, 10
+        )
         self.connection.has_hardware_interface = True
         self.velocity_reader = StateVelocityReader(
-            world=self.world, dofs=self.translation_dofs() + [self.connection.yaw]
+            world=self.world,
+            degrees_of_freedom=self.translation_dofs() + [self.connection.yaw],
         )
-        rospy.node.get_logger().info(f"Created publisher for {self.cmd_topic}.")
+        rospy.node.get_logger().info(f"Created publisher for {self.command_topic}.")
 
     def translation_dofs(self) -> List[DegreeOfFreedom]:
         """
@@ -484,10 +487,10 @@ class DriveVelocityCommandPublisher(CommandPublisher):
         self.message.angular.z = self.minimum_angular_velocity.enforce_on_scalar(
             velocities[-1]
         )
-        self.vel_pub.publish(self.message)
+        self.velocity_publisher.publish(self.message)
 
     def stop(self) -> None:
         self.message.linear.x = 0.0
         self.message.linear.y = 0.0
         self.message.angular.z = 0.0
-        self.vel_pub.publish(self.message)
+        self.velocity_publisher.publish(self.message)

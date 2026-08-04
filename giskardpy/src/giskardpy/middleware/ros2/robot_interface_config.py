@@ -181,7 +181,7 @@ class RobotInterfaceConfig(ABC):
         self.control_loop.command_publishers.append(
             DriveVelocityCommandPublisher(
                 world=self.world,
-                cmd_topic=cmd_vel_topic,
+                command_topic=cmd_vel_topic,
                 connection=joint,
                 minimum_linear_velocity=MinimumVelocity(minimum_linear_velocity),
                 minimum_angular_velocity=MinimumVelocity(minimum_angular_velocity),
@@ -238,7 +238,7 @@ class RobotInterfaceConfig(ABC):
         self.control_loop.command_publishers.append(
             JointGroupVelocityCommandPublisher(
                 world=self.world,
-                cmd_topic=cmd_topic,
+                command_topic=cmd_topic,
                 connections=controlled_connections,
                 minimum_velocities=JointMinimumVelocities.from_magnitudes(
                     minimum_valid_velocity, minimum_velocity_overrides

@@ -223,7 +223,7 @@ def group_publisher_for(
     """
     return JointGroupVelocityCommandPublisher(
         world=world,
-        cmd_topic="test_cmd",
+        command_topic="test_cmd",
         connections=[world.get_connection_by_name(spec.name) for spec in specs],
         minimum_velocities=JointMinimumVelocities.from_magnitudes(
             minimum_valid_velocity, minimum_velocity_overrides
@@ -236,7 +236,7 @@ def publish_group(controller: JointGroupVelocityCommandPublisher) -> List[float]
     Replace the publisher with a recorder, publish once, and return the data.
     """
     recorder = RecordingPublisher()
-    controller.cmd_pub = recorder
+    controller.command_publisher = recorder
     controller.publish()
     return list(recorder.published_message.data)
 
@@ -246,7 +246,7 @@ def publish_drive(publisher: DriveVelocityCommandPublisher) -> RecordingPublishe
     Replace the publisher with a recorder and publish one twist.
     """
     recorder = RecordingPublisher()
-    publisher.vel_pub = recorder
+    publisher.velocity_publisher = recorder
     publisher.publish()
     return recorder
 
@@ -452,7 +452,7 @@ def test_group_publisher_publishes_the_velocities_of_the_current_cycle(init_rosp
     world = build_world_with_joints(specs)
     controller = group_publisher_for(world, specs)
     recorder = RecordingPublisher()
-    controller.cmd_pub = recorder
+    controller.command_publisher = recorder
 
     controller.publish()
     world.get_connection_by_name("joint_a").velocity = 0.4
@@ -618,7 +618,7 @@ def build_drive_publisher(
     """
     return DriveVelocityCommandPublisher(
         world=world,
-        cmd_topic="/cmd_vel",
+        command_topic="/cmd_vel",
         connection=world.get_connection_by_name("brumbrum"),
         minimum_linear_velocity=MinimumVelocity(minimum_linear_velocity),
         minimum_angular_velocity=MinimumVelocity(minimum_angular_velocity),
@@ -705,7 +705,7 @@ def test_drive_publisher_publishes_the_velocities_of_the_current_cycle(init_rosp
     world.state[drive.x_velocity.id].velocity = 0.3
     publisher = build_drive_publisher(world)
     recorder = RecordingPublisher()
-    publisher.vel_pub = recorder
+    publisher.velocity_publisher = recorder
 
     publisher.publish()
     world.state[drive.x_velocity.id].velocity = 0.6
