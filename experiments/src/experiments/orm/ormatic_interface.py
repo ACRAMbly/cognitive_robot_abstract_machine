@@ -9434,13 +9434,13 @@ class JointStateInputSynchronizerDAO(
     }
 
 
-class JointPositionSynchronizerDAO(
+class LatestJointStateSynchronizerDAO(
     JointStateInputSynchronizerDAO,
     DataAccessObject[
-        giskardpy.middleware.ros2.input_synchronization.JointPositionSynchronizer
+        giskardpy.middleware.ros2.input_synchronization.LatestJointStateSynchronizer
     ],
 ):
-    __tablename__ = "JointPositionSynchronizerDAO"
+    __tablename__ = "LatestJointStateSynchronizerDAO"
 
     database_id: Mapped[builtins.int] = mapped_column(
         ForeignKey(JointStateInputSynchronizerDAO.database_id),
@@ -9449,28 +9449,7 @@ class JointPositionSynchronizerDAO(
     )
 
     __mapper_args__ = {
-        "polymorphic_identity": "JointPositionSynchronizerDAO",
-        "inherit_condition": database_id == JointStateInputSynchronizerDAO.database_id,
-        "polymorphic_load": "selectin",
-    }
-
-
-class JointStateSynchronizerDAO(
-    JointStateInputSynchronizerDAO,
-    DataAccessObject[
-        giskardpy.middleware.ros2.input_synchronization.JointStateSynchronizer
-    ],
-):
-    __tablename__ = "JointStateSynchronizerDAO"
-
-    database_id: Mapped[builtins.int] = mapped_column(
-        ForeignKey(JointStateInputSynchronizerDAO.database_id),
-        primary_key=True,
-        use_existing_column=True,
-    )
-
-    __mapper_args__ = {
-        "polymorphic_identity": "JointStateSynchronizerDAO",
+        "polymorphic_identity": "LatestJointStateSynchronizerDAO",
         "inherit_condition": database_id == JointStateInputSynchronizerDAO.database_id,
         "polymorphic_load": "selectin",
     }
@@ -9503,6 +9482,27 @@ class OdometrySynchronizerDAO(
     __mapper_args__ = {
         "polymorphic_identity": "OdometrySynchronizerDAO",
         "inherit_condition": database_id == TopicInputSynchronizerDAO.database_id,
+        "polymorphic_load": "selectin",
+    }
+
+
+class PendingJointStateSynchronizerDAO(
+    JointStateInputSynchronizerDAO,
+    DataAccessObject[
+        giskardpy.middleware.ros2.input_synchronization.PendingJointStateSynchronizer
+    ],
+):
+    __tablename__ = "PendingJointStateSynchronizerDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(JointStateInputSynchronizerDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
+    )
+
+    __mapper_args__ = {
+        "polymorphic_identity": "PendingJointStateSynchronizerDAO",
+        "inherit_condition": database_id == JointStateInputSynchronizerDAO.database_id,
         "polymorphic_load": "selectin",
     }
 

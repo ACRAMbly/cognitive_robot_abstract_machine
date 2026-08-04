@@ -180,9 +180,12 @@ class JointStateInputSynchronizer(TopicInputSynchronizer, ABC):
 
 
 @dataclass
-class JointStateSynchronizer(JointStateInputSynchronizer):
+class PendingJointStateSynchronizer(JointStateInputSynchronizer):
     """
-    Applies every joint state message exactly once.
+    Writes every joint state message exactly once, leaving nothing pending.
+
+    Reports that it wrote nothing in cycles without a new message, so that the world
+    state is not announced for positions the observers already know.
     """
 
     def apply(self) -> bool:
@@ -194,12 +197,13 @@ class JointStateSynchronizer(JointStateInputSynchronizer):
 
 
 @dataclass
-class JointPositionSynchronizer(JointStateInputSynchronizer):
+class LatestJointStateSynchronizer(JointStateInputSynchronizer):
     """
-    Applies the latest joint state message in every cycle.
+    Writes the most recent joint state message in every cycle, however old it is.
 
-    Used inside the control loop, where the world state must follow the robot even if no
-    new message arrived since the last cycle.
+    Keeps the world state on the last measurement of the robot even when the cycle
+    itself moved the state away from it, as a control cycle does when it integrates the
+    commanded velocities.
     """
 
     def apply(self) -> bool:

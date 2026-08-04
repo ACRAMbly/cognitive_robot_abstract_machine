@@ -21,8 +21,8 @@ from giskardpy.middleware.ros2.command_publishing import (
 )
 from giskardpy.middleware.ros2.control_loop import ControlLoop
 from giskardpy.middleware.ros2.input_synchronization import (
-    JointPositionSynchronizer,
-    JointStateSynchronizer,
+    LatestJointStateSynchronizer,
+    PendingJointStateSynchronizer,
     OdometrySynchronizer,
     TfFrameSynchronizer,
 )
@@ -145,12 +145,12 @@ class RobotInterfaceConfig(ABC):
         if group_name is None:
             group_name = self.robot.name
         self.motion_server.inputs.synchronizers.append(
-            JointStateSynchronizer(world=self.world, topic_name=topic_name)
+            PendingJointStateSynchronizer(world=self.world, topic_name=topic_name)
         )
         if not self.server_config.is_closed_loop or group_name != self.robot.name:
             return
         self.control_loop.inputs.synchronizers.append(
-            JointPositionSynchronizer(world=self.world, topic_name=topic_name)
+            LatestJointStateSynchronizer(world=self.world, topic_name=topic_name)
         )
 
     # %% commanding the robot
