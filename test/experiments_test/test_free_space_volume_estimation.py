@@ -70,7 +70,9 @@ def _non_watertight_ring_mesh() -> trimesh.Trimesh:
     return open_ring
 
 
-def test_non_watertight_mesh_falls_back_to_its_bounding_box(tmp_path):
+def test_non_watertight_mesh_is_convex_decomposed_instead_of_using_its_bounding_box(
+    tmp_path,
+):
     world = World()
     with world.modify_world():
         root = Body(name=PrefixedName("map"))
@@ -85,8 +87,40 @@ def test_non_watertight_mesh_falls_back_to_its_bounding_box(tmp_path):
     shape = obstacle.collision.shapes[0]
     containment_test = ObstacleContainmentTest.for_shape(shape, world.root)
 
-    # The ring's own hole at the center is not carved out by the bounding-box
-    # fallback, so a point there must still be reported as occupied.
+    # Unlike a bounding-box fallback, convex decomposition does not fill in the ring's
+    # own hole at the center, so a point there is correctly reported as free.
+    center_hole_and_outside = np.array([[0.0, 0.0, 0.0], [10.0, 10.0, 10.0]])
+
+    np.testing.assert_array_equal(
+        containment_test.contains(center_hole_and_outside), [False, False]
+    )
+
+    # A point actually inside the ring's material is still reported as occupied.
+    inside_ring_material = np.array([[0.4, 0.0, 0.0]])
+    assert containment_test.contains(inside_ring_material)[0]
+
+
+def test_decomposition_yielding_no_pieces_falls_back_to_the_bounding_box(tmp_path):
+    class _EmptyMeshDecomposer:
+        def apply_to_shape(self, shape):
+            return []
+
+    world = World()
+    with world.modify_world():
+        root = Body(name=PrefixedName("map"))
+        world.add_kinematic_structure_entity(root)
+        obstacle = Body(name=PrefixedName("ring"))
+        world.add_connection(FixedConnection.create_with_dofs(world, root, obstacle))
+        obstacle.collision.append(
+            Mesh.from_trimesh(
+                mesh=_non_watertight_ring_mesh(), dirname=str(tmp_path), file_type="stl"
+            )
+        )
+    shape = obstacle.collision.shapes[0]
+    containment_test = ObstacleContainmentTest.for_shape(
+        shape, world.root, mesh_decomposer=_EmptyMeshDecomposer()
+    )
+
     center_and_outside = np.array([[0.0, 0.0, 0.0], [10.0, 10.0, 10.0]])
 
     np.testing.assert_array_equal(

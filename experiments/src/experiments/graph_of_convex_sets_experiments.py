@@ -1,6 +1,6 @@
 """
 End-to-end performance benchmark for the Graph of Convex Sets (GCS) free- space
-pipeline, covering two families of environments:
+pipeline, covering three families of environments:
 
   * **URDF environments** — rooms loaded from `semantic_digital_twin/resources/urdf`
     via :class:`URDFParser`.
@@ -8,8 +8,13 @@ pipeline, covering two families of environments:
   * **PartNet-Mobility scenes** — articulated objects loaded from
     ``~/partnet-mobility-dataset`` via :class:`PartNetMobilityDatasetLoader`.
 
-For both, the navigable search space is the minimal box covering every obstacle in the
-scene, widened by 1 m in x and y (see :func:`_compute_minimal_search_space`).
+  * **Sage10k scenes** — real, multi-room scenes (walls, doors, furniture from PLY
+    meshes) downloaded from the ``nvidia/SAGE-10k`` dataset on Hugging Face via
+    :class:`Sage10kDatasetLoader`. Optional and off by default (see
+    ``--sage10k-count``), since loading a scene's meshes typically takes minutes.
+
+For all three, the navigable search space is the minimal box covering every obstacle in
+the scene, widened by 1 m in x and y (see :func:`_compute_minimal_search_space`).
 
 For every environment, both GCS implementations are benchmarked and compared against
 a mesh-accurate free-space ground truth:
@@ -36,6 +41,7 @@ Run with::
 
 from __future__ import annotations
 
+import argparse
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -53,6 +59,10 @@ from experiments.experiment_definitions import (
 from experiments.free_space_volume_estimation import MonteCarloFreeSpaceSampler
 from semantic_digital_twin.adapters.partnet_mobility_dataset.loader import (
     PartNetMobilityDatasetLoader,
+)
+from semantic_digital_twin.adapters.sage_10k_dataset.loader import Sage10kDatasetLoader
+from semantic_digital_twin.adapters.sage_10k_dataset.utils import (
+    Sage10kActionableScenes,
 )
 from semantic_digital_twin.adapters.urdf import URDFParser
 from semantic_digital_twin.semantic_annotations.semantic_annotations import (
@@ -560,14 +570,61 @@ def _perform_benchmark_for_partnet_model(
     )
 
 
+def _perform_benchmark_for_sage10k_scene(
+    loader: Sage10kDatasetLoader, scene_url: Sage10kActionableScenes
+) -> GraphOfConvexSetsFreespaceExperimentResult:
+    """
+    Run the GCS benchmark for a single Sage10k scene.
+
+    The search space is the minimal box covering every obstacle in the scene, widened by
+    1 m in x and y.
+
+    :param loader: A configured :class:`Sage10kDatasetLoader`.
+    :param scene_url: The Sage10k scene to benchmark; downloaded (and cached) from
+        Hugging Face on first use. Loading a scene's meshes typically takes minutes, not
+        seconds, so this is far more expensive per environment than the URDF or PartNet-
+        Mobility families.
+    """
+    return _run_benchmark(
+        world_loader=lambda: loader.create_scene(scene_url=scene_url).create_world(),
+        search_space_factory=lambda world: _compute_minimal_search_space(
+            _collect_obstacles(world), world
+        ),
+        environment_name=f"sage10k_{scene_url.name.lower()}",
+    )
+
+
+def _parse_arguments() -> argparse.Namespace:
+    """
+    Parse command-line arguments selecting how many Sage10k scenes to benchmark.
+
+    :return: The parsed arguments.
+    """
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--sage10k-count",
+        type=int,
+        default=0,
+        choices=range(len(Sage10kActionableScenes) + 1),
+        help="Number of Sage10k scenes to benchmark, taken in the order listed by "
+        "Sage10kActionableScenes. Defaults to 0 (skipped): each scene downloads (once, "
+        "then caches) and rebuilds its world from PLY meshes, which can take minutes "
+        "per scene.",
+    )
+    return parser.parse_args()
+
+
 def main():
     """
-    Benchmark all URDF environments and the first 10 PartNet-Mobility models.
+    Benchmark all URDF environments, the first 10 PartNet-Mobility models, and
+    optionally some Sage10k scenes (see ``--sage10k-count``).
 
     Results are collected into a single :class:`ExperimentsTable` and printed as a Typst
     ``#table`` block ready for inclusion in a scientific article. Progress is tracked
     via tqdm progress bars.
     """
+    arguments = _parse_arguments()
+
     urdf_directory_path = (
         Path(__file__).parent
         / ".."
@@ -589,6 +646,12 @@ def main():
     for model_id in (pbar := tqdm.tqdm(loader.available_model_ids[:10])):
         pbar.set_description(f"Running benchmark for partnet model {model_id}")
         results.append(_perform_benchmark_for_partnet_model(loader, model_id))
+
+    sage10k_scenes = list(Sage10kActionableScenes)[: arguments.sage10k_count]
+    sage10k_loader = Sage10kDatasetLoader()
+    for scene_url in (pbar := tqdm.tqdm(sage10k_scenes)):
+        pbar.set_description(f"Running benchmark for sage10k {scene_url.name}")
+        results.append(_perform_benchmark_for_sage10k_scene(sage10k_loader, scene_url))
 
     table = ExperimentsTable(results)
     print(TypstRenderer(table).render_table())

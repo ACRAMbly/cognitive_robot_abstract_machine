@@ -21,18 +21,29 @@ from functools import cached_property
 
 import numpy as np
 import trimesh
-from typing_extensions import TYPE_CHECKING, List, Sequence, Tuple
+from typing_extensions import TYPE_CHECKING, List, Optional, Sequence, Tuple
 
 from experiments.experiment_definitions import VolumeBound
+from semantic_digital_twin.pipeline.mesh_decomposition.vhacd import VHACDMeshDecomposer
 from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix
 from semantic_digital_twin.world_description.geometry import BoundingBox, Shape
 
 if TYPE_CHECKING:
     from pydrake.geometry.optimization import HPolyhedron
 
+    from semantic_digital_twin.pipeline.mesh_decomposition.base import MeshDecomposer
     from semantic_digital_twin.world_description.world_entity import (
         KinematicStructureEntity,
     )
+
+
+def _default_mesh_decomposer() -> VHACDMeshDecomposer:
+    """
+    :return: A VHACD decomposer tuned for fast approximate containment testing rather
+        than artifact-quality decomposition, since it runs once per non-watertight
+        obstacle at benchmark time.
+    """
+    return VHACDMeshDecomposer(max_convex_hulls=8, resolution=20000)
 
 
 # %% obstacle containment
@@ -43,34 +54,55 @@ class ObstacleContainmentTest:
     """
     Tests whether world-frame points fall inside a single obstacle shape.
 
-    Uses the shape's own mesh when it is watertight (exact), and falls back to its axis-
-    aligned bounding box otherwise, since :meth:`trimesh.Trimesh.contains` is only
-    reliable on a closed manifold. The bounding-box fallback over-approximates rather
-    than silently reporting no obstacle at all.
+    Uses the shape's own mesh directly when it is watertight (exact). Otherwise, since
+    :meth:`trimesh.Trimesh.contains` is only reliable on a closed manifold, the shape is
+    convex-decomposed (the same VHACD decomposition already used elsewhere in this
+    codebase, e.g. as :class:`~semantic_digital_twin.world.World`'s default mesh
+    decomposer) into watertight convex pieces, and a point counts as contained if it
+    falls in any of them. This is tighter than falling back to the shape's full bounding
+    box, since a decomposed piece cannot extend past the shape's own extent the way an
+    axis-aligned box around a hollow or L-shaped obstacle would.
     """
 
-    world_mesh: trimesh.Trimesh
+    world_meshes: List[trimesh.Trimesh]
     """
-    The obstacle's mesh, expressed in the target frame.
+    One or more watertight meshes covering the obstacle, expressed in the target frame
+    (the original mesh if it was already watertight, or its convex-decomposed pieces
+    otherwise).
     """
 
     world_bounding_box: BoundingBox
     """
-    The obstacle's bounding box, expressed in the target frame; used when
-    :attr:`world_mesh` is not watertight.
+    The obstacle's bounding box, expressed in the target frame; used only if
+    decomposition itself yields no pieces.
     """
 
     @classmethod
     def for_shape(
-        cls, shape: Shape, target_frame: KinematicStructureEntity
+        cls,
+        shape: Shape,
+        target_frame: KinematicStructureEntity,
+        mesh_decomposer: Optional[MeshDecomposer] = None,
     ) -> ObstacleContainmentTest:
         """
         Build a containment test for *shape*, expressed relative to *target_frame*.
+
+        :param mesh_decomposer: Decomposer used when the shape's own mesh is not
+            watertight; defaults to a VHACD decomposer tuned for speed.
         """
         world_bounding_box = shape.local_frame_bounding_box.transform_to_origin(
             HomogeneousTransformationMatrix(reference_frame=target_frame)
         )
-        return cls(shape.mesh_in_frame(target_frame), world_bounding_box)
+        world_mesh = shape.mesh_in_frame(target_frame)
+        if world_mesh.is_watertight:
+            return cls([world_mesh], world_bounding_box)
+
+        decomposer = mesh_decomposer or _default_mesh_decomposer()
+        world_meshes = [
+            piece.mesh_in_frame(target_frame)
+            for piece in decomposer.apply_to_shape(shape)
+        ]
+        return cls(world_meshes, world_bounding_box)
 
     def contains(self, points: np.ndarray) -> np.ndarray:
         """
@@ -78,10 +110,14 @@ class ObstacleContainmentTest:
         :return: A boolean ``(N,)`` array, ``True`` where the obstacle contains the
             point.
         """
-        if self.world_mesh.is_watertight:
-            return self.world_mesh.contains(points)
-        bounds = self.world_bounding_box.to_array_bounds()
-        return np.all((points >= bounds.lower) & (points <= bounds.upper), axis=1)
+        if not self.world_meshes:
+            bounds = self.world_bounding_box.to_array_bounds()
+            return np.all((points >= bounds.lower) & (points <= bounds.upper), axis=1)
+
+        contained = np.zeros(len(points), dtype=bool)
+        for mesh in self.world_meshes:
+            contained |= mesh.contains(points)
+        return contained
 
 
 # %% Monte Carlo sampling
