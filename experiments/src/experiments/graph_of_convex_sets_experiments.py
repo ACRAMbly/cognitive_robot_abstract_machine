@@ -3,13 +3,13 @@ End-to-end performance benchmark for the Graph of Convex Sets (GCS) free- space
 pipeline, covering two families of environments:
 
   * **URDF environments** — rooms loaded from `semantic_digital_twin/resources/urdf`
-    via :class:`URDFParser`.  The navigable search volume is a fixed axis-aligned
-    box (±20 m in XY, 0–3 m in Z) that conservatively contains all scenes.
+    via :class:`URDFParser`.
 
   * **PartNet-Mobility scenes** — articulated objects loaded from
     ``~/partnet-mobility-dataset`` via :class:`PartNetMobilityDatasetLoader`.
-    The search space is derived automatically from the union of each object's
-    obstacle bounding boxes plus 0.5 m of padding.
+
+For both, the navigable search space is the minimal box covering every obstacle in the
+scene, widened by 1 m in x and y (see :func:`_compute_minimal_search_space`).
 
 For every environment, both GCS implementations are benchmarked and compared against
 a mesh-accurate free-space ground truth:
@@ -302,17 +302,21 @@ def _region_volume(region) -> float:
         return region.CalcVolumeViaSampling(RandomGenerator(0), 0.01, 10000).volume
 
 
-def _compute_search_space_from_obstacles(
-    obstacle_bounding_boxes: List[BoundingBox], world, padding: float = 0.5
+def _compute_minimal_search_space(
+    obstacle_bounding_boxes: List[BoundingBox], world, xy_widen: float = 1.0
 ) -> BoundingBoxCollection:
     """
-    Derive a search-space bounding box from the union of obstacle bounding boxes plus
-    padding.
+    Derive a search-space bounding box as the minimal box covering every obstacle,
+    widened in x and y only.
+
+    z is left tight to the scene's own extent (unwidened), since the navigable volume
+    should not grow taller than the scene that defines it.
 
     :param obstacle_bounding_boxes: List of bounding boxes to include in the search
         space.
     :param world: The world to which the bounding boxes belong.
-    :param padding: Amount of padding to add around the union of the
+    :param xy_widen: Total amount to widen the minimal covering box by, split evenly
+        between both sides, in x and y.
     """
     origin = HomogeneousTransformationMatrix(reference_frame=world.root)
     if not obstacle_bounding_boxes:
@@ -336,15 +340,16 @@ def _compute_search_space_from_obstacles(
     all_max_x = max(bb.max_x for bb in obstacle_bounding_boxes)
     all_max_y = max(bb.max_y for bb in obstacle_bounding_boxes)
     all_max_z = max(bb.max_z for bb in obstacle_bounding_boxes)
+    half_xy_widen = xy_widen / 2.0
     return BoundingBoxCollection(
         shapes=[
             BoundingBox(
-                min_x=all_min_x - padding,
-                min_y=all_min_y - padding,
-                min_z=all_min_z - padding,
-                max_x=all_max_x + padding,
-                max_y=all_max_y + padding,
-                max_z=all_max_z + padding,
+                min_x=all_min_x - half_xy_widen,
+                min_y=all_min_y - half_xy_widen,
+                min_z=all_min_z,
+                max_x=all_max_x + half_xy_widen,
+                max_y=all_max_y + half_xy_widen,
+                max_z=all_max_z,
                 origin=origin,
             )
         ],
@@ -506,27 +511,14 @@ def _perform_benchmark_for_environment(
     """
     Run the GCS benchmark for a single URDF environment file.
 
-    The search space is a fixed ±20 m × ±20 m × 3 m box centred at the world root, which
-    conservatively contains all scenes in the URDF resource folder.
+    The search space is the minimal box covering every obstacle in the scene, widened by
+    1 m in x and y.
 
     :param urdf_path: Path to the ``.urdf`` file to benchmark.
     """
 
     def _search_space_factory(world):
-        return BoundingBoxCollection(
-            shapes=[
-                BoundingBox(
-                    min_x=-20.0,
-                    min_y=-20.0,
-                    min_z=0.0,
-                    max_x=20.0,
-                    max_y=20.0,
-                    max_z=3.0,
-                    origin=HomogeneousTransformationMatrix(reference_frame=world.root),
-                )
-            ],
-            reference_frame=world.root,
-        )
+        return _compute_minimal_search_space(_collect_obstacles(world), world)
 
     return _run_benchmark(
         world_loader=lambda: URDFParser.from_file(str(urdf_path)).parse(),
@@ -541,17 +533,16 @@ def _perform_benchmark_for_partnet_model(
     """
     Run the GCS benchmark for a single PartNet-Mobility model.
 
-    The search space is derived automatically: obstacle bounding boxes are
-    collected from the loaded world and a single enclosing box with 0.5 m
-    padding on every side is used as the navigable volume.
+    The search space is the minimal box covering every obstacle in the scene, widened by
+    1 m in x and y.
 
-    :param loader: A configured :class:`PartNetMobilityDatasetLoader` (already
-        points at the local dataset directory).
+    :param loader: A configured :class:`PartNetMobilityDatasetLoader` (already points at
+        the local dataset directory).
     :param model_id: PartNet-Mobility model identifier (e.g. ``179``).
     """
     return _run_benchmark(
         world_loader=lambda: loader.load(model_id),
-        search_space_factory=lambda world: _compute_search_space_from_obstacles(
+        search_space_factory=lambda world: _compute_minimal_search_space(
             _collect_obstacles(world), world
         ),
         environment_name=f"partnet_{model_id}",
