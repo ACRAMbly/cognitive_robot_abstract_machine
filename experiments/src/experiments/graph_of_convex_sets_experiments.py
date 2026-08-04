@@ -10,8 +10,10 @@ pipeline, covering three families of environments:
 
   * **Sage10k scenes** — real, multi-room scenes (walls, doors, furniture from PLY
     meshes) downloaded from the ``nvidia/SAGE-10k`` dataset on Hugging Face via
-    :class:`Sage10kDatasetLoader`. Optional and off by default (see
-    ``--sage10k-count``), since loading a scene's meshes typically takes minutes.
+    :class:`Sage10kDatasetLoader`. Optional and off by default, since loading a scene's
+    meshes typically takes minutes: ``--sage10k-count`` benchmarks scenes from the
+    curated :class:`Sage10kActionableScenes`, and ``--sage10k-random-count`` benchmarks
+    additional scenes sampled at random from the full, uncurated dataset.
 
 For all three, the navigable search space is the minimal box covering every obstacle in
 the scene, widened by 1 m in x and y (see :func:`_compute_minimal_search_space`).
@@ -42,10 +44,13 @@ Run with::
 from __future__ import annotations
 
 import argparse
+import logging
+import random
 import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, List
+from urllib.parse import urlparse
 
 import tqdm
 from experiments.experiment_definitions import (
@@ -82,6 +87,8 @@ from semantic_digital_twin.world_description.shape_collection import (
 )
 from semantic_digital_twin.world_description.world_entity import Body
 
+logger = logging.getLogger(__name__)
+
 
 @dataclass
 class GraphOfConvexSetsFreespaceExperimentResult(ExperimentResult):
@@ -108,8 +115,8 @@ class GraphOfConvexSetsFreespaceExperimentResult(ExperimentResult):
 
     free_space_computation_duration_milliseconds: MeanAndStandardDeviation
     """
-    Time to compute the free-space event via ``subtract_disjoint`` (mean ±
-    standard deviation).
+    Time to compute the free-space event via ``subtract_disjoint`` (mean ± standard
+    deviation).
     """
 
     free_space_simple_set_count: int
@@ -119,8 +126,8 @@ class GraphOfConvexSetsFreespaceExperimentResult(ExperimentResult):
 
     materialise_duration_milliseconds: MeanAndStandardDeviation
     """
-    Time to convert the free-space event into a :class:`BoundingBoxCollection`
-    (mean ± standard deviation).
+    Time to convert the free-space event into a :class:`BoundingBoxCollection` (mean ±
+    standard deviation).
     """
 
     free_space_bounding_box_count: int
@@ -145,7 +152,7 @@ class GraphOfConvexSetsFreespaceExperimentResult(ExperimentResult):
 
     box_construction_duration_milliseconds: MeanAndStandardDeviation
     """
-    Time to build a complete, query-ready :class:`GraphOfBoundingBoxes` from the already-
+    Time to build a complete, query-ready :class:`GraphOfBoundingBoxes` from an already-
     loaded world via ``GraphOfBoundingBoxes.free_space_from_world`` (mean ± standard
     deviation).
 
@@ -587,7 +594,7 @@ def _perform_benchmark_for_partnet_model(
 
 
 def _perform_benchmark_for_sage10k_scene(
-    loader: Sage10kDatasetLoader, scene_url: Sage10kActionableScenes
+    loader: Sage10kDatasetLoader, scene_url: str, environment_name: str
 ) -> GraphOfConvexSetsFreespaceExperimentResult:
     """
     Run the GCS benchmark for a single Sage10k scene.
@@ -596,18 +603,29 @@ def _perform_benchmark_for_sage10k_scene(
     1 m in x and y.
 
     :param loader: A configured :class:`Sage10kDatasetLoader`.
-    :param scene_url: The Sage10k scene to benchmark; downloaded (and cached) from
-        Hugging Face on first use. Loading a scene's meshes typically takes minutes, not
-        seconds, so this is far more expensive per environment than the URDF or PartNet-
-        Mobility families.
+    :param scene_url: URL of the Sage10k scene to benchmark; downloaded (and cached)
+        from Hugging Face on first use. Loading a scene's meshes typically takes
+        minutes, not seconds, so this is far more expensive per environment than the
+        URDF or PartNet-Mobility families.
+    :param environment_name: Human-readable label stored in the result row.
     """
     return _run_benchmark(
         world_loader=lambda: loader.create_scene(scene_url=scene_url).create_world(),
         search_space_factory=lambda world: _compute_minimal_search_space(
             _collect_obstacles(world), world
         ),
-        environment_name=f"sage10k_{scene_url.name.lower()}",
+        environment_name=environment_name,
     )
+
+
+def _environment_name_for_sage10k_url(scene_url: str) -> str:
+    """
+    :param scene_url: A Sage10k scene URL (e.g. one from
+        :meth:`Sage10kDatasetLoader.available_scenes`).
+    :return: A human-readable label derived from the URL's filename, e.g.
+        ``sage10k_random_20251213_171403_layout_26384448``.
+    """
+    return f"sage10k_random_{Path(urlparse(scene_url).path).stem}"
 
 
 def _parse_arguments() -> argparse.Namespace:
@@ -627,13 +645,30 @@ def _parse_arguments() -> argparse.Namespace:
         "then caches) and rebuilds its world from PLY meshes, which can take minutes "
         "per scene.",
     )
+    parser.add_argument(
+        "--sage10k-random-count",
+        type=int,
+        default=0,
+        help="Number of additional Sage10k scenes to benchmark, sampled at random "
+        "(without replacement) from the full nvidia/SAGE-10k dataset rather than the "
+        "curated Sage10kActionableScenes. Defaults to 0 (skipped). Requires "
+        "huggingface_hub to list the dataset.",
+    )
+    parser.add_argument(
+        "--sage10k-random-seed",
+        type=int,
+        default=42,
+        help="Seed for --sage10k-random-count's sampling, so repeated runs pick the "
+        "same random scenes.",
+    )
     return parser.parse_args()
 
 
 def main():
     """
     Benchmark all URDF environments, the first 10 PartNet-Mobility models, and
-    optionally some Sage10k scenes (see ``--sage10k-count``).
+    optionally some Sage10k scenes (see ``--sage10k-count`` and ``--sage10k-random-
+    count``).
 
     Results are collected into a single :class:`ExperimentsTable` and printed as a Typst
     ``#table`` block ready for inclusion in a scientific article. Progress is tracked
@@ -667,7 +702,31 @@ def main():
     sage10k_loader = Sage10kDatasetLoader()
     for scene_url in (pbar := tqdm.tqdm(sage10k_scenes)):
         pbar.set_description(f"Running benchmark for sage10k {scene_url.name}")
-        results.append(_perform_benchmark_for_sage10k_scene(sage10k_loader, scene_url))
+        results.append(
+            _perform_benchmark_for_sage10k_scene(
+                sage10k_loader, scene_url, f"sage10k_{scene_url.name.lower()}"
+            )
+        )
+
+    if arguments.sage10k_random_count:
+        all_scene_urls = Sage10kDatasetLoader.available_scenes()
+        random_scene_urls = random.Random(arguments.sage10k_random_seed).sample(
+            all_scene_urls, arguments.sage10k_random_count
+        )
+        for scene_url in (pbar := tqdm.tqdm(random_scene_urls)):
+            environment_name = _environment_name_for_sage10k_url(scene_url)
+            pbar.set_description(f"Running benchmark for {environment_name}")
+            try:
+                results.append(
+                    _perform_benchmark_for_sage10k_scene(
+                        sage10k_loader, scene_url, environment_name
+                    )
+                )
+            except Exception as error:
+                # Scenes here are sampled from the full, uncurated dataset (unlike
+                # Sage10kActionableScenes, which are verified to load), so a malformed
+                # scene is expected occasionally and should not sink the whole run.
+                logger.warning(f"Skipping {environment_name}: {error}")
 
     table = ExperimentsTable(results)
     print(TypstRenderer(table).render_table())
