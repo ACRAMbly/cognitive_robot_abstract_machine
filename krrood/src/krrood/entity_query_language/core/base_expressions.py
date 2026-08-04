@@ -13,6 +13,7 @@ import uuid
 import weakref
 from abc import ABC, abstractmethod
 from collections import UserDict
+from contextlib import AbstractContextManager
 from copy import copy
 from dataclasses import dataclass, field
 from functools import cached_property
@@ -81,7 +82,7 @@ class RuleTreeContext:
 
 
 @dataclass(eq=False)
-class SymbolicExpression(ABC):
+class SymbolicExpression(AbstractContextManager):
     """
     Base class for all symbolic expressions.
 
@@ -479,9 +480,8 @@ class SymbolicExpression(ABC):
 
     def _has_parent_(self, expression: SymbolicExpression) -> bool:
         """
-        :return: Whether the given expression is one of this expression's parents.
-
         :param expression: The expression to look for among this expression's parents.
+        :return: Whether the given expression is one of this expression's parents.
         """
         return expression._id_ in [parent._id_ for parent in self._parents_]
 
@@ -709,10 +709,9 @@ class SymbolicExpression(ABC):
         cls, condition: SymbolicExpression
     ) -> Optional[RuleTreeContext]:
         """
+        :param condition: The condition an edit is about to be made relative to.
         :return: The context of the innermost enclosing ``with`` statement that anchors on
             the given condition, or ``None`` when no enclosing statement does.
-
-        :param condition: The condition an edit is about to be made relative to.
         """
         return next(
             (
