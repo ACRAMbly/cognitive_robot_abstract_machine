@@ -159,7 +159,6 @@ class GiskardExecutable(Executable):
             if skip_end_conditions:
                 end_trigger = trinary_logic_or(end_trigger, *skip_end_conditions)
 
-            self._add_condition_monitors(first_task, end_trigger)
         if GiskardExecutable.collision_avoidance:
             self._current_motion_state_chart.add_node(ExternalCollisionAvoidance())
 
