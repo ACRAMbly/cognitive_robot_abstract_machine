@@ -148,7 +148,9 @@ def test_service_callback_with_multiple_modifications(rclpy_node):
 def test_world_fetching(rclpy_node):
     world = create_dummy_world()
     world.get_body_by_name("body_2").parent_connection.origin = (
-        HomogeneousTransformationMatrix.from_xyz_rpy(1, 1, 1)
+        HomogeneousTransformationMatrix.from_xyz_rpy(
+            1, 1, 1, reference_frame=world.get_body_by_name("body_1")
+        )
     )
     fetcher = FetchWorldServer(node=rclpy_node, world=world)
 
