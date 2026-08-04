@@ -30,6 +30,7 @@ from typing_extensions import (
 )
 
 from krrood.adapters.json_serializer import SubclassJSONSerializer, to_json, from_json
+from krrood.patterns.subclass_safe_generic import SubClassSafeGeneric
 from random_events.interval import SimpleInterval, Bound, closed
 from random_events.product_algebra import SimpleEvent
 from semantic_digital_twin.datastructures.variables import SpatialVariables
@@ -1098,7 +1099,7 @@ T = TypeVar("T")
 
 
 @dataclass
-class Bounds(Generic[T]):
+class Bounds(Generic[T], SubClassSafeGeneric):
     """
     The lower and upper corner of an axis-aligned region.
     """
