@@ -16,8 +16,9 @@ from dataclasses import dataclass, field
 import rclpy
 from rclpy.executors import SingleThreadedExecutor
 from rclpy.node import Node
-from typing_extensions import ClassVar
+from typing_extensions import ClassVar, List, Type
 
+from coraplex.alternative_motion_mapping import AlternativeMotion
 from coraplex.datastructures.dataclasses import Context
 from coraplex.datastructures.enums import ExecutionType
 from coraplex.execution_environment import ExecutionEnvironment
@@ -27,6 +28,7 @@ from semantic_digital_twin.adapters.ros.visualization.viz_marker import (
 )
 from semantic_digital_twin.adapters.ros.world_fetcher import fetch_world_from_service
 from semantic_digital_twin.adapters.ros.world_synchronizer import WorldSynchronizer
+from semantic_digital_twin.robots.robot_parts import AbstractRobot
 from semantic_digital_twin.world import World
 
 # %% ros session
@@ -122,6 +124,11 @@ class RobotDemonstration(ABC):
     simulated run builds its own world and touches no network.
     """
 
+    used_robot: Type[AbstractRobot]
+    """
+    The robot this demonstration uses.
+    """
+
     ros_node_name: ClassVar[str] = "robot_demonstration"
     """
     Name of the node a real run registers.
@@ -180,6 +187,16 @@ class RobotDemonstration(ABC):
         if self.ros_session is None:
             return None
         return self.ros_session.node
+
+    @property
+    def alternative_motion_mappings(self) -> List[Type[AlternativeMotion]]:
+        """
+        Every alternative motion mapping known to coraplex, for every robot.
+
+        Resolution filters by ``used_robot`` and execution type, so handing over the
+        full set is always safe and needs no per-robot selection here.
+        """
+        return AlternativeMotion.discover_all()
 
     def acquire_world(self) -> World:
         """

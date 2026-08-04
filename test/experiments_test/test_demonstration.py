@@ -105,7 +105,9 @@ def test_simulated_run_never_starts_a_ros_session(cylinder_bot_world):
     A simulated run builds its own world, so it must not touch the network or leave a
     ROS session behind.
     """
-    demonstration = RecordingDemonstration(world=cylinder_bot_world)
+    demonstration = RecordingDemonstration(
+        world=cylinder_bot_world, used_robot=MinimalRobot
+    )
 
     acquired_world = demonstration.acquire_world()
 
@@ -118,7 +120,9 @@ def test_simulated_run_never_starts_a_ros_session(cylinder_bot_world):
 
 
 def test_scene_is_spawned_when_the_world_does_not_have_it(cylinder_bot_world):
-    demonstration = RecordingDemonstration(world=cylinder_bot_world)
+    demonstration = RecordingDemonstration(
+        world=cylinder_bot_world, used_robot=MinimalRobot
+    )
 
     demonstration.run()
 
@@ -131,7 +135,9 @@ def test_scene_is_not_spawned_again_into_a_world_that_has_it(cylinder_bot_world)
     demonstration's objects, and must not spawn a second copy of them.
     """
     demonstration = RecordingDemonstration(
-        world=cylinder_bot_world, scene_already_populated=True
+        world=cylinder_bot_world,
+        used_robot=MinimalRobot,
+        scene_already_populated=True,
     )
 
     demonstration.run()
@@ -150,6 +156,7 @@ def test_plan_runs_in_the_demonstrations_execution_environment(cylinder_bot_worl
     previous_execution_type = GiskardExecutable.execution_type
     demonstration = RecordingDemonstration(
         world=cylinder_bot_world,
+        used_robot=MinimalRobot,
         execution_type=ExecutionType.SIMULATED,
         collision_avoidance=True,
     )
@@ -163,7 +170,9 @@ def test_plan_runs_in_the_demonstrations_execution_environment(cylinder_bot_worl
 
 
 def test_run_returns_the_world_it_acted_on(cylinder_bot_world):
-    demonstration = RecordingDemonstration(world=cylinder_bot_world)
+    demonstration = RecordingDemonstration(
+        world=cylinder_bot_world, used_robot=MinimalRobot
+    )
 
     assert demonstration.run() is cylinder_bot_world
 
@@ -176,7 +185,9 @@ def test_tear_down_runs_when_the_plan_fails(cylinder_bot_world):
     A demonstration that dies mid-plan still has to release what it acquired, or a real
     run leaves its ROS session behind.
     """
-    demonstration = RecordingDemonstration(world=cylinder_bot_world, fail_the_plan=True)
+    demonstration = RecordingDemonstration(
+        world=cylinder_bot_world, used_robot=MinimalRobot, fail_the_plan=True
+    )
 
     with pytest.raises(PlanDeliberatelyFailed):
         demonstration.run()

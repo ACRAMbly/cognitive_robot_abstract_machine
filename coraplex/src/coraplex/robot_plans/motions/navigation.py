@@ -37,7 +37,7 @@ class MoveMotion(BaseMotion):
                 base_pose=self.target.to_homogeneous_matrix(),
                 odom_connection=self.robot.root.parent_connection,
             )
-            if GiskardExecutable.execution_type == ExecutionType.SIMULATED
+            if False  # GiskardExecutable.execution_type == ExecutionType.SIMULATED
             else CartesianPose(
                 root_link=self.world.root,
                 tip_link=self.robot.root,

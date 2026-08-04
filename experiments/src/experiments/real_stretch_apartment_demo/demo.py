@@ -32,12 +32,6 @@ from dataclasses import dataclass
 import numpy as np
 from typing_extensions import ClassVar
 
-from coraplex.alternative_motion_mappings.stretch_motion_mapping import (
-    StretchClose,
-    StretchMoveReal,
-    StretchMoveSim,
-    StretchMoveToolCenterPoint,
-)
 from coraplex.datastructures.dataclasses import Context
 from coraplex.datastructures.enums import (
     ApproachDirection,
@@ -63,7 +57,14 @@ from semantic_digital_twin.api import (
     RobotSpecification,
     WorldSpecification,
 )
+from semantic_digital_twin.robots.armar7 import Armar7
+from semantic_digital_twin.robots.hsrb import HSRB
+from semantic_digital_twin.robots.justin import Justin
+from semantic_digital_twin.robots.mmp_dresden import MMPDresden
+from semantic_digital_twin.robots.pr2 import PR2
 from semantic_digital_twin.robots.stretch import Stretch
+from semantic_digital_twin.robots.tiago import Tiago
+from semantic_digital_twin.robots.unitree_g1 import UnitreeG1
 from semantic_digital_twin.semantic_annotations.semantic_annotations import (
     CheezeIt,
     Door,
@@ -138,7 +139,7 @@ class StretchApartmentDemonstration(RobotDemonstration):
             world=World.create_with_root_body(),
             robots=[
                 RobotSpecification(
-                    semantic_annotation_type=Stretch,
+                    semantic_annotation_type=self.used_robot,
                     odom_T_robot_start=HomogeneousTransformationMatrix.from_xyz_rpy(
                         1, 1
                     ),
@@ -330,15 +331,10 @@ class StretchApartmentDemonstration(RobotDemonstration):
         """
         return Context(
             world=world,
-            robot=world.get_semantic_annotations_by_type(Stretch)[0],
+            robot=world.get_semantic_annotations_by_type(self.used_robot)[0],
             ros_node=self.ros_node,
             evaluate_conditions=False,
-            alternative_motion_mappings=[
-                StretchMoveToolCenterPoint,
-                StretchMoveSim,
-                StretchMoveReal,
-                StretchClose,
-            ],
+            alternative_motion_mappings=self.alternative_motion_mappings,
         )
 
     def build_plan(self, context: Context) -> PlanNode:
@@ -412,8 +408,14 @@ def main(execution_type: ExecutionType = ExecutionType.SIMULATED) -> None:
 
     :param execution_type: Whether to drive the real robot or simulate it.
     """
-    StretchApartmentDemonstration(execution_type=execution_type).run()
+    # PR2
+    # HSRB
+    # Stretch
+    # Tiago,
+    StretchApartmentDemonstration(
+        used_robot=Stretch, execution_type=execution_type
+    ).run()
 
 
 if __name__ == "__main__":
-    main(execution_type=ExecutionType.REAL)
+    main(execution_type=ExecutionType.SIMULATED)

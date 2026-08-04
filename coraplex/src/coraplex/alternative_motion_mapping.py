@@ -2,11 +2,13 @@ from __future__ import annotations
 
 from abc import ABC
 from dataclasses import dataclass
+from inspect import isabstract
 
 from typing_extensions import (
     TypeVar,
     ClassVar,
     TYPE_CHECKING,
+    List,
     Optional,
     Type,
     Iterable,
@@ -15,6 +17,8 @@ from typing_extensions import (
 
 from krrood.adapters.json_serializer import list_like_classes
 from krrood.ormatic.data_access_objects.base import HasGeneric
+from krrood.ormatic.utils import classes_of_package
+from krrood.utils import recursive_subclasses
 from .datastructures.enums import ExecutionType
 from .plans.executables import GiskardExecutable
 from semantic_digital_twin.robots.robot_parts import AbstractRobot
@@ -70,3 +74,26 @@ class AlternativeMotion(HasGeneric[AbstractRobotType], ABC):
             ):
                 return alternative
         return None
+
+    @classmethod
+    def discover_all(cls) -> List[Type[AlternativeMotion]]:
+        """
+        Discover every concrete :class:`AlternativeMotion` for every robot.
+
+        Importing ``coraplex.alternative_motion_mappings`` walks and imports its
+        submodules, registering their :class:`AlternativeMotion` subclasses.
+
+        :return: Every concrete alternative motion known to coraplex.
+        """
+        # Deferred: every submodule of alternative_motion_mappings imports
+        # AlternativeMotion back via coraplex.robot_plans.motions.base, which imports
+        # it from this module -- a module-level import here would be circular and fail
+        # while this module is still initializing.
+        import coraplex.alternative_motion_mappings as mappings_package
+
+        classes_of_package(mappings_package)
+        return [
+            subclass
+            for subclass in recursive_subclasses(cls)
+            if not isabstract(subclass)
+        ]
