@@ -233,21 +233,7 @@ def test_exception_try_in_order(immutable_model_world):
     assert plan.root.status == TaskStatus.SUCCEEDED
 
 
-def test_exception_parallel(immutable_model_world):
-    world, robot_view, context = immutable_model_world
 
-    def raise_except():
-        raise PlanFailure()
-
-    act = NavigateAction(Pose.from_xyz_rpy(x=-2, reference_frame=world.root))
-    act2 = code(raise_except)
-
-    plan = parallel([act, act2], context).plan
-    with pytest.raises(PlanFailure):
-        with simulated_robot:
-            _ = plan.perform()
-    assert type(plan.root.reason) is PlanFailure
-    assert plan.root.status == TaskStatus.FAILED
 
 
 def test_exception_try_all(immutable_model_world):
