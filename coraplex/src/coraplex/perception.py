@@ -186,7 +186,7 @@ class Detection:
         body = annotations[0].root
         detected_origin = world.transform(self.pose, body.parent_connection.parent)
         if trust_orientation:
-            body.parent_connection.origin = detected_origin
+            body.parent_connection.origin = detected_origin.to_homogeneous_matrix()
         else:
             body.parent_connection.origin = (
                 HomogeneousTransformationMatrix.from_point_rotation_matrix(
