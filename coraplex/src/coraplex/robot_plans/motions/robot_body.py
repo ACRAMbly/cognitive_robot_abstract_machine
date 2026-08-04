@@ -10,6 +10,7 @@ from giskardpy.motion_statechart.tasks.joint_tasks import (
     JointVelocityLimit,
 )
 from giskardpy.motion_statechart.tasks.pointing import Pointing
+from coraplex.robot_plans.mixins import HasMaxJointVelocity
 from coraplex.robot_plans.motions.base import BaseMotion
 from semantic_digital_twin.robots.robot_parts import Camera
 from semantic_digital_twin.spatial_types import Vector3
@@ -17,7 +18,7 @@ from semantic_digital_twin.spatial_types.spatial_types import Pose
 
 
 @dataclass
-class MoveJointsMotion(BaseMotion):
+class MoveJointsMotion(BaseMotion, HasMaxJointVelocity):
     """
     Moves any joint on the robot.
     """
@@ -58,13 +59,6 @@ class MoveJointsMotion(BaseMotion):
     (optional).
     """
 
-    max_velocity: Optional[float] = None
-    """
-    Maximum joint velocity (in rad/s or m/s, per joint), enforced via
-    :class:`~giskardpy.motion_statechart.tasks.joint_tasks.JointVelocityLimit`. ``None``
-    leaves the speed unconstrained.
-    """
-
     def perform(self):
         return
 
@@ -74,12 +68,14 @@ class MoveJointsMotion(BaseMotion):
         joint_task = JointPositionList(
             goal_state=JointState.from_mapping(dict(zip(dofs, self.positions))),
         )
-        if self.max_velocity is None:
+        if self.max_joint_velocity is None:
             return joint_task
         return Parallel(
             [
                 joint_task,
-                JointVelocityLimit(connections=dofs, max_velocity=self.max_velocity),
+                JointVelocityLimit(
+                    connections=dofs, max_velocity=self.max_joint_velocity
+                ),
             ]
         )
 

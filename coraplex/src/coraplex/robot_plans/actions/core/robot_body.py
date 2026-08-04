@@ -20,6 +20,7 @@ from coraplex.datastructures.enums import AxisIdentifier, Arms
 from coraplex.datastructures.trajectory import PoseTrajectory
 from coraplex.plans.factories import execute_single, sequential
 from coraplex.robot_plans.actions.base import ActionDescription, DescriptionType
+from coraplex.robot_plans.mixins import HasMaxJointVelocity
 from coraplex.robot_plans.motions.gripper import (
     MoveGripperMotion,
     MoveTCPWaypointsMotion,
@@ -93,7 +94,7 @@ class SetGripperAction(ActionDescription):
 
 
 @dataclass
-class ParkArmsAction(ActionDescription):
+class ParkArmsAction(ActionDescription, HasMaxJointVelocity):
     """
     Park the arms of the robot.
     """
@@ -101,13 +102,6 @@ class ParkArmsAction(ActionDescription):
     arm: Arms
     """
     Entry from the enum for which arm should be parked.
-    """
-
-    max_velocity: Optional[float] = None
-    """
-    Maximum joint velocity (in rad/s) for the parking motion, enforced via
-    :class:`~giskardpy.motion_statechart.tasks.joint_tasks.JointVelocityLimit`. ``None``
-    leaves the speed unconstrained.
     """
 
     @property
@@ -118,7 +112,7 @@ class ParkArmsAction(ActionDescription):
             MoveJointsMotion(
                 names=joint_names,
                 positions=joint_poses,
-                max_velocity=self.max_velocity,
+                max_joint_velocity=self.max_joint_velocity,
             )
         )
 

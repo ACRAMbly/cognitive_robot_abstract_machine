@@ -15,7 +15,6 @@ from giskardpy.motion_statechart.tasks.cartesian_tasks import (
 )
 from giskardpy.motion_statechart.tasks.joint_tasks import (
     JointPositionList,
-    JointState,
     JointVelocityLimit,
 )
 from giskardpy.motion_statechart.monitors.monitors import LocalMinimumReached
@@ -37,22 +36,6 @@ from coraplex.datastructures.enums import (
 from coraplex.datastructures.grasp import GraspDescription
 from coraplex.view_manager import ViewManager
 from coraplex.utils import translate_pose_along_local_axis
-
-TOOL_ORIENTATION_THRESHOLD = 0.02
-"""
-Default orientation tolerance in rad for tool-center-point poses.
-
-.. note:: A physically simulated arm's PD-tracked joints settle with a small residual
-    orientation error, so reusing the (much tighter) position tolerance as the
-    rotation tolerance can leave the task perpetually unfinished, stalling the rest of
-    the plan behind it.
-"""
-
-DEFAULT_TCP_POSITION_THRESHOLD = 0.005
-"""
-Default position tolerance in meters for tool-center-point poses, tighter than
-Giskard's own task default so an approach doesn't stop short of a small object.
-"""
 
 
 @dataclass
@@ -83,12 +66,12 @@ class ReachMotion(BaseMotion):
     Reverses the sequence of poses, i.e., moves away from the object instead of towards it. Used for placing objects.
     """
 
-    position_threshold: float = DEFAULT_TCP_POSITION_THRESHOLD
+    position_threshold: float = BaseMotion.DEFAULT_TCP_POSITION_THRESHOLD
     """
     Distance threshold in meters for goal achievement.
     """
 
-    orientation_threshold: float = TOOL_ORIENTATION_THRESHOLD
+    orientation_threshold: float = BaseMotion.TOOL_ORIENTATION_THRESHOLD
     """
     Rotation threshold in rad for goal achievement.
     """
@@ -155,12 +138,6 @@ class MoveGripperMotion(BaseMotion):
     If the gripper is allowed to collide with something
     """
 
-    target_opening: Optional[float] = None
-    """
-    Explicit finger opening (in meters) to command instead of the position the
-    GripperState would resolve to. ``None`` keeps the GripperState's own position.
-    """
-
     finger_velocity: Optional[float] = None
     """
     Maximum finger joint velocity (in m/s), enforced via
@@ -188,27 +165,12 @@ class MoveGripperMotion(BaseMotion):
     def perform(self):
         return
 
-    def _goal_state(self, end_effector: EndEffector) -> JointState:
-        """
-        The finger joint state this motion commands: the GripperState's own state, or --
-        when ``target_opening`` is set -- the same finger connections remapped to that
-        explicit opening.
-        """
-        goal_state = end_effector.get_joint_state_by_type(self.motion)
-        if self.target_opening is None:
-            return goal_state
-        return JointState.from_mapping(
-            mapping={
-                connection: self.target_opening for connection in goal_state.connections
-            },
-        )
-
     @property
     def _motion_chart(self):
         arm = ViewManager().get_end_effector_view(self.gripper, self.robot)
 
         name = "OpenGripper" if self.motion == GripperState.OPEN else "CloseGripper"
-        goal_state = self._goal_state(arm)
+        goal_state = arm.get_joint_state_by_type(self.motion)
         joint_task = JointPositionList(goal_state=goal_state, name=name)
 
         done_node = joint_task
@@ -278,12 +240,12 @@ class MoveToolCenterPointMotion(BaseMotion):
     unconstrained.
     """
 
-    position_threshold: float = DEFAULT_TCP_POSITION_THRESHOLD
+    position_threshold: float = BaseMotion.DEFAULT_TCP_POSITION_THRESHOLD
     """
     Distance threshold in meters for goal achievement.
     """
 
-    orientation_threshold: float = TOOL_ORIENTATION_THRESHOLD
+    orientation_threshold: float = BaseMotion.TOOL_ORIENTATION_THRESHOLD
     """
     Rotation threshold in rad for goal achievement, used only for
     :class:`~giskardpy.motion_statechart.tasks.cartesian_tasks.CartesianPose`.
@@ -526,12 +488,12 @@ class MoveManipulatorMotion(BaseMotion):
     If the gripper can collide with something
     """
 
-    position_threshold: float = DEFAULT_TCP_POSITION_THRESHOLD
+    position_threshold: float = BaseMotion.DEFAULT_TCP_POSITION_THRESHOLD
     """
     Distance threshold in meters for goal achievement.
     """
 
-    orientation_threshold: float = TOOL_ORIENTATION_THRESHOLD
+    orientation_threshold: float = BaseMotion.TOOL_ORIENTATION_THRESHOLD
     """
     Rotation threshold in rad for goal achievement.
     """

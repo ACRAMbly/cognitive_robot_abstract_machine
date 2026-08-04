@@ -27,13 +27,11 @@ from coraplex.plans.factories import sequential, execute_single
 from coraplex.plans.plan_node import MotionNode, ActionNode
 from coraplex.robot_plans import MoveMotion, MoveToolCenterPointMotion
 from coraplex.robot_plans.actions.core.navigation import NavigateAction
-from coraplex.robot_plans.actions.core.pick_up import PickUpAction, ReachAction
+from coraplex.robot_plans.actions.core.pick_up import PickUpAction
 from coraplex.robot_plans.actions.core.placing import PlaceAction
 from coraplex.robot_plans.actions.core.robot_body import MoveTorsoAction
-from coraplex.robot_plans.motions.gripper import (
-    DEFAULT_TCP_POSITION_THRESHOLD,
-    MoveGripperMotion,
-)
+from coraplex.robot_plans.motions.base import BaseMotion
+from coraplex.robot_plans.motions.gripper import MoveGripperMotion
 from semantic_digital_twin.datastructures.definitions import GripperState, TorsoState
 from semantic_digital_twin.robots.pr2 import PR2
 from semantic_digital_twin.spatial_types import Point3, Quaternion
@@ -131,14 +129,17 @@ def test_move_tool_center_point_motion_uses_tight_threshold(immutable_model_worl
     assert isinstance(cartesian_motion.motion_chart, CartesianPose)
     assert (
         cartesian_motion.motion_chart.translation_threshold
-        == DEFAULT_TCP_POSITION_THRESHOLD
+        == BaseMotion.DEFAULT_TCP_POSITION_THRESHOLD
     )
 
     translation_motion = MoveToolCenterPointMotion(
         target, Arms.LEFT, movement_type=MovementType.TRANSLATION
     )
     execute_single(translation_motion, context=context)
-    assert translation_motion.motion_chart.threshold == DEFAULT_TCP_POSITION_THRESHOLD
+    assert (
+        translation_motion.motion_chart.threshold
+        == BaseMotion.DEFAULT_TCP_POSITION_THRESHOLD
+    )
 
 
 def test_move_tool_center_point_motion_without_max_velocity_returns_bare_task(
@@ -165,9 +166,9 @@ def test_move_tool_center_point_motion_max_linear_velocity_adds_real_limit(
     """
     An explicit ``max_linear_velocity`` must add a real
     :class:`CartesianPositionVelocityLimit` constraint alongside the goal task via
-    ``Parallel``, instead of tuning the goal task's own reference velocity -- per
-    review feedback, reference velocities are for QP normalization only and must not
-    be exposed as a caller-tunable speed limit.
+    ``Parallel``, instead of tuning the goal task's own reference velocity -- per review
+    feedback, reference velocities are for QP normalization only and must not be exposed
+    as a caller-tunable speed limit.
     """
     world, view, context = immutable_model_world
     target = Pose(Point3.from_iterable([1, 1, 1]), reference_frame=world.root)
@@ -196,8 +197,8 @@ def test_move_tool_center_point_motion_max_angular_velocity_adds_real_limit(
 ):
     """
     An explicit ``max_angular_velocity`` must add a real
-    :class:`CartesianRotationVelocityLimit` constraint, only meaningful for the
-    non-translation (full 6D pose) movement type.
+    :class:`CartesianRotationVelocityLimit` constraint, only meaningful for the non-
+    translation (full 6D pose) movement type.
     """
     world, view, context = immutable_model_world
     target = Pose(Point3.from_iterable([1, 1, 1]), reference_frame=world.root)
@@ -248,9 +249,8 @@ def test_move_gripper_motion_tolerate_stall_and_finger_velocity_combine(
 ):
     """
     ``tolerate_stall`` and ``finger_velocity`` set together must nest correctly: the
-    motion is done once (goal reached OR stalled) AND the finger velocity stayed
-    within its limit -- not a single flat ``Parallel`` that conflates OR and AND
-    semantics.
+    motion is done once (goal reached OR stalled) AND the finger velocity stayed within
+    its limit -- not a single flat ``Parallel`` that conflates OR and AND semantics.
     """
     world, view, context = immutable_model_world
 
@@ -278,9 +278,11 @@ def test_move_gripper_motion_tolerate_stall_defaults_to_false(immutable_model_wo
     MoveGripperMotion must not tolerate a stall by default, for either OPEN or CLOSE --
     stalling before reaching the target is a real failure that should be surfaced,
     unless a caller (e.g. PickUpAction, grasping a real object) explicitly opts in via
-    ``tolerate_stall=True``. A caller that never mentions this field must keep relying
-    on the original, unmodified default behaviour: the plain goal task, not wrapped in
-    any stall-tolerant monitor.
+    ``tolerate_stall=True``.
+
+    A caller that never mentions this field must keep relying on the original,
+    unmodified default behaviour: the plain goal task, not wrapped in any stall-tolerant
+    monitor.
     """
     world, view, context = immutable_model_world
 
@@ -299,9 +301,9 @@ def test_move_gripper_motion_tolerate_stall_can_be_explicitly_enabled(
     """
     An explicit ``tolerate_stall=True`` must wrap the goal task together with a
     :class:`LocalMinimumReached` monitor in a :class:`Parallel` (with
-    ``minimum_success=1``), so the motion is considered done as soon as either the
-    goal is reached or the fingers have stalled -- without changing what the goal
-    task's own observation means (goal reached, nothing else).
+    ``minimum_success=1``), so the motion is considered done as soon as either the goal
+    is reached or the fingers have stalled -- without changing what the goal task's own
+    observation means (goal reached, nothing else).
     """
     world, view, context = immutable_model_world
 
@@ -340,80 +342,6 @@ def test_pick_up_action_close_motion_tolerates_stall(immutable_model_world):
     assert close_motion_nodes[0].designator.tolerate_stall is True
 
 
-def test_move_gripper_motion_target_opening_overrides_state_position(
-    immutable_model_world,
-):
-    """
-    An explicit ``target_opening`` must override the finger positions the GripperState
-    would otherwise command, so a grasp can close to a specific squeeze without changing
-    the robot's shared CLOSE state -- while the same fingers are still targeted, so the
-    sim synchronizer maps it to the actuator control the same way.
-    """
-    world, view, context = immutable_model_world
-
-    custom_opening = 0.015
-    custom_motion = MoveGripperMotion(
-        motion=GripperState.CLOSE, gripper=Arms.LEFT, target_opening=custom_opening
-    )
-    execute_single(custom_motion, context=context)
-
-    default_motion = MoveGripperMotion(motion=GripperState.CLOSE, gripper=Arms.LEFT)
-    execute_single(default_motion, context=context)
-
-    assert set(custom_motion.motion_chart.goal_state.connections) == set(
-        default_motion.motion_chart.goal_state.connections
-    )
-    assert all(
-        value == custom_opening
-        for value in custom_motion.motion_chart.goal_state.target_values
-    )
-    assert all(
-        value == 0.0 for value in default_motion.motion_chart.goal_state.target_values
-    )
-
-
-def test_pick_up_action_threads_grasp_opening_to_close_motion(immutable_model_world):
-    """
-    PickUpAction's ``grasp_opening`` must reach the grasp's CLOSE motion (and only that
-    motion), so a caller can pick with a specific squeeze while the OPEN motion -- issued
-    by the nested ReachAction, before the final approach -- and the robot's shared
-    gripper states stay untouched.
-
-    The OPEN motion lives inside ReachAction's own plan, which PickUpAction's static
-    plan does not expand (that only happens once ReachAction is actually performed), so
-    it is inspected by building ReachAction's plan directly.
-    """
-    world, view, context = immutable_model_world
-    grasp_description = GraspDescription(
-        ApproachDirection.FRONT,
-        VerticalAlignment.NoAlignment,
-        view.left_arm.end_effector,
-    )
-    custom_opening = 0.012
-
-    pick_up = PickUpAction(
-        world.get_body_by_name("milk.stl"),
-        Arms.LEFT,
-        grasp_description,
-        grasp_opening=custom_opening,
-    )
-    sequential([pick_up], context=context)
-    top_level_plan = pick_up._action_plan.plan
-    close_motion_nodes = top_level_plan.get_nodes_by_designator_type(MoveGripperMotion)
-    assert len(close_motion_nodes) == 1
-    assert close_motion_nodes[0].designator.motion == GripperState.CLOSE
-    assert close_motion_nodes[0].designator.target_opening == custom_opening
-
-    reach_action = top_level_plan.get_nodes_by_designator_type(ReachAction)[
-        0
-    ].designator
-    reach_plan = reach_action._action_plan.plan
-    open_motion_nodes = reach_plan.get_nodes_by_designator_type(MoveGripperMotion)
-    assert len(open_motion_nodes) == 1
-    assert open_motion_nodes[0].designator.motion == GripperState.OPEN
-    assert open_motion_nodes[0].designator.target_opening is None
-
-
 def test_pick_up_action_velocity_fields_default_to_none(immutable_model_world):
     """
     PickUpAction's velocity/timing/friction fields must all default to ``None`` when not
@@ -438,7 +366,6 @@ def test_pick_up_action_velocity_fields_default_to_none(immutable_model_world):
     assert pick_up.lift_linear_velocity is None
     assert pick_up.grasp_stall_minimum_time is None
     assert pick_up.object_friction is None
-    assert pick_up.max_grasp_attempts is None
 
 
 def test_place_action_velocity_fields_default_to_none(immutable_model_world):
@@ -456,7 +383,6 @@ def test_place_action_velocity_fields_default_to_none(immutable_model_world):
     assert place.transport_linear_velocity is None
     assert place.release_opening_velocity is None
     assert place.retract_linear_velocity is None
-    assert place.max_release_attempts is None
 
 
 @pytest.mark.skipif(skip_tests, reason="Alternative motion mappings not available")

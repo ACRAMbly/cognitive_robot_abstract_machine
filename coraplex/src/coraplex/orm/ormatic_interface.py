@@ -54,6 +54,7 @@ import coraplex.robot_plans.actions.core.navigation
 import coraplex.robot_plans.actions.core.pick_up
 import coraplex.robot_plans.actions.core.placing
 import coraplex.robot_plans.actions.core.robot_body
+import coraplex.robot_plans.mixins
 import coraplex.robot_plans.motions.base
 import coraplex.robot_plans.motions.container
 import coraplex.robot_plans.motions.gripper
@@ -3918,36 +3919,6 @@ class ConditionNotSatisfiedDAO(
     }
 
 
-class GraspVerificationFailedDAO(
-    PlanFailureDAO, DataAccessObject[coraplex.exceptions.GraspVerificationFailed]
-):
-    __tablename__ = "GraspVerificationFailedDAO"
-
-    database_id: Mapped[builtins.int] = mapped_column(
-        ForeignKey(PlanFailureDAO.database_id),
-        primary_key=True,
-        use_existing_column=True,
-    )
-
-    attempt_count: Mapped[builtins.int] = mapped_column(use_existing_column=True)
-
-    object_designator_id: Mapped[int] = mapped_column(
-        ForeignKey("BodyDAO.database_id", use_alter=True),
-        nullable=True,
-        use_existing_column=True,
-    )
-
-    object_designator: Mapped[BodyDAO] = relationship(
-        "BodyDAO", uselist=False, foreign_keys=[object_designator_id], post_update=True
-    )
-
-    __mapper_args__ = {
-        "polymorphic_identity": "GraspVerificationFailedDAO",
-        "inherit_condition": database_id == PlanFailureDAO.database_id,
-        "polymorphic_load": "selectin",
-    }
-
-
 class MotionDidNotFinishDAO(
     PlanFailureDAO, DataAccessObject[coraplex.exceptions.MotionDidNotFinish]
 ):
@@ -5666,21 +5637,16 @@ class GraspingActionDAO(
     }
 
 
-class PickUpActionDAO(
-    ActionDescriptionDAO,
-    DataAccessObject[coraplex.robot_plans.actions.core.pick_up.PickUpAction],
+class PickUpTuningParametersDAO(
+    Base,
+    DataAccessObject[coraplex.robot_plans.actions.core.pick_up.PickUpTuningParameters],
 ):
-    __tablename__ = "PickUpActionDAO"
+    __tablename__ = "PickUpTuningParametersDAO"
 
     database_id: Mapped[builtins.int] = mapped_column(
-        ForeignKey(ActionDescriptionDAO.database_id),
-        primary_key=True,
-        use_existing_column=True,
+        Integer, primary_key=True, use_existing_column=True
     )
 
-    grasp_opening: Mapped[typing.Optional[builtins.float]] = mapped_column(
-        use_existing_column=True
-    )
     pre_approach_linear_velocity: Mapped[typing.Optional[builtins.float]] = (
         mapped_column(use_existing_column=True)
     )
@@ -5699,7 +5665,45 @@ class PickUpActionDAO(
     object_friction: Mapped[typing.Optional[builtins.float]] = mapped_column(
         use_existing_column=True
     )
-    max_grasp_attempts: Mapped[typing.Optional[builtins.int]] = mapped_column(
+
+    polymorphic_type: Mapped[str] = mapped_column(
+        String(255), nullable=False, use_existing_column=True
+    )
+
+    __mapper_args__ = {
+        "polymorphic_on": "polymorphic_type",
+        "polymorphic_identity": "PickUpTuningParametersDAO",
+    }
+
+
+class PickUpActionDAO(
+    ActionDescriptionDAO,
+    DataAccessObject[coraplex.robot_plans.actions.core.pick_up.PickUpAction],
+):
+    __tablename__ = "PickUpActionDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(ActionDescriptionDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
+    )
+
+    pre_approach_linear_velocity: Mapped[typing.Optional[builtins.float]] = (
+        mapped_column(use_existing_column=True)
+    )
+    grasp_linear_velocity: Mapped[typing.Optional[builtins.float]] = mapped_column(
+        use_existing_column=True
+    )
+    grasp_closing_velocity: Mapped[typing.Optional[builtins.float]] = mapped_column(
+        use_existing_column=True
+    )
+    lift_linear_velocity: Mapped[typing.Optional[builtins.float]] = mapped_column(
+        use_existing_column=True
+    )
+    grasp_stall_minimum_time: Mapped[typing.Optional[builtins.float]] = mapped_column(
+        use_existing_column=True
+    )
+    object_friction: Mapped[typing.Optional[builtins.float]] = mapped_column(
         use_existing_column=True
     )
     grasp_detection_threshold: Mapped[builtins.float] = mapped_column(
@@ -5740,6 +5744,33 @@ class PickUpActionDAO(
     }
 
 
+class ReachTuningParametersDAO(
+    Base,
+    DataAccessObject[coraplex.robot_plans.actions.core.pick_up.ReachTuningParameters],
+):
+    __tablename__ = "ReachTuningParametersDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
+
+    pre_approach_linear_velocity: Mapped[typing.Optional[builtins.float]] = (
+        mapped_column(use_existing_column=True)
+    )
+    final_approach_linear_velocity: Mapped[typing.Optional[builtins.float]] = (
+        mapped_column(use_existing_column=True)
+    )
+
+    polymorphic_type: Mapped[str] = mapped_column(
+        String(255), nullable=False, use_existing_column=True
+    )
+
+    __mapper_args__ = {
+        "polymorphic_on": "polymorphic_type",
+        "polymorphic_identity": "ReachTuningParametersDAO",
+    }
+
+
 class ReachActionDAO(
     ActionDescriptionDAO,
     DataAccessObject[coraplex.robot_plans.actions.core.pick_up.ReachAction],
@@ -5752,13 +5783,13 @@ class ReachActionDAO(
         use_existing_column=True,
     )
 
-    reverse_reach_order: Mapped[builtins.bool] = mapped_column(use_existing_column=True)
     pre_approach_linear_velocity: Mapped[typing.Optional[builtins.float]] = (
         mapped_column(use_existing_column=True)
     )
     final_approach_linear_velocity: Mapped[typing.Optional[builtins.float]] = (
         mapped_column(use_existing_column=True)
     )
+    reverse_reach_order: Mapped[builtins.bool] = mapped_column(use_existing_column=True)
     open_gripper_at_pre_pose: Mapped[builtins.bool] = mapped_column(
         use_existing_column=True
     )
@@ -5808,6 +5839,39 @@ class ReachActionDAO(
     }
 
 
+class PlaceTuningParametersDAO(
+    Base,
+    DataAccessObject[coraplex.robot_plans.actions.core.placing.PlaceTuningParameters],
+):
+    __tablename__ = "PlaceTuningParametersDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
+
+    placing_linear_velocity: Mapped[typing.Optional[builtins.float]] = mapped_column(
+        use_existing_column=True
+    )
+    transport_linear_velocity: Mapped[typing.Optional[builtins.float]] = mapped_column(
+        use_existing_column=True
+    )
+    release_opening_velocity: Mapped[typing.Optional[builtins.float]] = mapped_column(
+        use_existing_column=True
+    )
+    retract_linear_velocity: Mapped[typing.Optional[builtins.float]] = mapped_column(
+        use_existing_column=True
+    )
+
+    polymorphic_type: Mapped[str] = mapped_column(
+        String(255), nullable=False, use_existing_column=True
+    )
+
+    __mapper_args__ = {
+        "polymorphic_on": "polymorphic_type",
+        "polymorphic_identity": "PlaceTuningParametersDAO",
+    }
+
+
 class PlaceActionDAO(
     ActionDescriptionDAO,
     DataAccessObject[coraplex.robot_plans.actions.core.placing.PlaceAction],
@@ -5830,9 +5894,6 @@ class PlaceActionDAO(
         use_existing_column=True
     )
     retract_linear_velocity: Mapped[typing.Optional[builtins.float]] = mapped_column(
-        use_existing_column=True
-    )
-    max_release_attempts: Mapped[typing.Optional[builtins.int]] = mapped_column(
         use_existing_column=True
     )
     grasp_detection_threshold: Mapped[builtins.float] = mapped_column(
@@ -6038,35 +6099,6 @@ class MoveTorsoActionDAO(
     }
 
 
-class ParkArmsActionDAO(
-    ActionDescriptionDAO,
-    DataAccessObject[coraplex.robot_plans.actions.core.robot_body.ParkArmsAction],
-):
-    __tablename__ = "ParkArmsActionDAO"
-
-    database_id: Mapped[builtins.int] = mapped_column(
-        ForeignKey(ActionDescriptionDAO.database_id),
-        primary_key=True,
-        use_existing_column=True,
-    )
-
-    max_velocity: Mapped[typing.Optional[builtins.float]] = mapped_column(
-        use_existing_column=True
-    )
-
-    arm: Mapped[coraplex.datastructures.enums.Arms] = mapped_column(
-        krrood.ormatic.custom_types.PolymorphicEnumType,
-        nullable=False,
-        use_existing_column=True,
-    )
-
-    __mapper_args__ = {
-        "polymorphic_identity": "ParkArmsActionDAO",
-        "inherit_condition": database_id == ActionDescriptionDAO.database_id,
-        "polymorphic_load": "selectin",
-    }
-
-
 class SetGripperActionDAO(
     ActionDescriptionDAO,
     DataAccessObject[coraplex.robot_plans.actions.core.robot_body.SetGripperAction],
@@ -6094,6 +6126,58 @@ class SetGripperActionDAO(
 
     __mapper_args__ = {
         "polymorphic_identity": "SetGripperActionDAO",
+        "inherit_condition": database_id == ActionDescriptionDAO.database_id,
+        "polymorphic_load": "selectin",
+    }
+
+
+class HasMaxJointVelocityDAO(
+    Base, DataAccessObject[coraplex.robot_plans.mixins.HasMaxJointVelocity]
+):
+    __tablename__ = "HasMaxJointVelocityDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
+
+    max_joint_velocity: Mapped[typing.Optional[builtins.float]] = mapped_column(
+        use_existing_column=True
+    )
+
+    polymorphic_type: Mapped[str] = mapped_column(
+        String(255), nullable=False, use_existing_column=True
+    )
+
+    __mapper_args__ = {
+        "polymorphic_on": "polymorphic_type",
+        "polymorphic_identity": "HasMaxJointVelocityDAO",
+    }
+
+
+class ParkArmsActionDAO(
+    ActionDescriptionDAO,
+    DataAccessObject[coraplex.robot_plans.actions.core.robot_body.ParkArmsAction],
+):
+    __tablename__ = "ParkArmsActionDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(ActionDescriptionDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
+    )
+
+    max_joint_velocity: Mapped[typing.Optional[builtins.float]] = mapped_column(
+        use_existing_column=True
+    )
+
+    arm: Mapped[coraplex.datastructures.enums.Arms] = mapped_column(
+        krrood.ormatic.custom_types.PolymorphicEnumType,
+        nullable=False,
+        use_existing_column=True,
+    )
+
+    __mapper_args__ = {
+        "polymorphic_identity": "ParkArmsActionDAO",
         "inherit_condition": database_id == ActionDescriptionDAO.database_id,
         "polymorphic_load": "selectin",
     }
@@ -6221,9 +6305,6 @@ class MoveGripperMotionDAO(
     )
 
     allow_gripper_collision: Mapped[typing.Optional[builtins.bool]] = mapped_column(
-        use_existing_column=True
-    )
-    target_opening: Mapped[typing.Optional[builtins.float]] = mapped_column(
         use_existing_column=True
     )
     finger_velocity: Mapped[typing.Optional[builtins.float]] = mapped_column(
@@ -6733,6 +6814,9 @@ class MoveJointsMotionDAO(
         use_existing_column=True,
     )
 
+    max_joint_velocity: Mapped[typing.Optional[builtins.float]] = mapped_column(
+        use_existing_column=True
+    )
     align: Mapped[typing.Optional[builtins.bool]] = mapped_column(
         use_existing_column=True
     )
@@ -6741,9 +6825,6 @@ class MoveJointsMotionDAO(
     )
     root_link: Mapped[typing.Optional[builtins.str]] = mapped_column(
         sqlalchemy.sql.sqltypes.Text, use_existing_column=True
-    )
-    max_velocity: Mapped[typing.Optional[builtins.float]] = mapped_column(
-        use_existing_column=True
     )
 
     names: Mapped[typing.List[builtins.str]] = mapped_column(

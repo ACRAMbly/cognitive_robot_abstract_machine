@@ -76,7 +76,7 @@ class LocalMinimumReached(MotionStatechartNode):
 
     minimum_time: float = 1.0
     """
-    Minimum elapsed control time before the observation can become true.
+    Minimum elapsed control time (in seconds) before the observation can become true.
     """
 
     measure_from_own_start: bool = True
