@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 import numpy as np
 from typing_extensions import TYPE_CHECKING, List, Optional, Sequence, Tuple
 
-from semantic_digital_twin.exceptions import PointOccupiedError, UsageError
+from semantic_digital_twin.exceptions import PointOccupiedError
 from semantic_digital_twin.semantic_annotations.semantic_annotations import (
     SemanticEnvironmentAnnotation,
 )
@@ -16,8 +16,11 @@ from semantic_digital_twin.spatial_types import (
 )
 from semantic_digital_twin.world import World
 from semantic_digital_twin.world_description.geometry import Shape
-from semantic_digital_twin.world_description.graph_of_convex_sets import (
+from semantic_digital_twin.world_description.graph_of_convex_sets.base import (
     GraphOfConvexSets,
+)
+from semantic_digital_twin.world_description.graph_of_convex_sets.exceptions import (
+    UnboundedSearchSpaceError,
 )
 from semantic_digital_twin.world_description.shape_collection import (
     BoundingBoxCollection,
@@ -49,36 +52,14 @@ try:
 
 except ImportError:
     logger.warning(
-        "drake is required for DrakeGraphOfConvexSets. Please install it using "
+        "drake is required for GraphOfConvexPolygons. Please install it using "
         "'pip install drake'."
     )
 
 
-@dataclass
-class UnboundedSearchSpaceError(UsageError):
-    """
-    Raised when a :class:`DrakeGraphOfConvexSets` is built with a search space that is
-    not a single, finite bounding box.
-
-    IRIS grows regions within a bounded convex domain; unlike
-    :class:`~semantic_digital_twin.world_description.graph_of_convex_sets.GraphOfBoundingBoxes`,
-    which can decompose an unbounded or multi-box search space via the product algebra,
-    Drake's ``Iris`` function requires exactly one finite ``HPolyhedron`` domain.
-    """
-
-    def error_message(self) -> str:
-        return (
-            "DrakeGraphOfConvexSets requires a search space consisting of exactly one "
-            "finite bounding box."
-        )
-
-    def suggest_correction(self) -> str:
-        return "pass an explicit, finite search_space with a single bounding box."
-
-
 def _default_iris_options() -> IrisOptions:
     """
-    Build the default :class:`IrisOptions` used by :class:`DrakeGraphOfConvexSets`.
+    Build the default :class:`IrisOptions` used by :class:`GraphOfConvexPolygons`.
 
     :return: IRIS options with a bounded iteration count so a single region-growth call
         cannot dominate build time on large scenes.
@@ -93,15 +74,15 @@ def _default_iris_options() -> IrisOptions:
 @dataclass
 class IrisSeedingSettings:
     """
-    Settings controlling how many IRIS regions :class:`DrakeGraphOfConvexSets` grows,
-    and from where.
+    Settings controlling how many IRIS regions :class:`GraphOfConvexPolygons` grows, and
+    from where.
 
     Drake's IRIS grows one convex region at a time from a single seed point, so
     covering a scene requires calling it repeatedly from different seeds. Seeding here
     is a simple, deterministic coverage heuristic (a regular grid), not a tuned or
     optimal strategy: a production seeding strategy (e.g. clique-cover-based, or seeded
     from known robot poses via ``extra_seed_points`` on
-    :meth:`DrakeGraphOfConvexSets.from_world`) would likely produce a different, more
+    :meth:`GraphOfConvexPolygons.from_world`) would likely produce a different, more
     efficient region layout.
     """
 
@@ -222,12 +203,12 @@ def _shape_to_convex_set(
 
 
 @dataclass
-class DrakeGraphOfConvexSets(GraphOfConvexSets):
+class GraphOfConvexPolygons(GraphOfConvexSets):
     """
     A graph of convex sets whose regions are grown by Drake's IRIS algorithm and solved
     with Drake's ``GcsTrajectoryOptimization`` (:cite:t:`marcucci2022shortest`).
 
-    Unlike :class:`~semantic_digital_twin.world_description.graph_of_convex_sets.GraphOfBoundingBoxes`,
+    Unlike :class:`~semantic_digital_twin.world_description.graph_of_convex_sets.boxes.GraphOfBoundingBoxes`,
     which exhaustively partitions free space into many small axis-aligned boxes, IRIS
     covers free space with a handful of large, non-axis-aligned convex regions -- a
     sufficient cover for solving path queries, not a complete map of free space (some
@@ -289,7 +270,7 @@ class DrakeGraphOfConvexSets(GraphOfConvexSets):
         bloat_obstacles: float = 0.0,
         seeding_settings: Optional[IrisSeedingSettings] = None,
         extra_seed_points: Sequence[Point3] = (),
-    ) -> DrakeGraphOfConvexSets:
+    ) -> GraphOfConvexPolygons:
         """
         Grow IRIS regions covering the free space of *world* within *search_space*.
 

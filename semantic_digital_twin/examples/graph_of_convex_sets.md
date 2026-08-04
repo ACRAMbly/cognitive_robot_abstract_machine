@@ -59,7 +59,7 @@ be unable to fly by constraining the z-axis. Otherwise, he would get the idea to
 
 ```{code-cell} ipython3
 from random_events.interval import SimpleInterval
-from semantic_digital_twin.world_description.graph_of_convex_sets import GraphOfBoundingBoxes
+from semantic_digital_twin.world_description.graph_of_convex_sets.boxes import GraphOfBoundingBoxes
 from semantic_digital_twin.world_description.geometry import BoundingBox
 
 search_space = BoundingBoxCollection([BoundingBox(min_x=-1, max_x=1,

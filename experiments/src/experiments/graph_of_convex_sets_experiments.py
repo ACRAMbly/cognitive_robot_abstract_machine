@@ -45,7 +45,7 @@ from semantic_digital_twin.semantic_annotations.semantic_annotations import (
 from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix
 from semantic_digital_twin.world import World
 from semantic_digital_twin.world_description.geometry import BoundingBox
-from semantic_digital_twin.world_description.graph_of_convex_sets import (
+from semantic_digital_twin.world_description.graph_of_convex_sets.boxes import (
     GraphOfBoundingBoxes,
 )
 from semantic_digital_twin.world_description.shape_collection import (

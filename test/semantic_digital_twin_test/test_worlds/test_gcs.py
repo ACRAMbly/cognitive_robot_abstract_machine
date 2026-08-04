@@ -20,9 +20,11 @@ from semantic_digital_twin.spatial_types.spatial_types import (
 from semantic_digital_twin.world import World
 from semantic_digital_twin.world_description.connections import FixedConnection
 from semantic_digital_twin.world_description.geometry import BoundingBox, Box, Scale
-from semantic_digital_twin.world_description.graph_of_convex_sets import (
-    GraphOfBoundingBoxes,
+from semantic_digital_twin.world_description.graph_of_convex_sets.base import (
     create_reference_frame_with_only_yaw_from_body,
+)
+from semantic_digital_twin.world_description.graph_of_convex_sets.boxes import (
+    GraphOfBoundingBoxes,
 )
 from semantic_digital_twin.world_description.shape_collection import (
     BoundingBoxCollection,
