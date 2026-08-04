@@ -45,9 +45,9 @@ class MeanAndStandardDeviation:
         )
 
 
-class InvalidVolumeBoundError(ValueError):
+class InvalidBoundError(ValueError):
     """
-    Raised when a :class:`VolumeBound`'s lower bound exceeds its upper bound.
+    Raised when a bound's lower end exceeds its upper end.
     """
 
     def __init__(self, lower: float, upper: float):
@@ -76,10 +76,57 @@ class VolumeBound:
 
     def __post_init__(self):
         if self.lower > self.upper:
-            raise InvalidVolumeBoundError(self.lower, self.upper)
+            raise InvalidBoundError(self.lower, self.upper)
 
     def __str__(self) -> str:
         return f"[{round(self.lower, 4)}, {round(self.upper, 4)}]"
+
+
+@dataclass
+class PercentageBound:
+    """
+    A ``[lower, upper]`` interval, in percent, bounding the ratio of two
+    :class:`VolumeBound` quantities.
+
+    Use this to express one bounded volume as a share of another (e.g. how much of the
+    true free volume a covering is known to reach) without collapsing either bound into
+    a single, falsely precise point estimate.
+    """
+
+    lower: float
+    """
+    A percentage the true ratio is known to be at least as large as.
+    """
+
+    upper: float
+    """
+    A percentage the true ratio is known to be at most as large as.
+    """
+
+    def __post_init__(self):
+        if self.lower > self.upper:
+            raise InvalidBoundError(self.lower, self.upper)
+
+    def __str__(self) -> str:
+        return f"[{round(self.lower, 2)}%, {round(self.upper, 2)}%]"
+
+    @classmethod
+    def ratio_of(
+        cls, numerator: VolumeBound, denominator: VolumeBound
+    ) -> PercentageBound:
+        """
+        :param numerator: Bound on the covered quantity.
+        :param denominator: Bound on the reference quantity.
+        :return: A percentage bound on ``numerator / denominator``, clipped to
+            ``[0, 100]``. The worst case for each end is used: the lower end pairs the
+            smallest numerator with the largest denominator, and vice versa for the
+            upper end.
+        """
+        raw_lower = 100.0 * numerator.lower / denominator.upper
+        raw_upper = 100.0 * numerator.upper / denominator.lower
+        lower = max(0.0, min(raw_lower, 100.0))
+        upper = max(lower, min(raw_upper, 100.0))
+        return cls(lower=lower, upper=upper)
 
 
 @dataclass

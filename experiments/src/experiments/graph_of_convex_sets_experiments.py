@@ -46,6 +46,7 @@ from experiments.experiment_definitions import (
     ExperimentResult,
     ExperimentsTable,
     MeanAndStandardDeviation,
+    PercentageBound,
     TypstRenderer,
     VolumeBound,
 )
@@ -188,6 +189,12 @@ class GraphOfConvexSetsFreespaceExperimentResult(ExperimentResult):
     confidence-interval estimate, capped above by
     :attr:`graph_of_convex_polygons_region_volume_sum` (an exact upper bound, since
     overlap only ever inflates the sum past the union's true volume).
+    """
+
+    graph_of_convex_polygons_coverage_percentage: PercentageBound
+    """
+    :attr:`graph_of_convex_polygons_coverage_bound` as a percentage of
+    :attr:`true_free_volume_bound`.
     """
 
     environment_name: str
@@ -471,6 +478,9 @@ def _run_benchmark(
             raw_coverage_bound.lower, min(raw_coverage_bound.upper, region_volume_sum)
         ),
     )
+    coverage_percentage = PercentageBound.ratio_of(
+        coverage_bound, true_free_volume_bound
+    )
 
     return GraphOfConvexSetsFreespaceExperimentResult(
         world_loading_duration_milliseconds=round(
@@ -501,6 +511,7 @@ def _run_benchmark(
         graph_of_convex_polygons_region_count=graph_of_convex_polygons.region_count,
         graph_of_convex_polygons_region_volume_sum=round(region_volume_sum, 4),
         graph_of_convex_polygons_coverage_bound=coverage_bound,
+        graph_of_convex_polygons_coverage_percentage=coverage_percentage,
         environment_name=environment_name,
     )
 
