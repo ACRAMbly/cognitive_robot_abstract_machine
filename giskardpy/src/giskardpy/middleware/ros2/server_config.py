@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum, auto
 
 from giskardpy.executor import NoPacing, Pacer, RealTimePacer
-from giskardpy.middleware.ros2.qp_data_publisher import QPDataPublisherConfig
 from giskardpy.middleware.ros2.utils.utils import is_in_github_workflow
 
 
@@ -53,13 +52,6 @@ class GiskardServerConfig:
     plot_motion_statechart: bool = False
     """
     Draw the structure of every executed motion statechart, requires ``debug_mode``.
-    """
-
-    qp_data_publisher: QPDataPublisherConfig = field(
-        default_factory=QPDataPublisherConfig
-    )
-    """
-    Streams the internals of the quadratic program, requires ``debug_mode``.
     """
 
     idle_frequency: float = 20.0

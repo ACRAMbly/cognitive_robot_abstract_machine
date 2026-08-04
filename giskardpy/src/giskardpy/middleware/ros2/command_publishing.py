@@ -38,6 +38,9 @@ class MinimumVelocity:
     def enforce_on_vector(self, velocities: List[float]) -> List[float]:
         """
         Scale a velocity vector up to :attr:`magnitude`, keeping its direction.
+
+        :param velocities: The velocity vector to scale.
+        :return: The scaled velocity vector.
         """
         norm = math.hypot(*velocities)
         if not 0.0 < norm < self.magnitude:
@@ -48,6 +51,9 @@ class MinimumVelocity:
     def enforce_on_scalar(self, velocity: float) -> float:
         """
         Increase a single velocity to :attr:`magnitude`, keeping its sign.
+
+        :param velocity: The velocity to increase.
+        :return: The velocity, raised to the minimum magnitude if necessary.
         """
         if 0.0 < velocity < self.magnitude:
             return self.magnitude
@@ -90,6 +96,10 @@ class JointMinimumVelocities:
     ) -> Self:
         """
         Build minimum velocities from a default magnitude and per-joint magnitudes.
+
+        :param default: Minimum magnitude applied to every joint without an override.
+        :param overrides: Minimum magnitudes of individual joints, keyed by joint name.
+        :return: The built minimum velocities.
         """
         return cls(
             default=MinimumVelocity(default),
@@ -102,6 +112,9 @@ class JointMinimumVelocities:
     def of(self, connection: ActiveConnection1DOF) -> MinimumVelocity:
         """
         Minimum velocity that applies to the given connection.
+
+        :param connection: The connection to look up the minimum velocity for.
+        :return: The minimum velocity that applies to the connection.
         """
         for override in self.overrides:
             if override.joint_name == connection.name.name:
@@ -117,8 +130,10 @@ class JointMinimumVelocities:
         An override for a joint that is not commanded reads like that joint is exempt,
         while the hardware keeps receiving the default minimum.
 
+        :param connections: The connections that are actually commanded.
         :raises UnknownMinimumVelocityJointError: If an override applies to no
             connection.
+        :return: None
         """
         commanded_joint_names = [connection.name.name for connection in connections]
         for override in self.overrides:
@@ -166,6 +181,8 @@ class StateVelocityReader:
     def velocities(self) -> List[float]:
         """
         The current velocity of every degree of freedom.
+
+        :return: The velocities, in the order :attr:`degrees_of_freedom` lists them.
         """
         if self.model_version != self.world.get_world_model_manager().version:
             self.bind_to_state()
@@ -199,6 +216,9 @@ class JointVelocityCommand:
     def from_state_velocity(self, state_velocity: float) -> float:
         """
         Scale a raw state velocity to the joint and raise it to the minimum.
+
+        :param state_velocity: The raw velocity read from the world state.
+        :return: The velocity to send to the joint's hardware interface.
         """
         return self.minimum_velocity.enforce_on_scalar(
             state_velocity * self.connection.multiplier
@@ -213,8 +233,11 @@ class JointVelocityCommand:
         """
         Resolve the minimum velocity of every connection once.
 
+        :param connections: The connections to build commands for.
+        :param minimum_velocities: The minimum velocities to resolve per connection.
         :raises UnknownMinimumVelocityJointError: If an override applies to no
             connection.
+        :return: One command per connection, in the same order.
         """
         minimum_velocities.validate_overrides_apply_to(connections)
         return [
@@ -464,13 +487,16 @@ class DriveVelocityCommandPublisher(CommandPublisher):
         self.connection.has_hardware_interface = True
         self.velocity_reader = StateVelocityReader(
             world=self.world,
-            degrees_of_freedom=self.translation_dofs() + [self.connection.yaw],
+            degrees_of_freedom=self.translation_degrees_of_freedom()
+            + [self.connection.yaw],
         )
         rospy.node.get_logger().info(f"Created publisher for {self.command_topic}.")
 
-    def translation_dofs(self) -> List[DegreeOfFreedom]:
+    def translation_degrees_of_freedom(self) -> List[DegreeOfFreedom]:
         """
         The degrees of freedom the drive can translate along.
+
+        :return: The translation degrees of freedom, in publish order.
         """
         if isinstance(self.connection, OmniDrive):
             return [self.connection.x_velocity, self.connection.y_velocity]
