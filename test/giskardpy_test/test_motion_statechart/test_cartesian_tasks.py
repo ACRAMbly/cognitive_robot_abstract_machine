@@ -999,8 +999,8 @@ class TestCartesianTasks:
 
     def test_soft_trunk_cartesian_position(self):
         """
-        Verifies that Giskardpy can solve and execute a CartesianPosition task
-        for the procedurally built Piecewise Constant Curvature SoftTrunk robot.
+        Verifies that Giskardpy can solve and execute a CartesianPosition task for the
+        procedurally built Piecewise Constant Curvature SoftTrunk robot.
         """
         from semantic_digital_twin.datastructures.soft_trunk import (
             SoftTrunk,
@@ -1354,6 +1354,11 @@ class TestDebugExpressions:
         assert current.color == CURRENT_COLOR
 
     def test_cartesian_pose_uses_prefixed_names(self, cylinder_bot_world: World):
+        """
+        CartesianPose is a Parallel over a position and an orientation task, so its
+        debug expressions are registered by those children, each prefixed with its own
+        name.
+        """
         root = cylinder_bot_world.root
         tip = cylinder_bot_world.get_kinematic_structure_entity_by_name("bot")
         task = CartesianPose(
@@ -1362,17 +1367,21 @@ class TestDebugExpressions:
             goal_pose=Pose.from_xyz_rpy(x=1, reference_frame=root),
             name="pose",
         )
+        motion_statechart = MotionStatechart()
+        motion_statechart.add_node(task)
+        motion_statechart.add_node(EndMotion.when_true(task))
 
-        artifacts = task.build(MotionStatechartContext(world=cylinder_bot_world))
+        executor = Executor(MotionStatechartContext(world=cylinder_bot_world))
+        executor.compile(motion_statechart=motion_statechart)
 
-        goal = debug_expression_by_name(artifacts.debug_expressions, "pose/goal")
-        current = debug_expression_by_name(artifacts.debug_expressions, "pose/current")
         names = {
-            debug_expression.name for debug_expression in artifacts.debug_expressions
+            debug_expression.name
+            for child in task.nodes
+            for debug_expression in child.debug_expressions
         }
-        assert names == {"pose/goal", "pose/current"}
-        assert goal.color == GOAL_COLOR
-        assert current.color == CURRENT_COLOR
-        pose_like = (Pose, HomogeneousTransformationMatrix)
-        assert isinstance(goal.expression, pose_like)
-        assert isinstance(current.expression, pose_like)
+        assert names == {
+            "pose/position/goal",
+            "pose/position/current",
+            "pose/orientation/goal",
+            "pose/orientation/current",
+        }

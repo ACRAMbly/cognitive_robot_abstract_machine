@@ -6,8 +6,9 @@ import krrood.symbolic_math.symbolic_math as sm
 from giskardpy.motion_statechart.context import MotionStatechartContext
 from giskardpy.motion_statechart.data_types import DefaultWeights
 from giskardpy.motion_statechart.exceptions import EmptyGoalStateError
+from giskardpy.motion_statechart.error_signals import ErrorSignal, SymbolicErrorSignal
 from giskardpy.motion_statechart.graph_node import NodeArtifacts
-from giskardpy.motion_statechart.graph_node import Task
+from giskardpy.motion_statechart.graph_node import ConvergingTask
 from semantic_digital_twin.datastructures.joint_state import JointState
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 from semantic_digital_twin.spatial_types.derivatives import Derivatives
@@ -20,7 +21,7 @@ from semantic_digital_twin.world_description.connections import (
 
 
 @dataclass(eq=False, repr=False)
-class JointPositionList(Task):
+class JointPositionList(ConvergingTask):
     """
     Moves the robot to a given joint position.
     """
@@ -48,11 +49,19 @@ class JointPositionList(Task):
     The maximum velocity of the joints.
     """
 
-    def build(self, context: MotionStatechartContext) -> NodeArtifacts:
+    def build_error(
+        self, context: MotionStatechartContext, artifacts: NodeArtifacts
+    ) -> ErrorSignal:
+        """
+        Build one equality constraint per joint of the goal state.
+
+        :param context: Provides access to world model and kinematic expressions.
+        :param artifacts: The artifacts to add constraints to.
+        :return: The largest absolute joint position error, so the task succeeds only
+            once every joint is within the threshold.
+        """
         if len(self.goal_state) == 0:
             raise EmptyGoalStateError(node=self)
-
-        artifacts = NodeArtifacts()
 
         errors = []
         for connection, target in self.goal_state.items():
@@ -73,9 +82,8 @@ class JointPositionList(Task):
                 quadratic_weight=self.weight,
                 task_expression=current,
             )
-            errors.append(sm.abs(error) < self.threshold)
-        artifacts.observation = sm.logic_all(sm.Vector(errors))
-        return artifacts
+            errors.append(sm.abs(error))
+        return SymbolicErrorSignal(sm.max(sm.Vector(errors)))
 
     def apply_limits_to_target(
         self, target: float, connection: ActiveConnection1DOF

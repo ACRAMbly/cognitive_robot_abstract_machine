@@ -4,7 +4,7 @@ import ast
 import logging
 import threading
 import uuid
-from abc import ABC
+from abc import ABC, abstractmethod
 from dataclasses import field, dataclass, fields
 from functools import cached_property
 
@@ -54,7 +54,9 @@ from giskardpy.motion_statechart.exceptions import (
     SelfInStartConditionError,
     NonObservationVariableError,
     NodeAlreadyBelongsToDifferentNodeError,
+    NodeNotBuiltError,
 )
+from giskardpy.motion_statechart.error_signals import ErrorSignal
 from giskardpy.motion_statechart.plotters.plot_specs import NodePlotSpec
 from giskardpy.motion_statechart.constraint_builders import GeometricConstraintBuilder
 from giskardpy.qp.constraint_collection import ConstraintCollection
@@ -363,6 +365,11 @@ class NodeArtifacts:
     The advantage of using observation is that you can reuse the expressions used in constraints.
     .. warning:: the result of `on_tick` takes precedence over the observation expression.
     """
+    error: Optional[ErrorSignal] = field(default=None)
+    """
+    How far this node is from its goal. Set by :class:`ConvergingTask`, which derives
+    :attr:`observation` from it, and used to watch whether the node is still converging.
+    """
     debug_expressions: List[DebugExpression] = field(default_factory=list)
     """
     A list of symbolic expressions used for debugging only.
@@ -422,6 +429,8 @@ class MotionStatechartNode:
     _constraint_collection: ConstraintCollection = field(init=False, repr=False)
     """The parameter is set after build() using its NodeArtifacts."""
     _observation_expression: Scalar = field(init=False, repr=False)
+    """The parameter is set after build() using its NodeArtifacts."""
+    _error_signal: Optional[ErrorSignal] = field(init=False, repr=False, default=None)
     """The parameter is set after build() using its NodeArtifacts."""
     _debug_expressions: List[DebugExpression] = field(default_factory=list, init=False)
     """The parameter is set after build() using its NodeArtifacts."""
@@ -495,6 +504,16 @@ class MotionStatechartNode:
         :return: The debug expressions registered by this node during build.
         """
         return self._debug_expressions
+
+    @property
+    def prerequisite_nodes(self) -> List[MotionStatechartNode]:
+        """
+        Nodes that must be expanded and built before this one, because this node reads
+        artifacts they only produce during expansion or build.
+
+        :return: The nodes this node depends on, empty unless a subclass declares any.
+        """
+        return []
 
     @property
     def depth(self) -> int:
@@ -941,6 +960,66 @@ class Task(MotionStatechartNode):
     plot_specs: NodePlotSpec = field(
         default_factory=NodePlotSpec.create_task_style, kw_only=True, init=False
     )
+
+
+@dataclass(eq=False, repr=False)
+class ConvergingTask(Task, ABC):
+    """
+    A task that drives a single scalar error towards zero and succeeds once that error is
+    within :attr:`threshold`.
+
+    Subclasses declare the error rather than the success condition, so that "reached the
+    goal" is defined in one place, and so that how fast the goal is being approached can
+    be measured. Tasks that enforce an invariant instead of converging, such as a
+    velocity limit or a collision predicate, are plain :class:`Task` and write their own
+    observation.
+    """
+
+    threshold: float = field(default=0.01, kw_only=True)
+    """Error at or below which the goal counts as reached, in the task's own units."""
+
+    def build(self, context: MotionStatechartContext) -> NodeArtifacts:
+        """
+        Build the task and derive its observation from its error.
+        """
+        artifacts = super().build(context)
+        artifacts.error = self.build_error(context, artifacts)
+        artifacts.observation = artifacts.error.expression <= self.threshold
+        return artifacts
+
+    @abstractmethod
+    def build_error(
+        self, context: MotionStatechartContext, artifacts: NodeArtifacts
+    ) -> ErrorSignal:
+        """
+        Add the motion constraints of this task and describe the error they drive to
+        zero.
+
+        :param context: The context that contains data that can be used to build this
+            task.
+        :param artifacts: The artifacts to add constraints and debug expressions to.
+        :return: The error signal of this task.
+        """
+
+    @property
+    def error_signal(self) -> ErrorSignal:
+        """
+        :return: The error signal produced during build.
+        """
+        if self._error_signal is None:
+            raise NodeNotBuiltError(node=self)
+        return self._error_signal
+
+    @property
+    def normalized_error(self) -> Scalar:
+        """
+        The error divided by :attr:`threshold`, so that a value of at most 1 means the
+        goal is reached.
+
+        Dividing out the threshold makes errors of different tasks, and of different
+        units, comparable against a single convergence rate.
+        """
+        return self.error_signal.expression / self.threshold
 
 
 @dataclass(eq=False, repr=False)

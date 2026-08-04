@@ -14,6 +14,7 @@ if TYPE_CHECKING:
         MotionStatechartNode,
         TrinaryCondition,
     )
+    from giskardpy.motion_statechart.monitors.progress_monitors import ProgressStalled
     from semantic_digital_twin.world_description.world_entity import (
         KinematicStructureEntity,
     )
@@ -113,6 +114,63 @@ class GoalPointsReferenceFrameMismatchError(NodeInitializationError):
 
     def suggest_correction(self) -> str:
         return "Make sure all goal points have the same reference frame."
+
+
+@dataclass
+class NodeNotBuiltError(NodeInitializationError):
+    def error_message(self) -> str:
+        return f'Node "{self.node.unique_name}" has not been built yet.'
+
+    def suggest_correction(self) -> str:
+        return "Compile the motion statechart before reading a node's build artifacts."
+
+
+@dataclass
+class NoConvergingTaskError(NodeInitializationError):
+    monitored_node: MotionStatechartNode
+
+    def error_message(self) -> str:
+        return (
+            f'"{self.monitored_node.unique_name}" contains no ConvergingTask, so it has '
+            f"no goal error whose progress could be watched."
+        )
+
+    def suggest_correction(self) -> str:
+        return (
+            "Watch a task that converges towards a goal. Tasks that enforce an invariant, "
+            "such as a velocity limit or a collision predicate, never converge."
+        )
+
+
+@dataclass
+class CyclicNodeDependencyError(NodeInitializationError):
+    cycle: list[MotionStatechartNode]
+
+    def error_message(self) -> str:
+        cycle_str = " -> ".join(node.unique_name for node in self.cycle)
+        return f"Nodes depend on each other in a cycle: {cycle_str}."
+
+    def suggest_correction(self) -> str:
+        return "Break the cycle so the nodes can be expanded and built in some order."
+
+
+@dataclass
+class NoProgressError(MotionStatechartError):
+    progress_monitor: ProgressStalled
+
+    def error_message(self) -> str:
+        stalled_tasks = self.progress_monitor.stalled_tasks
+        names = ", ".join(task.unique_name for task in stalled_tasks)
+        return (
+            f"{names or self.progress_monitor.monitored_node.unique_name} stopped "
+            f"approaching a goal for {self.progress_monitor.timeout} seconds."
+        )
+
+    def suggest_correction(self) -> str:
+        return (
+            "Check whether the goal is reachable, whether another task of equal or higher "
+            "weight is opposing it, or whether the robot is at a joint limit."
+        )
 
 
 @dataclass

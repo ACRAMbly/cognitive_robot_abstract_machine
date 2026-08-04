@@ -4,12 +4,13 @@ from dataclasses import dataclass, field
 
 import krrood.symbolic_math.symbolic_math as sm
 from giskardpy.motion_statechart.context import MotionStatechartContext
-from giskardpy.motion_statechart.graph_node import Task, NodeArtifacts
+from giskardpy.motion_statechart.error_signals import ErrorSignal, SymbolicErrorSignal
+from giskardpy.motion_statechart.graph_node import ConvergingTask, NodeArtifacts
 from semantic_digital_twin.world_description.world_entity import Body
 
 
 @dataclass
-class MaxManipulability(Task):
+class MaxManipulability(ConvergingTask):
     """
     This goal maximizes the manipulability of the kinematic chain between root_link and
     tip_link.
@@ -30,12 +31,20 @@ class MaxManipulability(Task):
 
     manipulability_threshold: float = field(default=0.5, kw_only=True)
     """
-    Manipulability value the goal drives the measure towards; also defines the
-    observation threshold.
+    Manipulability value the goal drives the measure towards.
     """
 
-    def build(self, context: MotionStatechartContext) -> NodeArtifacts:
-        artifacts = NodeArtifacts()
+    def build_error(
+        self, context: MotionStatechartContext, artifacts: NodeArtifacts
+    ) -> ErrorSignal:
+        """
+        Build a constraint that drives the manipulability measure towards
+        :attr:`manipulability_threshold`.
+
+        :param context: Provides access to world model and kinematic expressions.
+        :param artifacts: The artifacts to add constraints to.
+        :return: How far the manipulability measure is from its target value.
+        """
         root_P_tip = context.world.compose_forward_kinematics_expression(
             self.root_link, self.tip_link
         ).to_position()[:3]
@@ -54,7 +63,6 @@ class MaxManipulability(Task):
             name=self.name,
         )
 
-        artifacts.observation = (
-            sm.abs(self.manipulability_threshold - manipulability) <= 0.01
+        return SymbolicErrorSignal(
+            sm.abs(self.manipulability_threshold - manipulability)
         )
-        return artifacts
