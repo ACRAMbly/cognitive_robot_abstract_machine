@@ -381,7 +381,12 @@ class StretchApartmentDemonstration(RobotDemonstration):
                     object_sem_annotation=CheezeIt,
                     trust_detected_orientation=False,
                 ),
-                PickUpAction(cereal_body, Arms.LEFT, grasp_description),
+                PickUpAction(
+                    cereal_body,
+                    Arms.LEFT,
+                    grasp_description,
+                    redetect_object_before_grasp=True,
+                ),
                 ParkArmsAction(Arms.BOTH),
                 NavigateAction(
                     Pose.from_xyz_rpy(

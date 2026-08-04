@@ -29,6 +29,7 @@ from coraplex.robot_plans.motions.misc import DetectingMotion, PerceptionTask
 from coraplex.utils import split_list_by_type
 from giskardpy.motion_statechart.tasks.cartesian_tasks import CartesianPose
 from giskardpy.motion_statechart.tasks.joint_tasks import JointPositionList
+from giskardpy.motion_statechart.tasks.pointing import Pointing
 from semantic_digital_twin.adapters.ros.visualization.viz_marker import (
     VizMarkerPublisher,
 )
@@ -144,6 +145,45 @@ def test_parse_pick_up_merges_motions_around_model_change(immutable_model_world)
     # The four motions before the attach (open gripper, reach pre-pose, reach pose,
     # close gripper) merge into one executable; the lift after it into another.
     assert len(executable.execution_list[0].motion_mappings) == 4
+    assert len(executable.execution_list[2].motion_mappings) == 1
+
+
+def test_parse_pick_up_with_redetect_adds_a_look_and_a_perception_task_before_the_reach(
+    immutable_model_world,
+):
+    """
+    ``redetect_object_before_grasp`` inserts a look-at and a further detection right
+    before the reach, merged into the same chart as the surrounding motions (perception
+    does not interrupt merging, see
+    :func:`test_detecting_motion_merges_with_the_motions_around_it`).
+    """
+    world, view, context = immutable_model_world
+
+    plan = execute_single(
+        PickUpAction(
+            world.get_body_by_name("milk.stl"),
+            Arms.RIGHT,
+            GraspDescription(
+                ApproachDirection.FRONT,
+                VerticalAlignment.NoAlignment,
+                view.right_arm.end_effector,
+            ),
+            redetect_object_before_grasp=True,
+        ),
+        context=context,
+    )
+
+    plan.notify()
+    executable = plan.parse()
+
+    # The redetect adds two motions (a Pointing look-at and a PerceptionTask) to the
+    # merged chart before the attach; the lift after it is unaffected.
+    assert len(executable.execution_list[0].motion_mappings) == 6
+    task_types = [
+        type(task) for task in executable.execution_list[0].motion_mappings.values()
+    ]
+    assert Pointing in task_types
+    assert PerceptionTask in task_types
     assert len(executable.execution_list[2].motion_mappings) == 1
 
 

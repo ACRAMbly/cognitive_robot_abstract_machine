@@ -19,12 +19,15 @@ from krrood.entity_query_language.factories import (
 from coraplex.datastructures.dataclasses import Context
 from coraplex.datastructures.enums import (
     Arms,
+    DetectionTechnique,
     MovementType,
 )
 from coraplex.datastructures.grasp import GraspDescription
 from coraplex.plans.factories import sequential, execute_single
 from coraplex.querying.predicates import GripperIsFree
 from coraplex.robot_plans.actions.base import ActionDescription
+from coraplex.robot_plans.actions.core.misc import DetectAction
+from coraplex.robot_plans.actions.core.navigation import LookAtAction
 from coraplex.robot_plans.motions.gripper import (
     MoveGripperMotion,
     MoveToolCenterPointMotion,
@@ -34,6 +37,9 @@ from semantic_digital_twin.datastructures.definitions import GripperState
 from semantic_digital_twin.reasoning.predicates import allclose
 from semantic_digital_twin.reasoning.robot_predicates import is_body_in_gripper
 from semantic_digital_twin.robots.robot_part_mixins import HasMobileBase
+from semantic_digital_twin.semantic_annotations.mixins import (
+    HasRootKinematicStructureEntity,
+)
 from semantic_digital_twin.spatial_types.spatial_types import Pose
 from semantic_digital_twin.world_description.world_entity import Body
 
@@ -156,15 +162,42 @@ class PickUpAction(ActionDescription):
     The GraspDescription that should be used for picking up the object.
     """
 
+    redetect_object_before_grasp: bool = False
+    """
+    If True, the robot looks at the object and a further
+    :class:`~coraplex.robot_plans.actions.core.misc.DetectAction` corrects its pose
+    right before the reach, on top of whatever detection happened earlier in the plan.
+    If False, no further look or detection happens here.
+    """
+
     @property
     def _action_plan(self) -> PlanNode:
 
         _, _, lift_to_pose = self.grasp_description.grasp_pose_sequence(
             self.object_designator
         )
-        return sequential(
-            children=[
-                MoveGripperMotion(motion=GripperState.OPEN, gripper=self.arm),
+        children = [
+            MoveGripperMotion(motion=GripperState.OPEN, gripper=self.arm),
+        ]
+        if self.redetect_object_before_grasp:
+            [semantic_annotation] = [
+                annotation
+                for annotation in self.world.semantic_annotations
+                if isinstance(annotation, HasRootKinematicStructureEntity)
+                and annotation.root == self.object_designator
+            ]
+            children.append(
+                LookAtAction(Pose.from_xyz_rpy(reference_frame=self.object_designator))
+            )
+            children.append(
+                DetectAction(
+                    DetectionTechnique.TYPES,
+                    object_sem_annotation=type(semantic_annotation),
+                    trust_detected_orientation=False,
+                )
+            )
+        children.extend(
+            [
                 # The whole plan is expanded before the first motion runs, so the reach is
                 # kept in the object's own frame rather than resolved to world
                 # coordinates here: that way it still follows a pose corrected in between,
@@ -188,8 +221,9 @@ class PickUpAction(ActionDescription):
                     allow_gripper_collision=True,
                     movement_type=MovementType.TRANSLATION,
                 ),
-            ],
+            ]
         )
+        return sequential(children=children)
 
     @staticmethod
     def pre_condition(

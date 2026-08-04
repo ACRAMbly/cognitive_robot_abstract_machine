@@ -5785,6 +5785,10 @@ class PickUpActionDAO(
         use_existing_column=True,
     )
 
+    redetect_object_before_grasp: Mapped[builtins.bool] = mapped_column(
+        use_existing_column=True
+    )
+
     arm: Mapped[coraplex.datastructures.enums.Arms] = mapped_column(
         krrood.ormatic.custom_types.PolymorphicEnumType,
         nullable=False,
