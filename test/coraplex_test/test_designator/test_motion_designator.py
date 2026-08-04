@@ -30,7 +30,6 @@ from coraplex.robot_plans.actions.core.navigation import NavigateAction
 from coraplex.robot_plans.actions.core.pick_up import PickUpAction
 from coraplex.robot_plans.actions.core.placing import PlaceAction
 from coraplex.robot_plans.actions.core.robot_body import MoveTorsoAction
-from coraplex.robot_plans.motions.base import BaseMotion
 from coraplex.robot_plans.motions.gripper import MoveGripperMotion
 from semantic_digital_twin.datastructures.definitions import GripperState, TorsoState
 from semantic_digital_twin.robots.pr2 import PR2
@@ -129,7 +128,7 @@ def test_move_tool_center_point_motion_uses_tight_threshold(immutable_model_worl
     assert isinstance(cartesian_motion.motion_chart, CartesianPose)
     assert (
         cartesian_motion.motion_chart.translation_threshold
-        == BaseMotion.DEFAULT_TCP_POSITION_THRESHOLD
+        == context.motion_tolerances.default_tcp_position_threshold
     )
 
     translation_motion = MoveToolCenterPointMotion(
@@ -138,7 +137,7 @@ def test_move_tool_center_point_motion_uses_tight_threshold(immutable_model_worl
     execute_single(translation_motion, context=context)
     assert (
         translation_motion.motion_chart.threshold
-        == BaseMotion.DEFAULT_TCP_POSITION_THRESHOLD
+        == context.motion_tolerances.default_tcp_position_threshold
     )
 
 
@@ -318,11 +317,14 @@ def test_move_gripper_motion_tolerate_stall_can_be_explicitly_enabled(
     assert LocalMinimumReached in node_types
 
 
-def test_pick_up_action_close_motion_tolerates_stall(immutable_model_world):
+def test_pick_up_action_close_motion_stall_tolerance_defaults_to_false(
+    immutable_model_world,
+):
     """
-    PickUpAction's own grasp-closing motion must opt into stall tolerance, so a grasped
-    object's fingers physically stopping before the nominal fully-closed target is
-    correctly treated as a real grasp, not a failed motion.
+    PickUpAction's grasp-closing motion must not tolerate a stall unless explicitly
+    asked to: building the stall monitor needs a velocity variable for every one of the
+    gripper's connections, which not every robot has, so it must stay opt-in rather than
+    always on (it crashes on Tracy's real-execution gripper otherwise).
     """
     world, view, context = immutable_model_world
     grasp_description = GraspDescription(
@@ -332,6 +334,35 @@ def test_pick_up_action_close_motion_tolerates_stall(immutable_model_world):
     )
     pick_up = PickUpAction(
         world.get_body_by_name("milk.stl"), Arms.LEFT, grasp_description
+    )
+    sequential([pick_up], context=context)
+
+    close_motion_nodes = pick_up._action_plan.plan.get_nodes_by_designator_type(
+        MoveGripperMotion
+    )
+    assert len(close_motion_nodes) == 1
+    assert close_motion_nodes[0].designator.tolerate_stall is False
+
+
+def test_pick_up_action_close_motion_tolerates_stall_when_enabled(
+    immutable_model_world,
+):
+    """
+    PickUpAction's ``tolerate_grasp_stall`` must reach the grasp's CLOSE motion, so a
+    grasped object's fingers physically stopping before the nominal fully-closed target
+    is correctly treated as a real grasp, not a failed motion, once explicitly enabled.
+    """
+    world, view, context = immutable_model_world
+    grasp_description = GraspDescription(
+        ApproachDirection.FRONT,
+        VerticalAlignment.NoAlignment,
+        view.left_arm.end_effector,
+    )
+    pick_up = PickUpAction(
+        world.get_body_by_name("milk.stl"),
+        Arms.LEFT,
+        grasp_description,
+        tolerate_grasp_stall=True,
     )
     sequential([pick_up], context=context)
 

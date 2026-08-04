@@ -4,7 +4,7 @@ import logging
 from abc import abstractmethod
 from dataclasses import dataclass
 from inspect import signature
-from typing_extensions import ClassVar, TypeVar, Type, Optional
+from typing_extensions import TypeVar, Type, Optional
 
 from giskardpy.motion_statechart.goals.collision_avoidance import (
     UpdateTemporaryCollisionRules,
@@ -32,22 +32,6 @@ class BaseMotion(Designator):
 
     Motions are like builders for Motion State Charts. Motions never create any other
     motions or actions. Motions create exactly one goal.
-    """
-
-    DEFAULT_TCP_POSITION_THRESHOLD: ClassVar[float] = 0.005
-    """
-    Default position tolerance in meters for tool-center-point poses, tighter than
-    Giskard's own task default so an approach doesn't stop short of a small object.
-    """
-
-    TOOL_ORIENTATION_THRESHOLD: ClassVar[float] = 0.02
-    """
-    Default orientation tolerance in rad for tool-center-point poses.
-
-    .. note:: A physically simulated arm's PD-tracked joints settle with a small
-        residual orientation error, so reusing the (much tighter) position tolerance
-        as the rotation tolerance can leave the task perpetually unfinished, stalling
-        the rest of the plan behind it.
     """
 
     def perform(self):

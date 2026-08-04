@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from typing_extensions import Any, Dict, Optional
 
@@ -25,6 +25,11 @@ from coraplex.datastructures.grasp import GraspDescription
 from coraplex.plans.factories import sequential
 from coraplex.querying.predicates import GripperIsFree
 from coraplex.robot_plans.actions.base import ActionDescription
+from coraplex.robot_plans.mixins import (
+    HasGraspDetectionThreshold,
+    PickUpTuningParameters,
+    ReachTuningParameters,
+)
 from coraplex.robot_plans.motions.gripper import (
     MoveGripperMotion,
     MoveToolCenterPointMotion,
@@ -41,84 +46,7 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass
-class ReachTuningParameters:
-    """
-    Tunable approach speeds for :class:`ReachAction`.
-    """
-
-    pre_approach_linear_velocity: Optional[float] = field(default=None, kw_only=True)
-    """
-    Maximum linear speed (in m/s) for the initial pre-pose approach, enforced via
-    :class:`~giskardpy.motion_statechart.tasks.cartesian_tasks.CartesianPositionVelocityLimit`.
-    ``None`` leaves the speed unconstrained.
-    """
-
-    final_approach_linear_velocity: Optional[float] = field(default=None, kw_only=True)
-    """
-    Maximum linear speed (in m/s) for the final approach onto the target pose, enforced
-    via
-    :class:`~giskardpy.motion_statechart.tasks.cartesian_tasks.CartesianPositionVelocityLimit`.
-    ``None`` leaves the speed unconstrained.
-    """
-
-
-@dataclass
-class PickUpTuningParameters:
-    """
-    Tunable grasp speeds and target-object friction for :class:`PickUpAction`.
-    """
-
-    pre_approach_linear_velocity: Optional[float] = field(default=None, kw_only=True)
-    """
-    Maximum linear speed (in m/s) for the initial reach towards the object's pre-grasp
-    standoff, enforced via
-    :class:`~giskardpy.motion_statechart.tasks.cartesian_tasks.CartesianPositionVelocityLimit`.
-    ``None`` leaves the speed unconstrained.
-    """
-
-    grasp_linear_velocity: Optional[float] = field(default=None, kw_only=True)
-    """
-    Maximum linear speed (in m/s) for the final approach onto the grasp pose, enforced
-    via
-    :class:`~giskardpy.motion_statechart.tasks.cartesian_tasks.CartesianPositionVelocityLimit`.
-    ``None`` leaves the speed unconstrained.
-    """
-
-    grasp_closing_velocity: Optional[float] = field(default=None, kw_only=True)
-    """
-    Maximum finger joint velocity (in m/s) used while closing onto the object, enforced
-    via
-    :class:`~giskardpy.motion_statechart.tasks.joint_tasks.JointVelocityLimit`. ``None``
-    leaves the speed unconstrained.
-    """
-
-    lift_linear_velocity: Optional[float] = field(default=None, kw_only=True)
-    """
-    Maximum linear speed (in m/s) for lifting the object clear of the table after
-    grasping, enforced via
-    :class:`~giskardpy.motion_statechart.tasks.cartesian_tasks.CartesianPositionVelocityLimit`.
-    ``None`` leaves the speed unconstrained.
-    """
-
-    grasp_stall_minimum_time: Optional[float] = field(default=None, kw_only=True)
-    """
-    Minimum stall dwell time (in seconds, see
-    :attr:`~coraplex.robot_plans.motions.gripper.MoveGripperMotion.stall_minimum_time`)
-    for the CLOSE motion. ``None`` keeps the default.
-    """
-
-    object_friction: Optional[float] = field(default=None, kw_only=True)
-    """
-    Sliding friction coefficient to apply to the target object's geom before this pick,
-    overriding the world's default. Not consumed by this action itself -- applying it is
-    the caller's responsibility (see
-    :meth:`~physics_simulators.mujoco_simulator.MujocoSimulator.set_geom_friction`);
-    recorded here for persistence. ``None`` leaves the friction untouched.
-    """
-
-
-@dataclass
-class ReachAction(ActionDescription, ReachTuningParameters):
+class ReachAction(ActionDescription, ReachTuningParameters, HasGraspDetectionThreshold):
     """
     Let the robot reach a specific pose.
     """
@@ -152,13 +80,6 @@ class ReachAction(ActionDescription, ReachTuningParameters):
     """
     Whether to open the gripper once the pre-pose is reached, used by
     :class:`PickUpAction` to open before its slower final approach.
-    """
-
-    grasp_detection_threshold: float = 0.9
-    """
-    Minimum fraction of sampled rays between the gripper's fingers that must hit
-    :attr:`object_designator` for it to count as reached (see
-    :func:`~semantic_digital_twin.reasoning.robot_predicates.is_body_gripped`).
     """
 
     @property
@@ -238,7 +159,9 @@ class ReachAction(ActionDescription, ReachTuningParameters):
 
 
 @dataclass
-class PickUpAction(ActionDescription, PickUpTuningParameters):
+class PickUpAction(
+    ActionDescription, PickUpTuningParameters, HasGraspDetectionThreshold
+):
     """
     Let the robot pick up an object.
     """
@@ -258,11 +181,15 @@ class PickUpAction(ActionDescription, PickUpTuningParameters):
     The GraspDescription that should be used for picking up the object.
     """
 
-    grasp_detection_threshold: float = 0.9
+    tolerate_grasp_stall: bool = False
     """
-    Minimum fraction of sampled rays between the gripper's fingers that must hit
-    :attr:`object_designator` for it to count as grasped (see
-    :func:`~semantic_digital_twin.reasoning.robot_predicates.is_body_gripped`).
+    Whether the CLOSE motion's completion also tolerates a stalled grasp (see
+    :attr:`~coraplex.robot_plans.motions.gripper.MoveGripperMotion.tolerate_stall`).
+
+    Opt-in rather than always on: building the stall monitor needs a velocity variable
+    for every one of the gripper's connections, which is not guaranteed for every robot
+    -- it crashes on Tracy's real-execution gripper, whose connections do not all have
+    one.
     """
 
     def _grasp_attempt_plan(self) -> PlanNode:
@@ -286,7 +213,7 @@ class PickUpAction(ActionDescription, PickUpTuningParameters):
                     gripper=self.arm,
                     finger_velocity=self.grasp_closing_velocity,
                     stall_minimum_time=self.grasp_stall_minimum_time,
-                    tolerate_stall=True,
+                    tolerate_stall=self.tolerate_grasp_stall,
                 ),
                 AttachNode(
                     body=self.object_designator,

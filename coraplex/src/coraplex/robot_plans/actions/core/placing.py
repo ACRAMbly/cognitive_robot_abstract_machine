@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from typing_extensions import Any, Dict, Optional
+from typing_extensions import Any, Dict
 
 from coraplex.plans.attachment_nodes import DetachNode
 from coraplex.plans.plan_node import PlanNode
@@ -25,6 +25,10 @@ from coraplex.plans.factories import sequential
 from coraplex.querying.predicates import GripperIsFree
 from coraplex.robot_plans.actions.base import ActionDescription
 from coraplex.robot_plans.actions.core.pick_up import PickUpAction
+from coraplex.robot_plans.mixins import (
+    HasGraspDetectionThreshold,
+    PlaceTuningParameters,
+)
 from coraplex.robot_plans.motions.gripper import (
     MoveGripperMotion,
     MoveToolCenterPointMotion,
@@ -38,46 +42,7 @@ from semantic_digital_twin.world_description.world_entity import Body
 
 
 @dataclass
-class PlaceTuningParameters:
-    """
-    Tunable transport/placing/release speeds for :class:`PlaceAction`.
-    """
-
-    placing_linear_velocity: Optional[float] = field(default=None, kw_only=True)
-    """
-    Maximum linear speed (in m/s) for the final descent onto the target location,
-    enforced via
-    :class:`~giskardpy.motion_statechart.tasks.cartesian_tasks.CartesianPositionVelocityLimit`.
-    ``None`` leaves the speed unconstrained.
-    """
-
-    transport_linear_velocity: Optional[float] = field(default=None, kw_only=True)
-    """
-    Maximum linear speed (in m/s) for carrying the held object above the target
-    location, before the final descent, enforced via
-    :class:`~giskardpy.motion_statechart.tasks.cartesian_tasks.CartesianPositionVelocityLimit`.
-    ``None`` leaves the speed unconstrained.
-    """
-
-    release_opening_velocity: Optional[float] = field(default=None, kw_only=True)
-    """
-    Maximum finger joint velocity (in m/s) used while opening the gripper to release
-    the object, enforced via
-    :class:`~giskardpy.motion_statechart.tasks.joint_tasks.JointVelocityLimit`. ``None``
-    leaves the speed unconstrained.
-    """
-
-    retract_linear_velocity: Optional[float] = field(default=None, kw_only=True)
-    """
-    Maximum linear speed (in m/s) for retracting the end effector away from the placed
-    object, enforced via
-    :class:`~giskardpy.motion_statechart.tasks.cartesian_tasks.CartesianPositionVelocityLimit`.
-    ``None`` leaves the speed unconstrained.
-    """
-
-
-@dataclass
-class PlaceAction(ActionDescription, PlaceTuningParameters):
+class PlaceAction(ActionDescription, PlaceTuningParameters, HasGraspDetectionThreshold):
     """
     Places an Object at a position using an arm.
     """
@@ -96,14 +61,7 @@ class PlaceAction(ActionDescription, PlaceTuningParameters):
     Arm that is currently holding the object
     """
 
-    grasp_detection_threshold: float = 0.9
-    """
-    Minimum fraction of sampled rays between the gripper's fingers that must hit
-    :attr:`object_designator` for it to still count as held (see
-    :func:`~semantic_digital_twin.reasoning.robot_predicates.is_body_gripped`).
-    """
-
-    grasp_release_threshold: float = 0.1
+    grasp_release_threshold: float = field(default=0.1, kw_only=True)
     """
     Maximum fraction of sampled rays between the gripper's fingers that may still hit
     :attr:`object_designator` for it to count as released (see

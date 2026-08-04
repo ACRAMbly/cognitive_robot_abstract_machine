@@ -27,6 +27,11 @@ from semantic_digital_twin.spatial_types import Point3, Vector3
 from semantic_digital_twin.spatial_types.spatial_types import Pose
 from semantic_digital_twin.world_description.world_entity import Body
 from coraplex.exceptions import MissingToolFrame, MissingWaypoints
+from coraplex.robot_plans.mixins import (
+    CartesianVelocityLimitParameters,
+    GripperStallToleranceParameters,
+    HasTcpGoalThresholds,
+)
 from coraplex.robot_plans.motions.base import BaseMotion
 from coraplex.datastructures.enums import (
     Arms,
@@ -39,7 +44,7 @@ from coraplex.utils import translate_pose_along_local_axis
 
 
 @dataclass
-class ReachMotion(BaseMotion):
+class ReachMotion(BaseMotion, HasTcpGoalThresholds):
     """
     Moves the tool center point through the grasp description's pre-grasp and grasp
     poses for an object.
@@ -64,16 +69,6 @@ class ReachMotion(BaseMotion):
     reverse_pose_sequence: bool = False
     """
     Reverses the sequence of poses, i.e., moves away from the object instead of towards it. Used for placing objects.
-    """
-
-    position_threshold: float = BaseMotion.DEFAULT_TCP_POSITION_THRESHOLD
-    """
-    Distance threshold in meters for goal achievement.
-    """
-
-    orientation_threshold: float = BaseMotion.TOOL_ORIENTATION_THRESHOLD
-    """
-    Rotation threshold in rad for goal achievement.
     """
 
     def _calculate_pose_sequence(self) -> List[Pose]:
@@ -110,8 +105,8 @@ class ReachMotion(BaseMotion):
                 root_link=self.robot_view.root,
                 tip_link=tip,
                 goal_pose=pose,
-                translation_threshold=self.position_threshold,
-                orientation_threshold=self.orientation_threshold,
+                translation_threshold=self.resolved_position_threshold(),
+                orientation_threshold=self.resolved_orientation_threshold(),
                 name="Reach",
             )
             for pose in self._calculate_pose_sequence()
@@ -120,7 +115,7 @@ class ReachMotion(BaseMotion):
 
 
 @dataclass
-class MoveGripperMotion(BaseMotion):
+class MoveGripperMotion(BaseMotion, GripperStallToleranceParameters):
     """
     Opens or closes the gripper
     """
@@ -136,30 +131,6 @@ class MoveGripperMotion(BaseMotion):
     allow_gripper_collision: Optional[bool] = None
     """
     If the gripper is allowed to collide with something
-    """
-
-    finger_velocity: Optional[float] = None
-    """
-    Maximum finger joint velocity (in m/s), enforced via
-    :class:`~giskardpy.motion_statechart.tasks.joint_tasks.JointVelocityLimit`. ``None``
-    leaves the speed unconstrained.
-    """
-
-    stall_minimum_time: Optional[float] = None
-    """
-    Minimum stall dwell time (in seconds, see
-    :attr:`~giskardpy.motion_statechart.monitors.monitors.LocalMinimumReached.minimum_time`)
-    to command. Only meaningful when :attr:`tolerate_stall` is True. ``None`` keeps the
-    default.
-    """
-
-    tolerate_stall: bool = False
-    """
-    Whether this motion is also considered done once the fingers' velocities settle
-    near zero, even without reaching their nominal target position -- checked via a
-    separate :class:`~giskardpy.motion_statechart.monitors.monitors.LocalMinimumReached`
-    monitor alongside the goal, not by the goal's own observation, since stalling does
-    not mean the goal itself was reached.
     """
 
     def perform(self):
@@ -201,7 +172,9 @@ class MoveGripperMotion(BaseMotion):
 
 
 @dataclass
-class MoveToolCenterPointMotion(BaseMotion):
+class MoveToolCenterPointMotion(
+    BaseMotion, CartesianVelocityLimitParameters, HasTcpGoalThresholds
+):
     """
     Moves the Tool center point (TCP) of the robot
     """
@@ -221,34 +194,6 @@ class MoveToolCenterPointMotion(BaseMotion):
     movement_type: Optional[MovementType] = MovementType.CARTESIAN
     """
     The type of movement that should be performed.
-    """
-
-    max_linear_velocity: Optional[float] = None
-    """
-    Maximum linear speed (in m/s) of the tool center point, enforced via
-    :class:`~giskardpy.motion_statechart.tasks.cartesian_tasks.CartesianPositionVelocityLimit`.
-    ``None`` leaves the linear speed unconstrained (other than the robot's own hardware
-    limits).
-    """
-
-    max_angular_velocity: Optional[float] = None
-    """
-    Maximum angular speed (in rad/s) of the tool center point, enforced via
-    :class:`~giskardpy.motion_statechart.tasks.cartesian_tasks.CartesianRotationVelocityLimit`.
-    Only meaningful for :class:`~giskardpy.motion_statechart.tasks.cartesian_tasks.CartesianPose`
-    (i.e. when not :attr:`MovementType.TRANSLATION`). ``None`` leaves the angular speed
-    unconstrained.
-    """
-
-    position_threshold: float = BaseMotion.DEFAULT_TCP_POSITION_THRESHOLD
-    """
-    Distance threshold in meters for goal achievement.
-    """
-
-    orientation_threshold: float = BaseMotion.TOOL_ORIENTATION_THRESHOLD
-    """
-    Rotation threshold in rad for goal achievement, used only for
-    :class:`~giskardpy.motion_statechart.tasks.cartesian_tasks.CartesianPose`.
     """
 
     def perform(self):
@@ -298,7 +243,7 @@ class MoveToolCenterPointMotion(BaseMotion):
                 goal_point=self.target.to_position(),
                 name="MoveTCP",
                 weight=DefaultWeights.WEIGHT_BELOW_COLLISION_AVOIDANCE,
-                threshold=self.position_threshold,
+                threshold=self.resolved_position_threshold(),
             )
         else:
             task = CartesianPose(
@@ -307,8 +252,8 @@ class MoveToolCenterPointMotion(BaseMotion):
                 goal_pose=self.target,
                 name="MoveTCP",
                 weight=DefaultWeights.WEIGHT_BELOW_COLLISION_AVOIDANCE,
-                translation_threshold=self.position_threshold,
-                orientation_threshold=self.orientation_threshold,
+                translation_threshold=self.resolved_position_threshold(),
+                orientation_threshold=self.resolved_orientation_threshold(),
             )
         velocity_limit_nodes = self._velocity_limit_nodes(root, tip)
         if not velocity_limit_nodes:
@@ -468,7 +413,7 @@ class MoveTCPWaypointsAlignedMotion(BaseMotion):
 
 
 @dataclass
-class MoveManipulatorMotion(BaseMotion):
+class MoveManipulatorMotion(BaseMotion, HasTcpGoalThresholds):
     """
     Moves the Tool center point (TCP) of the robot
     """
@@ -488,16 +433,6 @@ class MoveManipulatorMotion(BaseMotion):
     If the gripper can collide with something
     """
 
-    position_threshold: float = BaseMotion.DEFAULT_TCP_POSITION_THRESHOLD
-    """
-    Distance threshold in meters for goal achievement.
-    """
-
-    orientation_threshold: float = BaseMotion.TOOL_ORIENTATION_THRESHOLD
-    """
-    Rotation threshold in rad for goal achievement.
-    """
-
     @property
     def _motion_chart(self):
         robot = self.robot
@@ -511,8 +446,8 @@ class MoveManipulatorMotion(BaseMotion):
             root_link=root,
             tip_link=self.end_effector.tool_frame,
             goal_pose=self.target,
-            translation_threshold=self.position_threshold,
-            orientation_threshold=self.orientation_threshold,
+            translation_threshold=self.resolved_position_threshold(),
+            orientation_threshold=self.resolved_orientation_threshold(),
             binding_policy=GoalBindingPolicy.Bind_on_start,
             name=self.__class__.__name__,
         )
