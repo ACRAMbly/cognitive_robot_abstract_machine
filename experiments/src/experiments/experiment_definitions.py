@@ -45,6 +45,43 @@ class MeanAndStandardDeviation:
         )
 
 
+class InvalidVolumeBoundError(ValueError):
+    """
+    Raised when a :class:`VolumeBound`'s lower bound exceeds its upper bound.
+    """
+
+    def __init__(self, lower: float, upper: float):
+        super().__init__(f"lower bound {lower} exceeds upper bound {upper}")
+
+
+@dataclass
+class VolumeBound:
+    """
+    A ``[lower, upper]`` interval known to contain some volume, for tables that report a
+    bounded estimate instead of a single point value.
+
+    Use this in experiment results whenever the true volume cannot be measured exactly
+    (e.g. it was estimated by sampling) but valid lower and/or upper bounds can be.
+    """
+
+    lower: float
+    """
+    A value the true volume is known to be at least as large as.
+    """
+
+    upper: float
+    """
+    A value the true volume is known to be at most as large as.
+    """
+
+    def __post_init__(self):
+        if self.lower > self.upper:
+            raise InvalidVolumeBoundError(self.lower, self.upper)
+
+    def __str__(self) -> str:
+        return f"[{round(self.lower, 4)}, {round(self.upper, 4)}]"
+
+
 @dataclass
 class ExperimentResult:
     """

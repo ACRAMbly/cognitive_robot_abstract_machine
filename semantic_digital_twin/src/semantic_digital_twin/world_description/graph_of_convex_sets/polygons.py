@@ -187,9 +187,7 @@ def _shape_to_convex_set(
     :return: A ``VPolytope`` built from the shape's own mesh if it is convex, or an
         ``HPolyhedron`` bounding box otherwise.
     """
-    world = shape.origin.reference_frame._world
-    world_mesh = shape.mesh.copy()
-    world_mesh.apply_transform(world.transform(shape.origin, target_frame).to_np())
+    world_mesh = shape.mesh_in_frame(target_frame)
 
     if world_mesh.is_convex:
         vertices = _bloat_convex_hull_points(world_mesh.vertices, bloat_x, bloat_y)

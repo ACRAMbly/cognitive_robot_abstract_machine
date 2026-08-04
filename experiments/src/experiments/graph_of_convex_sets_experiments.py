@@ -11,6 +11,19 @@ pipeline, covering two families of environments:
     The search space is derived automatically from the union of each object's
     obstacle bounding boxes plus 0.5 m of padding.
 
+For every environment, both GCS implementations are benchmarked and compared against
+a mesh-accurate free-space ground truth:
+
+  * :class:`GraphOfBoundingBoxes` exhaustively partitions free space into disjoint
+    axis-aligned boxes; its own volume is an exact, always-valid lower bound on the
+    true free volume (obstacle bounding boxes only ever over-approximate the real
+    geometry).
+
+  * :class:`GraphOfConvexPolygons` grows a handful of possibly-overlapping IRIS
+    regions; since their union has no closed-form volume, it is scored via
+    :class:`~experiments.free_space_volume_estimation.MonteCarloFreeSpaceSampler`
+    against the same sample points used for the ground truth.
+
 Results are collected into :class:`GraphOfConvexSetsFreespaceExperimentResult`
 rows and printed as a Typst ``#table`` block.  All timing columns report
 wall-clock milliseconds; repeated phases show mean ± standard deviation over
@@ -34,7 +47,9 @@ from experiments.experiment_definitions import (
     ExperimentsTable,
     MeanAndStandardDeviation,
     TypstRenderer,
+    VolumeBound,
 )
+from experiments.free_space_volume_estimation import MonteCarloFreeSpaceSampler
 from semantic_digital_twin.adapters.partnet_mobility_dataset.loader import (
     PartNetMobilityDatasetLoader,
 )
@@ -44,13 +59,17 @@ from semantic_digital_twin.semantic_annotations.semantic_annotations import (
 )
 from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix
 from semantic_digital_twin.world import World
-from semantic_digital_twin.world_description.geometry import BoundingBox
+from semantic_digital_twin.world_description.geometry import BoundingBox, Shape
 from semantic_digital_twin.world_description.graph_of_convex_sets.boxes import (
     GraphOfBoundingBoxes,
+)
+from semantic_digital_twin.world_description.graph_of_convex_sets.polygons import (
+    GraphOfConvexPolygons,
 )
 from semantic_digital_twin.world_description.shape_collection import (
     BoundingBoxCollection,
 )
+from semantic_digital_twin.world_description.world_entity import Body
 
 
 @dataclass
@@ -114,6 +133,63 @@ class GraphOfConvexSetsFreespaceExperimentResult(ExperimentResult):
     loading.
     """
 
+    mesh_obstacle_volume_total: float
+    """
+    Sum of every obstacle's own mesh volume, ignoring overlaps between obstacles.
+    """
+
+    naive_free_volume_lower_bound: float
+    """
+    Search-space volume minus :attr:`mesh_obstacle_volume_total`.
+
+    Always a valid lower bound on the true free volume regardless of overlaps between
+    obstacles, since the sum of individual obstacle volumes is never smaller than the
+    volume of their union.
+    """
+
+    box_free_space_volume: float
+    """
+    Volume of :class:`GraphOfBoundingBoxes`'s own free-space partition (the sum of its
+    disjoint box volumes).
+
+    Also a valid, exact lower bound on the true free volume, since obstacle bounding
+    boxes only ever over-approximate the real obstacle geometry.
+    """
+
+    true_free_volume_bound: VolumeBound
+    """
+    Bound on the true, mesh-accurate free volume: the tighter of
+    :attr:`naive_free_volume_lower_bound` and :attr:`box_free_space_volume` for the
+    lower end, and a Monte Carlo confidence-interval estimate against the real obstacle
+    meshes for the upper end.
+    """
+
+    graph_of_convex_polygons_construction_duration_milliseconds: (
+        MeanAndStandardDeviation
+    )
+    """
+    Time to grow the IRIS regions via ``GraphOfConvexPolygons.from_world`` (mean ±
+    standard deviation).
+    """
+
+    graph_of_convex_polygons_region_count: int
+    """
+    Number of IRIS regions grown.
+    """
+
+    graph_of_convex_polygons_region_volume_sum: float
+    """
+    Sum of every IRIS region's own volume, ignoring overlaps between regions.
+    """
+
+    graph_of_convex_polygons_coverage_bound: VolumeBound
+    """
+    Bound on the free volume covered by the union of IRIS regions: a Monte Carlo
+    confidence-interval estimate, capped above by
+    :attr:`graph_of_convex_polygons_region_volume_sum` (an exact upper bound, since
+    overlap only ever inflates the sum past the union's true volume).
+    """
+
     environment_name: str
     """
     Human-readable label identifying the environment (e.g. ``"apartment"`` or
@@ -174,6 +250,56 @@ def _collect_obstacles(world: World) -> List[BoundingBox]:
     annotation = SemanticEnvironmentAnnotation(root=world.root, _world=world)
     origin = HomogeneousTransformationMatrix(reference_frame=world.root)
     return list(annotation.as_bounding_box_collection_at_origin(origin))
+
+
+def _collect_obstacle_shapes(world: World) -> List[Shape]:
+    """
+    Return every collision shape of every obstacle body in world.
+
+    Mirrors the obstacle selection of :func:`_collect_obstacles` (same bodies, one entry
+    per collision shape instead of one bounding box per body), so the mesh- accurate
+    ground truth in :func:`_run_benchmark` stays comparable to that function's bounding-
+    box-based numbers.
+
+    :param world: The world to query.
+    :returns: List of collision shapes.
+    """
+    annotation = SemanticEnvironmentAnnotation(root=world.root, _world=world)
+    return [
+        shape
+        for entity in annotation.kinematic_structure_entities
+        if isinstance(entity, Body) and entity.has_collision()
+        for shape in entity.collision.shapes
+    ]
+
+
+def _box_volume(box: BoundingBox) -> float:
+    """
+    :param box: The bounding box to measure.
+    :return: The volume enclosed by box.
+    """
+    return box.depth * box.width * box.height
+
+
+def _region_volume(region) -> float:
+    """
+    :param region: An IRIS region.
+    :return: The region's volume.
+
+    Falls back to Drake's own suggested Monte Carlo alternative for the regions
+    ``HPolyhedron.CalcVolume`` cannot compute exactly (this is Drake's documented
+    escape hatch, raised as a plain ``RuntimeError`` with no more specific type to
+    catch).
+    """
+    try:
+        return region.CalcVolume()
+    except RuntimeError:
+        from pydrake.common import RandomGenerator
+
+        # Explicit accuracy/sample-count arguments, not just RandomGenerator(0): this
+        # pydrake binding's default arguments do not resolve correctly for
+        # HPolyhedron and raise a spurious TypeError.
+        return region.CalcVolumeViaSampling(RandomGenerator(0), 0.01, 10000).volume
 
 
 def _compute_search_space_from_obstacles(
@@ -296,6 +422,51 @@ def _run_benchmark(
     _, end_to_end_elapsed = _measure(_run_end_to_end)
     end_to_end_duration_milliseconds = end_to_end_elapsed[0] * 1000.0
 
+    search_space_box = search_space.bounding_boxes[0]
+    obstacle_shapes = _collect_obstacle_shapes(world)
+    mesh_obstacle_volume_total = sum(shape.volume for shape in obstacle_shapes)
+    naive_free_volume_lower_bound = (
+        _box_volume(search_space_box) - mesh_obstacle_volume_total
+    )
+    box_free_space_volume = sum(_box_volume(box) for box in free_space_collection)
+
+    sampler = MonteCarloFreeSpaceSampler.for_obstacle_shapes(
+        search_space_bounding_box=search_space_box,
+        obstacle_shapes=obstacle_shapes,
+        target_frame=world.root,
+    )
+    ground_truth_bound = sampler.free_volume_bound()
+    true_free_volume_lower_bound = max(
+        0.0, naive_free_volume_lower_bound, box_free_space_volume
+    )
+    true_free_volume_bound = VolumeBound(
+        lower=true_free_volume_lower_bound,
+        # Widened rather than left to raise: the Monte Carlo upper end is only a
+        # confidence-interval estimate, so an unlucky draw could in principle fall
+        # below an exact lower bound above.
+        upper=max(true_free_volume_lower_bound, ground_truth_bound.upper),
+    )
+
+    def _grow_convex_polygons():
+        return GraphOfConvexPolygons.from_world(world, search_space)
+
+    graph_of_convex_polygons, polygon_construction_elapsed = _measure(
+        _grow_convex_polygons, repetitions=3
+    )
+    region_volume_sum = sum(
+        _region_volume(region) for region in graph_of_convex_polygons.regions
+    )
+    raw_coverage_bound = sampler.region_coverage_bound(graph_of_convex_polygons.regions)
+    coverage_bound = VolumeBound(
+        lower=raw_coverage_bound.lower,
+        # Capped rather than left to raise: overlap between regions only ever
+        # inflates region_volume_sum past the true covered volume, so it is a valid
+        # upper bound even where it is tighter than the sampled estimate.
+        upper=max(
+            raw_coverage_bound.lower, min(raw_coverage_bound.upper, region_volume_sum)
+        ),
+    )
+
     return GraphOfConvexSetsFreespaceExperimentResult(
         world_loading_duration_milliseconds=round(
             world_loading_duration_milliseconds, 2
@@ -315,6 +486,16 @@ def _run_benchmark(
         graph_node_count=len(connectivity_graph.graph.nodes()),
         graph_edge_count=len(connectivity_graph.graph.edges()),
         end_to_end_duration_milliseconds=round(end_to_end_duration_milliseconds, 2),
+        mesh_obstacle_volume_total=round(mesh_obstacle_volume_total, 4),
+        naive_free_volume_lower_bound=round(naive_free_volume_lower_bound, 4),
+        box_free_space_volume=round(box_free_space_volume, 4),
+        true_free_volume_bound=true_free_volume_bound,
+        graph_of_convex_polygons_construction_duration_milliseconds=_to_mean_and_standard_deviation_milliseconds(
+            polygon_construction_elapsed
+        ),
+        graph_of_convex_polygons_region_count=graph_of_convex_polygons.region_count,
+        graph_of_convex_polygons_region_volume_sum=round(region_volume_sum, 4),
+        graph_of_convex_polygons_coverage_bound=coverage_bound,
         environment_name=environment_name,
     )
 
