@@ -129,6 +129,14 @@ class AnalysisEngine(AnalysisEngineInterface):
         cluster_descriptor.parameters.hsv_max = (
             cluster_descriptor.parameters.color_name_to_hsv_range["red"]["hsv_max"]
         )
+        # The depth hole leaves few valid 3D points under the color mask. Lowered to
+        # ClusterPoseBBAnnotator's own floor (it needs more than 10 points to compute a
+        # pose, cluster_pose_bb.py:161-165) rather than the class default of 62, so a
+        # sparse-but-real detection reaches pose estimation instead of being dropped here
+        # first. Outlier removal is skipped too: pruning an already-sparse, hole-riddled
+        # cloud for statistical outliers risks stripping the real points further.
+        cluster_descriptor.parameters.min_points_threshold = 11
+        cluster_descriptor.parameters.outlier_removal = False
 
         # ..note:: PointcloudCropAnnotator crops CASViews.CLOUD, but
         #     ImageClusterExtractor reads CASViews.COLOR_IMAGE/DEPTH_IMAGE directly, so
