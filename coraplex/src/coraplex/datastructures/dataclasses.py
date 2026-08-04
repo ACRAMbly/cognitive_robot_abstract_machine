@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
+from functools import cached_property
 
 from typing_extensions import (
     Optional,
@@ -106,6 +107,13 @@ class Context(PlanEntity):
         logging.getLogger("coraplex").setLevel(
             logging.DEBUG if self.debug else logging.INFO
         )
+
+    @cached_property
+    def giskard_wrapper(self):
+        from giskardpy.middleware.ros2.python_interface import GiskardWrapper
+
+        return GiskardWrapper(self.ros_node, world=self.world)
+
 
     @classmethod
     def from_world(
