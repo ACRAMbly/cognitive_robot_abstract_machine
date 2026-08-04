@@ -4,6 +4,9 @@ Tests for the Stretch apartment demo's perception pipeline configuration.
 
 import numpy as np
 
+from robokudo.annotators.image_cluster_extractor import ImageClusterExtractor
+from robokudo.annotators.plane import PlaneAnnotator
+from robokudo.annotators.pointcloud_cluster_extractor import PointCloudClusterExtractor
 from robokudo.annotators.pointcloud_crop import PointcloudCropAnnotator
 from robokudo.descriptors.analysis_engines.stretch_demo import (
     TARGET_SHELF_LAYER_MAX_WORLD_Z,
@@ -40,6 +43,31 @@ def test_pointcloud_crop_is_narrowed_to_the_target_shelf_layer():
     assert parameters.max_y == TARGET_SHELF_MAX_WORLD_Y
     assert parameters.min_z == TARGET_SHELF_LAYER_MIN_WORLD_Z
     assert parameters.max_z == TARGET_SHELF_LAYER_MAX_WORLD_Z
+
+
+def test_pipeline_extracts_objects_by_color_not_depth_clustering():
+    """
+    The target object is glossy enough that the RealSense returns no depth on its face,
+    which starves depth-based clustering of points to work with. Extracting by color
+    instead bounds the object's region from its RGB contour, so a depth hole just means
+    fewer 3D points survive within an already-correctly-shaped region.
+    """
+    with bounded_build_time():
+        pipeline = AnalysisEngine().implementation()
+
+    assert not any(
+        isinstance(node, (PlaneAnnotator, PointCloudClusterExtractor))
+        for node in pipeline.children
+    )
+
+    cluster_annotator = next(
+        node for node in pipeline.children if isinstance(node, ImageClusterExtractor)
+    )
+    parameters = cluster_annotator.descriptor.parameters
+    red_hsv_range = parameters.color_name_to_hsv_range["red"]
+
+    assert parameters.hsv_min == red_hsv_range["hsv_min"]
+    assert parameters.hsv_max == red_hsv_range["hsv_max"]
 
 
 def test_target_shelf_layer_bounds_are_the_midpoints_to_its_neighbours():
