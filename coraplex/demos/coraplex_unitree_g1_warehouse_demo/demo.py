@@ -243,7 +243,7 @@ assert abs(lowest_collision_point_of(robot, world)) < 1e-3
 start_visualization(world)
 
 with simulated_robot:
-    for i in range(10):
+    for _ in range(10):
         build_plan(world, robot).perform()
         build_plan2(world, robot).perform()
     build_plan(world, robot).perform()
