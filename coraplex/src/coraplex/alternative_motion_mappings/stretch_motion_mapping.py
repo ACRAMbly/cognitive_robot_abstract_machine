@@ -8,6 +8,7 @@ from giskardpy.motion_statechart.goals.cartesian_goals import DifferentialDriveB
 from giskardpy.motion_statechart.goals.open_close import Close
 from giskardpy.motion_statechart.goals.templates import Sequence, Parallel
 from giskardpy.motion_statechart.monitors.monitors import LocalMinimumReached
+from giskardpy.motion_statechart.monitors.payload_monitors import CountSeconds
 from giskardpy.motion_statechart.tasks.align_planes import AlignPlanes
 from giskardpy.motion_statechart.tasks.cartesian_tasks import CartesianPose
 from giskardpy.motion_statechart.tasks.joint_tasks import JointPositionList
@@ -72,7 +73,12 @@ class StretchMoveToolCenterPoint(MoveToolCenterPointMotion, AlternativeMotion[St
                             tip_link=tip,
                             goal_pose=self.target,
                         ),
-                        LocalMinimumReached(joint_convergence_threshold=0.025),
+                        Parallel(
+                            [
+                                LocalMinimumReached(joint_convergence_threshold=0.025),
+                                CountSeconds(seconds=1),
+                            ]
+                        ),
                     ],
                     minimum_success=1,
                 ),

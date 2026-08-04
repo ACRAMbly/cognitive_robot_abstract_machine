@@ -4,6 +4,12 @@ from typing import Optional, List
 from giskardpy.motion_statechart.data_types import DefaultWeights
 from giskardpy.motion_statechart.goals.templates import Parallel, Sequence
 from giskardpy.motion_statechart.binding_policy import GoalBindingPolicy
+from giskardpy.motion_statechart.monitors.monitors import LocalMinimumReached
+from giskardpy.motion_statechart.monitors.payload_monitors import (
+    CountControlCycles,
+    CountSimulationTimeSeconds,
+    CountSeconds,
+)
 from giskardpy.motion_statechart.tasks.align_planes import AlignPlanes
 from giskardpy.motion_statechart.tasks.cartesian_tasks import (
     CartesianPose,
@@ -124,11 +130,23 @@ class MoveGripperMotion(BaseMotion):
     def _motion_chart(self):
         arm = ViewManager().get_end_effector_view(self.gripper, self.robot)
 
-        return JointPositionList(
-            goal_state=arm.get_joint_state_by_type(self.motion),
-            name=(
-                "OpenGripper" if self.motion == GripperState.OPEN else "CloseGripper"
-            ),
+        return Parallel(
+            [
+                JointPositionList(
+                    goal_state=arm.get_joint_state_by_type(self.motion),
+                    name=(
+                        "OpenGripper"
+                        if self.motion == GripperState.OPEN
+                        else "CloseGripper"
+                    ),
+                    threshold=0,
+                ),
+                CountSeconds(seconds=1),
+                LocalMinimumReached(
+                    joint_convergence_threshold=0.1, minimum_threshold=0.0
+                ),
+            ],
+            minimum_success=2,
         )
 
 

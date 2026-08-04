@@ -22,6 +22,9 @@ from coraplex.datastructures.dataclasses import Context
 from coraplex.datastructures.enums import ExecutionType
 from coraplex.execution_environment import ExecutionEnvironment
 from coraplex.plans.plan_node import PlanNode
+from semantic_digital_twin.adapters.ros.visualization.viz_marker import (
+    VizMarkerPublisher,
+)
 from semantic_digital_twin.adapters.ros.world_fetcher import fetch_world_from_service
 from semantic_digital_twin.adapters.ros.world_synchronizer import WorldSynchronizer
 from semantic_digital_twin.world import World
@@ -183,10 +186,14 @@ class RobotDemonstration(ABC):
         Obtain the world to act on: from the running controller for a real run, and from
         this demonstration's own description otherwise.
         """
-        if self.execution_type is not ExecutionType.REAL:
-            return self.build_simulated_world()
-
         self.ros_session = RobotDemonstrationRosSession.start(self.ros_node_name)
+
+        if self.execution_type is not ExecutionType.REAL:
+            world = self.build_simulated_world()
+            viz = VizMarkerPublisher(node=self.ros_node, _world=world)
+            viz.with_tf_publisher()
+            return world
+
         world = self.ros_session.fetch_world()
         WorldSynchronizer(_world=world, node=self.ros_session.node)
         return world

@@ -14,7 +14,7 @@ from semantic_digital_twin.reasoning.queries import annotation_class_by_label
 from semantic_digital_twin.robots.robot_parts import Camera, AbstractRobot
 from semantic_digital_twin.semantic_annotations.mixins import IsPerceivable
 from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix
-from semantic_digital_twin.spatial_types.spatial_types import Pose
+from semantic_digital_twin.spatial_types.spatial_types import Pose, Point3
 from semantic_digital_twin.world import World
 from semantic_digital_twin.world_description.geometry import BoundingBox
 from semantic_digital_twin.world_description.world_entity import (
@@ -188,10 +188,13 @@ class Detection:
         if trust_orientation:
             body.parent_connection.origin = detected_origin
         else:
+            parent_origin = body.parent_connection.origin
             body.parent_connection.origin = (
                 HomogeneousTransformationMatrix.from_point_rotation_matrix(
-                    point=detected_origin.to_position(),
-                    rotation_matrix=body.parent_connection.origin.to_rotation_matrix(),
+                    point=Point3(
+                        x=parent_origin.x, y=detected_origin.y, z=parent_origin.z
+                    ),
+                    rotation_matrix=parent_origin.to_rotation_matrix(),
                     reference_frame=body.parent_connection.parent,
                 )
             )

@@ -18,7 +18,10 @@ def main():
     #     )
     #     robot_description = rospy.node.get_parameter_or("robot_description").value
     # except ParameterUninitializedException as e:
-    robot_description = load_xacro(Stretch.get_ros_file_path())
+    # robot_description = load_xacro(Stretch.get_ros_file_path())
+    robot_description = load_xacro(
+        "package://stretch_description/urdf/stretch_description_RE2V0_tool_stretch_dex_wrist.xacro"
+    )
     giskard = Giskard(
         world_config=WorldWithStretchConfigDiffDrive(urdf=robot_description),
         robot_interface_config=StretchVelocityInterface(),

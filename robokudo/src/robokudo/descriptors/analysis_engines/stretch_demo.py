@@ -136,7 +136,7 @@ class AnalysisEngine(AnalysisEngineInterface):
         # first. Outlier removal is skipped too: pruning an already-sparse, hole-riddled
         # cloud for statistical outliers risks stripping the real points further.
         cluster_descriptor.parameters.min_points_threshold = 11
-        cluster_descriptor.parameters.outlier_removal = False
+        cluster_descriptor.parameters.outlier_removal = True
 
         # ..note:: PointcloudCropAnnotator crops CASViews.CLOUD, but
         #     ImageClusterExtractor reads CASViews.COLOR_IMAGE/DEPTH_IMAGE directly, so

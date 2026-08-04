@@ -385,7 +385,7 @@ class StretchApartmentDemonstration(RobotDemonstration):
                     cereal_body,
                     Arms.LEFT,
                     grasp_description,
-                    redetect_object_before_grasp=True,
+                    redetect_object_before_grasp=False,
                 ),
                 ParkArmsAction(Arms.BOTH),
                 NavigateAction(
@@ -396,7 +396,7 @@ class StretchApartmentDemonstration(RobotDemonstration):
                 PlaceAction(
                     object_designator=cereal_body,
                     target_location=Pose.from_xyz_rpy(
-                        x=0.1, z=0.49, yaw=np.pi, reference_frame=bedside_table_body
+                        x=0.1, z=0.56, yaw=np.pi, reference_frame=bedside_table_body
                     ),
                     arm=Arms.LEFT,
                 ),
@@ -416,4 +416,4 @@ def main(execution_type: ExecutionType = ExecutionType.SIMULATED) -> None:
 
 
 if __name__ == "__main__":
-    main()
+    main(execution_type=ExecutionType.REAL)
