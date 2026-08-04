@@ -4274,6 +4274,9 @@ class ContextDAO(
     )
 
     evaluate_conditions: Mapped[builtins.bool] = mapped_column(use_existing_column=True)
+    teleport_to_navigate_in_simulation: Mapped[builtins.bool] = mapped_column(
+        use_existing_column=True
+    )
 
     world_id: Mapped[int] = mapped_column(
         ForeignKey("WorldMappingDAO.database_id", use_alter=True),
