@@ -94,6 +94,11 @@ class GraphOfConvexSetsFreespaceExperimentResult(ExperimentResult):
     world_loading_duration_milliseconds: float
     """
     Wall-clock time to parse the URDF and set up collision geometry.
+
+    Reported for context only, not as part of the GCS comparison: every other timing
+    field in this row is measured against an already-loaded world, since a real system
+    only starts building a GCS once it already has a belief state and a 3D goal to
+    reach.
     """
 
     obstacle_count: int
@@ -138,10 +143,16 @@ class GraphOfConvexSetsFreespaceExperimentResult(ExperimentResult):
     Number of edges (adjacencies) in the connectivity graph.
     """
 
-    end_to_end_duration_milliseconds: float
+    box_construction_duration_milliseconds: MeanAndStandardDeviation
     """
-    Wall-clock time for a complete ``free_space_from_world`` call including world
-    loading.
+    Time to build a complete, query-ready :class:`GraphOfBoundingBoxes` from the already-
+    loaded world via ``GraphOfBoundingBoxes.free_space_from_world`` (mean ± standard
+    deviation).
+
+    World loading is excluded: by the time a navigation goal arrives, the world is
+    already loaded, so this is the number directly comparable to
+    :attr:`graph_of_convex_polygons_construction_duration_milliseconds` for deciding
+    which GCS implementation is faster to construct.
     """
 
     mesh_obstacle_volume_total: float
@@ -179,8 +190,11 @@ class GraphOfConvexSetsFreespaceExperimentResult(ExperimentResult):
         MeanAndStandardDeviation
     )
     """
-    Time to grow the IRIS regions via ``GraphOfConvexPolygons.from_world`` (mean ±
-    standard deviation).
+    Time to grow the IRIS regions via ``GraphOfConvexPolygons.from_world`` on the
+    already-loaded world (mean ± standard deviation).
+
+    Directly comparable to :attr:`box_construction_duration_milliseconds`, since both
+    measure construction from the same loaded world with world loading excluded.
     """
 
     graph_of_convex_polygons_region_count: int
@@ -383,8 +397,11 @@ def _run_benchmark(
     Run all GCS free-space benchmark phases and return a single result row.
 
     :param world_loader: Zero-argument callable that loads and returns a :class:`World`.
-        Called once for the timed world-loading phase and once more inside the end-to-
-        end phase.
+        Called once, to build the world every other phase in this function operates on.
+        World loading is timed separately (:attr:`world_loading_duration_milliseconds`)
+        but excluded from every construction-time comparison, since the world is
+        already loaded by the time a navigation goal arrives in the scenario this
+        benchmark models: GCS construction only starts once there is a 3D goal to reach.
     :param search_space_factory: Callable that receives a loaded :class:`World` and
         returns the :class:`BoundingBoxCollection` to use as the navigable search
         volume. For URDF environments this is a fixed room-scale box; for PartNet models
@@ -434,15 +451,12 @@ def _run_benchmark(
         _compute_connectivity, repetitions=3
     )
 
-    def _run_end_to_end():
-        loaded_world = world_loader()
-        e2e_search_space = search_space_factory(loaded_world)
-        return GraphOfBoundingBoxes.free_space_from_world(
-            loaded_world, e2e_search_space
-        )
+    def _construct_box_graph_from_loaded_world():
+        return GraphOfBoundingBoxes.free_space_from_world(world, search_space)
 
-    _, end_to_end_elapsed = _measure(_run_end_to_end)
-    end_to_end_duration_milliseconds = end_to_end_elapsed[0] * 1000.0
+    _, box_construction_elapsed = _measure(
+        _construct_box_graph_from_loaded_world, repetitions=3
+    )
 
     search_space_box = search_space.bounding_boxes[0]
     obstacle_shapes = _collect_obstacle_shapes(world)
@@ -510,7 +524,9 @@ def _run_benchmark(
         ),
         graph_node_count=len(connectivity_graph.graph.nodes()),
         graph_edge_count=len(connectivity_graph.graph.edges()),
-        end_to_end_duration_milliseconds=round(end_to_end_duration_milliseconds, 2),
+        box_construction_duration_milliseconds=_to_mean_and_standard_deviation_milliseconds(
+            box_construction_elapsed
+        ),
         mesh_obstacle_volume_total=round(mesh_obstacle_volume_total, 4),
         naive_free_volume_lower_bound=round(naive_free_volume_lower_bound, 4),
         box_free_space_volume=round(box_free_space_volume, 4),
