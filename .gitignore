@@ -168,3 +168,9 @@ CLAUDE.local.md
 # branch - shared project settings live in the committed .claude/settings.json instead.
 .claude/settings.local.json
 .claude/.personal-settings-sync-hash
+
+# The stacked-PR board snapshot, re-exported from GitHub by
+# `.claude/stack/maintenance.py board --write` at the start of every maintenance pass.
+# Scratch state, never committed: a stale copy read as current is a pass acting on a
+# stack that has since moved.
+.claude/stack/board.json
