@@ -50,7 +50,7 @@ jobs:
         run: |
           cd cognitive_robot_abstract_machine
           source /opt/ros/cram-env/bin/activate
-          uv pip install drake --active
+          uv pip install drake
 
       - name: Restore cache
         uses: actions/cache/restore@v4
