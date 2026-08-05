@@ -559,7 +559,9 @@ class HasMechanicalJoint(HasRootBody, PartWholeRelationship):
             return
 
         main_has_root_body_annotation._world.move_branch(
-            self.mechanical_joint.root, main_has_root_body_annotation.root, True
+            self.mechanical_joint.root,
+            main_has_root_body_annotation.root,
+            enable_unsafe_inside_world_block=True,
         )
 
     def _kinematic_structure_entities(

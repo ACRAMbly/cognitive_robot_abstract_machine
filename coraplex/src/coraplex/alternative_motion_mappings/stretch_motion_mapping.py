@@ -44,8 +44,8 @@ class StretchMoveToolCenterPoint(MoveToolCenterPointMotion, AlternativeMotion[St
         goal_point.z = 0
         return Sequence(
             [
-                # The wrist is straightened while the base turns, so the gripper is
-                # already aligned by the time the cartesian goal takes over.
+                # Due to its limited kinematics and bad tracking and joint delays, Stretch has better results in
+                # real demos when straightening the wrist joint and pointing at the goal first
                 Parallel(
                     [
                         Pointing(
@@ -64,8 +64,6 @@ class StretchMoveToolCenterPoint(MoveToolCenterPointMotion, AlternativeMotion[St
                         ),
                     ]
                 ),
-                # On the real robot the arm regularly settles just short of the goal, so
-                # a local minimum counts as success alongside reaching the pose.
                 Parallel(
                     [
                         CartesianPose(
@@ -76,6 +74,8 @@ class StretchMoveToolCenterPoint(MoveToolCenterPointMotion, AlternativeMotion[St
                         Parallel(
                             [
                                 LocalMinimumReached(joint_convergence_threshold=0.025),
+                                # We force stretch to move at least one second in real time, as otherwise the local
+                                # minimum is reached too quickly causing the robot not to move at all sometimes
                                 CountSeconds(seconds=1),
                             ]
                         ),

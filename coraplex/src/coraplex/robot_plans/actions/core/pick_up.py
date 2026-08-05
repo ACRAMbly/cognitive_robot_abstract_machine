@@ -165,10 +165,8 @@ class PickUpAction(ActionDescription):
         return sequential(
             children=[
                 MoveGripperMotion(motion=GripperState.OPEN, gripper=self.arm),
-                # The whole plan is expanded before the first motion runs, so the reach is
-                # kept in the object's own frame rather than resolved to world
-                # coordinates here: that way it still follows a pose corrected in between,
-                # for example by a detection.
+                # defining the target_pose relative to the object ensures it stays correct even if the object pose is
+                # updated after defining the goal
                 ReachAction(
                     target_pose=Pose(reference_frame=self.object_designator),
                     object_designator=self.object_designator,

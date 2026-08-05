@@ -82,13 +82,12 @@ class AlternativeMotion(HasGeneric[AbstractRobotType], ABC):
 
         Importing ``coraplex.alternative_motion_mappings`` walks and imports its
         submodules, registering their :class:`AlternativeMotion` subclasses.
+        Mainly a helper to pass to the context of a demo to make it robot agnostic with regards to the alternative
+        motion mappings.
 
         :return: Every concrete alternative motion known to coraplex.
         """
-        # Deferred: every submodule of alternative_motion_mappings imports
-        # AlternativeMotion back via coraplex.robot_plans.motions.base, which imports
-        # it from this module -- a module-level import here would be circular and fail
-        # while this module is still initializing.
+        # Local import as module-level import would be circular and fail while this module is still initializing.
         import coraplex.alternative_motion_mappings as mappings_package
 
         classes_of_package(mappings_package)

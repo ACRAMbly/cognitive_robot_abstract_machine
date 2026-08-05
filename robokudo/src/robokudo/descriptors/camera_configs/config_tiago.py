@@ -41,6 +41,6 @@ class TiagoCameraConfig(
 
     topic_color: str = "/xtion/rgb/image_raw/compressed"
 
-    tf_from: str = "xtion_rgb_optical_frame"
+    tf_from: str = "/xtion_rgb_optical_frame"
 
-    tf_to: str = "odom"
+    tf_to: str = "/odom"

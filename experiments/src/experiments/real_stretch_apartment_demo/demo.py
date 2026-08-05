@@ -157,8 +157,6 @@ class StretchApartmentDemonstration(RobotDemonstration):
         # %% shelf
 
         with world.modify_world():
-            # The hollow-case geometry parameters live on the root specification, so the
-            # shelf is spawned from a specification rather than the plain body factory.
             shelf = Shelf.get_specification(
                 "shelf",
                 Shelf.get_default_root_specification(
@@ -246,7 +244,7 @@ class StretchApartmentDemonstration(RobotDemonstration):
 
         # %% wardrobe
 
-        # Each door mesh has its origin on the edge it hangs from, so a hinge at the
+        # In this case, each door mesh has its origin on the edge it hangs from, so a hinge at the
         # door's own frame already sits on the rotation axis. The wardrobe opens towards
         # -x and the leaves reach it from opposite sides, so they swing about the shared
         # vertical axis in opposite directions.
@@ -343,9 +341,6 @@ class StretchApartmentDemonstration(RobotDemonstration):
         """
         world = context.world
 
-        # Stretch has a single arm, so ViewManager resolves Arms.LEFT to it. Going
-        # through the ViewManager guarantees this is the same end effector the pick and
-        # place actions will drive.
         grasp_description = GraspDescription(
             ApproachDirection.FRONT,
             VerticalAlignment.NoAlignment,

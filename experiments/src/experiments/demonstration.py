@@ -158,7 +158,9 @@ class RobotDemonstration(ABC):
     @abstractmethod
     def is_scene_populated(self, world: World) -> bool:
         """
-        Whether the objects this demonstration manipulates already exist in ``world``.
+        Implementations should define a condition which without a doubt define the scene was already populated
+        before, populating a scene in a different process multiple times, for example because one restarts the demo in
+        the current process.
         """
 
     @abstractmethod

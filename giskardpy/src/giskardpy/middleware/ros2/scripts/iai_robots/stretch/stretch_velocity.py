@@ -12,16 +12,10 @@ from semantic_digital_twin.robots.stretch import Stretch
 
 def main():
     rospy.init_node("giskard")
-    # try:
-    #     rospy.node.declare_parameters(
-    #         namespace="", parameters=[("robot_description", Parameter.Type.STRING)]
-    #     )
-    #     robot_description = rospy.node.get_parameter_or("robot_description").value
-    # except ParameterUninitializedException as e:
-    # robot_description = load_xacro(Stretch.get_ros_file_path())
-    robot_description = load_xacro(
-        "package://stretch_description/urdf/stretch_description_RE2V0_tool_stretch_dex_wrist.xacro"
-    )
+
+    # the loaded urdf should be equivalent to the following xacro:
+    # "package://stretch_description/urdf/stretch_description_RE2V0_tool_stretch_dex_wrist.xacro"
+    robot_description = load_xacro(Stretch.get_ros_file_path())
     giskard = Giskard(
         world_config=WorldWithStretchConfigDiffDrive(urdf=robot_description),
         robot_interface_config=StretchVelocityInterface(),

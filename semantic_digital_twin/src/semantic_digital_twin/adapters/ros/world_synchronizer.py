@@ -337,19 +337,6 @@ class Synchronizer(WorldEntityWithClassBasedID):
         :param msg: The message to publish.
         """
         if not self.synchronous:
-            is_state_update = (
-                isinstance(msg, WorldUpdate) and msg.modification_block is None
-            )
-            if not is_state_update:
-                kind = (
-                    WorldSynchronizer._describe_update_kind(msg)
-                    if isinstance(msg, WorldUpdate)
-                    else type(msg).__name__
-                )
-                self.node.get_logger().info(
-                    f"Publishing {msg.publication_event_id} ({kind}) asynchronously: "
-                    f"delivery and application by subscribers is not confirmed."
-                )
             self.publisher.publish(std_msgs.msg.String(data=json.dumps(to_json(msg))))
             return
 
@@ -599,40 +586,11 @@ class WorldSynchronizer(Synchronizer, ModelChangeCallback, StateChangeCallback):
         }
 
     def _subscription_callback(self, message: WorldUpdate):
-        is_model_change = message.modification_block is not None
         if self._is_paused:
-            if is_model_change:
-                self.node.get_logger().info(
-                    f"World update {message.publication_event_id} "
-                    f"({self._describe_update_kind(message)}) received while paused, "
-                    f"buffering it instead of applying and acknowledging it now."
-                )
             self.missed_messages.append(message)
         else:
-            if is_model_change:
-                self.node.get_logger().info(
-                    f"World update {message.publication_event_id} "
-                    f"({self._describe_update_kind(message)}) received, applying it now."
-                )
             self.apply_message(message)
             self.acknowledge_message(message)
-
-    @staticmethod
-    def _describe_update_kind(message: WorldUpdate) -> str:
-        """
-        Human-readable summary of what kind of change ``message`` carries, so that
-        structural changes (e.g. an attach/detach) can be told apart from routine
-        degree-of-freedom state updates in the logs.
-        """
-        if message.modification_block is not None:
-            modification_types = [
-                type(modification).__name__
-                for modification in message.modification_block.modifications.modifications
-            ]
-            return f"model change: {modification_types}"
-        if message.state_update is not None:
-            return f"state update for {len(message.state_update.ids)} degree(s) of freedom"
-        return "empty update"
 
     def apply_message(self, message: WorldUpdate):
         """
@@ -702,21 +660,6 @@ class WorldSynchronizer(Synchronizer, ModelChangeCallback, StateChangeCallback):
             return
         pending_messages = self.missed_messages
         self.missed_messages = []
-        model_change_messages = [
-            message
-            for message in pending_messages
-            if message.modification_block is not None
-        ]
-        if model_change_messages:
-            self.node.get_logger().info(
-                f"Applying {len(model_change_messages)} buffered model change(s) out of "
-                f"{len(pending_messages)} buffered world update(s): "
-                + ", ".join(
-                    f"{message.publication_event_id} "
-                    f"({self._describe_update_kind(message)})"
-                    for message in model_change_messages
-                )
-            )
         # Hold the world lock across the whole batch so the buffered messages apply atomically: a
         # concurrent modify_world on another thread serializes behind it instead of interleaving.
         with self._world._world_lock:

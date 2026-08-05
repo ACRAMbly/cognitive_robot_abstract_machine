@@ -6,8 +6,6 @@ from giskardpy.motion_statechart.goals.templates import Parallel, Sequence
 from giskardpy.motion_statechart.binding_policy import GoalBindingPolicy
 from giskardpy.motion_statechart.monitors.monitors import LocalMinimumReached
 from giskardpy.motion_statechart.monitors.payload_monitors import (
-    CountControlCycles,
-    CountSimulationTimeSeconds,
     CountSeconds,
 )
 from giskardpy.motion_statechart.tasks.align_planes import AlignPlanes
@@ -141,6 +139,8 @@ class MoveGripperMotion(BaseMotion):
                     ),
                     threshold=0,
                 ),
+                # We force stretch to move at least one second in real time, as otherwise the local
+                # minimum is reached too quickly causing the robot not to move at all sometimes
                 CountSeconds(seconds=1),
                 LocalMinimumReached(
                     joint_convergence_threshold=0.1, minimum_threshold=0.0
