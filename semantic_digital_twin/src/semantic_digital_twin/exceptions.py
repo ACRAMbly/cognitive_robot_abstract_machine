@@ -1429,8 +1429,10 @@ class VideoRecordingError(MultiSimError):
 @dataclass
 class VideoRecordingAlreadyStartedError(VideoRecordingError):
     """
-    Raised when :meth:`~semantic_digital_twin.adapters.mujoco_video_recording.MujocoVide
-    oRecorder.start` is called on a recorder that is already recording.
+    Raised when
+    :meth:`~semantic_digital_twin.adapters.mujoco_video_recording.MujocoVide
+    oRecorder.start`
+    is called on a recorder that is already recording.
     """
 
     world: World
@@ -1448,8 +1450,10 @@ class VideoRecordingAlreadyStartedError(VideoRecordingError):
 @dataclass
 class VideoRecordingNotStartedError(VideoRecordingError):
     """
-    Raised when :meth:`~semantic_digital_twin.adapters.mujoco_video_recording.MujocoVide
-    oRecorder.stop` is called on a recorder that was never started.
+    Raised when
+    :meth:`~semantic_digital_twin.adapters.mujoco_video_recording.MujocoVide
+    oRecorder.stop`
+    is called on a recorder that was never started.
     """
 
     world: World
