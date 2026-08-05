@@ -31,12 +31,18 @@ from giskardpy.motion_statechart.monitors.progress_monitors import (
     ProgressStalled,
 )
 from giskardpy.motion_statechart.motion_statechart import MotionStatechart
+from giskardpy.motion_statechart.nodes_for_testing.nodes_for_testing import (
+    ConstFalseNode,
+)
 from giskardpy.motion_statechart.tasks.cartesian_tasks import (
     CartesianPosition,
     CartesianPositionTrajectory,
     CartesianPositionVelocityLimit,
 )
 from krrood.symbolic_math.symbolic_math import Scalar
+from semantic_digital_twin.adapters.ros.visualization.viz_marker import (
+    VizMarkerPublisher,
+)
 from semantic_digital_twin.spatial_types import Point3
 from semantic_digital_twin.spatial_types.spatial_types import Pose
 from semantic_digital_twin.world import World
@@ -258,7 +264,7 @@ class TestStallDetection:
             tip_link=cylinder_bot_world.get_kinematic_structure_entity_by_name("bot"),
             goal_point=Point3(1, 0, 0, reference_frame=cylinder_bot_world.root),
         )
-        blocker = EndMotion()
+        blocker = ConstFalseNode()
         motion_statechart.add_nodes([goal, blocker])
         # The goal only starts once the blocker is true, which never happens.
         goal.start_condition = blocker.observation_variable

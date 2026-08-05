@@ -55,6 +55,7 @@ from giskardpy.motion_statechart.exceptions import (
     NonObservationVariableError,
     NodeAlreadyBelongsToDifferentNodeError,
     NodeNotBuiltError,
+    TerminalNodeInConditionError,
 )
 from giskardpy.motion_statechart.error_signals import ErrorSignal
 from giskardpy.motion_statechart.plotters.plot_specs import NodePlotSpec
@@ -134,6 +135,7 @@ class TrinaryCondition(SubclassJSONSerializer):
         self._check_condition_is_variable_or_expression(new_expression)
         self._check_owner_not_in_start_condition(new_expression)
         self._check_only_observation_variables(new_expression)
+        self._check_no_terminal_node(new_expression)
 
     def _check_condition_is_variable_or_expression(self, new_expression: Scalar):
         if not isinstance(new_expression, Scalar):
@@ -147,6 +149,21 @@ class TrinaryCondition(SubclassJSONSerializer):
                     condition=self,
                     non_observation_variable=variable,
                     new_expression=new_expression,
+                )
+
+    def _check_no_terminal_node(self, new_expression: Scalar):
+        """
+        Rejects references to nodes that end the motion.
+
+        .. note:: Runs after :meth:`_check_only_observation_variables`, so every free
+            variable is known to be an :class:`ObservationVariable`.
+        """
+        for variable in new_expression.free_variables():
+            if isinstance(variable.motion_statechart_node, TerminalNode):
+                raise TerminalNodeInConditionError(
+                    condition=self,
+                    new_expression=new_expression,
+                    terminal_node=variable.motion_statechart_node,
                 )
 
     def _check_owner_not_in_start_condition(self, new_expression: Scalar):
@@ -1133,7 +1150,16 @@ class ThreadPayloadMonitor(MotionStatechartNode, ABC):
 
 
 @dataclass(eq=False, repr=False)
-class EndMotion(MotionStatechartNode):
+class TerminalNode(MotionStatechartNode, ABC):
+    """
+    A node that ends the whole motion once its observation state turns true.
+
+    No transition can happen afterwards, so conditions may not reference such a node.
+    """
+
+
+@dataclass(eq=False, repr=False)
+class EndMotion(TerminalNode):
 
     plot_specs: NodePlotSpec = field(
         default_factory=NodePlotSpec.create_end_style, kw_only=True, init=False
@@ -1215,7 +1241,7 @@ class EndMotion(MotionStatechartNode):
 
 
 @dataclass(eq=False, repr=False)
-class CancelMotion(MotionStatechartNode):
+class CancelMotion(TerminalNode):
     exception: DataclassException = field(kw_only=True)
     observation_expression: Scalar = field(
         default_factory=Scalar.const_true, init=False

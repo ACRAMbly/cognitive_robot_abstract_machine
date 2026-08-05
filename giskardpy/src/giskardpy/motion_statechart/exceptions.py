@@ -288,6 +288,30 @@ class ConditionScopeError(InvalidConditionError):
 
 
 @dataclass
+class TerminalNodeInConditionError(InvalidConditionError):
+    """
+    Raised when a condition references a node that ends the motion.
+
+    Such a condition can never take effect, because the motion is already over by the
+    time the referenced node is true.
+    """
+
+    terminal_node: MotionStatechartNode
+    """
+    The referenced node that ends the motion when its observation state turns true.
+    """
+
+    def reason(self) -> str:
+        return (
+            f'References "{self.terminal_node.unique_name}", which ends the motion when '
+            "it turns true, so no transition can depend on it."
+        )
+
+    def suggest_correction(self) -> str:
+        return "Reference the node that makes it true instead."
+
+
+@dataclass
 class MissingContextExtensionError(MotionStatechartError):
     expected_extension: Type
 

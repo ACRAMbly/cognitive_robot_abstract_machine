@@ -11,6 +11,7 @@ from giskardpy.motion_statechart.graph_node import (
     Goal,
     MotionStatechartNode,
     NodeArtifacts,
+    TerminalNode,
 )
 
 
@@ -31,7 +32,9 @@ class Sequence(Goal):
             self.add_node(node)
             if last_node is not None:
                 node.start_condition = last_node.observation_variable
-            node.end_condition = node.observation_variable
+            # A node that ends the motion has nothing left to transition to.
+            if not isinstance(node, TerminalNode):
+                node.end_condition = node.observation_variable
             last_node = node
 
     def build(self, context: MotionStatechartContext) -> NodeArtifacts:
