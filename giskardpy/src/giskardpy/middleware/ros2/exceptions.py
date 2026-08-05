@@ -5,7 +5,7 @@ Exceptions raised while executing a trajectory on a robot.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import List
+from typing import List, Type
 
 from giskardpy.data_types.exceptions import (
     DontPrintStackTrace,
@@ -327,6 +327,30 @@ class AlreadyTrackedByTfFrameError(SetupException):
 
     def suggest_correction(self) -> str:
         return ""
+
+
+@dataclass
+class UnboundMessageTypeError(SetupException):
+    """
+    Raised when a topic synchronizer does not name the type of its messages.
+    """
+
+    synchronizer_type: Type
+    """
+    The synchronizer whose message type is unknown.
+    """
+
+    def error_message(self) -> str:
+        return (
+            f"'{self.synchronizer_type.__name__}' does not name the type of the "
+            f"messages it reads."
+        )
+
+    def suggest_correction(self) -> str:
+        return (
+            f"Declare it in the bases of '{self.synchronizer_type.__name__}', as in "
+            f"'TopicInputSynchronizer[Odometry]'."
+        )
 
 
 @dataclass

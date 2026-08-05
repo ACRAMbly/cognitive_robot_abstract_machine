@@ -2,17 +2,20 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Any, ClassVar, Dict, List, Tuple, Type, Union
+from typing import Dict, Generic, List, Tuple, Type, Union
 
 from nav_msgs.msg import Odometry
 from rclpy.subscription import Subscription
 from sensor_msgs.msg import JointState
+from typing_extensions import TypeVar
 
 from giskardpy.middleware.ros2 import rospy
 from giskardpy.middleware.ros2.exceptions import (
     AlreadyTrackedByTfFrameError,
     ConnectionCannotBeTrackedByTfFrameError,
+    UnboundMessageTypeError,
 )
+from krrood.patterns.subclass_safe_generic import SubClassSafeGeneric
 from semantic_digital_twin.adapters.ros.tfwrapper import TFWrapper
 from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix
 from semantic_digital_twin.world import World
@@ -24,6 +27,8 @@ from semantic_digital_twin.world_description.connections import (
 )
 
 # %% base classes
+
+MessageType = TypeVar("MessageType")
 
 
 @dataclass
@@ -114,9 +119,14 @@ class WorldStateInputs:
 
 
 @dataclass
-class TopicInputSynchronizer(InputSynchronizer, ABC):
+class TopicInputSynchronizer(
+    InputSynchronizer, Generic[MessageType], SubClassSafeGeneric, ABC
+):
     """
     Buffers the latest message of a topic and applies it on demand.
+
+    Subclasses name the type of their messages by binding the generic parameter, as in
+    ``TopicInputSynchronizer[Odometry]``.
     """
 
     topic_name: str
@@ -124,12 +134,7 @@ class TopicInputSynchronizer(InputSynchronizer, ABC):
     Name of the topic the inputs are read from.
     """
 
-    message_type: ClassVar[Type]
-    """
-    Type of the messages published on ``topic_name``.
-    """
-
-    latest_message: Any = field(init=False, default=None)
+    latest_message: MessageType | None = field(init=False, default=None)
     """
     The most recently received message, or ``None`` if nothing was received yet.
     """
@@ -143,15 +148,47 @@ class TopicInputSynchronizer(InputSynchronizer, ABC):
         if not self.topic_name.startswith("/"):
             self.topic_name = f"/{self.topic_name}"
         self.subscription = rospy.node.create_subscription(
-            self.message_type, self.topic_name, self.buffer_message, 1
+            self.message_type(), self.topic_name, self.buffer_message, 1
         )
         rospy.node.get_logger().info(f"Subscribed to {self.topic_name}")
 
-    def buffer_message(self, message: Any) -> None:
+    @classmethod
+    def message_type(cls) -> Type[MessageType]:
+        """
+        The type of the messages published on ``topic_name``.
+
+        :raises UnboundMessageTypeError: If the class does not bind the generic
+            parameter.
+        """
+        message_types = cls.get_generic_type_parameters()
+        if not message_types or isinstance(message_types[0], TypeVar):
+            raise UnboundMessageTypeError(synchronizer_type=cls)
+        return message_types[0]
+
+    def buffer_message(self, message: MessageType) -> None:
         """
         Remember the message so that the next :meth:`apply` can use it.
         """
         self.latest_message = message
+
+    def apply(self) -> bool:
+        message = self.take_message()
+        if message is None:
+            return False
+        self.apply_message(message)
+        return True
+
+    def take_message(self) -> MessageType | None:
+        """
+        The message to write in this cycle, or ``None`` when there is nothing to write.
+        """
+        return self.latest_message
+
+    @abstractmethod
+    def apply_message(self, message: MessageType) -> None:
+        """
+        Write the message into the world state.
+        """
 
     def close(self) -> None:
         rospy.node.destroy_subscription(self.subscription)
@@ -161,22 +198,26 @@ class TopicInputSynchronizer(InputSynchronizer, ABC):
 
 
 @dataclass
-class JointStateInputSynchronizer(TopicInputSynchronizer, ABC):
+class JointStateInputSynchronizer(TopicInputSynchronizer[JointState], ABC):
     """
     Writes the positions of a joint state message into the world state.
     """
 
-    message_type: ClassVar[Type] = JointState
-
-    def write_positions(self, message: JointState) -> None:
-        """
-        Copy every joint position of the message into the world state.
-        """
+    def apply_message(self, message: JointState) -> None:
         for joint_name, position in zip(message.name, message.position):
             connection: ActiveConnection1DOF = self.world.get_connection_by_name(
                 joint_name
             )
             self.world.state[connection.raw_dof.id].position = position
+
+    @abstractmethod
+    def take_message(self) -> JointState | None:
+        """
+        The message to write in this cycle, or ``None`` when there is nothing to write.
+
+        Each joint state synchronizer decides here whether writing a message consumes
+        it.
+        """
 
 
 @dataclass
@@ -188,12 +229,10 @@ class PendingJointStateSynchronizer(JointStateInputSynchronizer):
     state is not announced for positions the observers already know.
     """
 
-    def apply(self) -> bool:
-        if self.latest_message is None:
-            return False
-        self.write_positions(self.latest_message)
+    def take_message(self) -> JointState | None:
+        message = self.latest_message
         self.latest_message = None
-        return True
+        return message
 
 
 @dataclass
@@ -206,33 +245,26 @@ class LatestJointStateSynchronizer(JointStateInputSynchronizer):
     commanded velocities.
     """
 
-    def apply(self) -> bool:
-        if self.latest_message is None:
-            return False
-        self.write_positions(self.latest_message)
-        return True
+    def take_message(self) -> JointState | None:
+        return self.latest_message
 
 
 # %% base pose
 
 
 @dataclass
-class OdometrySynchronizer(TopicInputSynchronizer):
+class OdometrySynchronizer(TopicInputSynchronizer[Odometry]):
     """
     Writes the pose of an odometry message into a drive connection.
     """
-
-    message_type: ClassVar[Type[Any]] = Odometry
 
     connection: Union[OmniDrive, DifferentialDrive] = field(kw_only=True)
     """
     The drive connection whose origin follows the odometry.
     """
 
-    def apply(self) -> bool:
-        if self.latest_message is None:
-            return False
-        pose = self.latest_message.pose.pose
+    def apply_message(self, message: Odometry) -> None:
+        pose = message.pose.pose
         self.connection.origin = HomogeneousTransformationMatrix.from_xyz_quaternion(
             pos_x=pose.position.x,
             pos_y=pose.position.y,
@@ -242,7 +274,6 @@ class OdometrySynchronizer(TopicInputSynchronizer):
             quat_y=pose.orientation.y,
             quat_z=pose.orientation.z,
         )
-        return True
 
 
 @dataclass
