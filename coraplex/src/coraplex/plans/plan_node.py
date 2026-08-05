@@ -152,20 +152,6 @@ class PlanNode(PlanEntity):
         return self.children == []
 
     @property
-    def is_execution_boundary(self) -> bool:
-        """
-        Whether this node interrupts the merging of surrounding motions into one chart.
-
-        A boundary parses into something other than a
-        :class:`~coraplex.plans.executables.GiskardExecutable`, so the motions before it
-        have to run (and their effect on the world has to land) before the ones after it
-        are built.
-
-        :return: True if the plan must be split at this node.
-        """
-        return False
-
-    @property
     def siblings(self) -> List[PlanNode]:
         """
         :return: All siblings of this node.
@@ -390,7 +376,14 @@ class PlanNode(PlanEntity):
 
 
 @dataclass(eq=False, repr=False)
-class UnderspecifiedNode(PlanNode):
+class ExecutionBoundaryNode(ABC, PlanNode):
+    """
+    A PlanNode that interrupts the merging of surrounding motions into one chart.
+    """
+
+
+@dataclass(eq=False, repr=False)
+class UnderspecifiedNode(ExecutionBoundaryNode):
     """
     An action or language expression that is described by an underspecified `an(...)`
     match statement.
@@ -423,10 +416,6 @@ class UnderspecifiedNode(PlanNode):
 
     On failure, `advance` replaces it with the next candidate.
     """
-
-    @property
-    def is_execution_boundary(self) -> bool:
-        return True
 
     @property
     def designator_type(self) -> Type:

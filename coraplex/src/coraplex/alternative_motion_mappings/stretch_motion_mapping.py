@@ -14,9 +14,15 @@ from giskardpy.motion_statechart.tasks.cartesian_tasks import CartesianPose
 from giskardpy.motion_statechart.tasks.joint_tasks import JointPositionList
 from giskardpy.motion_statechart.tasks.pointing import Pointing
 from coraplex.datastructures.enums import ExecutionType
-from coraplex.robot_plans import MoveToolCenterPointMotion, MoveMotion, ClosingMotion
+from coraplex.robot_plans import (
+    MoveToolCenterPointMotion,
+    MoveMotion,
+    ClosingMotion,
+    MoveGripperMotion,
+)
 from coraplex.robot_plans.motions.base import AlternativeMotion
 from coraplex.view_manager import ViewManager
+from semantic_digital_twin.datastructures.definitions import GripperState
 from semantic_digital_twin.datastructures.joint_state import JointState
 from semantic_digital_twin.robots.stretch import Stretch
 from semantic_digital_twin.spatial_types import Vector3, HomogeneousTransformationMatrix
@@ -159,3 +165,41 @@ class StretchClose(ClosingMotion, AlternativeMotion[Stretch]):
         )
         close = Close(tip_link=tip, environment_link=self.object_part)
         return Parallel([cart, align, close])
+
+
+class StretchMoveGripperMotion(MoveGripperMotion, AlternativeMotion[Stretch]):
+    """
+    Gripper motion tuned for Stretch: forces convergence checks to hold for at
+    least one second so the local minimum isn't reported before the gripper
+    has actually moved.
+    """
+
+    execution_type = ExecutionType.SIMULATED, ExecutionType.REAL
+
+    def perform(self):
+        return
+
+    @property
+    def _motion_chart(self):
+        arm = ViewManager().get_end_effector_view(self.gripper, self.robot)
+
+        return Parallel(
+            [
+                JointPositionList(
+                    goal_state=arm.get_joint_state_by_type(self.motion),
+                    name=(
+                        "OpenGripper"
+                        if self.motion == GripperState.OPEN
+                        else "CloseGripper"
+                    ),
+                    threshold=0,
+                ),
+                # We force stretch to move at least one second in real time, as otherwise the local
+                # minimum is reached too quickly causing the robot not to move at all sometimes
+                CountSeconds(seconds=1),
+                LocalMinimumReached(
+                    joint_convergence_threshold=0.1, minimum_threshold=0.0
+                ),
+            ],
+            minimum_success=2,
+        )

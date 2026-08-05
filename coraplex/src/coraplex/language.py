@@ -26,7 +26,7 @@ from coraplex.plans.executables import (
 from coraplex.datastructures.enums import TaskStatus, MonitorBehavior
 from coraplex.plans.failures import PlanFailure, AllChildrenFailed
 from coraplex.fluent import Fluent
-from coraplex.plans.plan_node import PlanNode
+from coraplex.plans.plan_node import PlanNode, ExecutionBoundaryNode
 from coraplex.utils import split_list_by_type
 
 logger = logging.getLogger(__name__)
@@ -60,7 +60,7 @@ class LanguageNode(PlanNode, ABC):
     def parse(self) -> Executable:
         # Nodes that do not parse into a single motion chart split the plan into
         # sequential execution groups instead of one merged chart.
-        if any(child.is_execution_boundary for child in self.descendants):
+        if any(isinstance(child, ExecutionBoundaryNode) for child in self.descendants):
             return self.parse_with_non_giskard_executable()
         child_execs = [child.parse() for child in self.children]
 

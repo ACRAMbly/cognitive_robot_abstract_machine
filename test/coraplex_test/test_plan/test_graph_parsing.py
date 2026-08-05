@@ -18,7 +18,7 @@ from coraplex.plans.executables import (
     ModelChangeExecutable,
 )
 from coraplex.plans.factories import execute_single, sequential
-from coraplex.plans.plan_node import MotionNode, PlanNode
+from coraplex.plans.plan_node import MotionNode, PlanNode, ExecutionBoundaryNode
 from coraplex.robot_plans import MoveToolCenterPointMotion
 from coraplex.robot_plans.actions.composite.transporting import TransportAction
 from coraplex.robot_plans.actions.core.misc import DetectAction
@@ -266,19 +266,13 @@ def test_parse_transport_plan(mutable_model_world, rclpy_node):
 
 
 @dataclass(eq=False, repr=False)
-class BoundaryNode(PlanNode):
+class BoundaryNode(ExecutionBoundaryNode):
     """
     Node that declares itself an execution boundary and parses to a non-giskard
     executable.
 
-    Stands in for any node that interrupts the merging of motions, so the split is pinned
-    to the :attr:`~coraplex.plans.plan_node.PlanNode.is_execution_boundary` contract rather
-    than to the node types that happen to declare it today.
+    Stands in for any node that interrupts the merging of motions.
     """
-
-    @property
-    def is_execution_boundary(self) -> bool:
-        return True
 
     def notify(self) -> None:
         pass

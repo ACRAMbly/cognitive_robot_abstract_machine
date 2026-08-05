@@ -1,12 +1,12 @@
 from dataclasses import dataclass, field
 
 from coraplex.plans.executables import Executable, ModelChangeExecutable
-from coraplex.plans.plan_node import PlanNode
+from coraplex.plans.plan_node import PlanNode, ExecutionBoundaryNode
 from semantic_digital_twin.world_description.world_entity import Body
 
 
 @dataclass
-class ModelChangeNode(PlanNode):
+class ModelChangeNode(ExecutionBoundaryNode):
     """
     Node that represents a change in the world model of the semantic digital twin.
 
@@ -28,10 +28,6 @@ class ModelChangeNode(PlanNode):
 
     def __post_init__(self):
         self.new_parent = self.new_parent or self.body._world.root
-
-    @property
-    def is_execution_boundary(self) -> bool:
-        return True
 
     def notify(self):
         pass
