@@ -1,4 +1,6 @@
 #!/usr/bin/env python
+from dataclasses import dataclass
+
 from giskardpy.qp.qp_controller_config import QPControllerConfig
 from giskardpy.middleware.ros2.server_config import ExecutionMode, GiskardServerConfig
 from giskardpy.middleware.ros2.giskard import Giskard
@@ -10,7 +12,12 @@ from giskardpy.middleware.ros2 import rospy
 from giskardpy.middleware.ros2.ros2_interface import get_robot_description
 
 
+@dataclass
 class R6BotInterface(RobotInterfaceConfig):
+    """
+    Commands the six joints of the r6bot demo through its velocity controller.
+    """
+
     def setup(self):
         self.sync_joint_state_topic("/joint_states")
         self.add_joint_velocity_group_controller(

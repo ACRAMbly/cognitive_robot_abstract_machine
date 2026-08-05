@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Dict, List, Union
 
 from geometry_msgs.msg import Twist
@@ -50,17 +51,23 @@ if TYPE_CHECKING:
     from giskardpy.middleware.ros2.giskard import Giskard
 
 
+@dataclass
 class RobotInterfaceConfig(ABC):
     """
     Describes how Giskard reads the state of a robot and how it commands it.
     """
 
-    giskard: Giskard
+    giskard: Giskard = field(init=False, repr=False, compare=False)
     """
     The Giskard instance this interface belongs to, set by :meth:`attach`.
+
+    ..note:: Kept out of ``__repr__`` and ``__eq__`` because Giskard refers back to this
+        interface.
     """
 
-    tf_frame_synchronizer: TfFrameSynchronizer | None = None
+    tf_frame_synchronizer: TfFrameSynchronizer | None = field(
+        init=False, default=None, repr=False, compare=False
+    )
     """
     Created on demand, tracks all 6 degree of freedom connections that follow tf.
     """
@@ -337,6 +344,7 @@ class RobotInterfaceConfig(ABC):
             ]
 
 
+@dataclass
 class StandAloneRobotInterfaceConfig(RobotInterfaceConfig):
     """
     Controls the given joints without talking to any hardware.
@@ -346,9 +354,6 @@ class StandAloneRobotInterfaceConfig(RobotInterfaceConfig):
     """
     The joints Giskard is allowed to control.
     """
-
-    def __init__(self, joint_names: List[str]):
-        self.joint_names = joint_names
 
     def setup(self):
         self.register_controlled_joints(self.joint_names)

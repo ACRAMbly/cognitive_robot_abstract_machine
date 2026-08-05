@@ -17,7 +17,12 @@ class WorldWithHSRConfig(WorldWithOmniDriveRobot):
     urdf_view: AbstractRobot = field(kw_only=True, default=HSRB, init=False)
 
 
+@dataclass
 class HSRStandaloneInterface(RobotInterfaceConfig):
+    """
+    Simulates the arm, head and drive of the HSR without talking to hardware.
+    """
+
     def setup(self):
         self.register_controlled_joints(
             [
@@ -33,7 +38,11 @@ class HSRStandaloneInterface(RobotInterfaceConfig):
         )
 
 
+@dataclass
 class HSRVelocityInterface(RobotInterfaceConfig):
+    """
+    Commands the arm, head and drive of the HSR through their velocity controllers.
+    """
 
     def setup(self):
         self.sync_6dof_joint_with_tf_frame(

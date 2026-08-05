@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 
 from giskardpy.model.world_config import WorldWithOmniDriveRobot
-from giskardpy.middleware.ros2.giskard import RobotInterfaceConfig
+from giskardpy.middleware.ros2.robot_interface_config import RobotInterfaceConfig
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 from semantic_digital_twin.robots.robot_parts import AbstractRobot
 from semantic_digital_twin.robots.pr2 import PR2, PR2Joint
@@ -16,7 +16,12 @@ class WorldWithPR2Config(WorldWithOmniDriveRobot):
     urdf_view: AbstractRobot = field(kw_only=True, default=PR2, init=False)
 
 
+@dataclass
 class PR2StandaloneInterface(RobotInterfaceConfig):
+    """
+    Simulates the arms, torso, head and drive of the PR2 without talking to hardware.
+    """
+
     def setup(self):
         self.register_controlled_joints(
             [
@@ -42,23 +47,31 @@ class PR2StandaloneInterface(RobotInterfaceConfig):
         )
 
 
+@dataclass
 class PR2VelocityMujocoInterface(RobotInterfaceConfig):
-    map_name: str
-    localization_joint_name: str
-    odom_link_name: str
-    drive_joint_name: str
+    """
+    Commands a PR2 simulated in mujoco through its controller manager.
+    """
 
-    def __init__(
-        self,
-        map_name: str = "map",
-        localization_joint_name: str = "localization",
-        odom_link_name: str = "odom_combined",
-        drive_joint_name: str = "brumbrum",
-    ):
-        self.map_name = map_name
-        self.localization_joint_name = localization_joint_name
-        self.odom_link_name = odom_link_name
-        self.drive_joint_name = drive_joint_name
+    map_name: str = "map"
+    """
+    Name of the frame the localization is expressed in.
+    """
+
+    localization_joint_name: str = "localization"
+    """
+    Name of the 6 degree of freedom connection carrying the localization.
+    """
+
+    odom_link_name: str = "odom_combined"
+    """
+    Name of the body the drive moves relative to.
+    """
+
+    drive_joint_name: str = "brumbrum"
+    """
+    Name of the drive connection that the odometry topic is synced into.
+    """
 
     def setup(self):
         self.discover_interfaces_from_controller_manager()

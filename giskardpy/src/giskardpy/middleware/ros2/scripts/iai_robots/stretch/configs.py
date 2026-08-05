@@ -1,4 +1,5 @@
 from dataclasses import dataclass, field
+from typing import List
 
 from giskardpy.middleware.ros2.robot_interface_config import (
     StandAloneRobotInterfaceConfig,
@@ -16,29 +17,45 @@ from semantic_digital_twin.world_description.connections import (
 )
 
 
+@dataclass
 class StretchStandaloneInterface(StandAloneRobotInterfaceConfig):
+    """
+    Simulates the arm, gripper, head and drive of Stretch without talking to hardware.
+    """
 
-    def __init__(self, drive_joint_name: str = "brumbrum"):
-        super().__init__(
-            [
-                drive_joint_name,
-                "joint_gripper_finger_left",
-                "joint_gripper_finger_right",
-                "joint_right_wheel",
-                "joint_left_wheel",
-                "joint_lift",
-                "joint_arm_l3",
-                "joint_arm_l2",
-                "joint_arm_l1",
-                "joint_arm_l0",
-                "joint_wrist_yaw",
-                "joint_head_pan",
-                "joint_head_tilt",
-            ]
-        )
+    drive_joint_name: str = "brumbrum"
+    """
+    Name of the drive connection that is controlled alongside the other joints.
+    """
+
+    joint_names: List[str] = field(init=False, default_factory=list)
+    """
+    The drive joint plus the arm, gripper, wheel and head joints of Stretch.
+    """
+
+    def __post_init__(self) -> None:
+        self.joint_names = [
+            self.drive_joint_name,
+            "joint_gripper_finger_left",
+            "joint_gripper_finger_right",
+            "joint_right_wheel",
+            "joint_left_wheel",
+            "joint_lift",
+            "joint_arm_l3",
+            "joint_arm_l2",
+            "joint_arm_l1",
+            "joint_arm_l0",
+            "joint_wrist_yaw",
+            "joint_head_pan",
+            "joint_head_tilt",
+        ]
 
 
+@dataclass
 class StretchVelocityInterface(RobotInterfaceConfig):
+    """
+    Commands the arm, head and drive of Stretch through their velocity controllers.
+    """
 
     def setup(self):
         self.sync_6dof_joint_with_tf_frame(
