@@ -1046,8 +1046,8 @@ def test_repeated_collision_pr2_apartment_does_not_increase_execution_time(
 
     left_arm_park = robot.left_arm.get_joint_state_by_type(StaticJointState.PARK)
     right_arm_park = robot.right_arm.get_joint_state_by_type(StaticJointState.PARK)
-    world.set_positions_1DOF_connection(dict(left_arm_park.items()))
-    world.set_positions_1DOF_connection(dict(right_arm_park.items()))
+    left_arm_park.apply_to(world)
+    right_arm_park.apply_to(world)
 
     body = world.get_body_by_name("handle_cab11_t")
 

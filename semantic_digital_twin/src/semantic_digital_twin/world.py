@@ -74,7 +74,6 @@ from semantic_digital_twin.spatial_types import (
 from semantic_digital_twin.spatial_types.derivatives import Derivatives
 from semantic_digital_twin.world_description.connections import (
     Connection6DoF,
-    ActiveConnection1DOF,
     FixedConnection,
     ActiveConnection,
 )
@@ -168,6 +167,10 @@ class WorldStateBatchContextManager:
     Writing a whole configuration one degree of freedom at a time otherwise recomputes
     the forward kinematics and notifies every observer once per degree of freedom, which
     turns one logical change into a burst of individual ones.
+
+    A batch interrupted by an error still announces what it wrote before the error,
+    because that state is already live and staying silent would leave the forward
+    kinematics and every observer stale.
     """
 
     publish_changes: bool = True
@@ -2520,14 +2523,4 @@ class World(HasSimulatorProperties):
                     connection.update_state(dt)
                 case _:
                     pass
-        self.notify_state_change()
-
-    def set_positions_1DOF_connection(
-        self, new_state: Dict[ActiveConnection1DOF, float]
-    ) -> None:
-        """
-        Set the positions of 1DOF connections and notify the world of the state change.
-        """
-        for connection, value in new_state.items():
-            connection.position = value
         self.notify_state_change()

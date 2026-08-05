@@ -773,18 +773,18 @@ class MissingWorldModificationContextError(UsageError):
 @dataclass
 class MismatchingPublishChangesAttribute(UsageError):
     """
-    Raised when trying to enter a world modification context with a different
-    publish_changes policy than the currently active world modification context.
+    Raised when trying to enter a nested world modification or state batch context with
+    a different publish_changes policy than the context it is nested in.
     """
 
     active_publish_changes: bool
     """
-    The publish_changes of the currently active world modification context.
+    The publish_changes of the currently active context.
     """
 
     proposed_publish_changes: bool
     """
-    The publish_changes of the world modification context that is being entered.
+    The publish_changes of the context that is being entered.
     """
 
     def error_message(self) -> str:

@@ -1,21 +1,17 @@
-import gc
 import os
 import subprocess
 import sys
 from copy import deepcopy
 from dataclasses import dataclass, field
-from time import sleep
 from uuid import UUID, uuid4
 
 import numpy as np
-import objgraph
 import pytest
 from numpy.testing import assert_raises
-from typing_extensions import Optional
 
 from semantic_digital_twin.adapters.urdf import URDFParser
+from semantic_digital_twin.datastructures.joint_state import JointState
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
-from semantic_digital_twin.callbacks.callback import StateChangeCallback
 from semantic_digital_twin.exceptions import (
     DuplicateWorldEntityError,
     MismatchingPublishChangesAttribute,
@@ -24,7 +20,6 @@ from semantic_digital_twin.exceptions import (
     DofNotInWorldStateError,
     WrongWorldModelVersion,
     NonMonotonicTimeError,
-    WorldEntityNotFoundError,
     BrokenWorldModificationHistoryError,
     WorldEntityNotFoundError,
 )
@@ -42,9 +37,8 @@ from semantic_digital_twin.spatial_types.derivatives import Derivatives, Derivat
 from semantic_digital_twin.spatial_types.spatial_types import (
     HomogeneousTransformationMatrix,
     RotationMatrix,
-    Point3,
 )
-from semantic_digital_twin.testing import world_setup
+from semantic_digital_twin.testing import StateChangeCounter, world_setup
 from semantic_digital_twin.world import World
 from semantic_digital_twin.world_description.connections import (
     PrismaticConnection,
@@ -73,7 +67,6 @@ from semantic_digital_twin.world_description.world_state import (
 from semantic_digital_twin.world_description.world_state_trajectory_plotter import (
     WorldStateTrajectoryPlotter,
 )
-from semantic_digital_twin.orm.ormatic_interface import *
 
 
 def test_create_with_root_body_names_the_root_from_a_plain_string():
@@ -100,7 +93,7 @@ def test_set_state(world_setup):
     c3.origin = transform
     assert np.allclose(world.compute_forward_kinematics_np(world.root, bf), transform)
 
-    world.set_positions_1DOF_connection({c1: 2})
+    JointState.from_mapping({c1: 2}).apply_to(world)
     assert c1.position == 2.0
 
     transform[0, 3] += c1.position
@@ -237,27 +230,6 @@ def test_nested_with_blocks_illegal_state(world_setup):
 # %% batching state changes
 
 
-@dataclass(eq=False)
-class StateChangeCounter(StateChangeCallback):
-    """
-    Counts how often the world announced a state change.
-    """
-
-    count: int = field(default=0, init=False)
-    """
-    Number of state changes announced since this callback was registered.
-    """
-
-    publish_changes_of_last_call: Optional[bool] = field(default=None, init=False)
-    """
-    The ``publish_changes`` the most recent announcement carried.
-    """
-
-    def on_state_change(self, **kwargs):
-        self.count += 1
-        self.publish_changes_of_last_call = kwargs.get("publish_changes")
-
-
 def test_batching_state_changes_announces_them_once(world_setup):
     world, l1, l2, _, _, _ = world_setup
     prismatic_connection = world.get_connection(l1, l2)
@@ -325,6 +297,20 @@ def test_a_nested_batch_disagreeing_about_publishing_is_rejected(world_setup):
         with world.batch_state_changes(publish_changes=False):
             with world.batch_state_changes(publish_changes=True):
                 pass
+
+
+def test_a_batch_interrupted_by_an_error_still_announces_its_changes(world_setup):
+    world, l1, l2, _, _, _ = world_setup
+    prismatic_connection = world.get_connection(l1, l2)
+    counter = StateChangeCounter(_world=world)
+
+    with pytest.raises(ZeroDivisionError):
+        with world.batch_state_changes():
+            prismatic_connection.position = 1.0
+            raise ZeroDivisionError
+
+    assert counter.count == 1
+    assert prismatic_connection.position == 1.0
 
 
 def test_compute_fk_connection6dof(world_setup):
