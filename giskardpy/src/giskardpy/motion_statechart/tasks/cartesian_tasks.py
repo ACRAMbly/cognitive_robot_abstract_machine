@@ -664,8 +664,18 @@ class CartesianPose(Parallel):
     )
     """Unit: rad/s. This is used for normalization, for real limits use CartesianVelocityLimit."""
 
-    threshold: float = field(default=0.01, kw_only=True)
-    """If the error falls below this threshold, the goal is achieved. This is used for both position and orientation. Units are m and rad."""
+    translation_threshold: float = field(default=0.01, kw_only=True)
+    """If the position error falls below this threshold (in meters), that half of the goal is achieved."""
+
+    orientation_threshold: float = field(default=0.01, kw_only=True)
+    """
+    If the orientation error falls below this threshold (in rad), that half of the goal
+    is achieved.
+
+    ..note:: A physically tracked arm settles with a residual orientation error, so a
+        rotation tolerance as tight as a typical translation tolerance in meters may
+        never be reached -- set this independently of :attr:`translation_threshold`.
+    """
 
     weight: float = field(
         default=DefaultWeights.WEIGHT_BELOW_COLLISION_AVOIDANCE, kw_only=True
@@ -689,7 +699,7 @@ class CartesianPose(Parallel):
                 tip_link=self.tip_link,
                 goal_point=self.goal_pose.to_position(),
                 reference_velocity=self.reference_linear_velocity,
-                threshold=self.threshold,
+                threshold=self.translation_threshold,
                 weight=self.weight,
                 binding_policy=self.binding_policy,
             ),
@@ -699,7 +709,7 @@ class CartesianPose(Parallel):
                 tip_link=self.tip_link,
                 goal_orientation=self.goal_pose.to_rotation_matrix(),
                 reference_velocity=self.reference_angular_velocity,
-                threshold=self.threshold,
+                threshold=self.orientation_threshold,
                 weight=self.weight,
                 binding_policy=self.binding_policy,
             ),
