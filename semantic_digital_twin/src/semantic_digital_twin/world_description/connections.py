@@ -737,7 +737,9 @@ class Connection6DoF(Connection):
         :param transformation: The desired parent-to-child origin. Must carry a
             reference frame (:meth:`World.transform` raises
             :class:`~semantic_digital_twin.exceptions.MissingReferenceFrameError`
-            otherwise); does not need to already be expressed in the parent frame.
+            otherwise); does not need to already be expressed in the parent frame. Other
+            spatial types (e.g. ``Pose``) must be converted with their own
+            ``to_homogeneous_matrix()`` before being assigned here.
         """
         parent_T_child = self._world.transform(transformation, self.parent)
         local_kinematics = (
