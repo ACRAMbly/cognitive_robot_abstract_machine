@@ -50,9 +50,9 @@ def _default_mesh_decomposer() -> VHACDMeshDecomposer:
 
 
 @dataclass
-class ObstacleContainmentTest:
+class ObstacleContainmentChecker:
     """
-    Tests whether world-frame points fall inside a single obstacle shape.
+    Checks whether world-frame points fall inside a single obstacle shape.
 
     Uses the shape's own mesh directly when it is watertight (exact). Otherwise, since
     :meth:`trimesh.Trimesh.contains` is only reliable on a closed manifold, the shape is
@@ -83,10 +83,13 @@ class ObstacleContainmentTest:
         shape: Shape,
         target_frame: KinematicStructureEntity,
         mesh_decomposer: Optional[MeshDecomposer] = None,
-    ) -> ObstacleContainmentTest:
+    ) -> ObstacleContainmentChecker:
         """
-        Build a containment test for *shape*, expressed relative to *target_frame*.
+        Build a containment checker for *shape*, expressed relative to *target_frame*.
 
+        :param shape: The obstacle shape to test points against.
+        :param target_frame: The frame the checker's :meth:`contains` points are
+            expressed in.
         :param mesh_decomposer: Decomposer used when the shape's own mesh is not
             watertight; defaults to a VHACD decomposer tuned for speed.
         """
@@ -141,11 +144,11 @@ class MonteCarloFreeSpaceSampler:
     The volume to sample points within.
     """
 
-    obstacle_containment_tests: List[ObstacleContainmentTest] = field(
+    obstacle_containment_checkers: List[ObstacleContainmentChecker] = field(
         default_factory=list
     )
     """
-    Containment tests for every obstacle in the scene.
+    Containment checkers for every obstacle in the scene.
     """
 
     sample_count: int = 2000
@@ -178,11 +181,21 @@ class MonteCarloFreeSpaceSampler:
     ) -> MonteCarloFreeSpaceSampler:
         """
         Build a sampler from raw obstacle shapes, expressed relative to *target_frame*.
+
+        :param search_space_bounding_box: The volume to sample points within.
+        :param obstacle_shapes: The obstacle shapes to build containment checkers for.
+        :param target_frame: The frame *obstacle_shapes* and the sample points are
+            expressed in.
+        :param sample_count: Number of points to sample.
+        :param confidence_level: Confidence level used for every Wilson-score interval
+            this sampler produces.
+        :param random_seed: Seed for the sample points, so repeated runs over the same
+            scene are comparable.
         """
         return cls(
             search_space_bounding_box=search_space_bounding_box,
-            obstacle_containment_tests=[
-                ObstacleContainmentTest.for_shape(shape, target_frame)
+            obstacle_containment_checkers=[
+                ObstacleContainmentChecker.for_shape(shape, target_frame)
                 for shape in obstacle_shapes
             ],
             sample_count=sample_count,
@@ -217,8 +230,8 @@ class MonteCarloFreeSpaceSampler:
         """
         points = self.sample_points
         occupied = np.zeros(len(points), dtype=bool)
-        for containment_test in self.obstacle_containment_tests:
-            occupied |= containment_test.contains(points)
+        for containment_checker in self.obstacle_containment_checkers:
+            occupied |= containment_checker.contains(points)
         return occupied
 
     def free_volume_bound(self) -> VolumeBound:
@@ -258,6 +271,9 @@ class MonteCarloFreeSpaceSampler:
         """
         Wilson score confidence interval for the true proportion of successes among
         *total* Bernoulli trials.
+
+        Wilson, E. B. (1927). Probable inference, the law of succession, and statistical
+        inference. *Journal of the American Statistical Association*, 22(158), 209-212.
 
         :param success_count: Number of observed successes.
         :param total: Number of trials.

@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import List
 
 from krrood.class_diagrams.utils import get_type_hints_of_object
+from krrood.exceptions import DataclassException
 
 
 from krrood.class_diagrams.attribute_introspector import (
@@ -45,67 +46,77 @@ class MeanAndStandardDeviation:
         )
 
 
-class InvalidBoundError(ValueError):
+@dataclass
+class InvalidBoundError(DataclassException):
     """
     Raised when a bound's lower end exceeds its upper end.
     """
 
-    def __init__(self, lower: float, upper: float):
-        super().__init__(f"lower bound {lower} exceeds upper bound {upper}")
-
-
-@dataclass
-class VolumeBound:
-    """
-    A ``[lower, upper]`` interval known to contain some volume, for tables that report a
-    bounded estimate instead of a single point value.
-
-    Use this in experiment results whenever the true volume cannot be measured exactly
-    (e.g. it was estimated by sampling) but valid lower and/or upper bounds can be.
-    """
-
     lower: float
     """
-    A value the true volume is known to be at least as large as.
+    The bound's lower end.
     """
 
     upper: float
     """
-    A value the true volume is known to be at most as large as.
+    The bound's upper end.
+    """
+
+    def error_message(self) -> str:
+        return f"lower bound {self.lower} exceeds upper bound {self.upper}"
+
+    def suggest_correction(self) -> str:
+        return ""
+
+
+@dataclass
+class Bound:
+    """
+    A ``[lower, upper]`` interval known to contain some quantity, for tables that report
+    a bounded estimate instead of a single point value.
+
+    Use this as a base whenever the true quantity cannot be measured exactly (e.g. it
+    was estimated by sampling) but valid lower and/or upper bounds can be.
+    """
+
+    lower: float
+    """
+    A value the true quantity is known to be at least as large as.
+    """
+
+    upper: float
+    """
+    A value the true quantity is known to be at most as large as.
     """
 
     def __post_init__(self):
         if self.lower > self.upper:
             raise InvalidBoundError(self.lower, self.upper)
+
+
+@dataclass
+class VolumeBound(Bound):
+    """
+    A :class:`Bound` on a volume.
+
+    Use this in experiment results whenever the true volume cannot be measured exactly
+    (e.g. it was estimated by sampling) but valid lower and/or upper bounds can be.
+    """
 
     def __str__(self) -> str:
         return f"[{round(self.lower, 4)}, {round(self.upper, 4)}]"
 
 
 @dataclass
-class PercentageBound:
+class PercentageBound(Bound):
     """
-    A ``[lower, upper]`` interval, in percent, bounding the ratio of two
-    :class:`VolumeBound` quantities.
+    A :class:`Bound`, in percent, bounding the ratio of two :class:`VolumeBound`
+    quantities.
 
     Use this to express one bounded volume as a share of another (e.g. how much of the
     true free volume a covering is known to reach) without collapsing either bound into
     a single, falsely precise point estimate.
     """
-
-    lower: float
-    """
-    A percentage the true ratio is known to be at least as large as.
-    """
-
-    upper: float
-    """
-    A percentage the true ratio is known to be at most as large as.
-    """
-
-    def __post_init__(self):
-        if self.lower > self.upper:
-            raise InvalidBoundError(self.lower, self.upper)
 
     def __str__(self) -> str:
         return f"[{round(self.lower, 2)}%, {round(self.upper, 2)}%]"

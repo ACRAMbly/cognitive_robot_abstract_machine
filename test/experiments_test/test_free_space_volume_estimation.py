@@ -5,7 +5,7 @@ import trimesh
 from experiments.experiment_definitions import VolumeBound
 from experiments.free_space_volume_estimation import (
     MonteCarloFreeSpaceSampler,
-    ObstacleContainmentTest,
+    ObstacleContainmentChecker,
 )
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix
@@ -44,16 +44,16 @@ def _world_with_box_obstacle(scale: Scale) -> tuple[World, Shape]:
     return world, obstacle.collision.shapes[0]
 
 
-# %% ObstacleContainmentTest
+# %% ObstacleContainmentChecker
 
 
 def test_watertight_mesh_containment_matches_the_real_geometry():
     world, shape = _world_with_box_obstacle(Scale(2.0, 2.0, 2.0))
-    containment_test = ObstacleContainmentTest.for_shape(shape, world.root)
+    containment_checker = ObstacleContainmentChecker.for_shape(shape, world.root)
 
     points = np.array([[0.0, 0.0, 0.0], [10.0, 10.0, 10.0]])
 
-    np.testing.assert_array_equal(containment_test.contains(points), [True, False])
+    np.testing.assert_array_equal(containment_checker.contains(points), [True, False])
 
 
 def _non_watertight_ring_mesh() -> trimesh.Trimesh:
@@ -85,19 +85,19 @@ def test_non_watertight_mesh_is_convex_decomposed_instead_of_using_its_bounding_
             )
         )
     shape = obstacle.collision.shapes[0]
-    containment_test = ObstacleContainmentTest.for_shape(shape, world.root)
+    containment_checker = ObstacleContainmentChecker.for_shape(shape, world.root)
 
     # Unlike a bounding-box fallback, convex decomposition does not fill in the ring's
     # own hole at the center, so a point there is correctly reported as free.
     center_hole_and_outside = np.array([[0.0, 0.0, 0.0], [10.0, 10.0, 10.0]])
 
     np.testing.assert_array_equal(
-        containment_test.contains(center_hole_and_outside), [False, False]
+        containment_checker.contains(center_hole_and_outside), [False, False]
     )
 
     # A point actually inside the ring's material is still reported as occupied.
     inside_ring_material = np.array([[0.4, 0.0, 0.0]])
-    assert containment_test.contains(inside_ring_material)[0]
+    assert containment_checker.contains(inside_ring_material)[0]
 
 
 def test_decomposition_yielding_no_pieces_falls_back_to_the_bounding_box(tmp_path):
@@ -117,14 +117,14 @@ def test_decomposition_yielding_no_pieces_falls_back_to_the_bounding_box(tmp_pat
             )
         )
     shape = obstacle.collision.shapes[0]
-    containment_test = ObstacleContainmentTest.for_shape(
+    containment_checker = ObstacleContainmentChecker.for_shape(
         shape, world.root, mesh_decomposer=_EmptyMeshDecomposer()
     )
 
     center_and_outside = np.array([[0.0, 0.0, 0.0], [10.0, 10.0, 10.0]])
 
     np.testing.assert_array_equal(
-        containment_test.contains(center_and_outside), [True, False]
+        containment_checker.contains(center_and_outside), [True, False]
     )
 
 
@@ -166,7 +166,7 @@ def test_free_volume_bound_of_an_empty_scene_brackets_the_full_search_space():
         world.add_kinematic_structure_entity(root)
     sampler = MonteCarloFreeSpaceSampler(
         search_space_bounding_box=_search_space_box(world),
-        obstacle_containment_tests=[],
+        obstacle_containment_checkers=[],
         sample_count=2000,
         random_seed=0,
     )
@@ -182,8 +182,8 @@ def test_free_volume_bound_of_a_fully_occupied_scene_is_zero_at_the_lower_end():
     world, shape = _world_with_box_obstacle(Scale(10.0, 10.0, 10.0))
     sampler = MonteCarloFreeSpaceSampler(
         search_space_bounding_box=_search_space_box(world),
-        obstacle_containment_tests=[
-            ObstacleContainmentTest.for_shape(shape, world.root)
+        obstacle_containment_checkers=[
+            ObstacleContainmentChecker.for_shape(shape, world.root)
         ],
         sample_count=2000,
         random_seed=0,
@@ -203,13 +203,13 @@ def test_sample_points_are_deterministic_for_a_fixed_seed():
     search_space = _search_space_box(world)
     first = MonteCarloFreeSpaceSampler(
         search_space_bounding_box=search_space,
-        obstacle_containment_tests=[],
+        obstacle_containment_checkers=[],
         sample_count=50,
         random_seed=42,
     )
     second = MonteCarloFreeSpaceSampler(
         search_space_bounding_box=search_space,
-        obstacle_containment_tests=[],
+        obstacle_containment_checkers=[],
         sample_count=50,
         random_seed=42,
     )
