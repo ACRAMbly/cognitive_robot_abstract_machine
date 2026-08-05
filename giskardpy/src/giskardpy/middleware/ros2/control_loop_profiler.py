@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import threading
 import time
-from contextlib import ExitStack
+from contextlib import ExitStack, AbstractContextManager
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Tuple, Type
 
@@ -350,7 +350,7 @@ class NoControlCycleMeasuredError(DataclassException):
 
 
 @dataclass
-class ControlLoopProfiler:
+class ControlLoopProfiler(AbstractContextManager):
     """
     Measures where the control loop spends its time, without changing it.
 

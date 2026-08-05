@@ -12,6 +12,7 @@ from giskardpy.data_types.exceptions import (
     GiskardException,
     SetupException,
 )
+from semantic_digital_twin.world_description.world_entity import Connection
 
 
 @dataclass
@@ -334,20 +335,15 @@ class ConnectionCannotBeTrackedByTfFrameError(SetupException):
     Raised when a connection without 6 degrees of freedom is registered for tf tracking.
     """
 
-    connection_name: str
+    connection: Connection
     """
-    The name of the connection that cannot be tracked.
-    """
-
-    connection_type: str
-    """
-    The type of the connection that cannot be tracked.
+    The connection that cannot be tracked.
     """
 
     def error_message(self) -> str:
         return (
-            f"Can only sync Connection6DoF with tf, but '{self.connection_name}' is of "
-            f"type '{self.connection_type}'."
+            f"Can only sync Connection6DoF with tf, but '{str(self.connection.name)}' is of "
+            f"type '{type(self.connection).__name__}'."
         )
 
     def suggest_correction(self) -> str:

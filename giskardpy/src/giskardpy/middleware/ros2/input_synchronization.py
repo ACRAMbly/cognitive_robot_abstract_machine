@@ -124,12 +124,12 @@ class TopicInputSynchronizer(InputSynchronizer, ABC):
     Name of the topic the inputs are read from.
     """
 
-    message_type: ClassVar[Type[Any]]
+    message_type: ClassVar[Type]
     """
     Type of the messages published on ``topic_name``.
     """
 
-    latest_message: Any | None = field(init=False, default=None)
+    latest_message: Any = field(init=False, default=None)
     """
     The most recently received message, or ``None`` if nothing was received yet.
     """
@@ -166,7 +166,7 @@ class JointStateInputSynchronizer(TopicInputSynchronizer, ABC):
     Writes the positions of a joint state message into the world state.
     """
 
-    message_type: ClassVar[Type[Any]] = JointState
+    message_type: ClassVar[Type] = JointState
 
     def write_positions(self, message: JointState) -> None:
         """
@@ -283,10 +283,7 @@ class TfFrameSynchronizer(InputSynchronizer):
                 tf_child_frame=self.connection_to_frames[connection][1],
             )
         if not isinstance(connection, Connection6DoF):
-            raise ConnectionCannotBeTrackedByTfFrameError(
-                connection_name=str(connection.name),
-                connection_type=type(connection).__name__,
-            )
+            raise ConnectionCannotBeTrackedByTfFrameError(connection=connection)
         self.connection_to_frames[connection] = (tf_parent_frame, tf_child_frame)
 
     def apply(self) -> bool:
