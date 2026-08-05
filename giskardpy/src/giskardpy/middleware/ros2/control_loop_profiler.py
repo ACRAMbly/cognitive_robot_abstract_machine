@@ -16,6 +16,7 @@ from giskardpy.middleware.ros2.input_synchronization import WorldStateInputs
 from giskardpy.motion_statechart.motion_statechart import MotionStatechart
 from giskardpy.qp.qp_controller import QPController
 from krrood.adapters.json_serializer import SubclassJSONSerializer
+from krrood.exceptions import DataclassException
 from semantic_digital_twin.collision_checking.collision_manager import CollisionManager
 from semantic_digital_twin.spatial_computations.forward_kinematics import (
     ForwardKinematicsManager,
@@ -101,13 +102,16 @@ class _OpenPhase:
     """
 
 
+@dataclass
 class _ThreadLocalPhaseStack(threading.local):
     """
     Gives every thread its own stack of entered phases.
     """
 
-    def __init__(self):
-        self.stack: List[_OpenPhase] = []
+    stack: List[_OpenPhase] = field(default_factory=list)
+    """
+    The phases the thread has entered and not yet left.
+    """
 
 
 @dataclass
@@ -296,16 +300,19 @@ class CallTreeProfile(SubclassJSONSerializer):
         )
 
 
-class NoControlCycleMeasuredError(Exception):
+@dataclass
+class NoControlCycleMeasuredError(DataclassException):
     """
     Raised when a profile is read that never saw a control cycle.
     """
 
-    def __init__(self, scenario_name: str):
-        super().__init__(
-            f'No control cycle was measured for "{scenario_name}". The profiler has to '
-            f"be entered before the motion is started."
-        )
+    scenario_name: str
+
+    def error_message(self) -> str:
+        return f'No control cycle was measured for "{self.scenario_name}". '
+
+    def suggest_correction(self) -> str:
+        return "The profiler has to be entered before the motion is started."
 
 
 # %% profiler

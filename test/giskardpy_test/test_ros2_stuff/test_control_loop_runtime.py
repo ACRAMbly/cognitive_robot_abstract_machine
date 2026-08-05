@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-from typing import Any
 
 from giskardpy.middleware.ros2.control_loop_profiler import (
     CONTROL_CYCLE_PHASES,
