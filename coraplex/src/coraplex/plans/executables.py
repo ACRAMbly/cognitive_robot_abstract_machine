@@ -431,7 +431,6 @@ class ModelChangeExecutable(Executable):
         """
         Re-parent the body to ``new_parent`` while preserving its global pose.
         """
-        logger.info(f"Attaching {self.body.name} to {self.new_parent.name}")
         obj_transform = self.context.world.compute_forward_kinematics(
             self.new_parent, self.body
         )
