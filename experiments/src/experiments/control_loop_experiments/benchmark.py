@@ -42,6 +42,7 @@ from giskardpy.middleware.ros2.control_loop_profiler import (
     CallTreeProfile,
     PhasePath,
 )
+from krrood.exceptions import DataclassException
 
 # %% one configuration of the sweep
 
@@ -117,7 +118,7 @@ class ControlLoopBenchmarkResult(ExperimentResult):
         :raises NoProfilesMeasuredError: If not a single repetition was measured.
         """
         if not profiles:
-            raise NoProfilesMeasuredError(plotter_mode)
+            raise NoProfilesMeasuredError(plotter_mode=plotter_mode)
         cycles = [profile.control_cycle for profile in profiles]
         return cls(
             scenario_name=profiles[0].scenario_name,
@@ -146,16 +147,25 @@ class ControlLoopBenchmarkResult(ExperimentResult):
         )
 
 
-class NoProfilesMeasuredError(Exception):
+@dataclass
+class NoProfilesMeasuredError(DataclassException):
     """
     Raised when a configuration is aggregated that was never measured.
     """
 
-    def __init__(self, plotter_mode: PlotterMode):
-        super().__init__(
-            f"No repetition was measured under the {plotter_mode} plotter mode, so "
-            f"there is nothing to aggregate."
+    plotter_mode: PlotterMode
+    """
+    The plotter mode whose repetitions are missing.
+    """
+
+    def error_message(self) -> str:
+        return (
+            f"No repetition was measured under the {self.plotter_mode} plotter mode, "
+            f"so there is nothing to aggregate."
         )
+
+    def suggest_correction(self) -> str:
+        return "Measure at least one repetition before aggregating."
 
 
 # %% where one measurement spent its time
@@ -319,7 +329,9 @@ class BenchmarkSweep:
             )
             completed = subprocess.run(command)
             if completed.returncode != 0:
-                raise MeasurementProcessFailedError(scenario_name, completed.returncode)
+                raise MeasurementProcessFailedError(
+                    scenario_name=scenario_name, return_code=completed.returncode
+                )
             return CallTreeProfile.from_json(
                 json.loads(Path(result_file.name).read_text())
             )
@@ -334,14 +346,32 @@ class BenchmarkSweep:
         )
 
 
-class MeasurementProcessFailedError(Exception):
+@dataclass
+class MeasurementProcessFailedError(DataclassException):
     """
     Raised when the subprocess measuring a scenario did not finish successfully.
     """
 
-    def __init__(self, scenario_name: str, return_code: int):
-        super().__init__(
-            f'Measuring "{scenario_name}" failed with return code {return_code}.'
+    scenario_name: str
+    """
+    The motion whose measurement was attempted.
+    """
+
+    return_code: int
+    """
+    The code the measuring process exited with.
+    """
+
+    def error_message(self) -> str:
+        return (
+            f'Measuring "{self.scenario_name}" failed with return code '
+            f"{self.return_code}."
+        )
+
+    def suggest_correction(self) -> str:
+        return (
+            f"Measure it on its own with --scenario {self.scenario_name} to see what "
+            f"the process reported."
         )
 
 

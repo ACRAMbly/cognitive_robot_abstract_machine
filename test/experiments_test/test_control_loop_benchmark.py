@@ -4,6 +4,7 @@ import pytest
 
 from experiments.control_loop_experiments.benchmark import (
     ControlLoopBenchmarkResult,
+    MeasurementProcessFailedError,
     NoProfilesMeasuredError,
     PhaseBreakdownResult,
 )
@@ -151,6 +152,46 @@ class TestRepetitionAggregation:
             "cycles_per_second",
             "compile_milliseconds",
         ]
+
+
+# %% what a failed measurement reports
+
+
+class TestFailureReporting:
+    """
+    A benchmark that fails after minutes of measuring has to say which configuration
+    broke and what to run to see why.
+    """
+
+    def test_missing_repetitions_name_the_plotter_mode(self):
+        error = NoProfilesMeasuredError(plotter_mode=PlotterMode.DEBUG)
+
+        assert error.error_message() == (
+            "No repetition was measured under the debug plotter mode, so there is "
+            "nothing to aggregate."
+        )
+
+    def test_failed_measurement_names_the_scenario_and_the_return_code(self):
+        error = MeasurementProcessFailedError(
+            scenario_name="long_sequence", return_code=3
+        )
+
+        assert error.error_message() == (
+            'Measuring "long_sequence" failed with return code 3.'
+        )
+
+    def test_the_suggestion_is_part_of_what_is_raised(self):
+        """
+        The suggestion only helps if it reaches the traceback, which the base class
+        composes into the message at construction time.
+        """
+        error = MeasurementProcessFailedError(
+            scenario_name="long_sequence", return_code=3
+        )
+
+        assert str(error) == (
+            f"{error.error_message()}\nSuggestion: {error.suggest_correction()}"
+        )
 
 
 # %% breaking one measurement down into its phases
