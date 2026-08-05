@@ -365,13 +365,6 @@ class StretchApartmentDemonstration(RobotDemonstration):
                     )
                 ),
                 LookAtAction(Pose.from_xyz_rpy(reference_frame=shelf_layer_body)),
-                # Correct the cereal's pose before grasping it. The plan is identical in
-                # simulation and on the real robot; only the source of the detections
-                # differs, so the grasp is planned against a perceived pose either way.
-                # Orientation is not trusted yet: stretch_demo's pose estimate comes from
-                # a cv2.minAreaRect fit on the object's 2D footprint, which is only
-                # stable for a footprint that is clearly elongated and fully in view --
-                # noise or partial occlusion can flip its reported angle by 90 degrees.
                 DetectAction(
                     DetectionTechnique.TYPES,
                     object_sem_annotation=CheezeIt,
@@ -408,10 +401,9 @@ def main(execution_type: ExecutionType = ExecutionType.SIMULATED) -> None:
 
     :param execution_type: Whether to drive the real robot or simulate it.
     """
-    # PR2
-    # HSRB
-    # Stretch
-    # Tiago,
+    # StretchApartmentDemonstration(used_robot=PR2, execution_type=execution_type).run()
+    # StretchApartmentDemonstration(used_robot=HSRB, execution_type=execution_type).run()
+    # StretchApartmentDemonstration(used_robot=Tiago, execution_type=execution_type).run()
     StretchApartmentDemonstration(
         used_robot=Stretch, execution_type=execution_type
     ).run()
