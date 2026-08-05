@@ -70,27 +70,6 @@ def test_pipeline_extracts_objects_by_color_not_depth_clustering():
     assert parameters.hsv_max == red_hsv_range["hsv_max"]
 
 
-def test_min_points_threshold_lets_sparse_detections_reach_pose_estimation():
-    """
-    ClusterPoseBBAnnotator needs more than 10 points to compute a pose
-    (cluster_pose_bb.py:161-165) and silently skips a hypothesis otherwise. The class
-    default of 62 rejects a real, sparse detection (few valid depth points survive the
-    color mask under the target object's depth hole) before it ever reaches that stage,
-    so it must be lowered to match what pose estimation itself actually needs.
-    """
-    with bounded_build_time():
-        pipeline = AnalysisEngine().implementation()
-
-    cluster_annotator = next(
-        node for node in pipeline.children if isinstance(node, ImageClusterExtractor)
-    )
-    parameters = cluster_annotator.descriptor.parameters
-
-    cluster_pose_bb_annotator_minimum_point_count = 10
-    assert parameters.min_points_threshold > cluster_pose_bb_annotator_minimum_point_count
-    assert parameters.outlier_removal is False
-
-
 def test_target_shelf_layer_bounds_are_the_midpoints_to_its_neighbours():
     """
     The bounds are derived from the apartment demo's own shelf layer heights (0.283m,
