@@ -51,14 +51,13 @@ from semantic_digital_twin.world_description.world_entity import (
 
 class PR2Joint(StrEnum):
     """
-    Names of the PR2 connections a joint configuration addresses, as spelled in its
-    URDF.
+    Names of the PR2's actuated connections, as spelled in its URDF.
 
     Members are usable wherever a connection name is expected, so a configuration keyed by
     them stays a plain mapping of names to positions.
 
-    ..note:: Only the left finger of each gripper appears, because the right finger mimics
-        it.
+    ..note:: The fixed connections that only tie the structure together are left out; a
+        joint goal cannot address them.
     """
 
     TORSO_LIFT = "torso_lift_joint"
@@ -73,6 +72,7 @@ class PR2Joint(StrEnum):
     LEFT_WRIST_FLEX = "l_wrist_flex_joint"
     LEFT_WRIST_ROLL = "l_wrist_roll_joint"
     LEFT_GRIPPER_LEFT_FINGER = "l_gripper_l_finger_joint"
+    LEFT_GRIPPER_RIGHT_FINGER = "l_gripper_r_finger_joint"
 
     RIGHT_SHOULDER_PAN = "r_shoulder_pan_joint"
     RIGHT_SHOULDER_LIFT = "r_shoulder_lift_joint"
@@ -82,6 +82,7 @@ class PR2Joint(StrEnum):
     RIGHT_WRIST_FLEX = "r_wrist_flex_joint"
     RIGHT_WRIST_ROLL = "r_wrist_roll_joint"
     RIGHT_GRIPPER_LEFT_FINGER = "r_gripper_l_finger_joint"
+    RIGHT_GRIPPER_RIGHT_FINGER = "r_gripper_r_finger_joint"
 
 
 @dataclass(eq=False)

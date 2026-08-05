@@ -28,6 +28,7 @@ from semantic_digital_twin.datastructures.joint_state import JointState
 from semantic_digital_twin.spatial_types import Point3, Vector3
 from semantic_digital_twin.world import World
 from test.semantic_digital_twin_test.test_orm.test_orm import hsr_world_state_reset
+from semantic_digital_twin.robots.pr2 import PR2Joint
 
 
 def _hole_at_current_tip(world: World, tip, root) -> Point3:
@@ -146,8 +147,8 @@ def test_wiggle_insert(hsr_world_state_reset):
         "arm_flex_joint": -1.5,
         "arm_lift_joint": 0.5,
         "arm_roll_joint": 0.0,
-        "head_pan_joint": 0.0,
-        "head_tilt_joint": 0.0,
+        PR2Joint.HEAD_PAN: 0.0,
+        PR2Joint.HEAD_TILT: 0.0,
         "wrist_flex_joint": -1.5,
         "wrist_roll_joint": 0.0,
     }

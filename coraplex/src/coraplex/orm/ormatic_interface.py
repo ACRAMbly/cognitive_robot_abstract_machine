@@ -24,7 +24,6 @@ import coraplex.datastructures.dataclasses
 import coraplex.datastructures.enums
 import coraplex.datastructures.execution_data
 import coraplex.datastructures.grasp
-import coraplex.datastructures.grasp_scoring
 import coraplex.datastructures.trajectory
 import coraplex.exceptions
 import coraplex.execution_environment
@@ -78,7 +77,6 @@ import giskardpy.middleware.ros2.motion_goal
 import giskardpy.middleware.ros2.motion_server
 import giskardpy.middleware.ros2.post_goal_plotters
 import giskardpy.middleware.ros2.python_interface
-import giskardpy.middleware.ros2.qp_data_publisher
 import giskardpy.middleware.ros2.scripts.iai_robots.daisy.configs
 import giskardpy.middleware.ros2.scripts.iai_robots.hsr.configs
 import giskardpy.middleware.ros2.scripts.iai_robots.pr2.configs
@@ -557,8 +555,10 @@ class JointMinimumVelocitiesDAO_overrides_association(
     )
 
 
-class StateVelocityReaderDAO_dofs_association(Base, AssociationDataAccessObject):
-    __tablename__ = "_65139406026654917612383338199281979718364972288928842454388694"
+class StateVelocityReaderDAO_degrees_of_freedom_association(
+    Base, AssociationDataAccessObject
+):
+    __tablename__ = "_18157449855897601867923370179058390124590358964549907320360070"
 
     database_id: Mapped[int] = mapped_column(Integer, primary_key=True)
 
@@ -3098,55 +3098,6 @@ class PreferredGraspAlignmentDAO(
         krrood.ormatic.custom_types.PolymorphicEnumType,
         nullable=True,
         use_existing_column=True,
-    )
-
-
-class GraspScorerDAO(
-    Base, DataAccessObject[coraplex.datastructures.grasp_scoring.GraspScorer]
-):
-    __tablename__ = "GraspScorerDAO"
-
-    database_id: Mapped[builtins.int] = mapped_column(
-        Integer, primary_key=True, use_existing_column=True
-    )
-
-    weight_normal: Mapped[builtins.float] = mapped_column(use_existing_column=True)
-    weight_distance: Mapped[builtins.float] = mapped_column(use_existing_column=True)
-    weight_clearance: Mapped[builtins.float] = mapped_column(use_existing_column=True)
-    penalty_collision: Mapped[builtins.float] = mapped_column(use_existing_column=True)
-    collision_tolerance: Mapped[builtins.float] = mapped_column(
-        use_existing_column=True
-    )
-    penalty_clearance: Mapped[builtins.float] = mapped_column(use_existing_column=True)
-    penalty_unstable: Mapped[builtins.float] = mapped_column(use_existing_column=True)
-    score_partial_contact: Mapped[builtins.float] = mapped_column(
-        use_existing_column=True
-    )
-    ground_plane_z: Mapped[builtins.float] = mapped_column(use_existing_column=True)
-
-
-class ScoredGraspDAO(
-    Base, DataAccessObject[coraplex.datastructures.grasp_scoring.ScoredGrasp]
-):
-    __tablename__ = "ScoredGraspDAO"
-
-    database_id: Mapped[builtins.int] = mapped_column(
-        Integer, primary_key=True, use_existing_column=True
-    )
-
-    score: Mapped[builtins.float] = mapped_column(use_existing_column=True)
-    id: Mapped[builtins.str] = mapped_column(
-        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
-    )
-
-    pose_id: Mapped[int] = mapped_column(
-        ForeignKey("PoseMappingDAO.database_id", use_alter=True),
-        nullable=True,
-        use_existing_column=True,
-    )
-
-    pose: Mapped[PoseMappingDAO] = relationship(
-        "PoseMappingDAO", uselist=False, foreign_keys=[pose_id], post_update=True
     )
 
 
@@ -7252,7 +7203,7 @@ class DriveVelocityCommandPublisherDAO(
         use_existing_column=True,
     )
 
-    cmd_topic: Mapped[builtins.str] = mapped_column(
+    command_topic: Mapped[builtins.str] = mapped_column(
         sqlalchemy.sql.sqltypes.Text, use_existing_column=True
     )
 
@@ -7317,7 +7268,7 @@ class JointGroupVelocityCommandPublisherDAO(
         use_existing_column=True,
     )
 
-    cmd_topic: Mapped[builtins.str] = mapped_column(
+    command_topic: Mapped[builtins.str] = mapped_column(
         sqlalchemy.sql.sqltypes.Text, use_existing_column=True
     )
 
@@ -7534,11 +7485,13 @@ class StateVelocityReaderDAO(
     world: Mapped[WorldMappingDAO] = relationship(
         "WorldMappingDAO", uselist=False, foreign_keys=[world_id], post_update=True
     )
-    dofs: Mapped[builtins.list[StateVelocityReaderDAO_dofs_association]] = relationship(
-        "StateVelocityReaderDAO_dofs_association",
+    degrees_of_freedom: Mapped[
+        builtins.list[StateVelocityReaderDAO_degrees_of_freedom_association]
+    ] = relationship(
+        "StateVelocityReaderDAO_degrees_of_freedom_association",
         collection_class=builtins.list,
         cascade="all, delete-orphan",
-        foreign_keys="[StateVelocityReaderDAO_dofs_association.source_statevelocityreaderdao_id]",
+        foreign_keys="[StateVelocityReaderDAO_degrees_of_freedom_association.source_statevelocityreaderdao_id]",
         lazy="selectin",
     )
 
@@ -8677,52 +8630,6 @@ class GiskardWrapperNodeDAO(
     }
 
 
-class QPDataPublisherDAO(
-    Base, DataAccessObject[giskardpy.middleware.ros2.qp_data_publisher.QPDataPublisher]
-):
-    __tablename__ = "QPDataPublisherDAO"
-
-    database_id: Mapped[builtins.int] = mapped_column(
-        Integer, primary_key=True, use_existing_column=True
-    )
-
-    config_id: Mapped[int] = mapped_column(
-        ForeignKey("QPDataPublisherConfigDAO.database_id", use_alter=True),
-        nullable=True,
-        use_existing_column=True,
-    )
-
-    config: Mapped[QPDataPublisherConfigDAO] = relationship(
-        "QPDataPublisherConfigDAO",
-        uselist=False,
-        foreign_keys=[config_id],
-        post_update=True,
-    )
-
-
-class QPDataPublisherConfigDAO(
-    Base,
-    DataAccessObject[giskardpy.middleware.ros2.qp_data_publisher.QPDataPublisherConfig],
-):
-    __tablename__ = "QPDataPublisherConfigDAO"
-
-    database_id: Mapped[builtins.int] = mapped_column(
-        Integer, primary_key=True, use_existing_column=True
-    )
-
-    publish_lb: Mapped[builtins.bool] = mapped_column(use_existing_column=True)
-    publish_ub: Mapped[builtins.bool] = mapped_column(use_existing_column=True)
-    publish_lbA: Mapped[builtins.bool] = mapped_column(use_existing_column=True)
-    publish_ubA: Mapped[builtins.bool] = mapped_column(use_existing_column=True)
-    publish_bE: Mapped[builtins.bool] = mapped_column(use_existing_column=True)
-    publish_Ax: Mapped[builtins.bool] = mapped_column(use_existing_column=True)
-    publish_Ex: Mapped[builtins.bool] = mapped_column(use_existing_column=True)
-    publish_xdot: Mapped[builtins.bool] = mapped_column(use_existing_column=True)
-    publish_weights: Mapped[builtins.bool] = mapped_column(use_existing_column=True)
-    publish_g: Mapped[builtins.bool] = mapped_column(use_existing_column=True)
-    publish_debug: Mapped[builtins.bool] = mapped_column(use_existing_column=True)
-
-
 class InteractiveMarkerNodeDAO(
     Base,
     DataAccessObject[
@@ -8811,19 +8718,6 @@ class GiskardServerConfigDAO(
             nullable=False,
             use_existing_column=True,
         )
-    )
-
-    qp_data_publisher_id: Mapped[int] = mapped_column(
-        ForeignKey("QPDataPublisherConfigDAO.database_id", use_alter=True),
-        nullable=True,
-        use_existing_column=True,
-    )
-
-    qp_data_publisher: Mapped[QPDataPublisherConfigDAO] = relationship(
-        "QPDataPublisherConfigDAO",
-        uselist=False,
-        foreign_keys=[qp_data_publisher_id],
-        post_update=True,
     )
 
 
@@ -24141,28 +24035,6 @@ class WorldModelManagerDAO(
         cascade="all, delete-orphan",
         foreign_keys="[WorldModelManagerDAO_model_modification_blocks_association.source_worldmodelmanagerdao_id]",
         lazy="selectin",
-    )
-
-
-class WorldStateBatchContextManagerDAO(
-    Base, DataAccessObject[semantic_digital_twin.world.WorldStateBatchContextManager]
-):
-    __tablename__ = "WorldStateBatchContextManagerDAO"
-
-    database_id: Mapped[builtins.int] = mapped_column(
-        Integer, primary_key=True, use_existing_column=True
-    )
-
-    publish_changes: Mapped[builtins.bool] = mapped_column(use_existing_column=True)
-
-    world_id: Mapped[int] = mapped_column(
-        ForeignKey("WorldMappingDAO.database_id", use_alter=True),
-        nullable=True,
-        use_existing_column=True,
-    )
-
-    world: Mapped[WorldMappingDAO] = relationship(
-        "WorldMappingDAO", uselist=False, foreign_keys=[world_id], post_update=True
     )
 
 

@@ -24,7 +24,7 @@ from semantic_digital_twin.exceptions import (
     WorldEntityNotFoundError,
 )
 from semantic_digital_twin.robots.minimal_robot import MinimalRobot
-from semantic_digital_twin.robots.pr2 import PR2
+from semantic_digital_twin.robots.pr2 import PR2, PR2Joint
 from semantic_digital_twin.semantic_annotations.semantic_annotations import (
     Handle,
     Milk,
@@ -575,7 +575,9 @@ def test_merge_with_connection(world_setup, pr2_world_copy):
 
     origin = HomogeneousTransformationMatrix(pose)
 
-    connection = pr2_world_copy.get_connection_by_name("l_gripper_l_finger_joint")
+    connection = pr2_world_copy.get_connection_by_name(
+        PR2Joint.LEFT_GRIPPER_LEFT_FINGER
+    )
     connection_dof_id = connection.dof.id
     pr2_world_copy.state[connection.dof.id].position = 0.55
     pr2_world_copy.notify_state_change()
@@ -937,7 +939,7 @@ def test_copy_dof(world_setup):
 
 def test_copy_pr2_world_state_reset(pr2_world_state_reset):
     pr2_world_state_reset.state[
-        pr2_world_state_reset.get_degree_of_freedom_by_name("torso_lift_joint").id
+        pr2_world_state_reset.get_degree_of_freedom_by_name(PR2Joint.TORSO_LIFT).id
     ].position = 0.3
     pr2_world_state_reset.notify_state_change()
     pr2_copy = deepcopy(pr2_world_state_reset)
@@ -977,7 +979,7 @@ def test_world_same_body_but_different_in_memory(world_setup):
 
 def test_copy_pr2(pr2_world_state_reset):
     pr2_world_state_reset.state[
-        pr2_world_state_reset.get_degree_of_freedom_by_name("torso_lift_joint").id
+        pr2_world_state_reset.get_degree_of_freedom_by_name(PR2Joint.TORSO_LIFT).id
     ].position = 0.3
     pr2_world_state_reset.notify_state_change()
     pr2_copy = deepcopy(pr2_world_state_reset)
@@ -998,14 +1000,14 @@ def test_copy_connections(pr2_world_state_reset):
             connection.origin.to_np(), pr2_copy_connection.origin.to_np(), decimal=3
         )
     pr2_copy.state[
-        pr2_copy.get_degree_of_freedom_by_name("torso_lift_joint").id
+        pr2_copy.get_degree_of_freedom_by_name(PR2Joint.TORSO_LIFT).id
     ].position = 0.3
     pr2_copy.notify_state_change()
     original_torso_state = pr2_world_state_reset.get_connection_by_name(
-        "torso_lift_joint"
+        PR2Joint.TORSO_LIFT
     ).origin
     copied_and_updated_torso_state = pr2_copy.get_connection_by_name(
-        "torso_lift_joint"
+        PR2Joint.TORSO_LIFT
     ).origin
 
     assert_raises(

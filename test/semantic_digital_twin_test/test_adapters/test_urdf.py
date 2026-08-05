@@ -8,7 +8,7 @@ from urdf_parser_py import urdf as urdfpy
 
 from semantic_digital_twin.adapters.urdf import URDFParser
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
-from semantic_digital_twin.robots.pr2 import PR2
+from semantic_digital_twin.robots.pr2 import PR2, PR2Joint
 from semantic_digital_twin.robots.tiago import Tiago
 from semantic_digital_twin.world_description.connections import FixedConnection
 from semantic_digital_twin.world_description.world_entity import Body
@@ -123,8 +123,10 @@ def test_pr2_parsing(pr2_parser):
 
 def test_mimic_joints(pr2_parser):
     world = pr2_parser.parse()
-    joint_to_be_mimicked = world.get_connection_by_name("l_gripper_l_finger_joint")
-    mimic_joint = world.get_connection_by_name("l_gripper_r_finger_joint")
+    joint_to_be_mimicked = world.get_connection_by_name(
+        PR2Joint.LEFT_GRIPPER_LEFT_FINGER
+    )
+    mimic_joint = world.get_connection_by_name(PR2Joint.LEFT_GRIPPER_RIGHT_FINGER)
 
     assert joint_to_be_mimicked.dofs == mimic_joint.dofs
 

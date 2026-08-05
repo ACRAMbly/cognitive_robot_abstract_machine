@@ -107,12 +107,12 @@ class PR2Tester(GiskardTester):
 
     better_pose_left = {
         PR2Joint.LEFT_SHOULDER_PAN: 1.9652,
-        "l_shoulder_lift_joint": -0.26499,
+        PR2Joint.LEFT_SHOULDER_LIFT: -0.26499,
         PR2Joint.LEFT_UPPER_ARM_ROLL: 1.3837,
-        "l_elbow_flex_joint": -2.12,
-        "l_forearm_roll_joint": 16.99,
-        "l_wrist_flex_joint": -0.10001,
-        "l_wrist_roll_joint": 0,
+        PR2Joint.LEFT_ELBOW_FLEX: -2.12,
+        PR2Joint.LEFT_FOREARM_ROLL: 16.99,
+        PR2Joint.LEFT_WRIST_FLEX: -0.10001,
+        PR2Joint.LEFT_WRIST_ROLL: 0,
     }
 
     r_tip: KinematicStructureEntity = field(init=False)
@@ -224,75 +224,75 @@ def robot():
 @pytest.fixture()
 def default_joint_state():
     return {
-        "r_elbow_flex_joint": -0.15,
-        "r_forearm_roll_joint": 0,
-        "r_shoulder_lift_joint": 0,
-        "r_shoulder_pan_joint": 0,
-        "r_upper_arm_roll_joint": 0,
+        PR2Joint.RIGHT_ELBOW_FLEX: -0.15,
+        PR2Joint.RIGHT_FOREARM_ROLL: 0,
+        PR2Joint.RIGHT_SHOULDER_LIFT: 0,
+        PR2Joint.RIGHT_SHOULDER_PAN: 0,
+        PR2Joint.RIGHT_UPPER_ARM_ROLL: 0,
         PR2Joint.RIGHT_WRIST_FLEX: -0.10001,
         PR2Joint.RIGHT_WRIST_ROLL: 0,
-        "l_elbow_flex_joint": -0.15,
-        "l_forearm_roll_joint": 0,
-        "l_shoulder_lift_joint": 0,
+        PR2Joint.LEFT_ELBOW_FLEX: -0.15,
+        PR2Joint.LEFT_FOREARM_ROLL: 0,
+        PR2Joint.LEFT_SHOULDER_LIFT: 0,
         PR2Joint.LEFT_SHOULDER_PAN: 0,
         PR2Joint.LEFT_UPPER_ARM_ROLL: 0,
-        "l_wrist_flex_joint": -0.10001,
-        "l_wrist_roll_joint": 0,
-        "torso_lift_joint": 0.2,
-        "head_pan_joint": 0,
-        "head_tilt_joint": 0,
-        "l_gripper_l_finger_joint": 0.55,
-        "r_gripper_l_finger_joint": 0.55,
+        PR2Joint.LEFT_WRIST_FLEX: -0.10001,
+        PR2Joint.LEFT_WRIST_ROLL: 0,
+        PR2Joint.TORSO_LIFT: 0.2,
+        PR2Joint.HEAD_PAN: 0,
+        PR2Joint.HEAD_TILT: 0,
+        PR2Joint.LEFT_GRIPPER_LEFT_FINGER: 0.55,
+        PR2Joint.RIGHT_GRIPPER_LEFT_FINGER: 0.55,
     }
 
 
 @pytest.fixture()
 def pocky_pose_state():
     return {
-        "r_elbow_flex_joint": -1.29610152504,
-        "r_forearm_roll_joint": -0.0301682323805,
-        "r_shoulder_lift_joint": 1.20324921318,
-        "r_shoulder_pan_joint": -0.73456435706,
-        "r_upper_arm_roll_joint": -0.70790051778,
+        PR2Joint.RIGHT_ELBOW_FLEX: -1.29610152504,
+        PR2Joint.RIGHT_FOREARM_ROLL: -0.0301682323805,
+        PR2Joint.RIGHT_SHOULDER_LIFT: 1.20324921318,
+        PR2Joint.RIGHT_SHOULDER_PAN: -0.73456435706,
+        PR2Joint.RIGHT_UPPER_ARM_ROLL: -0.70790051778,
         PR2Joint.RIGHT_WRIST_FLEX: -0.10001,
         PR2Joint.RIGHT_WRIST_ROLL: 0.258268529825,
-        "l_elbow_flex_joint": -1.29610152504,
-        "l_forearm_roll_joint": 0.0301682323805,
-        "l_shoulder_lift_joint": 1.20324921318,
+        PR2Joint.LEFT_ELBOW_FLEX: -1.29610152504,
+        PR2Joint.LEFT_FOREARM_ROLL: 0.0301682323805,
+        PR2Joint.LEFT_SHOULDER_LIFT: 1.20324921318,
         PR2Joint.LEFT_SHOULDER_PAN: 0.73456435706,
         PR2Joint.LEFT_UPPER_ARM_ROLL: 0.70790051778,
-        "l_wrist_flex_joint": -0.1001,
-        "l_wrist_roll_joint": -0.258268529825,
-        "torso_lift_joint": 0.2,
-        "head_pan_joint": 0,
-        "head_tilt_joint": 0,
-        "l_gripper_l_finger_joint": 0.55,
-        "r_gripper_l_finger_joint": 0.55,
+        PR2Joint.LEFT_WRIST_FLEX: -0.1001,
+        PR2Joint.LEFT_WRIST_ROLL: -0.258268529825,
+        PR2Joint.TORSO_LIFT: 0.2,
+        PR2Joint.HEAD_PAN: 0,
+        PR2Joint.HEAD_TILT: 0,
+        PR2Joint.LEFT_GRIPPER_LEFT_FINGER: 0.55,
+        PR2Joint.RIGHT_GRIPPER_LEFT_FINGER: 0.55,
     }
 
 
 @pytest.fixture()
 def better_pose():
     return {
-        "r_shoulder_pan_joint": -1.7125,
-        "r_shoulder_lift_joint": -0.25672,
-        "r_upper_arm_roll_joint": -1.46335,
-        "r_elbow_flex_joint": -2.12,
-        "r_forearm_roll_joint": 1.76632,
+        PR2Joint.RIGHT_SHOULDER_PAN: -1.7125,
+        PR2Joint.RIGHT_SHOULDER_LIFT: -0.25672,
+        PR2Joint.RIGHT_UPPER_ARM_ROLL: -1.46335,
+        PR2Joint.RIGHT_ELBOW_FLEX: -2.12,
+        PR2Joint.RIGHT_FOREARM_ROLL: 1.76632,
         PR2Joint.RIGHT_WRIST_FLEX: -0.10001,
         PR2Joint.RIGHT_WRIST_ROLL: 0.05106,
         PR2Joint.LEFT_SHOULDER_PAN: 1.9652,
-        "l_shoulder_lift_joint": -0.26499,
+        PR2Joint.LEFT_SHOULDER_LIFT: -0.26499,
         PR2Joint.LEFT_UPPER_ARM_ROLL: 1.3837,
-        "l_elbow_flex_joint": -2.12,
-        "l_forearm_roll_joint": 16.99,
-        "l_wrist_flex_joint": -0.10001,
-        "l_wrist_roll_joint": 0,
-        "torso_lift_joint": 0.2,
-        "l_gripper_l_finger_joint": 0.55,
-        "r_gripper_l_finger_joint": 0.55,
-        "head_pan_joint": 0,
-        "head_tilt_joint": 0,
+        PR2Joint.LEFT_ELBOW_FLEX: -2.12,
+        PR2Joint.LEFT_FOREARM_ROLL: 16.99,
+        PR2Joint.LEFT_WRIST_FLEX: -0.10001,
+        PR2Joint.LEFT_WRIST_ROLL: 0,
+        PR2Joint.TORSO_LIFT: 0.2,
+        PR2Joint.LEFT_GRIPPER_LEFT_FINGER: 0.55,
+        PR2Joint.RIGHT_GRIPPER_LEFT_FINGER: 0.55,
+        PR2Joint.HEAD_PAN: 0,
+        PR2Joint.HEAD_TILT: 0,
     }
 
 
@@ -328,23 +328,23 @@ def fake_table_setup(pocky_pose_setup: PR2Tester) -> PR2Tester:
 class TestJointGoals:
     def test_joint_goal(self, giskard: PR2Tester):
         js = {
-            "torso_lift_joint": 0.2999225173357618,
-            "head_pan_joint": 0.041880780651479044,
-            "head_tilt_joint": -0.37,
-            "r_upper_arm_roll_joint": -0.9487714747527726,
-            "r_shoulder_pan_joint": -1.0047307505973626,
-            "r_shoulder_lift_joint": 0.48736790658811985,
-            "r_forearm_roll_joint": -14.895833882874182,
-            "r_elbow_flex_joint": -1.392377908925028,
+            PR2Joint.TORSO_LIFT: 0.2999225173357618,
+            PR2Joint.HEAD_PAN: 0.041880780651479044,
+            PR2Joint.HEAD_TILT: -0.37,
+            PR2Joint.RIGHT_UPPER_ARM_ROLL: -0.9487714747527726,
+            PR2Joint.RIGHT_SHOULDER_PAN: -1.0047307505973626,
+            PR2Joint.RIGHT_SHOULDER_LIFT: 0.48736790658811985,
+            PR2Joint.RIGHT_FOREARM_ROLL: -14.895833882874182,
+            PR2Joint.RIGHT_ELBOW_FLEX: -1.392377908925028,
             PR2Joint.RIGHT_WRIST_FLEX: -0.4548695149411013,
             PR2Joint.RIGHT_WRIST_ROLL: 0.11426798984097819,
             PR2Joint.LEFT_UPPER_ARM_ROLL: 1.7383062350263658,
             PR2Joint.LEFT_SHOULDER_PAN: 1.8799810286792007,
-            "l_shoulder_lift_joint": 0.011627231224188975,
-            "l_forearm_roll_joint": 312.67276414458695,
-            "l_elbow_flex_joint": -2.0300928925694675,
-            "l_wrist_flex_joint": -0.1,
-            "l_wrist_roll_joint": -6.062015047706399,
+            PR2Joint.LEFT_SHOULDER_LIFT: 0.011627231224188975,
+            PR2Joint.LEFT_FOREARM_ROLL: 312.67276414458695,
+            PR2Joint.LEFT_ELBOW_FLEX: -2.0300928925694675,
+            PR2Joint.LEFT_WRIST_FLEX: -0.1,
+            PR2Joint.LEFT_WRIST_ROLL: -6.062015047706399,
         }
         msc = MotionStatechart()
         msc.add_node(
@@ -375,13 +375,13 @@ class TestJointGoals:
 
     def test_hard_joint_limits(self, giskard: PR2Tester):
         r_elbow_flex_joint: ActiveConnection1DOF = (
-            giskard.api.world.get_connection_by_name("r_elbow_flex_joint")
+            giskard.api.world.get_connection_by_name(PR2Joint.RIGHT_ELBOW_FLEX)
         )
         torso_lift_joint: ActiveConnection1DOF = (
-            giskard.api.world.get_connection_by_name("torso_lift_joint")
+            giskard.api.world.get_connection_by_name(PR2Joint.TORSO_LIFT)
         )
         head_pan_joint: ActiveConnection1DOF = giskard.api.world.get_connection_by_name(
-            "head_pan_joint"
+            PR2Joint.HEAD_PAN
         )
         msc = MotionStatechart()
 
@@ -502,8 +502,8 @@ class TestConstraints:
     def test_pointing_kitchen(self, kitchen_setup: PR2Tester, better_pose):
         pointing_axis = Vector3.X(reference_frame=kitchen_setup.camera)
         gaya_pose2 = deepcopy(better_pose)
-        del gaya_pose2["head_pan_joint"]
-        del gaya_pose2["head_tilt_joint"]
+        del gaya_pose2[PR2Joint.HEAD_PAN]
+        del gaya_pose2[PR2Joint.HEAD_TILT]
 
         handle_point = kitchen_setup.api.world.compute_forward_kinematics(
             root=kitchen_setup.map,
@@ -797,7 +797,7 @@ class TestSelfCollisionAvoidance:
             [
                 joint_goal := JointPositionList(
                     goal_state=JointState.from_str_dict(
-                        {"head_pan_joint": 2.84, "head_tilt_joint": 1.0},
+                        {PR2Joint.HEAD_PAN: 2.84, PR2Joint.HEAD_TILT: 1.0},
                         world=giskard.api.world,
                     )
                 ),
@@ -811,14 +811,14 @@ class TestSelfCollisionAvoidance:
 
     def test_attached_self_collision_avoid_stick(self, giskard: PR2Tester):
         collision_pose = {
-            "l_elbow_flex_joint": -1.1343683863086362,
-            "l_forearm_roll_joint": 7.517553513504836,
-            "l_shoulder_lift_joint": 0.5726770101613905,
+            PR2Joint.LEFT_ELBOW_FLEX: -1.1343683863086362,
+            PR2Joint.LEFT_FOREARM_ROLL: 7.517553513504836,
+            PR2Joint.LEFT_SHOULDER_LIFT: 0.5726770101613905,
             PR2Joint.LEFT_SHOULDER_PAN: 0.1592669164939349,
             PR2Joint.LEFT_UPPER_ARM_ROLL: 0.5532568387077381,
-            "l_wrist_flex_joint": -1.215660155912625,
-            "l_wrist_roll_joint": 4.249300323527076,
-            "torso_lift_joint": 0.2,
+            PR2Joint.LEFT_WRIST_FLEX: -1.215660155912625,
+            PR2Joint.LEFT_WRIST_ROLL: 4.249300323527076,
+            PR2Joint.TORSO_LIFT: 0.2,
         }
 
         msc = MotionStatechart()
@@ -851,14 +851,14 @@ class TestSelfCollisionAvoidance:
                 JointPositionList(
                     goal_state=JointState.from_str_dict(
                         {
-                            "r_forearm_roll_joint": 0.0,
-                            "r_shoulder_lift_joint": 0.0,
-                            "r_shoulder_pan_joint": 0.0,
-                            "r_upper_arm_roll_joint": 0.0,
+                            PR2Joint.RIGHT_FOREARM_ROLL: 0.0,
+                            PR2Joint.RIGHT_SHOULDER_LIFT: 0.0,
+                            PR2Joint.RIGHT_SHOULDER_PAN: 0.0,
+                            PR2Joint.RIGHT_UPPER_ARM_ROLL: 0.0,
                             PR2Joint.RIGHT_WRIST_FLEX: -0.10001,
                             PR2Joint.RIGHT_WRIST_ROLL: 0.0,
-                            "r_elbow_flex_joint": -0.15,
-                            "torso_lift_joint": 0.2,
+                            PR2Joint.RIGHT_ELBOW_FLEX: -0.15,
+                            PR2Joint.TORSO_LIFT: 0.2,
                         },
                         world=giskard.api.world,
                     )
@@ -927,11 +927,11 @@ class TestSelfCollisionAvoidance:
                         SetSeedConfiguration(
                             seed_configuration=JointState.from_str_dict(
                                 {
-                                    "r_elbow_flex_joint": -1.43286344265,
-                                    "r_forearm_roll_joint": -1.26465060073,
-                                    "r_shoulder_lift_joint": 0.47990329056,
-                                    "r_shoulder_pan_joint": -0.281272240139,
-                                    "r_upper_arm_roll_joint": -0.528415402668,
+                                    PR2Joint.RIGHT_ELBOW_FLEX: -1.43286344265,
+                                    PR2Joint.RIGHT_FOREARM_ROLL: -1.26465060073,
+                                    PR2Joint.RIGHT_SHOULDER_LIFT: 0.47990329056,
+                                    PR2Joint.RIGHT_SHOULDER_PAN: -0.281272240139,
+                                    PR2Joint.RIGHT_UPPER_ARM_ROLL: -0.528415402668,
                                     PR2Joint.RIGHT_WRIST_FLEX: -1.18811419869,
                                     PR2Joint.RIGHT_WRIST_ROLL: 2.26884630124,
                                 },
@@ -965,11 +965,11 @@ class TestSelfCollisionAvoidance:
                         SetSeedConfiguration(
                             seed_configuration=JointState.from_str_dict(
                                 {
-                                    "r_shoulder_pan_joint": -0.0672581793019,
-                                    "r_shoulder_lift_joint": 0.429650469244,
-                                    "r_upper_arm_roll_joint": -0.580889703636,
-                                    "r_forearm_roll_joint": -101.948215412,
-                                    "r_elbow_flex_joint": -1.35221928696,
+                                    PR2Joint.RIGHT_SHOULDER_PAN: -0.0672581793019,
+                                    PR2Joint.RIGHT_SHOULDER_LIFT: 0.429650469244,
+                                    PR2Joint.RIGHT_UPPER_ARM_ROLL: -0.580889703636,
+                                    PR2Joint.RIGHT_FOREARM_ROLL: -101.948215412,
+                                    PR2Joint.RIGHT_ELBOW_FLEX: -1.35221928696,
                                     PR2Joint.RIGHT_WRIST_FLEX: -0.986144640142,
                                     PR2Joint.RIGHT_WRIST_ROLL: 0.7397216172451033,
                                 },
@@ -1015,13 +1015,13 @@ class TestSelfCollisionAvoidance:
                     JointPositionList(
                         goal_state=JointState.from_str_dict(
                             {
-                                "l_elbow_flex_joint": -1.43286344265,
-                                "l_forearm_roll_joint": 1.26465060073,
-                                "l_shoulder_lift_joint": 0.47990329056,
+                                PR2Joint.LEFT_ELBOW_FLEX: -1.43286344265,
+                                PR2Joint.LEFT_FOREARM_ROLL: 1.26465060073,
+                                PR2Joint.LEFT_SHOULDER_LIFT: 0.47990329056,
                                 PR2Joint.LEFT_SHOULDER_PAN: 0.281272240139,
                                 PR2Joint.LEFT_UPPER_ARM_ROLL: 0.528415402668,
-                                "l_wrist_flex_joint": -1.18811419869,
-                                "l_wrist_roll_joint": 2.26884630124,
+                                PR2Joint.LEFT_WRIST_FLEX: -1.18811419869,
+                                PR2Joint.LEFT_WRIST_ROLL: 2.26884630124,
                             },
                             world=giskard.api.world,
                         )
@@ -1207,11 +1207,11 @@ class TestCollisionAvoidanceGoals:
                     JointPositionList(
                         goal_state=JointState.from_str_dict(
                             {
-                                "r_elbow_flex_joint": -1.58118094489,
-                                "r_forearm_roll_joint": -0.904933033043,
-                                "r_shoulder_lift_joint": 0.822412440711,
-                                "r_shoulder_pan_joint": -1.07866800992,
-                                "r_upper_arm_roll_joint": -1.34905471854,
+                                PR2Joint.RIGHT_ELBOW_FLEX: -1.58118094489,
+                                PR2Joint.RIGHT_FOREARM_ROLL: -0.904933033043,
+                                PR2Joint.RIGHT_SHOULDER_LIFT: 0.822412440711,
+                                PR2Joint.RIGHT_SHOULDER_PAN: -1.07866800992,
+                                PR2Joint.RIGHT_UPPER_ARM_ROLL: -1.34905471854,
                                 PR2Joint.RIGHT_WRIST_FLEX: -1.20182042644,
                                 PR2Joint.RIGHT_WRIST_ROLL: 0.190433188769,
                             },
@@ -1621,23 +1621,23 @@ class TestWeightScaling:
     @pytest.mark.skip(reason="use debug expressions to check result.")
     def test_weight_scaling1(self, giskard):
         js = {
-            # 'torso_lift_joint': 0.2999225173357618,
-            "head_pan_joint": 0.041880780651479044,
-            "head_tilt_joint": -0.37,
-            "r_upper_arm_roll_joint": -0.9487714747527726,
-            "r_shoulder_pan_joint": -1.0047307505973626,
-            "r_shoulder_lift_joint": 0.48736790658811985,
-            "r_forearm_roll_joint": -14.895833882874182,
-            "r_elbow_flex_joint": -1.392377908925028,
+            # "torso_lift_joint": 0.2999225173357618,
+            PR2Joint.HEAD_PAN: 0.041880780651479044,
+            PR2Joint.HEAD_TILT: -0.37,
+            PR2Joint.RIGHT_UPPER_ARM_ROLL: -0.9487714747527726,
+            PR2Joint.RIGHT_SHOULDER_PAN: -1.0047307505973626,
+            PR2Joint.RIGHT_SHOULDER_LIFT: 0.48736790658811985,
+            PR2Joint.RIGHT_FOREARM_ROLL: -14.895833882874182,
+            PR2Joint.RIGHT_ELBOW_FLEX: -1.392377908925028,
             PR2Joint.RIGHT_WRIST_FLEX: -0.4548695149411013,
             PR2Joint.RIGHT_WRIST_ROLL: 0.11426798984097819,
             PR2Joint.LEFT_UPPER_ARM_ROLL: 1.7383062350263658,
             PR2Joint.LEFT_SHOULDER_PAN: 1.8799810286792007,
-            "l_shoulder_lift_joint": 0.011627231224188975,
-            "l_forearm_roll_joint": 312.67276414458695,
-            "l_elbow_flex_joint": -2.0300928925694675,
-            "l_wrist_flex_joint": -0.10014623223021513,
-            "l_wrist_roll_joint": -6.062015047706399,
+            PR2Joint.LEFT_SHOULDER_LIFT: 0.011627231224188975,
+            PR2Joint.LEFT_FOREARM_ROLL: 312.67276414458695,
+            PR2Joint.LEFT_ELBOW_FLEX: -2.0300928925694675,
+            PR2Joint.LEFT_WRIST_FLEX: -0.10014623223021513,
+            PR2Joint.LEFT_WRIST_ROLL: -6.062015047706399,
         }
         giskard.api.motion_goals.add_joint_position(js)
         giskard.api.motion_goals.allow_all_collisions()
@@ -1686,23 +1686,23 @@ class TestWeightScaling:
             tip_goal=goal_pose.to_position(),
             gain=100000,
             arm_joints=[
-                "torso_lift_joint",
-                # 'head_pan_joint',
-                # 'head_tilt_joint',
-                "r_upper_arm_roll_joint",
-                "r_shoulder_pan_joint",
-                "r_shoulder_lift_joint",
-                "r_forearm_roll_joint",
-                "r_elbow_flex_joint",
+                PR2Joint.TORSO_LIFT,
+                # "head_pan_joint",
+                # "head_tilt_joint",
+                PR2Joint.RIGHT_UPPER_ARM_ROLL,
+                PR2Joint.RIGHT_SHOULDER_PAN,
+                PR2Joint.RIGHT_SHOULDER_LIFT,
+                PR2Joint.RIGHT_FOREARM_ROLL,
+                PR2Joint.RIGHT_ELBOW_FLEX,
                 PR2Joint.RIGHT_WRIST_FLEX,
                 PR2Joint.RIGHT_WRIST_ROLL,
                 PR2Joint.LEFT_UPPER_ARM_ROLL,
                 PR2Joint.LEFT_SHOULDER_PAN,
-                "l_shoulder_lift_joint",
-                "l_forearm_roll_joint",
-                "l_elbow_flex_joint",
-                "l_wrist_flex_joint",
-                "l_wrist_roll_joint",
+                PR2Joint.LEFT_SHOULDER_LIFT,
+                PR2Joint.LEFT_FOREARM_ROLL,
+                PR2Joint.LEFT_ELBOW_FLEX,
+                PR2Joint.LEFT_WRIST_FLEX,
+                PR2Joint.LEFT_WRIST_ROLL,
             ],
             base_joints=["odom_combined_T_base_footprint"],
         )
