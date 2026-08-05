@@ -48,6 +48,7 @@ from krrood.utils import recursive_subclasses
 from semantic_digital_twin.collision_checking.collision_rules import (
     AvoidExternalCollisions,
 )
+from semantic_digital_twin.robots.pr2 import PR2Joint
 from semantic_digital_twin.spatial_types import (
     HomogeneousTransformationMatrix,
     Vector3,
@@ -108,75 +109,75 @@ class BenchmarkRobot(GiskardTester):
     """
 
     default_joint_state: ClassVar[Dict[str, float]] = {
-        "r_elbow_flex_joint": -0.15,
-        "r_forearm_roll_joint": 0,
-        "r_shoulder_lift_joint": 0,
-        "r_shoulder_pan_joint": 0,
-        "r_upper_arm_roll_joint": 0,
-        "r_wrist_flex_joint": -0.10001,
-        "r_wrist_roll_joint": 0,
-        "l_elbow_flex_joint": -0.15,
-        "l_forearm_roll_joint": 0,
-        "l_shoulder_lift_joint": 0,
-        "l_shoulder_pan_joint": 0,
-        "l_upper_arm_roll_joint": 0,
-        "l_wrist_flex_joint": -0.10001,
-        "l_wrist_roll_joint": 0,
-        "torso_lift_joint": 0.2,
-        "head_pan_joint": 0,
-        "head_tilt_joint": 0,
-        "l_gripper_l_finger_joint": 0.55,
-        "r_gripper_l_finger_joint": 0.55,
+        PR2Joint.RIGHT_ELBOW_FLEX: -0.15,
+        PR2Joint.RIGHT_FOREARM_ROLL: 0,
+        PR2Joint.RIGHT_SHOULDER_LIFT: 0,
+        PR2Joint.RIGHT_SHOULDER_PAN: 0,
+        PR2Joint.RIGHT_UPPER_ARM_ROLL: 0,
+        PR2Joint.RIGHT_WRIST_FLEX: -0.10001,
+        PR2Joint.RIGHT_WRIST_ROLL: 0,
+        PR2Joint.LEFT_ELBOW_FLEX: -0.15,
+        PR2Joint.LEFT_FOREARM_ROLL: 0,
+        PR2Joint.LEFT_SHOULDER_LIFT: 0,
+        PR2Joint.LEFT_SHOULDER_PAN: 0,
+        PR2Joint.LEFT_UPPER_ARM_ROLL: 0,
+        PR2Joint.LEFT_WRIST_FLEX: -0.10001,
+        PR2Joint.LEFT_WRIST_ROLL: 0,
+        PR2Joint.TORSO_LIFT: 0.2,
+        PR2Joint.HEAD_PAN: 0,
+        PR2Joint.HEAD_TILT: 0,
+        PR2Joint.LEFT_GRIPPER_LEFT_FINGER: 0.55,
+        PR2Joint.RIGHT_GRIPPER_LEFT_FINGER: 0.55,
     }
     """
     The neutral configuration the arms start from.
     """
 
     better_pose: ClassVar[Dict[str, float]] = {
-        "r_shoulder_pan_joint": -1.7125,
-        "r_shoulder_lift_joint": -0.25672,
-        "r_upper_arm_roll_joint": -1.46335,
-        "r_elbow_flex_joint": -2.12,
-        "r_forearm_roll_joint": 1.76632,
-        "r_wrist_flex_joint": -0.10001,
-        "r_wrist_roll_joint": 0.05106,
-        "l_shoulder_pan_joint": 1.9652,
-        "l_shoulder_lift_joint": -0.26499,
-        "l_upper_arm_roll_joint": 1.3837,
-        "l_elbow_flex_joint": -2.12,
-        "l_forearm_roll_joint": 16.99,
-        "l_wrist_flex_joint": -0.10001,
-        "l_wrist_roll_joint": 0,
-        "torso_lift_joint": 0.2,
-        "l_gripper_l_finger_joint": 0.55,
-        "r_gripper_l_finger_joint": 0.55,
-        "head_pan_joint": 0,
-        "head_tilt_joint": 0,
+        PR2Joint.RIGHT_SHOULDER_PAN: -1.7125,
+        PR2Joint.RIGHT_SHOULDER_LIFT: -0.25672,
+        PR2Joint.RIGHT_UPPER_ARM_ROLL: -1.46335,
+        PR2Joint.RIGHT_ELBOW_FLEX: -2.12,
+        PR2Joint.RIGHT_FOREARM_ROLL: 1.76632,
+        PR2Joint.RIGHT_WRIST_FLEX: -0.10001,
+        PR2Joint.RIGHT_WRIST_ROLL: 0.05106,
+        PR2Joint.LEFT_SHOULDER_PAN: 1.9652,
+        PR2Joint.LEFT_SHOULDER_LIFT: -0.26499,
+        PR2Joint.LEFT_UPPER_ARM_ROLL: 1.3837,
+        PR2Joint.LEFT_ELBOW_FLEX: -2.12,
+        PR2Joint.LEFT_FOREARM_ROLL: 16.99,
+        PR2Joint.LEFT_WRIST_FLEX: -0.10001,
+        PR2Joint.LEFT_WRIST_ROLL: 0,
+        PR2Joint.TORSO_LIFT: 0.2,
+        PR2Joint.LEFT_GRIPPER_LEFT_FINGER: 0.55,
+        PR2Joint.RIGHT_GRIPPER_LEFT_FINGER: 0.55,
+        PR2Joint.HEAD_PAN: 0,
+        PR2Joint.HEAD_TILT: 0,
     }
     """
     The configuration with the arms tucked in, used when the robot has to drive around.
     """
 
     pocky_pose: ClassVar[Dict[str, float]] = {
-        "r_elbow_flex_joint": -1.29610152504,
-        "r_forearm_roll_joint": -0.0301682323805,
-        "r_shoulder_lift_joint": 1.20324921318,
-        "r_shoulder_pan_joint": -0.73456435706,
-        "r_upper_arm_roll_joint": -0.70790051778,
-        "r_wrist_flex_joint": -0.10001,
-        "r_wrist_roll_joint": 0.258268529825,
-        "l_elbow_flex_joint": -1.29610152504,
-        "l_forearm_roll_joint": 0.0301682323805,
-        "l_shoulder_lift_joint": 1.20324921318,
-        "l_shoulder_pan_joint": 0.73456435706,
-        "l_upper_arm_roll_joint": 0.70790051778,
-        "l_wrist_flex_joint": -0.1001,
-        "l_wrist_roll_joint": -0.258268529825,
-        "torso_lift_joint": 0.2,
-        "head_pan_joint": 0,
-        "head_tilt_joint": 0,
-        "l_gripper_l_finger_joint": 0.55,
-        "r_gripper_l_finger_joint": 0.55,
+        PR2Joint.RIGHT_ELBOW_FLEX: -1.29610152504,
+        PR2Joint.RIGHT_FOREARM_ROLL: -0.0301682323805,
+        PR2Joint.RIGHT_SHOULDER_LIFT: 1.20324921318,
+        PR2Joint.RIGHT_SHOULDER_PAN: -0.73456435706,
+        PR2Joint.RIGHT_UPPER_ARM_ROLL: -0.70790051778,
+        PR2Joint.RIGHT_WRIST_FLEX: -0.10001,
+        PR2Joint.RIGHT_WRIST_ROLL: 0.258268529825,
+        PR2Joint.LEFT_ELBOW_FLEX: -1.29610152504,
+        PR2Joint.LEFT_FOREARM_ROLL: 0.0301682323805,
+        PR2Joint.LEFT_SHOULDER_LIFT: 1.20324921318,
+        PR2Joint.LEFT_SHOULDER_PAN: 0.73456435706,
+        PR2Joint.LEFT_UPPER_ARM_ROLL: 0.70790051778,
+        PR2Joint.LEFT_WRIST_FLEX: -0.1001,
+        PR2Joint.LEFT_WRIST_ROLL: -0.258268529825,
+        PR2Joint.TORSO_LIFT: 0.2,
+        PR2Joint.HEAD_PAN: 0,
+        PR2Joint.HEAD_TILT: 0,
+        PR2Joint.LEFT_GRIPPER_LEFT_FINGER: 0.55,
+        PR2Joint.RIGHT_GRIPPER_LEFT_FINGER: 0.55,
     }
     """
     The configuration with both arms stretched out in front of the robot.
@@ -208,13 +209,13 @@ class BenchmarkRobot(GiskardTester):
         """
         return self.giskard.executor.context.qp_controller_config.control_dt
 
-    def entity(self, name: str):
+    def get_kinematic_structure(self, name: str):
         """
         The kinematic structure entity of the given name.
         """
         return self.api.world.get_kinematic_structure_entity_by_name(name)
 
-    def move_to_seed_configuration(self, joint_state: Dict[str, float]) -> None:
+    def teleport_to_configuration(self, joint_state: Dict[str, float]) -> None:
         """
         Teleport the robot into the given configuration and reset its odometry.
 
@@ -302,11 +303,11 @@ class CartesianGoalScenario(BenchmarkScenario):
         return robot.default_joint_state
 
     def build_motion_statechart(self, robot: BenchmarkRobot) -> MotionStatechart:
-        tip = robot.entity("r_gripper_tool_frame")
+        tip = robot.get_kinematic_structure("r_gripper_tool_frame")
         motion_statechart = MotionStatechart()
         motion_statechart.add_node(
             cartesian_goal := CartesianPose(
-                root_link=robot.entity("base_footprint"),
+                root_link=robot.get_kinematic_structure("base_footprint"),
                 tip_link=tip,
                 goal_pose=HomogeneousTransformationMatrix.from_xyz_quaternion(
                     pos_x=-0.2, reference_frame=tip
@@ -333,7 +334,7 @@ class CollisionAvoidanceScenario(BenchmarkScenario):
             name="box",
             size=(1.0, 1.0, 1.0),
             pose=HomogeneousTransformationMatrix.from_xyz_rpy(
-                x=1.2, z=0.3, reference_frame=robot.entity("map")
+                x=1.2, z=0.3, reference_frame=robot.get_kinematic_structure("map")
             ),
         )
 
@@ -342,7 +343,7 @@ class CollisionAvoidanceScenario(BenchmarkScenario):
         motion_statechart.add_node(
             CartesianPose(
                 root_link=robot.default_root,
-                tip_link=robot.entity("r_gripper_tool_frame"),
+                tip_link=robot.get_kinematic_structure("r_gripper_tool_frame"),
                 goal_pose=Pose.from_xyz_axis_angle(
                     x=0.8,
                     y=-0.38,
@@ -391,11 +392,11 @@ class ApartmentDrivingScenario(BenchmarkScenario):
         )
 
     def build_motion_statechart(self, robot: BenchmarkRobot) -> MotionStatechart:
-        base = robot.entity("base_footprint")
+        base = robot.get_kinematic_structure("base_footprint")
         motion_statechart = MotionStatechart()
         motion_statechart.add_node(
             cartesian_goal := CartesianPose(
-                root_link=robot.entity("map"),
+                root_link=robot.get_kinematic_structure("map"),
                 tip_link=base,
                 goal_pose=HomogeneousTransformationMatrix.from_xyz_rpy(
                     x=0.4, y=-2.0, reference_frame=base
@@ -426,16 +427,16 @@ class KitchenPointingScenario(BenchmarkScenario):
         )
 
     def build_motion_statechart(self, robot: BenchmarkRobot) -> MotionStatechart:
-        camera = robot.entity("head_mount_kinect_rgb_link")
-        map_frame = robot.entity("map")
+        camera = robot.get_kinematic_structure("head_mount_kinect_rgb_link")
+        map_frame = robot.get_kinematic_structure("map")
         pointing_axis = Vector3.X(reference_frame=camera)
         handle_point = robot.api.world.compute_forward_kinematics(
-            root=map_frame, tip=robot.entity("iai_fridge_door_handle")
+            root=map_frame, tip=robot.get_kinematic_structure("iai_fridge_door_handle")
         ).to_position()
         arm_pose = {
             name: position
             for name, position in robot.better_pose.items()
-            if name not in ("head_pan_joint", "head_tilt_joint")
+            if name not in (PR2Joint.HEAD_PAN, PR2Joint.HEAD_TILT)
         }
         motion_statechart = MotionStatechart()
         motion_statechart.add_node(
@@ -457,12 +458,16 @@ class KitchenPointingScenario(BenchmarkScenario):
                             ),
                             CartesianPose(
                                 root_link=map_frame,
-                                tip_link=robot.entity("base_footprint"),
+                                tip_link=robot.get_kinematic_structure(
+                                    "base_footprint"
+                                ),
                                 goal_pose=HomogeneousTransformationMatrix.from_xyz_axis_angle(
                                     y=2.0,
                                     axis=Vector3.Z(),
                                     angle=1,
-                                    reference_frame=robot.entity("base_footprint"),
+                                    reference_frame=robot.get_kinematic_structure(
+                                        "base_footprint"
+                                    ),
                                 ),
                             ),
                             JointPositionList(
@@ -501,12 +506,12 @@ class LongSequenceScenario(BenchmarkScenario):
 
     def build_motion_statechart(self, robot: BenchmarkRobot) -> MotionStatechart:
         tips = [
-            robot.entity("l_gripper_tool_frame"),
-            robot.entity("r_gripper_tool_frame"),
+            robot.get_kinematic_structure("l_gripper_tool_frame"),
+            robot.get_kinematic_structure("r_gripper_tool_frame"),
         ]
         waypoints = [
             CartesianPose(
-                root_link=robot.entity("base_footprint"),
+                root_link=robot.get_kinematic_structure("base_footprint"),
                 tip_link=tips[index % len(tips)],
                 goal_pose=HomogeneousTransformationMatrix.from_xyz_quaternion(
                     pos_x=offset, reference_frame=tips[index % len(tips)]
@@ -605,7 +610,7 @@ class ScenarioRunner:
             plotter_mode=self.plotter_mode, target_frequency=self.target_frequency
         )
         try:
-            robot.move_to_seed_configuration(scenario.seed_joint_state(robot))
+            robot.teleport_to_configuration(scenario.seed_joint_state(robot))
             scenario.prepare(robot)
             motion_statechart = scenario.build_motion_statechart(robot)
             profiler = ControlLoopProfiler(

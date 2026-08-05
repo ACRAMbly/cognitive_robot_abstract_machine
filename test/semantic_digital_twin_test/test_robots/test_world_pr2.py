@@ -15,6 +15,7 @@ from semantic_digital_twin.reasoning.predicates import LeftOf
 from semantic_digital_twin.robots.hsrb import HSRB
 from semantic_digital_twin.robots.pr2 import (
     PR2,
+    PR2Joint,
     PR2MobileBase,
     PR2Torso,
     PR2Neck,
@@ -804,3 +805,15 @@ def test_pr2_degrees_of_freedom_with_hardware_interface(pr2_world_state_reset):
     assert (
         actual_dof_names == expected_dof_names
     ), f"Missing DOFs: {expected_dof_names - actual_dof_names}, Extra DOFs: {actual_dof_names - expected_dof_names}"
+
+
+# %% joint name enum
+
+
+def test_pr2_joint_names_resolve_to_connections(pr2_world_state_reset):
+    resolved = {
+        joint: pr2_world_state_reset.get_connection_by_name(joint).name.name
+        for joint in PR2Joint
+    }
+
+    assert resolved == {joint: joint.value for joint in PR2Joint}
