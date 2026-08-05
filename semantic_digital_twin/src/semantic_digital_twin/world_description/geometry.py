@@ -335,15 +335,6 @@ class Scale:
     def to_np(self) -> np.ndarray:
         return np.array([self.x, self.y, self.z])
 
-    @property
-    def xy(self):
-        """
-        Returns the scale in the xy-plane with a zero for z.
-
-        :return: The scale in the xy-plane
-        """
-        return Scale(self.x, self.y, 0)
-
 
 @dataclass
 class Shape(ABC, SubclassJSONSerializer, HasSimulatorProperties):
@@ -505,6 +496,27 @@ class Mesh(Shape):
         """
         return BoundingBox.from_mesh(self.mesh, self.origin)
 
+    @staticmethod
+    def _load_in_meters(filename: str, process: bool = True) -> trimesh.Trimesh:
+        """
+        Load a mesh file, converting its coordinates to meters when the file declares
+        the unit they are written in.
+
+        A file that declares no unit is read as it is written, because there is nothing to
+        convert from.
+
+        ..note:: The scale a renderer applies on top of this must stay free of the
+            conversion. RViz is handed the file itself and converts its units again.
+
+        :param filename: The path of the mesh file.
+        :param process: Whether trimesh merges vertices and drops degenerate faces.
+        :return: The loaded mesh, measured in meters.
+        """
+        mesh = trimesh.load_mesh(filename, process=process)
+        if mesh.units is not None:
+            mesh.convert_units("meters")
+        return mesh
+
     def to_json(self) -> Dict[str, Any]:
         # Serialize the unscaled geometry and the scale separately. This is the same
         # mesh :attr:`mesh` exposes, so a deserialized mesh reproduces the original
@@ -589,7 +601,7 @@ class Mesh(Shape):
         """
         The mesh exactly as the file describes it, before this shape's scale is applied.
         """
-        mesh = trimesh.load_mesh(self.filename, process=False)
+        mesh = self._load_in_meters(self.filename, process=False)
         if mesh.visual.kind != "vertex":
             # Welding duplicate vertices is what makes a mesh watertight, which volume
             # and boolean operations require; formats like STL give every face its own
