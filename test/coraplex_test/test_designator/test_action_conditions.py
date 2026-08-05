@@ -49,7 +49,7 @@ def test_get_bound_variables(immutable_model_world):
     assert list(bound_variables.keys()) == [
         "grasp_detection_threshold",
         "pre_approach_linear_velocity",
-        "grasp_linear_velocity",
+        "final_approach_linear_velocity",
         "grasp_closing_velocity",
         "lift_linear_velocity",
         "grasp_stall_minimum_time",

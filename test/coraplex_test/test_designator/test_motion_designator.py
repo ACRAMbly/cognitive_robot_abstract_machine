@@ -392,7 +392,7 @@ def test_pick_up_action_velocity_fields_default_to_none(immutable_model_world):
     )
 
     assert pick_up.pre_approach_linear_velocity is None
-    assert pick_up.grasp_linear_velocity is None
+    assert pick_up.final_approach_linear_velocity is None
     assert pick_up.grasp_closing_velocity is None
     assert pick_up.lift_linear_velocity is None
     assert pick_up.grasp_stall_minimum_time is None

@@ -71,18 +71,17 @@ class ReachTuningParameters(HasApproachVelocity):
 
 
 @dataclass
-class PickUpTuningParameters(HasApproachVelocity):
+class PickUpTuningParameters(ReachTuningParameters):
     """
     Tunable grasp speeds and target-object friction for
     :class:`~coraplex.robot_plans.actions.core.pick_up.PickUpAction`.
-    """
 
-    grasp_linear_velocity: Optional[float] = field(default=None, kw_only=True)
-    """
-    Maximum linear speed (in m/s) for the final approach onto the grasp pose, enforced
-    via
-    :class:`~giskardpy.motion_statechart.tasks.cartesian_tasks.CartesianPositionVelocityLimit`.
-    ``None`` leaves the speed unconstrained.
+    Extends :class:`ReachTuningParameters` rather than just :class:`HasApproachVelocity`:
+    :class:`~coraplex.robot_plans.actions.core.pick_up.PickUpAction` forwards both
+    ``pre_approach_linear_velocity`` and ``final_approach_linear_velocity`` verbatim to
+    the internal :class:`~coraplex.robot_plans.actions.core.pick_up.ReachAction` it
+    builds, so both fields are literally the same value under the same name in both
+    places rather than two similarly-named-but-distinct fields.
     """
 
     grasp_closing_velocity: Optional[float] = field(default=None, kw_only=True)

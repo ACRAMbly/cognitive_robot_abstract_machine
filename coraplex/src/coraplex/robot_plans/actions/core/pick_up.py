@@ -205,7 +205,7 @@ class PickUpAction(
                     arm=self.arm,
                     grasp_description=self.grasp_description,
                     pre_approach_linear_velocity=self.pre_approach_linear_velocity,
-                    final_approach_linear_velocity=self.grasp_linear_velocity,
+                    final_approach_linear_velocity=self.final_approach_linear_velocity,
                     open_gripper_at_pre_pose=True,
                 ),
                 MoveGripperMotion(

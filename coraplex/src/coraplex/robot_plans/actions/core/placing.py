@@ -68,45 +68,6 @@ class PlaceAction(ActionDescription, PlaceTuningParameters, HasGraspDetectionThr
     :func:`~semantic_digital_twin.reasoning.robot_predicates.is_body_gripped`).
     """
 
-    def _previous_grasp(self) -> GraspDescription:
-        """
-        The grasp description used by the preceding :class:`PickUpAction` on this
-        object, or a default front/no-alignment grasp if none is found.
-        """
-        end_effector = ViewManager.get_arm_view(self.arm, self.robot).end_effector
-        previous_pick = self.plan_node.get_previous_node_by_designator_type(
-            PickUpAction
-        )
-        if previous_pick:
-            return previous_pick.designator.grasp_description
-        return GraspDescription(
-            ApproachDirection.FRONT, VerticalAlignment.NoAlignment, end_effector
-        )
-
-    def _transport_and_descend_plan(
-        self, transport_pose: Pose, placing_pose: Pose
-    ) -> PlanNode:
-        """
-        :return: The plan that carries the held object above the target location and
-            then descends onto it.
-        """
-        return sequential(
-            [
-                MoveToolCenterPointMotion(
-                    transport_pose,
-                    self.arm,
-                    allow_gripper_collision=False,
-                    max_linear_velocity=self.transport_linear_velocity,
-                ),
-                MoveToolCenterPointMotion(
-                    placing_pose,
-                    self.arm,
-                    allow_gripper_collision=False,
-                    max_linear_velocity=self.placing_linear_velocity,
-                ),
-            ],
-        )
-
     def _retract_plan(self, retract_pose: Pose) -> PlanNode:
         """
         :return: The plan that re-parents the placed object back to the world and
@@ -125,17 +86,37 @@ class PlaceAction(ActionDescription, PlaceTuningParameters, HasGraspDetectionThr
 
     @property
     def _action_plan(self) -> PlanNode:
-        (
-            transport_pose,
-            placing_pose,
-            retract_pose,
-        ) = self._previous_grasp().pose_sequence(
-            self.target_location, self.object_designator, reverse=True
+        end_effector = ViewManager.get_arm_view(self.arm, self.robot).end_effector
+        previous_pick = self.plan_node.get_previous_node_by_designator_type(
+            PickUpAction
+        )
+        previous_grasp_description = (
+            previous_pick.designator.grasp_description
+            if previous_pick
+            else GraspDescription(
+                ApproachDirection.FRONT, VerticalAlignment.NoAlignment, end_effector
+            )
+        )
+        transport_pose, placing_pose, retract_pose = (
+            previous_grasp_description.pose_sequence(
+                self.target_location, self.object_designator, reverse=True
+            )
         )
 
         return sequential(
             [
-                self._transport_and_descend_plan(transport_pose, placing_pose),
+                MoveToolCenterPointMotion(
+                    transport_pose,
+                    self.arm,
+                    allow_gripper_collision=False,
+                    max_linear_velocity=self.transport_linear_velocity,
+                ),
+                MoveToolCenterPointMotion(
+                    placing_pose,
+                    self.arm,
+                    allow_gripper_collision=False,
+                    max_linear_velocity=self.placing_linear_velocity,
+                ),
                 MoveGripperMotion(
                     GripperState.OPEN,
                     self.arm,
