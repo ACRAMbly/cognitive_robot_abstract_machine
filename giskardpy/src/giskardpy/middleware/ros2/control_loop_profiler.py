@@ -139,6 +139,8 @@ class PhaseSamples(SubclassJSONSerializer):
     def call_count(self) -> int:
         """
         How often the phase was measured.
+
+        :return: The number of measured calls.
         """
         return len(self.inclusive_durations)
 
@@ -146,6 +148,8 @@ class PhaseSamples(SubclassJSONSerializer):
     def inclusive_total(self) -> float:
         """
         Seconds all calls took together, including their children.
+
+        :return: The summed inclusive duration in seconds.
         """
         return float(np.sum(self.inclusive_durations))
 
@@ -153,6 +157,8 @@ class PhaseSamples(SubclassJSONSerializer):
     def exclusive_total(self) -> float:
         """
         Seconds all calls spent in their own code.
+
+        :return: The summed exclusive duration in seconds.
         """
         return float(np.sum(self.exclusive_durations))
 
@@ -160,6 +166,8 @@ class PhaseSamples(SubclassJSONSerializer):
     def inclusive_mean(self) -> float:
         """
         Average seconds per call, including children.
+
+        :return: The mean inclusive duration in seconds.
         """
         return float(np.mean(self.inclusive_durations))
 
@@ -167,12 +175,17 @@ class PhaseSamples(SubclassJSONSerializer):
     def inclusive_maximum(self) -> float:
         """
         Slowest call, including children.
+
+        :return: The largest inclusive duration in seconds.
         """
         return float(np.max(self.inclusive_durations))
 
     def inclusive_percentile(self, percentile: float) -> float:
         """
         Seconds below which the given share of calls stayed.
+
+        :param percentile: The share of calls to cover, from 0 to 100.
+        :return: The inclusive duration at that percentile in seconds.
         """
         return float(np.percentile(self.inclusive_durations, percentile))
 
@@ -188,6 +201,10 @@ class PhaseSamples(SubclassJSONSerializer):
     def _from_json(cls, data: Dict[str, Any], **kwargs) -> Self:
         """
         Rebuild the samples, turning the stored path back into the tuple that keys it.
+
+        :param data: The json representation of the samples.
+        :param kwargs: Additional arguments passed down by the deserializer.
+        :return: The restored samples.
         """
         return cls(
             path=tuple(data["path"]),
@@ -233,6 +250,7 @@ class CallTreeProfile(SubclassJSONSerializer):
         """
         Measurements of the whole control cycle.
 
+        :return: The samples of the outermost phase.
         :raises NoControlCycleMeasuredError: If not a single cycle was measured.
         """
         path = (CONTROL_CYCLE_PHASE,)
@@ -244,6 +262,8 @@ class CallTreeProfile(SubclassJSONSerializer):
     def control_cycles(self) -> int:
         """
         How many control cycles the motion took.
+
+        :return: The number of measured control cycles.
         """
         return self.control_cycle.call_count
 
@@ -251,6 +271,8 @@ class CallTreeProfile(SubclassJSONSerializer):
     def cycles_per_second(self) -> float:
         """
         How many control cycles the loop manages per second of cycle time.
+
+        :return: The achievable control frequency in hertz.
         """
         return 1 / self.control_cycle.inclusive_mean
 
@@ -259,12 +281,17 @@ class CallTreeProfile(SubclassJSONSerializer):
         """
         Share of the control budget an average cycle uses; ``1.0`` means the loop is
         exactly fast enough.
+
+        :return: The used share of the control budget.
         """
         return self.control_cycle.inclusive_mean / self.control_dt
 
     def children_of(self, path: PhasePath) -> List[PhaseSamples]:
         """
         The phases that were called directly by the phase at the given path.
+
+        :param path: Chain of phase names leading to the parent phase.
+        :return: The samples of every phase one level below that path.
         """
         return [
             samples
@@ -289,6 +316,10 @@ class CallTreeProfile(SubclassJSONSerializer):
 
         The phases are stored as a list because their keys are paths, which json cannot
         represent.
+
+        :param data: The json representation of the profile.
+        :param kwargs: Additional arguments passed down by the deserializer.
+        :return: The restored profile.
         """
         phases = [PhaseSamples.from_json(entry) for entry in data["phases"]]
         return cls(
@@ -392,6 +423,8 @@ class ControlLoopProfiler:
     def profile(self) -> CallTreeProfile:
         """
         Everything that was measured while the profiler was active.
+
+        :return: The profile of the measured motion.
         """
         return CallTreeProfile(
             scenario_name=self.scenario_name,
@@ -404,6 +437,8 @@ class ControlLoopProfiler:
     def _install_phase(self, definition: PhaseDefinition) -> None:
         """
         Replace the method of the definition by a wrapper that times it.
+
+        :param definition: The method to measure and the phase it is reported under.
         """
         original = getattr(definition.owner, definition.method_name)
         is_control_cycle = definition.phase_name == CONTROL_CYCLE_PHASE
@@ -456,6 +491,11 @@ class ControlLoopProfiler:
 
         A method the owner inherited is removed again instead of assigned back, so
         profiling never turns an inherited method into an own one.
+
+        :param owner: Class the method is looked up on.
+        :param method_name: Name of the method that is replaced.
+        :param original: The method as it was before profiling.
+        :param replacement: The method that is installed instead.
         """
         if method_name in owner.__dict__:
             self._exit_stack.callback(setattr, owner, method_name, original)
@@ -466,12 +506,18 @@ class ControlLoopProfiler:
     def _open_phases_of_current_thread(self) -> List[_OpenPhase]:
         """
         The phases the calling thread has entered and not yet left.
+
+        :return: The phase stack of the calling thread.
         """
         return self._open_phases.stack
 
     def _record(self, path: PhasePath, inclusive: float, exclusive: float) -> None:
         """
         Remember one measurement of the phase at the given path.
+
+        :param path: Chain of phase names leading to the measured phase.
+        :param inclusive: Seconds the call took, including the phases it called.
+        :param exclusive: Seconds the call spent outside of the phases it called.
         """
         if path not in self.phases:
             self.phases[path] = PhaseSamples(path=path)
