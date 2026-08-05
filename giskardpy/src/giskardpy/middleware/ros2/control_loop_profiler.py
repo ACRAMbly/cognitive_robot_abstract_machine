@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Tuple, Type
 
 import numpy as np
+from typing_extensions import Self
 
 from giskardpy.executor import Executor
 from giskardpy.middleware.ros2.control_loop import ControlLoop
@@ -14,6 +15,7 @@ from giskardpy.middleware.ros2.feedback_publisher import ActionFeedbackPublisher
 from giskardpy.middleware.ros2.input_synchronization import WorldStateInputs
 from giskardpy.motion_statechart.motion_statechart import MotionStatechart
 from giskardpy.qp.qp_controller import QPController
+from krrood.adapters.json_serializer import SubclassJSONSerializer
 from semantic_digital_twin.collision_checking.collision_manager import CollisionManager
 from semantic_digital_twin.spatial_computations.forward_kinematics import (
     ForwardKinematicsManager,
@@ -109,7 +111,7 @@ class _ThreadLocalPhaseStack(threading.local):
 
 
 @dataclass
-class PhaseSamples:
+class PhaseSamples(SubclassJSONSerializer):
     """
     Every measurement taken for one phase at one position in the call tree.
     """
@@ -128,20 +130,6 @@ class PhaseSamples:
     """
     Seconds each call spent outside of the phases it called.
     """
-
-    @property
-    def name(self) -> str:
-        """
-        Name of the phase itself.
-        """
-        return self.path[-1]
-
-    @property
-    def depth(self) -> int:
-        """
-        How deep the phase sits below the control cycle.
-        """
-        return len(self.path) - 1
 
     @property
     def call_count(self) -> int:
@@ -172,13 +160,6 @@ class PhaseSamples:
         return float(np.mean(self.inclusive_durations))
 
     @property
-    def inclusive_median(self) -> float:
-        """
-        Median seconds per call, including children.
-        """
-        return float(np.median(self.inclusive_durations))
-
-    @property
     def inclusive_maximum(self) -> float:
         """
         Slowest call, including children.
@@ -191,9 +172,28 @@ class PhaseSamples:
         """
         return float(np.percentile(self.inclusive_durations, percentile))
 
+    def to_json(self) -> Dict[str, Any]:
+        return {
+            **super().to_json(),
+            "path": list(self.path),
+            "inclusive_durations": self.inclusive_durations,
+            "exclusive_durations": self.exclusive_durations,
+        }
+
+    @classmethod
+    def _from_json(cls, data: Dict[str, Any], **kwargs) -> Self:
+        """
+        Rebuild the samples, turning the stored path back into the tuple that keys it.
+        """
+        return cls(
+            path=tuple(data["path"]),
+            inclusive_durations=data["inclusive_durations"],
+            exclusive_durations=data["exclusive_durations"],
+        )
+
 
 @dataclass
-class CallTreeProfile:
+class CallTreeProfile(SubclassJSONSerializer):
     """
     What one profiled motion spent its time on.
     """
@@ -258,13 +258,6 @@ class CallTreeProfile:
         """
         return self.control_cycle.inclusive_mean / self.control_dt
 
-    @property
-    def worst_budget_utilization(self) -> float:
-        """
-        Share of the control budget the slowest cycle used.
-        """
-        return self.control_cycle.inclusive_maximum / self.control_dt
-
     def children_of(self, path: PhasePath) -> List[PhaseSamples]:
         """
         The phases that were called directly by the phase at the given path.
@@ -275,84 +268,32 @@ class CallTreeProfile:
             if samples.path[:-1] == path and len(samples.path) == len(path) + 1
         ]
 
-    def format_report(self) -> str:
-        """
-        Render the call tree as a table, slowest branch first at every level.
-        """
-        header = (
-            f"{'phase':<44}{'calls/cycle':>12}{'incl. mean':>12}"
-            f"{'excl. mean':>12}{'incl. p95':>12}{'incl. max':>12}{'% cycle':>9}"
-        )
-        lines = [
-            f"scenario: {self.scenario_name}",
-            f"control cycles: {self.control_cycles}   "
-            f"wall time: {self.wall_time:.3f} s   "
-            f"compile: {self.compile_duration * 1000:.1f} ms",
-            f"cycle mean: {self.control_cycle.inclusive_mean * 1000:.2f} ms   "
-            f"median: {self.control_cycle.inclusive_median * 1000:.2f} ms   "
-            f"p95: {self.control_cycle.inclusive_percentile(95) * 1000:.2f} ms   "
-            f"max: {self.control_cycle.inclusive_maximum * 1000:.2f} ms",
-            f"budget: {self.control_dt * 1000:.1f} ms per cycle   "
-            f"mean utilization: {self.budget_utilization:.1%}   "
-            f"worst: {self.worst_budget_utilization:.1%}   "
-            f"sustainable rate: {self.cycles_per_second:.1f} Hz",
-            "",
-            header,
-            "-" * len(header),
-        ]
-        lines.extend(self._format_subtree((CONTROL_CYCLE_PHASE,)))
-        return "\n".join(lines)
-
-    def _format_subtree(self, path: PhasePath) -> List[str]:
-        """
-        Render the phase at the given path and everything it called below it.
-        """
-        samples = self.phases[path]
-        cycle_total = self.control_cycle.inclusive_total
-        label = f"{'  ' * samples.depth}{samples.name}"
-        lines = [
-            f"{label:<44}"
-            f"{samples.call_count / self.control_cycles:>12.2f}"
-            f"{samples.inclusive_mean * 1000:>12.3f}"
-            f"{samples.exclusive_total / self.control_cycles * 1000:>12.3f}"
-            f"{samples.inclusive_percentile(95) * 1000:>12.3f}"
-            f"{samples.inclusive_maximum * 1000:>12.3f}"
-            f"{samples.inclusive_total / cycle_total:>9.1%}"
-        ]
-        children = sorted(
-            self.children_of(path), key=lambda child: -child.inclusive_total
-        )
-        for child in children:
-            lines.extend(self._format_subtree(child.path))
-        return lines
-
-    def to_dict(self) -> Dict[str, Any]:
-        """
-        Reduce the profile to plain data so it can be stored as json.
-        """
+    def to_json(self) -> Dict[str, Any]:
         return {
+            **super().to_json(),
             "scenario_name": self.scenario_name,
             "control_dt": self.control_dt,
             "wall_time": self.wall_time,
             "compile_duration": self.compile_duration,
-            "control_cycles": self.control_cycles,
-            "cycles_per_second": self.cycles_per_second,
-            "budget_utilization": self.budget_utilization,
-            "cycle_durations": list(self.control_cycle.inclusive_durations),
-            "phases": [
-                {
-                    "path": list(samples.path),
-                    "call_count": samples.call_count,
-                    "inclusive_total": samples.inclusive_total,
-                    "exclusive_total": samples.exclusive_total,
-                    "inclusive_mean": samples.inclusive_mean,
-                    "inclusive_median": samples.inclusive_median,
-                    "inclusive_p95": samples.inclusive_percentile(95),
-                    "inclusive_maximum": samples.inclusive_maximum,
-                }
-                for samples in self.phases.values()
-            ],
+            "phases": [samples.to_json() for samples in self.phases.values()],
         }
+
+    @classmethod
+    def _from_json(cls, data: Dict[str, Any], **kwargs) -> Self:
+        """
+        Rebuild a profile, keying the phases by the path each one carries.
+
+        The phases are stored as a list because their keys are paths, which json cannot
+        represent.
+        """
+        phases = [PhaseSamples.from_json(entry) for entry in data["phases"]]
+        return cls(
+            scenario_name=data["scenario_name"],
+            control_dt=data["control_dt"],
+            wall_time=data["wall_time"],
+            compile_duration=data["compile_duration"],
+            phases={samples.path: samples for samples in phases},
+        )
 
 
 class NoControlCycleMeasuredError(Exception):
@@ -457,7 +398,7 @@ class ControlLoopProfiler:
         """
         Replace the method of the definition by a wrapper that times it.
         """
-        original = definition.owner.__dict__[definition.method_name]
+        original = getattr(definition.owner, definition.method_name)
         is_control_cycle = definition.phase_name == CONTROL_CYCLE_PHASE
 
         def timed(instance: Any, *args: Any, **kwargs: Any) -> Any:
@@ -484,7 +425,7 @@ class ControlLoopProfiler:
         """
         Measure how long the controller of a goal takes to build.
         """
-        original = Executor.__dict__["compile"]
+        original = Executor.compile
 
         def timed(instance: Executor, *args: Any, **kwargs: Any) -> Any:
             started_at = time.perf_counter()
@@ -505,8 +446,14 @@ class ControlLoopProfiler:
         """
         Put the replacement on the class and restore the original when the profiler is
         left.
+
+        A method the owner inherited is removed again instead of assigned back, so
+        profiling never turns an inherited method into an own one.
         """
-        self._exit_stack.callback(setattr, owner, method_name, original)
+        if method_name in owner.__dict__:
+            self._exit_stack.callback(setattr, owner, method_name, original)
+        else:
+            self._exit_stack.callback(delattr, owner, method_name)
         setattr(owner, method_name, replacement)
 
     def _open_phases_of_current_thread(self) -> List[_OpenPhase]:

@@ -3,6 +3,7 @@ from __future__ import annotations
 import cProfile
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
+from enum import Enum
 from typing import ClassVar, Dict, List, Type
 
 import numpy as np
@@ -54,6 +55,38 @@ from semantic_digital_twin.spatial_types import (
 from semantic_digital_twin.spatial_types.spatial_types import Pose
 from semantic_digital_twin.world import World
 
+# %% how much the measurement records
+
+
+class PlotterMode(Enum):
+    """
+    Whether the post goal plotters record the motion while it is measured.
+
+    Recording costs time in every cycle, so the same motion is measured under both modes
+    to show what the plotters cost.
+    """
+
+    PLAIN = "plain"
+    """
+    The plotters are off, so only the control loop itself is measured.
+    """
+
+    DEBUG = "debug"
+    """
+    The plotters record the motion, as they do when a motion is debugged.
+    """
+
+    @property
+    def records_trajectory(self) -> bool:
+        """
+        Whether Giskard has to keep the trajectory around for the plotters.
+        """
+        return self is PlotterMode.DEBUG
+
+    def __str__(self) -> str:
+        return self.value
+
+
 # %% the robot under measurement
 
 
@@ -64,7 +97,7 @@ class BenchmarkRobot(GiskardTester):
     simulator or hardware in between.
     """
 
-    debug_mode: bool = True
+    plotter_mode: PlotterMode = PlotterMode.DEBUG
     """
     Whether the post goal plotters record the motion, which costs time in every cycle.
     """
@@ -150,6 +183,7 @@ class BenchmarkRobot(GiskardTester):
     """
 
     def setup_giskard(self) -> Giskard:
+        records_trajectory = self.plotter_mode.records_trajectory
         return Giskard(
             world_config=WorldWithPR2Config(
                 urdf=load_xacro(
@@ -159,8 +193,8 @@ class BenchmarkRobot(GiskardTester):
             robot_interface_config=PR2StandaloneInterface(),
             server_config=GiskardServerConfig(
                 execution_mode=ExecutionMode.STANDALONE,
-                debug_mode=self.debug_mode,
-                plot_trajectory=self.debug_mode,
+                debug_mode=records_trajectory,
+                plot_trajectory=records_trajectory,
             ),
             qp_controller_config=QPControllerConfig(
                 target_frequency=self.target_frequency
@@ -545,7 +579,7 @@ class ScenarioRunner:
     Sets a scenario up, measures its motion and takes the robot down again.
     """
 
-    debug_mode: bool = True
+    plotter_mode: PlotterMode = PlotterMode.DEBUG
     """
     Whether the post goal plotters record the motion while it is measured.
     """
@@ -568,7 +602,7 @@ class ScenarioRunner:
         Measure one motion of the given scenario on a freshly built robot.
         """
         robot = BenchmarkRobot(
-            debug_mode=self.debug_mode, target_frequency=self.target_frequency
+            plotter_mode=self.plotter_mode, target_frequency=self.target_frequency
         )
         try:
             robot.move_to_seed_configuration(scenario.seed_joint_state(robot))

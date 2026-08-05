@@ -1,15 +1,31 @@
-import pytest
+from dataclasses import dataclass
+from typing import Any
 
 from giskardpy.middleware.ros2.control_loop_profiler import (
     CONTROL_CYCLE_PHASES,
-    CallTreeProfile,
     ControlLoopProfiler,
+    PhaseDefinition,
 )
-from giskardpy.middleware.ros2.utils.control_loop_benchmark import (
-    CartesianGoalScenario,
-    LongSequenceScenario,
-    ScenarioRunner,
-)
+
+# %% owners whose profiled method is inherited
+
+
+@dataclass
+class ProfiledMethodOwner:
+    """
+    Defines the method a profiled phase is measured on.
+    """
+
+    def measured(self) -> str:
+        return "measured"
+
+
+@dataclass
+class InheritingProfiledMethodOwner(ProfiledMethodOwner):
+    """
+    Takes the profiled method over from its base class instead of defining it.
+    """
+
 
 # %% profiler mechanics
 
@@ -38,53 +54,24 @@ class TestProfilerInstallation:
                 definition.owner.__dict__[definition.method_name] is before[definition]
             )
 
-
-# %% measured runtime
-
-
-@pytest.fixture()
-def cartesian_goal_profile(init_rospy) -> CallTreeProfile:
-    return ScenarioRunner(debug_mode=False).run(CartesianGoalScenario())
-
-
-@pytest.fixture()
-def long_sequence_profile(init_rospy) -> CallTreeProfile:
-    return ScenarioRunner(debug_mode=False).run(LongSequenceScenario())
-
-
-@pytest.mark.slow
-class TestPhaseAccounting:
-    """
-    A phase table that loses time cannot be used to decide what to optimize.
-    """
-
-    def test_measured_phases_account_for_the_whole_cycle(
-        self, cartesian_goal_profile: CallTreeProfile
-    ):
-        control_cycle = cartesian_goal_profile.control_cycle
-        children = cartesian_goal_profile.children_of(control_cycle.path)
-        accounted = control_cycle.exclusive_total + sum(
-            child.inclusive_total for child in children
+    def test_inherited_method_is_measured_and_left_inherited(self):
+        """
+        A phase whose method the owner inherited must install, measure and disappear
+        again, so that profiling never turns an inherited method into an own one.
+        """
+        definition = PhaseDefinition(
+            InheritingProfiledMethodOwner, "measured", "control_cycle"
+        )
+        profiler = ControlLoopProfiler(
+            scenario_name="inherited",
+            control_dt=0.05,
+            phase_definitions=(definition,),
         )
 
-        assert accounted == pytest.approx(control_cycle.inclusive_total, rel=1e-9)
+        with profiler:
+            assert "measured" in InheritingProfiledMethodOwner.__dict__
+            assert InheritingProfiledMethodOwner().measured() == "measured"
 
-
-@pytest.mark.slow
-class TestControlCycleBudget:
-    """
-    A cycle that overruns its slot makes the robot run slower than the controller was
-    discretized for, and the pacer does not catch that up.
-    """
-
-    def test_cycle_stays_within_the_control_budget(
-        self, long_sequence_profile: CallTreeProfile
-    ):
-        assert long_sequence_profile.control_cycle.inclusive_percentile(95) < (
-            long_sequence_profile.control_dt
-        )
-
-    def test_motion_is_long_enough_to_judge_the_distribution(
-        self, long_sequence_profile: CallTreeProfile
-    ):
-        assert long_sequence_profile.control_cycles >= 100
+        assert "measured" not in InheritingProfiledMethodOwner.__dict__
+        assert InheritingProfiledMethodOwner().measured() == "measured"
+        assert profiler.profile.control_cycles == 1

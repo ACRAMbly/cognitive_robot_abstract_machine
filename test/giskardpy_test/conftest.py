@@ -1,7 +1,6 @@
 import numpy as np
 import pytest
 
-from giskardpy.middleware.ros2 import rospy
 from giskardpy.middleware.ros2.utils.utils import load_xacro
 from giskardpy.middleware.ros2.utils.utils_for_tests import GiskardTester
 from giskardpy.motion_statechart.graph_node import EndMotion
@@ -88,18 +87,6 @@ def mini_world():
         )
         world.add_connection(connection)
     return world
-
-
-@pytest.fixture(scope="function")
-def init_rospy():
-
-    rospy.init_node("giskard")
-
-    try:
-        yield None
-    finally:
-        # Cleanly reset TF and shutdown ROS2 node/executor
-        rospy.shutdown()
 
 
 @pytest.fixture()
