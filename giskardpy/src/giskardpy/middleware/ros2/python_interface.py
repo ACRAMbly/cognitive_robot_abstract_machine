@@ -35,7 +35,10 @@ class GiskardWrapper:
     """
     Python wrapper for the ROS interface of Giskard.
 
+    :param node_handle: node used to talk to Giskard
     :param giskard_node_name: node name of Giskard
+    :param world: world to keep in step with the world of Giskard, fetched from Giskard
+        when not given
     """
 
     node_handle: Node
@@ -90,6 +93,8 @@ class GiskardWrapper:
         A goal that fails raises the exception that made Giskard abort it, for example
         :class:`WorldModelModifiedDuringMotionError` when another process modified the
         world model while the motion was running.
+
+        :param motion_statechart: statechart to execute
         """
         motion_statechart.sanity_check()
         result = self._send_action_goal(motion_statechart)
@@ -103,6 +108,9 @@ class GiskardWrapper:
 
         Only reached for a goal that succeeded; a failed one raises while its result is
         awaited.
+
+        :param result: result of the finished goal
+        :param motion_statechart: statechart the goal was built from
         """
         result_json = json.loads(result.result.result)
         self.world_updates.wait_for_the_changes_of_a_goal(result_json)
@@ -122,6 +130,9 @@ class GiskardWrapper:
         """
         Wrap the motion statechart into a goal that names the change of this world it
         was built on.
+
+        :param motion_statechart: statechart to send to Giskard
+        :return: action goal message holding the serialized motion goal
         """
         goal_msg = JsonAction.Goal()
         goal = MotionGoal.for_motion_statechart(
@@ -144,6 +155,8 @@ class GiskardWrapper:
     def cancel_goal_async(self) -> Future:
         """
         Stops the goal that was last sent to Giskard.
+
+        :return: future that completes once the cancel request was answered
         """
         try:
             future = self._client._goal_handle.cancel_goal_async()
