@@ -258,7 +258,7 @@ class PhaseBreakdownResult(ExperimentResult):
 
 
 @dataclass
-class BenchmarkSweep:
+class BenchmarkMultiRun:
     """
     Runs every requested configuration in a subprocess and collects the results.
     """
@@ -413,7 +413,7 @@ def run_sweep(arguments: argparse.Namespace) -> None:
         "plain": [PlotterMode.PLAIN],
         "both": [PlotterMode.PLAIN, PlotterMode.DEBUG],
     }[arguments.plotters]
-    sweep = BenchmarkSweep(
+    sweep = BenchmarkMultiRun(
         scenario_names=arguments.scenarios,
         plotter_modes=plotter_modes,
         repeats=arguments.repeats,
