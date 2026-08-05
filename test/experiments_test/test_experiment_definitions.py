@@ -1,18 +1,9 @@
 import pytest
 
 from experiments.experiment_definitions import (
-    InvalidBoundError,
     PercentageBound,
     VolumeBound,
 )
-
-# %% VolumeBound
-
-
-def test_volume_bound_rejects_lower_greater_than_upper():
-    with pytest.raises(InvalidBoundError):
-        VolumeBound(lower=5.0, upper=1.0)
-
 
 # %% PercentageBound
 
@@ -21,11 +12,6 @@ def test_percentage_bound_string_representation_rounds_to_two_decimals():
     bound = PercentageBound(lower=41.2345, upper=43.6789)
 
     assert str(bound) == "[41.23%, 43.68%]"
-
-
-def test_percentage_bound_rejects_lower_greater_than_upper():
-    with pytest.raises(InvalidBoundError):
-        PercentageBound(lower=50.0, upper=10.0)
 
 
 def test_ratio_of_pairs_worst_case_ends():

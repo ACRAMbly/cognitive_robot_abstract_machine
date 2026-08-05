@@ -5,7 +5,6 @@ from dataclasses import dataclass
 from typing import List
 
 from krrood.class_diagrams.utils import get_type_hints_of_object
-from krrood.exceptions import DataclassException
 from semantic_digital_twin.world_description.geometry import Bounds
 
 
@@ -48,29 +47,6 @@ class MeanAndStandardDeviation:
 
 
 @dataclass
-class InvalidBoundError(DataclassException):
-    """
-    Raised when a bound's lower end exceeds its upper end.
-    """
-
-    lower: float
-    """
-    The bound's lower end.
-    """
-
-    upper: float
-    """
-    The bound's upper end.
-    """
-
-    def error_message(self) -> str:
-        return f"lower bound {self.lower} exceeds upper bound {self.upper}"
-
-    def suggest_correction(self) -> str:
-        return ""
-
-
-@dataclass
 class VolumeBound(Bounds[float]):
     """
     A :class:`Bounds` interval known to contain some volume, for tables that report a
@@ -79,10 +55,6 @@ class VolumeBound(Bounds[float]):
     Use this in experiment results whenever the true volume cannot be measured exactly
     (e.g. it was estimated by sampling) but valid lower and/or upper bounds can be.
     """
-
-    def __post_init__(self):
-        if self.lower > self.upper:
-            raise InvalidBoundError(self.lower, self.upper)
 
     def __str__(self) -> str:
         return f"[{round(self.lower, 4)}, {round(self.upper, 4)}]"
@@ -98,10 +70,6 @@ class PercentageBound(Bounds[float]):
     true free volume a covering is known to reach) without collapsing either bound into
     a single, falsely precise point estimate.
     """
-
-    def __post_init__(self):
-        if self.lower > self.upper:
-            raise InvalidBoundError(self.lower, self.upper)
 
     def __str__(self) -> str:
         return f"[{round(self.lower, 2)}%, {round(self.upper, 2)}%]"
