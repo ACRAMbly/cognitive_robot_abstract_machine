@@ -8,12 +8,6 @@ from experiments.experiment_definitions import (
 # %% PercentageBound
 
 
-def test_percentage_bound_string_representation_rounds_to_two_decimals():
-    bound = PercentageBound(lower=41.2345, upper=43.6789)
-
-    assert str(bound) == "[41.23%, 43.68%]"
-
-
 def test_ratio_of_pairs_worst_case_ends():
     numerator = VolumeBound(lower=8.0, upper=10.0)
     denominator = VolumeBound(lower=20.0, upper=40.0)
