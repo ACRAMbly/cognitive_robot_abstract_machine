@@ -270,10 +270,7 @@ class MonteCarloFreeSpaceSampler:
     ) -> Tuple[float, float]:
         """
         Wilson score confidence interval for the true proportion of successes among
-        *total* Bernoulli trials.
-
-        Wilson, E. B. (1927). Probable inference, the law of succession, and statistical
-        inference. *Journal of the American Statistical Association*, 22(158), 209-212.
+        *total* Bernoulli trials, following :cite:t:`wilson1927probable`.
 
         :param success_count: Number of observed successes.
         :param total: Number of trials.
