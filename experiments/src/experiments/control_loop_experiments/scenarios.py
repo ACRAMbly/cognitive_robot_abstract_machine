@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import cProfile
 from abc import ABC, abstractmethod
+from contextlib import AbstractContextManager
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import ClassVar, Dict, List, Type
@@ -81,6 +82,8 @@ class PlotterMode(Enum):
     def records_trajectory(self) -> bool:
         """
         Whether Giskard has to keep the trajectory around for the plotters.
+
+        :return: True if the trajectory has to be kept.
         """
         return self is PlotterMode.DEBUG
 
@@ -206,12 +209,17 @@ class BenchmarkRobot(GiskardTester):
     def control_dt(self) -> float:
         """
         Seconds one control cycle may take before the robot is commanded too late.
+
+        :return: The length of one control cycle in seconds.
         """
         return self.giskard.executor.context.qp_controller_config.control_dt
 
     def get_kinematic_structure(self, name: str):
         """
         The kinematic structure entity of the given name.
+
+        :param name: Name of the kinematic structure entity in the world.
+        :return: The entity registered under that name.
         """
         return self.api.world.get_kinematic_structure_entity_by_name(name)
 
@@ -221,6 +229,8 @@ class BenchmarkRobot(GiskardTester):
 
         This runs as a motion of its own, so the measured motion starts from a defined
         state.
+
+        :param joint_state: Target position for each connection, by connection name.
         """
         connections = {
             self.api.world.get_connection_by_name(name): target
@@ -251,6 +261,11 @@ class BenchmarkRobot(GiskardTester):
         """
         Load a whole environment into the world, which grows the cost of forward
         kinematics and collision checking.
+
+        :param name: Name the environment is added under.
+        :param package_path: Package path of the xacro or urdf describing the
+            environment.
+        :param pose: Where the environment is placed in the world.
         """
         self.default_env_name = name
         self.add_urdf_to_world(name=name, urdf=load_xacro(package_path), pose=pose)
@@ -274,17 +289,25 @@ class BenchmarkScenario(ABC):
     def seed_joint_state(self, robot: BenchmarkRobot) -> Dict[str, float]:
         """
         The configuration the robot is teleported into before the motion starts.
+
+        :param robot: The robot the motion is measured on.
+        :return: Target position for each connection, by connection name.
         """
 
     def prepare(self, robot: BenchmarkRobot) -> None:
         """
         Put everything the motion needs into the world before it is measured.
+
+        :param robot: The robot the motion is measured on.
         """
 
     @abstractmethod
     def build_motion_statechart(self, robot: BenchmarkRobot) -> MotionStatechart:
         """
         Describe the motion that is measured.
+
+        :param robot: The robot the motion is measured on.
+        :return: The statechart describing the measured motion.
         """
 
 
@@ -545,7 +568,7 @@ Every scenario the control loop can be measured on, by name.
 
 
 @dataclass
-class IsolatedBenchmarkSession:
+class IsolatedBenchmarkSession(AbstractContextManager):
     """
     Gives one measurement a ros node and a symbol graph of its own.
 
@@ -605,6 +628,9 @@ class ScenarioRunner:
     def run(self, scenario: BenchmarkScenario) -> CallTreeProfile:
         """
         Measure one motion of the given scenario on a freshly built robot.
+
+        :param scenario: The scenario whose motion is measured.
+        :return: The call tree recorded while the motion ran.
         """
         robot = BenchmarkRobot(
             plotter_mode=self.plotter_mode, target_frequency=self.target_frequency
@@ -627,6 +653,9 @@ class ScenarioRunner:
     ) -> None:
         """
         Run the motion, with the python profiler active if one was given.
+
+        :param robot: The robot the motion is executed on.
+        :param motion_statechart: The motion that is executed.
         """
         if self.python_profiler is None:
             robot.api.execute(motion_statechart)
