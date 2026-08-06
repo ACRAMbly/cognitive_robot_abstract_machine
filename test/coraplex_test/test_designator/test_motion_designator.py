@@ -442,23 +442,24 @@ def test_alternative_mapping(hsr_apartment_world):
 
 def test_looking_motion_pointing_parameters(immutable_model_world):
     """
-    The looking motion drives the camera with a wide convergence threshold and a raised
-    velocity, so the head settles quickly instead of trimming towards a precise angle.
+    The looking motion aims the camera's forward axis at the target, moving the head
+    relative to the torso so the rest of the body stays where it is.
     """
     world, view, context = immutable_model_world
     camera = view.get_default_camera()
-    motion = LookingMotion(
-        target=Pose(Point3.from_iterable([1, 1, 1]), reference_frame=world.root),
-        camera=camera,
-    )
+    target = Pose(Point3.from_iterable([1, 1, 1]), reference_frame=world.root)
+    motion = LookingMotion(target=target, camera=camera)
     execute_single(motion, context=context)
 
     pointing = motion.motion_chart
 
     assert isinstance(pointing, Pointing)
-    assert pointing.max_velocity == 1.0
-    assert pointing.threshold == 0.5
+    assert pointing.root_link is view.get_torso().root
+    assert pointing.tip_link is camera.root
     assert pointing.pointing_axis is camera.forward_facing_axis
+    assert pointing.pointing_axis.reference_frame is camera.root
+    assert pointing.goal_point.reference_frame is world.root
+    assert np.array_equal(pointing.goal_point.to_np(), target.to_position().to_np())
 
 
 # %% stretch tool center point
@@ -515,15 +516,12 @@ def test_stretch_tool_center_point_accepts_a_local_minimum(
 
     assert isinstance(reaching_stage, Parallel)
     assert reaching_stage.minimum_success == 1
-    assert {type(node) for node in reaching_stage.nodes} == {CartesianPose, Parallel}
-    convergence_stage = next(
-        node for node in reaching_stage.nodes if isinstance(node, Parallel)
-    )
-    assert {type(node) for node in convergence_stage.nodes} == {LocalMinimumReached}
+    assert {type(node) for node in reaching_stage.nodes} == {
+        CartesianPose,
+        LocalMinimumReached,
+    }
     local_minimum = next(
-        node
-        for node in convergence_stage.nodes
-        if isinstance(node, LocalMinimumReached)
+        node for node in reaching_stage.nodes if isinstance(node, LocalMinimumReached)
     )
     assert local_minimum.joint_convergence_threshold == 0.025
 
