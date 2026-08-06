@@ -2047,11 +2047,13 @@ def trinary_logic_not(expression: FloatVariable | Scalar) -> Scalar:
 
 def trinary_logic_and(*args: FloatVariable | Scalar) -> Scalar:
     """
-    AND   |  True   | Unknown | False ------------------+---------+------- True    |
-    True   | Unknown | False Unknown | Unknown | Unknown | False False   |  False  |
-    False  | False.
+    AND   |  True   | Unknown | False
+    ------------------+---------+-------
+    True    | True   | Unknown | False
+    Unknown | Unknown | Unknown | False
+    False   |  False  | False  | False.
     """
-    assert len(args) >= 2, "and must be called with at least 2 arguments"
+    assert len(args) >= 2, "trinary_logic_and must be called with at least 2 arguments"
     # if there is any False, return False
     if any(x for x in args if x.is_const_false()):
         return Scalar.const_false()
@@ -2069,11 +2071,13 @@ def trinary_logic_and(*args: FloatVariable | Scalar) -> Scalar:
 
 def trinary_logic_or(*args: FloatVariable | Scalar) -> Scalar:
     """
-    OR   |  True   | Unknown | False ------------------+---------+------- True    | True
-    |  True   | True Unknown |  True   | Unknown | Unknown False   |  True   | Unknown |
-    False.
+    OR   |  True   | Unknown | False
+    ------------------+---------+-------
+    True    | True     |  True   | True
+    Unknown |  True   | Unknown | Unknown
+    False   |  True   | Unknown | False.
     """
-    assert len(args) >= 2, "and must be called with at least 2 arguments"
+    assert len(args) >= 2, "trinary_logic_or must be called with at least 2 arguments"
     # if there is any False, return False
     if any(x for x in args if x.is_const_true()):
         return Scalar.const_true()

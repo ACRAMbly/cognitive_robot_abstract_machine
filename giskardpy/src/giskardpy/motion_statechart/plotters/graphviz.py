@@ -109,6 +109,8 @@ class MotionStatechartGraphviz:
             f"  </TD>"
             f"</TR>"
         )
+        if node.plot_specifications.collapse_children:
+            label += self._build_hidden_node_count_block(node)
         if self.compact:
             label += (
                 f"<TR>" f'  <TD WIDTH="100%" HEIGHT="{LineWidth*2.5}"></TD>' f"</TR>"
@@ -117,6 +119,29 @@ class MotionStatechartGraphviz:
             label += self._build_condition_block(node)
         label += f"</TABLE>>"
         return label
+
+    def _build_hidden_node_count_block(self, node: MotionStatechartNode) -> str:
+        """
+        Builds the label row telling the reader how many descendants of `node` are left
+        out of the drawing.
+        """
+        hidden_node_count = self._count_descendants(node)
+        plural = "s" if hidden_node_count != 1 else ""
+        return (
+            f"<TR>"
+            f'  <TD><FONT FACE="{ConditionFont}">'
+            f"[+] {hidden_node_count} node{plural} hidden"
+            f"</FONT></TD>"
+            f"</TR>"
+        )
+
+    def _count_descendants(self, node: MotionStatechartNode) -> int:
+        """
+        :return: The number of nodes below `node`, nested goals included.
+        """
+        if not isinstance(node, Goal):
+            return 0
+        return sum(1 + self._count_descendants(child_node) for child_node in node.nodes)
 
     def _build_condition_block(
         self, node: MotionStatechartNode, line_color="black"
@@ -166,15 +191,15 @@ class MotionStatechartGraphviz:
         node: MotionStatechartNode,
     ) -> pydot.Node:
         pydot_node = self._create_pydot_node(node)
-        if len(node.plot_specs.extra_border_styles) == 0:
+        if len(node.plot_specifications.extra_border_styles) == 0:
             graph.add_node(pydot_node)
             return pydot_node
         child = pydot_node
-        for index, style in enumerate(node.plot_specs.extra_border_styles):
+        for index, style in enumerate(node.plot_specifications.extra_border_styles):
             c = pydot.Cluster(
                 graph_name=f"{node.unique_name}",
                 penwidth=LineWidth,
-                style=node.plot_specs.extra_border_styles[index],
+                style=node.plot_specifications.extra_border_styles[index],
                 color="black",
             )
             if index == 0:
@@ -182,7 +207,7 @@ class MotionStatechartGraphviz:
             else:
                 c.add_subgraph(child)
             child = c
-        if len(node.plot_specs.extra_border_styles) > 0:
+        if len(node.plot_specifications.extra_border_styles) > 0:
             graph.add_subgraph(c)
         return pydot_node
 
@@ -191,9 +216,9 @@ class MotionStatechartGraphviz:
         pydot_node = pydot.Node(
             str(node.unique_name),
             label=label,
-            shape=node.plot_specs.shape,
+            shape=node.plot_specifications.shape,
             color="black",
-            style=node.plot_specs.style,
+            style=node.plot_specifications.style,
             margin=0,
             fillcolor="white",
             fontname=FONT,
@@ -218,14 +243,16 @@ class MotionStatechartGraphviz:
         self.graph.write_pdf(file_name)
         print(f"Saved task graph at {file_name}.")
 
-    def _is_visible_in_hierarchy(self, node: MotionStatechartNode) -> bool:
+    def _is_drawn(self, node: MotionStatechartNode) -> bool:
         """
         Return False if the node or any of its ancestors is marked invisible in plot
-        specs.
+        specs, or if one of its ancestors collapses its children.
         """
-        current = node
+        if not node.plot_specifications.visible:
+            return False
+        current = node.parent_node
         while current is not None:
-            if not current.plot_specs.visible:
+            if not current.plot_specifications.visible or current.plot_specifications.collapse_children:
                 return False
             current = current.parent_node
         return True
@@ -236,18 +263,19 @@ class MotionStatechartGraphviz:
         nodes: List[MotionStatechartNode],
     ):
         for i, node in enumerate(nodes):
-            # Skip invisible nodes entirely. If a Goal is invisible, skip its children as well.
-            if not self._is_visible_in_hierarchy(node):
+            # Skip invisible nodes entirely, as well as the children of a Goal that is
+            # invisible or collapses them.
+            if not self._is_drawn(node):
                 continue
 
-            if isinstance(node, Goal):
+            if isinstance(node, Goal) and not node.plot_specifications.collapse_children:
                 goal_cluster = self._add_cluster(node, parent_cluster)
                 self._add_node(
                     graph=goal_cluster,
                     node=node,
                 )
-                # Recurse only into visible children; _add_nodes applies visibility filtering
                 self._add_nodes(goal_cluster, node.nodes)
+                continue
 
             self._add_node(
                 parent_cluster,
@@ -284,10 +312,10 @@ class MotionStatechartGraphviz:
             )
             child_node = self.motion_statechart.rx_graph.get_node_data(child_node_index)
 
-            # Skip edges if either endpoint (or one of its ancestors) is invisible
-            if not self._is_visible_in_hierarchy(parent_node):
+            # Skip edges if either endpoint (or one of its ancestors) is not drawn
+            if not self._is_drawn(parent_node):
                 continue
-            if not self._is_visible_in_hierarchy(child_node):
+            if not self._is_drawn(child_node):
                 continue
 
             if not self._are_nodes_in_same_cluster(parent_node, child_node):
