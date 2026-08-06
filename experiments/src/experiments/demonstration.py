@@ -42,6 +42,15 @@ waits this long for the same race: the world-fetcher server is still parsing the
 starting up when a shorter budget would expire.
 """
 
+SPIN_THREAD_JOIN_TIMEOUT_SECONDS = 5.0
+"""
+How long to wait for the executor's spin thread to exit after :meth:`Executor.shutdown`.
+
+A daemon thread still running rclpy's native code when the interpreter starts finalizing
+gets torn down mid-call, which crashes the process rather than raising a catchable
+exception. Joining it here ensures it has actually left that code first.
+"""
+
 
 @dataclass
 class RobotDemonstrationRosSession:
@@ -67,6 +76,11 @@ class RobotDemonstrationRosSession:
     Whether this session initialized rclpy and must therefore shut it down again.
     """
 
+    spin_thread: threading.Thread = field(init=False)
+    """
+    Thread running :attr:`executor`'s spin loop, joined again in :meth:`stop`.
+    """
+
     @classmethod
     def start(cls, node_name: str) -> RobotDemonstrationRosSession:
         """
@@ -80,10 +94,12 @@ class RobotDemonstrationRosSession:
         node = rclpy.create_node(node_name)
         executor = SingleThreadedExecutor()
         executor.add_node(node)
-        threading.Thread(
+        session = cls(node=node, executor=executor, owns_context=owns_context)
+        session.spin_thread = threading.Thread(
             target=executor.spin, daemon=True, name=f"{node_name}-executor"
-        ).start()
-        return cls(node=node, executor=executor, owns_context=owns_context)
+        )
+        session.spin_thread.start()
+        return session
 
     def fetch_world(
         self, timeout_seconds: float = WORLD_FETCH_TIMEOUT_SECONDS
@@ -100,6 +116,7 @@ class RobotDemonstrationRosSession:
         Destroy the node, and release the ROS context if this session created it.
         """
         self.executor.shutdown()
+        self.spin_thread.join(timeout=SPIN_THREAD_JOIN_TIMEOUT_SECONDS)
         self.node.destroy_node()
         if self.owns_context and rclpy.ok():
             rclpy.shutdown()
@@ -121,7 +138,8 @@ class RobotDemonstration(ABC):
 
     A real run takes its world from the controller and keeps it synchronized, so the
     objects the demonstration spawns reach the controller before the plan needs them. A
-    simulated run builds its own world and touches no network.
+    simulated run builds its own world and publishes it to Rviz, so its progress can be
+    watched the same way a real run's can.
     """
 
     used_robot: Type[AbstractRobot]

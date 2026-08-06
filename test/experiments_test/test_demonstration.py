@@ -100,10 +100,10 @@ class RecordingDemonstration(RobotDemonstration):
 # %% world acquisition
 
 
-def test_simulated_run_never_starts_a_ros_session(cylinder_bot_world):
+def test_simulated_run_still_builds_its_own_world(cylinder_bot_world):
     """
-    A simulated run builds its own world, so it must not touch the network or leave a
-    ROS session behind.
+    A simulated run builds its own world rather than fetching one from a controller,
+    even though it starts a ROS session of its own to visualize that world.
     """
     demonstration = RecordingDemonstration(
         world=cylinder_bot_world, used_robot=MinimalRobot
@@ -112,8 +112,10 @@ def test_simulated_run_never_starts_a_ros_session(cylinder_bot_world):
     acquired_world = demonstration.acquire_world()
 
     assert acquired_world is cylinder_bot_world
-    assert demonstration.ros_session is None
-    assert demonstration.ros_node is None
+    assert demonstration.ros_session is not None
+    assert demonstration.ros_node is not None
+
+    demonstration.tear_down()
 
 
 # %% scene population
