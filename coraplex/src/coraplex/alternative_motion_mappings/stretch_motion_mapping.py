@@ -77,14 +77,7 @@ class StretchMoveToolCenterPoint(MoveToolCenterPointMotion, AlternativeMotion[St
                             tip_link=tip,
                             goal_pose=self.target,
                         ),
-                        Parallel(
-                            [
-                                LocalMinimumReached(joint_convergence_threshold=0.025),
-                                # We force stretch to move at least one second in real time, as otherwise the local
-                                # minimum is reached too quickly causing the robot not to move at all sometimes
-                                CountSeconds(seconds=1),
-                            ]
-                        ),
+                        LocalMinimumReached(joint_convergence_threshold=0.025),
                     ],
                     minimum_success=1,
                 ),
@@ -194,12 +187,9 @@ class StretchMoveGripperMotion(MoveGripperMotion, AlternativeMotion[Stretch]):
                     ),
                     threshold=0,
                 ),
-                # We force stretch to move at least one second in real time, as otherwise the local
-                # minimum is reached too quickly causing the robot not to move at all sometimes
-                CountSeconds(seconds=1),
                 LocalMinimumReached(
                     joint_convergence_threshold=0.1, minimum_threshold=0.0
                 ),
             ],
-            minimum_success=2,
+            minimum_success=1,
         )

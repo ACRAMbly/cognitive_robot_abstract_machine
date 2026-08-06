@@ -19,8 +19,7 @@ from experiments.real_stretch_apartment_demo.demo import (
 )
 from semantic_digital_twin.semantic_annotations.semantic_annotations import CheezeIt
 
-from ..dataset import PERCEPTION_PIPELINE_STAND_IN_PATH
-from ..standalone_process import StandaloneProcess
+from coraplex.testing import StandaloneProcess
 
 # %% standalone controller process
 
@@ -127,7 +126,9 @@ def cereal_perception_process(stretch_controller_process):
 
     position = CEREAL_SHELF_LAYER_T_CEREAL.to_position().to_np().flatten()[:3]
     with StandaloneProcess(
-        launcher_path=PERCEPTION_PIPELINE_STAND_IN_PATH,
+        launcher_path=Path(__file__).parent
+        / "dataset"
+        / "perception_pipeline_stand_in.py",
         is_ready=is_serving_queries,
         arguments=[
             "--class-label",

@@ -51,7 +51,7 @@ def test_create_with_dofs_threads_parent_T_connection_expression(world_with_two_
             parent_T_connection_expression=parent_T_connection,
         )
         world.add_connection(connection)
-    assert_allclose(connection.origin.to_np(), parent_T_connection.to_np(), atol=1e-9)
+    assert_allclose(connection.origin, parent_T_connection, atol=1e-9)
 
 
 def test_connection6dof_origin_setter_round_trips_with_non_identity_constants(
@@ -68,9 +68,7 @@ def test_connection6dof_origin_setter_round_trips_with_non_identity_constants(
     parent_T_connection = HomogeneousTransformationMatrix.from_xyz_rpy(
         x=0.3, y=0.4, z=0.1
     )
-    connection_T_child = HomogeneousTransformationMatrix.from_xyz_rpy(
-        x=0.05, yaw=0.2
-    )
+    connection_T_child = HomogeneousTransformationMatrix.from_xyz_rpy(x=0.05, yaw=0.2)
     with world.modify_world():
         connection = Connection6DoF.create_with_dofs(
             world,
@@ -86,7 +84,7 @@ def test_connection6dof_origin_setter_round_trips_with_non_identity_constants(
     )
     connection.origin = desired_origin
 
-    assert_allclose(connection.origin.to_np(), desired_origin.to_np(), atol=1e-9)
+    assert_allclose(connection.origin, desired_origin, atol=1e-9)
 
 
 def test_connection6dof_origin_setter_requires_a_reference_frame(world_with_two_bodies):
@@ -95,8 +93,8 @@ def test_connection6dof_origin_setter_requires_a_reference_frame(world_with_two_
         connection = Connection6DoF.create_with_dofs(world, parent, child)
         world.add_connection(connection)
 
-    transformation_without_reference_frame = HomogeneousTransformationMatrix.from_xyz_rpy(
-        x=1.0
+    transformation_without_reference_frame = (
+        HomogeneousTransformationMatrix.from_xyz_rpy(x=1.0)
     )
 
     with pytest.raises(MissingReferenceFrameError):
@@ -132,9 +130,7 @@ def test_connection6dof_origin_setter_converts_from_a_non_parent_reference_frame
     connection.origin = desired_origin_in_grandparent
 
     expected_origin_in_parent = world.transform(desired_origin_in_grandparent, parent)
-    assert_allclose(
-        connection.origin.to_np(), expected_origin_in_parent.to_np(), atol=1e-9
-    )
+    assert_allclose(connection.origin, expected_origin_in_parent, atol=1e-9)
 
 
 def test_reference_origin_excludes_joint_state(world_with_two_bodies):

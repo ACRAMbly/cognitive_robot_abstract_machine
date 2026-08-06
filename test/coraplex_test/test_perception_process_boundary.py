@@ -12,6 +12,7 @@ spend.
 from __future__ import annotations
 
 from datetime import timedelta
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -25,8 +26,7 @@ from coraplex.perception import (
 )
 from semantic_digital_twin.semantic_annotations.semantic_annotations import Milk
 
-from ..dataset import PERCEPTION_PIPELINE_STAND_IN_PATH
-from ..standalone_process import StandaloneProcess
+from coraplex.testing import StandaloneProcess
 
 REPORTED_CLASS_LABEL = "Milk"
 """
@@ -67,7 +67,9 @@ def pipeline_process_reporting(rclpy_node):
 
     def start(class_label: str) -> StandaloneProcess:
         process = StandaloneProcess(
-            launcher_path=PERCEPTION_PIPELINE_STAND_IN_PATH,
+            launcher_path=Path(__file__).parent.parent
+            / "dataset"
+            / "perception_pipeline_stand_in.py",
             is_ready=is_serving_queries,
             arguments=[
                 "--class-label",

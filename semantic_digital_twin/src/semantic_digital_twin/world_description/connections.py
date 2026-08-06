@@ -747,8 +747,8 @@ class Connection6DoF(Connection):
             @ parent_T_child
             @ self.connection_T_child_expression.inverse()
         )
-        position = local_kinematics.to_position().to_np()
-        orientation = local_kinematics.to_rotation_matrix().to_quaternion().to_np()
+        position = local_kinematics.to_position()
+        orientation = local_kinematics.to_rotation_matrix().to_quaternion()
         self._world.state[self.x.id].position = position[0]
         self._world.state[self.y.id].position = position[1]
         self._world.state[self.z.id].position = position[2]
