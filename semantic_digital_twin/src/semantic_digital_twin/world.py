@@ -2312,6 +2312,8 @@ class World(HasSimulatorProperties):
         """
         if spatial_object.reference_frame is None:
             raise MissingReferenceFrameError(spatial_object)
+        if spatial_object.reference_frame == target_frame:
+            return spatial_object
         target_frame_T_reference_frame = self.compute_forward_kinematics(
             root=target_frame, tip=spatial_object.reference_frame
         )
