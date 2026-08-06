@@ -1,4 +1,3 @@
-import traceback
 from threading import Thread
 
 from py_trees.common import Status
