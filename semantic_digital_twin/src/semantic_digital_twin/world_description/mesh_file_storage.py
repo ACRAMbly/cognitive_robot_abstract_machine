@@ -4,11 +4,36 @@ import atexit
 import os
 import shutil
 import tempfile
+from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
 
+import psutil
 from krrood.singleton import SingletonMeta
 from typing_extensions import ClassVar
+
+
+class ProcessLiveness(ABC):
+    """
+    Answers whether a process is still running.
+    """
+
+    @abstractmethod
+    def is_alive(self, process_id: int) -> bool:
+        """
+        :param process_id: The process to ask about.
+        :return: Whether a process with that id is running.
+        """
+
+
+@dataclass
+class RunningProcessLiveness(ProcessLiveness):
+    """
+    Answers from the process table of the machine this runs on.
+    """
+
+    def is_alive(self, process_id: int) -> bool:
+        return psutil.pid_exists(process_id)
 
 
 @dataclass
@@ -30,6 +55,18 @@ class MeshFileStorage(metaclass=SingletonMeta):
     Marks a temporary directory as a mesh session root of this package.
     """
 
+    temporary_directory: Path = field(
+        default_factory=lambda: Path(tempfile.gettempdir())
+    )
+    """
+    The directory the root is created in, and the one searched for abandoned roots.
+    """
+
+    process_liveness: ProcessLiveness = field(default_factory=RunningProcessLiveness)
+    """
+    Decides whether the process a root is named after is still running.
+    """
+
     owner_process_id: int = field(init=False, default_factory=os.getpid)
     """
     The process that created the root, and the only one permitted to remove it.
@@ -44,10 +81,11 @@ class MeshFileStorage(metaclass=SingletonMeta):
         self.root = Path(
             tempfile.mkdtemp(
                 prefix=f"{self.root_prefix}{self.owner_process_id}_",
-                dir=tempfile.gettempdir(),
+                dir=self.temporary_directory,
             )
         )
         atexit.register(self.remove)
+        self.remove_abandoned_roots()
 
     @staticmethod
     def create_mesh_directory(parent: Path) -> Path:
@@ -81,3 +119,24 @@ class MeshFileStorage(metaclass=SingletonMeta):
             return
         atexit.unregister(self.remove)
         shutil.rmtree(self.root, ignore_errors=True)
+
+    def remove_abandoned_roots(self) -> None:
+        """
+        Delete the roots of processes that are no longer running.
+
+        A root outlives its process whenever that process is killed instead of allowed to
+        exit, because nothing runs at shutdown to clean up after it then.
+
+        ..warning:: A process is recognised by its id, which is unique only within a
+            process namespace. Containers sharing a temporary directory see each other's
+            ids and would need another way to tell a live root apart.
+        """
+        for candidate in self.temporary_directory.glob(f"{self.root_prefix}*"):
+            if candidate == self.root:
+                continue
+            process_id = candidate.name[len(self.root_prefix) :].split("_")[0]
+            if not process_id.isdigit():
+                continue
+            if self.process_liveness.is_alive(int(process_id)):
+                continue
+            shutil.rmtree(candidate, ignore_errors=True)

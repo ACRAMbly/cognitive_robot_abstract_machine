@@ -147,7 +147,7 @@ def test_exported_mesh_gets_a_directory_of_its_own():
     )
 
     mesh_directory = Path(mesh.filename).parent
-    assert mesh_directory != MeshFileStorage().root
+    assert mesh_directory.parent.name.startswith(MeshFileStorage.root_prefix)
     assert {path.suffix for path in mesh_directory.iterdir()} == {
         ".obj",
         ".mtl",
