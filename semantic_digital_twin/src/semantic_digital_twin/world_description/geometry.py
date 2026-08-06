@@ -404,6 +404,18 @@ class Shape(ABC, SubclassJSONSerializer, HasSimulatorProperties):
         This should be implemented by subclasses.
         """
 
+    def mesh_in_frame(self, target_frame: KinematicStructureEntity) -> trimesh.Trimesh:
+        """
+        :param target_frame: The kinematic structure entity to express the mesh
+            relative to.
+        :return: A copy of :attr:`mesh` transformed from this shape's own frame into
+            *target_frame*.
+        """
+        world = self.origin.reference_frame._world
+        world_mesh = self.mesh.copy()
+        world_mesh.apply_transform(world.transform(self.origin, target_frame).to_np())
+        return world_mesh
+
     def to_json(self) -> Dict[str, Any]:
         return {
             **super().to_json(),
