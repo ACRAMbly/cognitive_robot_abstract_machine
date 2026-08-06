@@ -23,6 +23,7 @@ from semantic_digital_twin.adapters.ros.visualization.viz_marker import (
     VizMarkerPublisher,
 )
 from semantic_digital_twin.datastructures.joint_state import JointState
+from semantic_digital_twin.robots.hsrb import HSRBJoint
 from semantic_digital_twin.spatial_types import Point3, Vector3
 from semantic_digital_twin.world import World
 from test.semantic_digital_twin_test.test_orm.test_orm import hsr_world_state_reset
@@ -141,13 +142,13 @@ def test_wiggle_insert_on_tick_updates_noise(pr2_world_state_reset: World):
 
 def test_wiggle_insert(hsr_world_state_reset):
     goal_state = {
-        "arm_flex_joint": -1.5,
-        "arm_lift_joint": 0.5,
-        "arm_roll_joint": 0.0,
-        "head_pan_joint": 0.0,
-        "head_tilt_joint": 0.0,
-        "wrist_flex_joint": -1.5,
-        "wrist_roll_joint": 0.0,
+        HSRBJoint.ARM_FLEX: -1.5,
+        HSRBJoint.ARM_LIFT: 0.5,
+        HSRBJoint.ARM_ROLL: 0.0,
+        HSRBJoint.HEAD_PAN: 0.0,
+        HSRBJoint.HEAD_TILT: 0.0,
+        HSRBJoint.WRIST_FLEX: -1.5,
+        HSRBJoint.WRIST_ROLL: 0.0,
     }
 
     hpl = hsr_world_state_reset.get_body_by_name("hand_gripper_tool_frame")
