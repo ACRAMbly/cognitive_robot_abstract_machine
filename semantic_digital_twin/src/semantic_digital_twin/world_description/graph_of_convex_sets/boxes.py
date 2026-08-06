@@ -46,20 +46,20 @@ logger = logging.getLogger(__name__)
 
 
 def _segment_box_overlap(
-    start: Point3, direction: Vector3, box: BoundingBox
+    coordinates: Tuple[float, float, float],
+    deltas: Tuple[float, float, float],
+    box: BoundingBox,
 ) -> Optional[Tuple[float, float]]:
     """
-    Clip the parametrized segment ``start + t * direction`` (``t`` in ``[0, 1]``)
+    Clip the parametrized segment ``coordinates + t * deltas`` (``t`` in ``[0, 1]``)
     against an axis-aligned box, using the slab method.
 
-    :param start: The segment's start point.
-    :param direction: The vector from the segment's start to its end.
+    :param coordinates: The segment's start point, as plain floats.
+    :param deltas: The vector from the segment's start to its end, as plain floats.
     :param box: The box to clip the segment against.
     :return: The ``(t_min, t_max)`` sub-interval of the segment that lies inside
         ``box``, or None if the segment misses ``box`` entirely.
     """
-    coordinates = (float(start.x), float(start.y), float(start.z))
-    deltas = (float(direction.x), float(direction.y), float(direction.z))
     bounds = (
         (box.x_interval.lower, box.x_interval.upper),
         (box.y_interval.lower, box.y_interval.upper),
@@ -398,10 +398,12 @@ class GraphOfBoundingBoxes(GraphOfConvexSets):
             nodes.
         """
         direction = end - start
+        coordinates = (float(start.x), float(start.y), float(start.z))
+        deltas = (float(direction.x), float(direction.y), float(direction.z))
         covered = [
             overlap
             for node in self.graph.nodes()
-            if (overlap := _segment_box_overlap(start, direction, node)) is not None
+            if (overlap := _segment_box_overlap(coordinates, deltas, node)) is not None
         ]
         return _covers_unit_interval(covered)
 
