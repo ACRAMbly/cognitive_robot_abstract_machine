@@ -1279,6 +1279,18 @@ class BoundingBox:
         """
         return [self.depth, self.width, self.height]
 
+    @property
+    def center(self) -> Point3:
+        """
+        :return: The center point of the bounding box, in the same frame as ``origin``.
+        """
+        return Point3(
+            self.x_interval.center(),
+            self.y_interval.center(),
+            self.z_interval.center(),
+            reference_frame=self.origin.reference_frame,
+        )
+
     def bloat(
         self, x_amount: float = 0.0, y_amount: float = 0, z_amount: float = 0
     ) -> BoundingBox:
