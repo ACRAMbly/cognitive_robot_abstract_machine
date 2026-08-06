@@ -840,9 +840,9 @@ class Mesh(Shape):
         """
         points = np.asarray([point.to_np()[:3] for point in points_3d], dtype=float)
         points = np.unique(points, axis=0)
-        assert (
-            len(points) >= 3
-        ), "At least 4 unique points are required to define a 3D region."
+        assert len(points) >= 3, (
+            "At least 4 unique points are required to define a 3D region."
+        )
 
         centered_points = points - points.mean(axis=0, keepdims=True)
         assert np.any(centered_points), "Points must not be all identical."
@@ -1126,6 +1126,39 @@ class Bounds(Generic[T], SubClassSafeGeneric):
     The corner with the largest coordinate on every axis.
     """
 
+    def clip_segment(
+        self, start: np.ndarray, direction: np.ndarray
+    ) -> Optional[SimpleInterval]:
+        """
+        Clip the parametrized segment ``start + t * direction`` (``t`` in ``[0, 1]``)
+        against this region, using the slab method.
+
+        Assumes ``lower``/``upper`` are plain numeric arrays, as returned by
+        :meth:`BoundingBox.to_array_bounds`.
+
+        :param start: The segment's start point.
+        :param direction: The vector from the segment's start to its end.
+        :return: The sub-interval of ``t`` for which the segment lies inside this
+            region, or None if the segment misses it entirely.
+        """
+        t_min, t_max = 0.0, 1.0
+        for coordinate, delta, lower, upper in zip(
+            start, direction, self.lower, self.upper
+        ):
+            if abs(delta) < 1e-12:
+                if coordinate < lower or coordinate > upper:
+                    return None
+                continue
+            t_enter = (lower - coordinate) / delta
+            t_exit = (upper - coordinate) / delta
+            if t_enter > t_exit:
+                t_enter, t_exit = t_exit, t_enter
+            t_min = max(t_min, t_enter)
+            t_max = min(t_max, t_exit)
+            if t_min > t_max:
+                return None
+        return SimpleInterval.from_data(t_min, t_max, Bound.CLOSED, Bound.CLOSED)
+
 
 @dataclass(eq=False)
 class BoundingBox:
@@ -1212,12 +1245,9 @@ class BoundingBox:
 
         :return: The corners, in the same frame as ``origin``.
         """
-        lower = np.array(
-            [self.x_interval.lower, self.y_interval.lower, self.z_interval.lower]
-        )
-        upper = np.array(
-            [self.x_interval.upper, self.y_interval.upper, self.z_interval.upper]
-        )
+        x, y, z = self.x_interval, self.y_interval, self.z_interval
+        lower = np.array([x.lower, y.lower, z.lower])
+        upper = np.array([x.upper, y.upper, z.upper])
         return Bounds(lower, upper)
 
     def to_point3_bounds(self) -> Bounds[Point3]:
@@ -1226,16 +1256,17 @@ class BoundingBox:
 
         :return: The corners, in the same frame as ``origin``.
         """
+        x, y, z = self.x_interval, self.y_interval, self.z_interval
         lower = Point3(
-            self.x_interval.lower,
-            self.y_interval.lower,
-            self.z_interval.lower,
+            x.lower,
+            y.lower,
+            z.lower,
             reference_frame=self.origin.reference_frame,
         )
         upper = Point3(
-            self.x_interval.upper,
-            self.y_interval.upper,
-            self.z_interval.upper,
+            x.upper,
+            y.upper,
+            z.upper,
             reference_frame=self.origin.reference_frame,
         )
         return Bounds(lower, upper)
@@ -1443,9 +1474,9 @@ class BoundingBox:
         :param min_point: The minimum point
         :param max_point: The maximum point
         """
-        assert (
-            min_point.reference_frame == max_point.reference_frame
-        ), "The reference frames of the minimum and maximum points must be the same."
+        assert min_point.reference_frame == max_point.reference_frame, (
+            "The reference frames of the minimum and maximum points must be the same."
+        )
         return cls(*min_point.to_np()[:3], *max_point.to_np()[:3], origin=origin)
 
     def as_shape(self) -> Box:

@@ -7,14 +7,15 @@ from functools import reduce
 from operator import or_
 
 import matplotlib.pyplot as plt
+import numpy as np
 import plotly.graph_objects as go
 import rustworkx as rx
-from random_events.interval import reals, closed
+from random_events.interval import reals, closed, Interval
 from random_events.product_algebra import Event
 from random_events.product_algebra import SimpleEvent
 from rtree import index
 from sortedcontainers import SortedSet
-from typing_extensions import List, Optional, Dict, Sequence, Self, Tuple
+from typing_extensions import List, Optional, Dict, Sequence, Self
 
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 from semantic_digital_twin.datastructures.variables import SpatialVariables
@@ -25,11 +26,10 @@ from semantic_digital_twin.semantic_annotations.semantic_annotations import (
 from semantic_digital_twin.spatial_types import (
     HomogeneousTransformationMatrix,
     Point3,
-    Vector3,
 )
 from semantic_digital_twin.world import World
 from semantic_digital_twin.world_description.connections import FixedConnection
-from semantic_digital_twin.world_description.geometry import BoundingBox, Color
+from semantic_digital_twin.world_description.geometry import BoundingBox, Bounds, Color
 from semantic_digital_twin.world_description.graph_of_convex_sets.base import (
     GraphOfConvexSets,
 )
@@ -43,61 +43,6 @@ from semantic_digital_twin.world_description.world_entity import (
 )
 
 logger = logging.getLogger(__name__)
-
-
-def _segment_box_overlap(
-    coordinates: Tuple[float, float, float],
-    deltas: Tuple[float, float, float],
-    lower: Tuple[float, float, float],
-    upper: Tuple[float, float, float],
-) -> Optional[Tuple[float, float]]:
-    """
-    Clip the parametrized segment ``coordinates + t * deltas`` (``t`` in ``[0, 1]``)
-    against an axis-aligned box, using the slab method.
-
-    :param coordinates: The segment's start point, as plain floats.
-    :param deltas: The vector from the segment's start to its end, as plain floats.
-    :param lower: The box's minimum corner, as plain floats.
-    :param upper: The box's maximum corner, as plain floats.
-    :return: The ``(t_min, t_max)`` sub-interval of the segment that lies inside
-        the box, or None if the segment misses it entirely.
-    """
-    t_min, t_max = 0.0, 1.0
-    for coordinate, delta, lo, hi in zip(coordinates, deltas, lower, upper):
-        if abs(delta) < 1e-12:
-            if coordinate < lo or coordinate > hi:
-                return None
-            continue
-        t_enter = (lo - coordinate) / delta
-        t_exit = (hi - coordinate) / delta
-        if t_enter > t_exit:
-            t_enter, t_exit = t_exit, t_enter
-        t_min = max(t_min, t_enter)
-        t_max = min(t_max, t_exit)
-        if t_min > t_max:
-            return None
-    return t_min, t_max
-
-
-def _covers_unit_interval(
-    intervals: List[Tuple[float, float]], tolerance: float = 1e-6
-) -> bool:
-    """
-    Check whether a set of ``(t_min, t_max)`` intervals fully covers ``[0, 1]``.
-
-    :param intervals: The intervals to merge and check.
-    :param tolerance: The largest gap between neighbouring intervals that still counts
-        as continuous coverage, to absorb floating-point noise at box boundaries.
-    :return: True if the union of ``intervals`` covers ``[0, 1]``.
-    """
-    covered_up_to = 0.0
-    for lower, upper in sorted(intervals):
-        if lower > covered_up_to + tolerance:
-            return False
-        covered_up_to = max(covered_up_to, upper)
-        if covered_up_to >= 1.0 - tolerance:
-            return True
-    return covered_up_to >= 1.0 - tolerance
 
 
 @dataclass
@@ -378,12 +323,7 @@ class GraphOfBoundingBoxes(GraphOfConvexSets):
         # BoundingBox.x_interval/y_interval/z_interval recompute symbolic arithmetic
         # on every access, so every node's bounds are read as plain floats exactly
         # once here rather than once per collision check below.
-        node_bounds = []
-        for node in self.graph.nodes():
-            x, y, z = node.x_interval, node.y_interval, node.z_interval
-            node_bounds.append(
-                ((x.lower, y.lower, z.lower), (x.upper, y.upper, z.upper))
-            )
+        node_bounds = [node.to_array_bounds() for node in self.graph.nodes()]
 
         result = [waypoints[0]]
         anchor_index = 0
@@ -397,33 +337,30 @@ class GraphOfBoundingBoxes(GraphOfConvexSets):
         return result
 
     def _segment_is_collision_free(
-        self,
-        start: Point3,
-        end: Point3,
-        node_bounds: List[
-            Tuple[Tuple[float, float, float], Tuple[float, float, float]]
-        ],
+        self, start: Point3, end: Point3, node_bounds: List[Bounds[np.ndarray]]
     ) -> bool:
         """
         Check whether a straight-line segment stays entirely within free space.
 
         :param start: The segment's start point, in the search space's reference frame.
         :param end: The segment's end point, in the search space's reference frame.
-        :param node_bounds: The graph's nodes' ``(lower, upper)`` corners, as plain
-            floats, in the same order as :meth:`_shortcut_waypoints` collected them.
+        :param node_bounds: The graph's nodes' bounds, in the same order
+            :meth:`_shortcut_waypoints` collected them.
         :return: True if the segment never leaves the union of the graph's bounding-box
             nodes.
         """
         direction = end - start
-        coordinates = (float(start.x), float(start.y), float(start.z))
-        deltas = (float(direction.x), float(direction.y), float(direction.z))
-        covered = [
-            overlap
-            for lower, upper in node_bounds
-            if (overlap := _segment_box_overlap(coordinates, deltas, lower, upper))
-            is not None
+        coordinates = np.array([float(start.x), float(start.y), float(start.z)])
+        deltas = np.array([float(direction.x), float(direction.y), float(direction.z)])
+        covered_intervals = [
+            interval
+            for bounds in node_bounds
+            if (interval := bounds.clip_segment(coordinates, deltas)) is not None
         ]
-        return _covers_unit_interval(covered)
+        if not covered_intervals:
+            return False
+        covered = Interval.from_simple_sets(*covered_intervals).make_disjoint()
+        return (closed(0.0, 1.0) - covered).is_empty()
 
     @classmethod
     def obstacles_from_semantic_annotations(
