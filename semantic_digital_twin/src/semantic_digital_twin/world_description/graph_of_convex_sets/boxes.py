@@ -14,7 +14,7 @@ from random_events.product_algebra import Event
 from random_events.product_algebra import SimpleEvent
 from rtree import index
 from sortedcontainers import SortedSet
-from typing_extensions import List, Optional, Dict, Sequence, Self
+from typing_extensions import List, Optional, Dict, Sequence, Self, Tuple
 
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 from semantic_digital_twin.datastructures.variables import SpatialVariables
@@ -40,6 +40,93 @@ from semantic_digital_twin.world_description.world_entity import (
 
 logger = logging.getLogger(__name__)
 
+Coordinates3D = Tuple[float, float, float]
+"""
+A raw, unlabeled 3-D point, expressed in a :class:`GraphOfBoundingBoxes` search space's
+reference frame.
+
+Used internally for path shortcutting, where working with plain floats is far cheaper
+than symbolic :class:`Point3` arithmetic.
+"""
+
+
+def _segment_box_overlap(
+    start: Coordinates3D, direction: Coordinates3D, box: BoundingBox
+) -> Optional[Tuple[float, float]]:
+    """
+    Clip the parametrized segment ``start + t * direction`` (``t`` in ``[0, 1]``)
+    against an axis-aligned box, using the slab method.
+
+    :param start: The segment's start point.
+    :param direction: The vector from the segment's start to its end.
+    :param box: The box to clip the segment against.
+    :return: The ``(t_min, t_max)`` sub-interval of the segment that lies inside
+        ``box``, or None if the segment misses ``box`` entirely.
+    """
+    bounds = (
+        (box.x_interval.lower, box.x_interval.upper),
+        (box.y_interval.lower, box.y_interval.upper),
+        (box.z_interval.lower, box.z_interval.upper),
+    )
+
+    t_min, t_max = 0.0, 1.0
+    for coordinate, delta, (lower, upper) in zip(start, direction, bounds):
+        if abs(delta) < 1e-12:
+            if coordinate < lower or coordinate > upper:
+                return None
+            continue
+        t_enter = (lower - coordinate) / delta
+        t_exit = (upper - coordinate) / delta
+        if t_enter > t_exit:
+            t_enter, t_exit = t_exit, t_enter
+        t_min = max(t_min, t_enter)
+        t_max = min(t_max, t_exit)
+        if t_min > t_max:
+            return None
+    return t_min, t_max
+
+
+def _covers_unit_interval(
+    intervals: List[Tuple[float, float]], tolerance: float = 1e-6
+) -> bool:
+    """
+    Check whether a set of ``(t_min, t_max)`` intervals fully covers ``[0, 1]``.
+
+    :param intervals: The intervals to merge and check.
+    :param tolerance: The largest gap between neighbouring intervals that still counts
+        as continuous coverage, to absorb floating-point noise at box boundaries.
+    :return: True if the union of ``intervals`` covers ``[0, 1]``.
+    """
+    covered_up_to = 0.0
+    for lower, upper in sorted(intervals):
+        if lower > covered_up_to + tolerance:
+            return False
+        covered_up_to = max(covered_up_to, upper)
+        if covered_up_to >= 1.0 - tolerance:
+            return True
+    return covered_up_to >= 1.0 - tolerance
+
+
+@dataclass
+class BoundingBoxAdjacency:
+    """
+    Edge payload connecting two adjacent bounding boxes in a
+    :class:`GraphOfBoundingBoxes`.
+    """
+
+    intersection: BoundingBox
+    """
+    The region where the two adjacent boxes overlap or touch.
+    """
+
+    weight: float
+    """
+    Euclidean distance between the centers of the two adjacent boxes.
+
+    Used as the edge cost for shortest-path search, so that the search minimizes
+    travelled distance instead of the number of boxes crossed.
+    """
+
 
 @dataclass
 class GraphOfBoundingBoxes(GraphOfConvexSets):
@@ -51,7 +138,7 @@ class GraphOfBoundingBoxes(GraphOfConvexSets):
     node is a box; every edge represents the adjacency between two boxes.
     """
 
-    graph: rx.PyGraph[BoundingBox] = field(
+    graph: rx.PyGraph[BoundingBox, BoundingBoxAdjacency] = field(
         default_factory=lambda: rx.PyGraph(multigraph=False)
     )
     """
@@ -84,7 +171,9 @@ class GraphOfBoundingBoxes(GraphOfConvexSets):
         """
         Calculate the connectivity of the graph by checking for intersections between
         the bounding boxes of the nodes. This uses an R-tree for efficient spatial
-        indexing and intersection queries.
+        indexing and intersection queries. Each edge is weighted by the Euclidean
+        distance between the centers of the two boxes it connects, for use by
+        :meth:`path_from_to`.
 
         :param tolerance: The tolerance for the intersection when calculating the
             connectivity.
@@ -111,13 +200,19 @@ class GraphOfBoundingBoxes(GraphOfConvexSets):
                 HomogeneousTransformationMatrix(reference_frame=self.world.root),
             )
 
+        def _center(mn, mx):
+            return ((mn[0] + mx[0]) / 2, (mn[1] + mx[1]) / 2, (mn[2] + mx[2]) / 2)
+
+        def _distance(a, b):
+            return ((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2 + (a[2] - b[2]) ** 2) ** 0.5
+
         # Build a 3-D R-tree
         prop = index.Property()
         prop.dimension = 3
         rtree_idx = index.Index(properties=prop)
 
         node_list = list(self.graph.nodes())
-        orig_mins, orig_maxs, expanded = [], [], []
+        orig_mins, orig_maxs, expanded, centers = [], [], [], []
 
         # Record every node once, insert it into the index
         for n in node_list:
@@ -135,6 +230,7 @@ class GraphOfBoundingBoxes(GraphOfConvexSets):
             orig_mins.append(mn)
             orig_maxs.append(mx)
             expanded.append(ex)
+            centers.append(_center(mn, mx))
             rtree_idx.insert(len(orig_mins) - 1, ex)
 
         # Query & link, skip self-loops and symmetric pairs
@@ -146,12 +242,13 @@ class GraphOfBoundingBoxes(GraphOfConvexSets):
                 if not _overlap(mn_i, mx_i, mn_j, mx_j):
                     continue  # no true overlap
                 box = _intersection_box(mn_i, mx_i, mn_j, mx_j)
+                weight = _distance(centers[i], centers[j])
 
                 # Map from the local list positions back to the graph node indices
                 u = self.box_to_index_map[node_list[i]]
                 v = self.box_to_index_map[node_list[j]]
 
-                self.graph.add_edge(u, v, box)
+                self.graph.add_edge(u, v, BoundingBoxAdjacency(box, weight))
 
     def draw(self):
         import rustworkx.visualization
@@ -205,11 +302,17 @@ class GraphOfBoundingBoxes(GraphOfConvexSets):
         Calculate a connected path from a start pose to a goal pose.
 
         .. note::
-            Uses a single-source Dijkstra search (unweighted, i.e. hop-count shortest
-            path) rather than enumerating all shortest paths and picking the first one.
-            Free-space decompositions with thousands of nodes routinely have an
-            exponential number of equally-short paths, which makes enumerating all of
-            them intractable; finding just one is not.
+            Uses a single-source Dijkstra search, weighted by the Euclidean distance
+            between adjacent boxes' centers, rather than enumerating all shortest paths
+            and picking the first one. Free-space decompositions with thousands of
+            nodes routinely have an exponential number of equally-short (by hop count)
+            paths, which makes enumerating all of them intractable; finding the one
+            that minimizes travelled distance is not.
+
+        .. note::
+            The resulting waypoints are shortcut afterwards: any waypoint that a
+            straight line can bypass without leaving free space is dropped. See
+            :meth:`_shortcut_waypoints`.
 
         :param start: The start pose.
         :param goal: The goal pose.
@@ -232,7 +335,12 @@ class GraphOfBoundingBoxes(GraphOfConvexSets):
         start_index = self.box_to_index_map[start_node]
         goal_index = self.box_to_index_map[goal_node]
 
-        paths = rx.dijkstra_shortest_paths(self.graph, start_index, target=goal_index)
+        paths = rx.dijkstra_shortest_paths(
+            self.graph,
+            start_index,
+            target=goal_index,
+            weight_fn=lambda adjacency: adjacency.weight,
+        )
 
         # if it is not possible to find a path
         if goal_index not in paths:
@@ -240,19 +348,84 @@ class GraphOfBoundingBoxes(GraphOfConvexSets):
 
         path = paths[goal_index]
 
-        # build the path
-        result = [start]
+        # build the path, working in raw coordinates (in the search space's reference
+        # frame) so shortcutting doesn't repeatedly pay for symbolic Point3 arithmetic
+        waypoints = [self._coordinates_in_search_space_frame(start)]
 
         for source, target in zip(path, path[1:]):
+            intersection = self.graph.get_edge_data(source, target).intersection
+            waypoints.append(
+                (
+                    intersection.x_interval.center(),
+                    intersection.y_interval.center(),
+                    intersection.z_interval.center(),
+                )
+            )
 
-            intersection: BoundingBox = self.graph.get_edge_data(source, target)
-            x_target = intersection.x_interval.center()
-            y_target = intersection.y_interval.center()
-            z_target = intersection.z_interval.center()
-            result.append(Point3(x_target, y_target, z_target))
+        waypoints.append(self._coordinates_in_search_space_frame(goal))
+        waypoints = self._shortcut_waypoints(waypoints)
 
+        result = [start]
+        result.extend(Point3(x, y, z) for x, y, z in waypoints[1:-1])
         result.append(goal)
         return result
+
+    def _coordinates_in_search_space_frame(self, point: Point3) -> Coordinates3D:
+        """
+        Express a point as raw floats in the search space's reference frame.
+
+        :param point: The point to convert.
+        :return: The point's coordinates in the search space's reference frame.
+        """
+        transformed = self.world.transform(point, self.search_space.reference_frame)
+        return float(transformed.x), float(transformed.y), float(transformed.z)
+
+    def _shortcut_waypoints(
+        self, waypoints: List[Coordinates3D]
+    ) -> List[Coordinates3D]:
+        """
+        Drop waypoints that a straight line can bypass without leaving free space.
+
+        Repeatedly inspects consecutive triples ``(a, b, c)``: if the straight segment
+        from ``a`` to ``c`` never leaves the union of the graph's bounding-box nodes,
+        ``b`` is redundant and gets dropped. Runs to a fixed point, so shortcuts cascade
+        (e.g. dropping ``b`` may then let ``a`` connect straight to ``d``).
+
+        :param waypoints: The waypoints of a path, in the search space's reference
+            frame.
+        :return: The shortcut waypoints.
+        """
+        waypoints = list(waypoints)
+        shortened = True
+        while shortened and len(waypoints) > 2:
+            shortened = False
+            i = 0
+            while i < len(waypoints) - 2:
+                if self._segment_is_collision_free(waypoints[i], waypoints[i + 2]):
+                    del waypoints[i + 1]
+                    shortened = True
+                else:
+                    i += 1
+        return waypoints
+
+    def _segment_is_collision_free(
+        self, start: Coordinates3D, end: Coordinates3D
+    ) -> bool:
+        """
+        Check whether a straight-line segment stays entirely within free space.
+
+        :param start: The segment's start point, in the search space's reference frame.
+        :param end: The segment's end point, in the search space's reference frame.
+        :return: True if the segment never leaves the union of the graph's bounding-box
+            nodes.
+        """
+        direction = (end[0] - start[0], end[1] - start[1], end[2] - start[2])
+        covered = [
+            overlap
+            for node in self.graph.nodes()
+            if (overlap := _segment_box_overlap(start, direction, node)) is not None
+        ]
+        return _covers_unit_interval(covered)
 
     @classmethod
     def obstacles_from_semantic_annotations(
