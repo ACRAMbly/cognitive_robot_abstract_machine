@@ -15,7 +15,7 @@ from experiments.control_loop_experiments.scenarios import (
     ScenarioRunner,
 )
 from experiments.experiment_definitions import MeanAndStandardDeviation
-from giskardpy.middleware.ros2.control_loop_profiler import (
+from experiments.control_loop_experiments.control_loop_profiler import (
     CallTreeProfile,
     PhaseSamples,
 )

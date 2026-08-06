@@ -37,7 +37,7 @@ from experiments.experiment_definitions import (
     MeanAndStandardDeviation,
     TypstRenderer,
 )
-from giskardpy.middleware.ros2.control_loop_profiler import (
+from experiments.control_loop_experiments.control_loop_profiler import (
     CONTROL_CYCLE_PHASE,
     CallTreeProfile,
     PhasePath,

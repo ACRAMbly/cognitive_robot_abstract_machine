@@ -10,7 +10,7 @@ from typing import ClassVar, Dict, List, Type
 import numpy as np
 
 from giskardpy.middleware.ros2 import rospy
-from giskardpy.middleware.ros2.control_loop_profiler import (
+from experiments.control_loop_experiments.control_loop_profiler import (
     CallTreeProfile,
     ControlLoopProfiler,
 )
@@ -206,7 +206,7 @@ class BenchmarkRobot(GiskardTester):
         )
 
     @property
-    def control_dt(self) -> float:
+    def control_delta_time(self) -> float:
         """
         Seconds one control cycle may take before the robot is commanded too late.
 
@@ -640,7 +640,7 @@ class ScenarioRunner:
             scenario.prepare(robot)
             motion_statechart = scenario.build_motion_statechart(robot)
             profiler = ControlLoopProfiler(
-                scenario_name=scenario.name, control_dt=robot.control_dt
+                scenario_name=scenario.name, control_dt=robot.control_delta_time
             )
             with profiler:
                 self._execute(robot, motion_statechart)

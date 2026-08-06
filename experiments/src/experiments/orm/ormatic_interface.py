@@ -24,6 +24,7 @@ import coraplex.datastructures.dataclasses
 import coraplex.datastructures.enums
 import coraplex.datastructures.execution_data
 import coraplex.datastructures.grasp
+import coraplex.datastructures.grasp_scoring
 import coraplex.datastructures.trajectory
 import coraplex.exceptions
 import coraplex.execution_environment
@@ -64,6 +65,7 @@ import coraplex.training_environments.training_environment
 import coraplex.view_manager
 import datetime
 import enum
+import experiments.control_loop_experiments.control_loop_profiler
 import experiments.eql_experiments.monitoring_profile
 import experiments.experiment_definitions
 import experiments.graph_of_convex_sets_experiments
@@ -527,6 +529,44 @@ class TrainingEnvironmentDAO_executed_plans_association(
 
     target: Mapped[PlanMappingDAO] = relationship(
         "PlanMappingDAO", foreign_keys=[target_planmappingdao_id], lazy="selectin"
+    )
+
+
+class ControlLoopProfilerDAO_phase_definitions_association(
+    Base, AssociationDataAccessObject
+):
+    __tablename__ = "_46119469330005635918832626263934281939469583075283618022217907"
+
+    database_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+
+    source_controlloopprofilerdao_id: Mapped[int] = mapped_column(
+        ForeignKey("ControlLoopProfilerDAO.database_id")
+    )
+    target_phasedefinitiondao_id: Mapped[int] = mapped_column(
+        ForeignKey("PhaseDefinitionDAO.database_id")
+    )
+
+    target: Mapped[PhaseDefinitionDAO] = relationship(
+        "PhaseDefinitionDAO",
+        foreign_keys=[target_phasedefinitiondao_id],
+        lazy="selectin",
+    )
+
+
+class _ThreadLocalPhaseStackDAO_stack_association(Base, AssociationDataAccessObject):
+    __tablename__ = "_53296531801747765718673669832728132899238623157535676481611926"
+
+    database_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+
+    source__threadlocalphasestackdao_id: Mapped[int] = mapped_column(
+        ForeignKey("_ThreadLocalPhaseStackDAO.database_id")
+    )
+    target__openphasedao_id: Mapped[int] = mapped_column(
+        ForeignKey("_OpenPhaseDAO.database_id")
+    )
+
+    target: Mapped[_OpenPhaseDAO] = relationship(
+        "_OpenPhaseDAO", foreign_keys=[target__openphasedao_id], lazy="selectin"
     )
 
 
@@ -3170,6 +3210,55 @@ class PreferredGraspAlignmentDAO(
         krrood.ormatic.custom_types.PolymorphicEnumType,
         nullable=True,
         use_existing_column=True,
+    )
+
+
+class GraspScorerDAO(
+    Base, DataAccessObject[coraplex.datastructures.grasp_scoring.GraspScorer]
+):
+    __tablename__ = "GraspScorerDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
+
+    weight_normal: Mapped[builtins.float] = mapped_column(use_existing_column=True)
+    weight_distance: Mapped[builtins.float] = mapped_column(use_existing_column=True)
+    weight_clearance: Mapped[builtins.float] = mapped_column(use_existing_column=True)
+    penalty_collision: Mapped[builtins.float] = mapped_column(use_existing_column=True)
+    collision_tolerance: Mapped[builtins.float] = mapped_column(
+        use_existing_column=True
+    )
+    penalty_clearance: Mapped[builtins.float] = mapped_column(use_existing_column=True)
+    penalty_unstable: Mapped[builtins.float] = mapped_column(use_existing_column=True)
+    score_partial_contact: Mapped[builtins.float] = mapped_column(
+        use_existing_column=True
+    )
+    ground_plane_z: Mapped[builtins.float] = mapped_column(use_existing_column=True)
+
+
+class ScoredGraspDAO(
+    Base, DataAccessObject[coraplex.datastructures.grasp_scoring.ScoredGrasp]
+):
+    __tablename__ = "ScoredGraspDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
+
+    score: Mapped[builtins.float] = mapped_column(use_existing_column=True)
+    id: Mapped[builtins.str] = mapped_column(
+        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
+    )
+
+    pose_id: Mapped[int] = mapped_column(
+        ForeignKey("PoseMappingDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
+    )
+
+    pose: Mapped[PoseMappingDAO] = relationship(
+        "PoseMappingDAO", uselist=False, foreign_keys=[pose_id], post_update=True
     )
 
 
@@ -7185,6 +7274,159 @@ class ViewManagerDAO(Base, DataAccessObject[coraplex.view_manager.ViewManager]):
     )
 
 
+class CallTreeProfileDAO(
+    Base,
+    DataAccessObject[
+        experiments.control_loop_experiments.control_loop_profiler.CallTreeProfile
+    ],
+):
+    __tablename__ = "CallTreeProfileDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
+
+    scenario_name: Mapped[builtins.str] = mapped_column(
+        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
+    )
+    control_dt: Mapped[builtins.float] = mapped_column(use_existing_column=True)
+    wall_time: Mapped[builtins.float] = mapped_column(use_existing_column=True)
+    compile_duration: Mapped[builtins.float] = mapped_column(use_existing_column=True)
+
+
+class ControlLoopProfilerDAO(
+    Base,
+    DataAccessObject[
+        experiments.control_loop_experiments.control_loop_profiler.ControlLoopProfiler
+    ],
+):
+    __tablename__ = "ControlLoopProfilerDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
+
+    scenario_name: Mapped[builtins.str] = mapped_column(
+        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
+    )
+    control_dt: Mapped[builtins.float] = mapped_column(use_existing_column=True)
+
+    phase_definitions: Mapped[
+        builtins.tuple[ControlLoopProfilerDAO_phase_definitions_association]
+    ] = relationship(
+        "ControlLoopProfilerDAO_phase_definitions_association",
+        collection_class=builtins.tuple,
+        cascade="all, delete-orphan",
+        foreign_keys="[ControlLoopProfilerDAO_phase_definitions_association.source_controlloopprofilerdao_id]",
+        lazy="selectin",
+    )
+
+
+class NoControlCycleMeasuredErrorDAO(
+    Base,
+    DataAccessObject[
+        experiments.control_loop_experiments.control_loop_profiler.NoControlCycleMeasuredError
+    ],
+):
+    __tablename__ = "NoControlCycleMeasuredErrorDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
+
+    scenario_name: Mapped[builtins.str] = mapped_column(
+        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
+    )
+
+
+class PhaseDefinitionDAO(
+    Base,
+    DataAccessObject[
+        experiments.control_loop_experiments.control_loop_profiler.PhaseDefinition
+    ],
+):
+    __tablename__ = "PhaseDefinitionDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
+
+    method_name: Mapped[builtins.str] = mapped_column(
+        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
+    )
+    phase_name: Mapped[builtins.str] = mapped_column(
+        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
+    )
+
+    owner: Mapped[TypeType] = mapped_column(
+        TypeType, nullable=False, use_existing_column=True
+    )
+
+
+class PhaseSamplesDAO(
+    Base,
+    DataAccessObject[
+        experiments.control_loop_experiments.control_loop_profiler.PhaseSamples
+    ],
+):
+    __tablename__ = "PhaseSamplesDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
+
+    inclusive_durations: Mapped[typing.List[builtins.float]] = mapped_column(
+        JSON, nullable=False, use_existing_column=True
+    )
+    exclusive_durations: Mapped[typing.List[builtins.float]] = mapped_column(
+        JSON, nullable=False, use_existing_column=True
+    )
+
+
+class _OpenPhaseDAO(
+    Base,
+    DataAccessObject[
+        experiments.control_loop_experiments.control_loop_profiler._OpenPhase
+    ],
+):
+    __tablename__ = "_OpenPhaseDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
+
+    name: Mapped[builtins.str] = mapped_column(
+        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
+    )
+    started_at: Mapped[builtins.float] = mapped_column(use_existing_column=True)
+    time_spent_in_children: Mapped[builtins.float] = mapped_column(
+        use_existing_column=True
+    )
+
+
+class _ThreadLocalPhaseStackDAO(
+    Base,
+    DataAccessObject[
+        experiments.control_loop_experiments.control_loop_profiler._ThreadLocalPhaseStack
+    ],
+):
+    __tablename__ = "_ThreadLocalPhaseStackDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
+
+    stack: Mapped[builtins.list[_ThreadLocalPhaseStackDAO_stack_association]] = (
+        relationship(
+            "_ThreadLocalPhaseStackDAO_stack_association",
+            collection_class=builtins.list,
+            cascade="all, delete-orphan",
+            foreign_keys="[_ThreadLocalPhaseStackDAO_stack_association.source__threadlocalphasestackdao_id]",
+            lazy="selectin",
+        )
+    )
+
+
 class GadgetDAO(
     Base, DataAccessObject[experiments.eql_experiments.monitoring_profile.Gadget]
 ):
@@ -8408,6 +8650,11 @@ class MissingActionResultErrorDAO(
         use_existing_column=True,
     )
 
+    action_server_name: Mapped[builtins.str] = mapped_column(
+        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
+    )
+    goal_id: Mapped[builtins.int] = mapped_column(use_existing_column=True)
+
     __mapper_args__ = {
         "polymorphic_identity": "MissingActionResultErrorDAO",
         "inherit_condition": database_id == GiskardExceptionDAO.database_id,
@@ -8426,6 +8673,11 @@ class MissingGoalOutcomeErrorDAO(
         primary_key=True,
         use_existing_column=True,
     )
+
+    action_server_name: Mapped[builtins.str] = mapped_column(
+        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
+    )
+    goal_id: Mapped[builtins.int] = mapped_column(use_existing_column=True)
 
     __mapper_args__ = {
         "polymorphic_identity": "MissingGoalOutcomeErrorDAO",
