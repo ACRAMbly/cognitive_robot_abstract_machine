@@ -27,6 +27,7 @@ from coraplex.robot_plans.motions.gripper import MoveGripperMotion
 from giskardpy.motion_statechart.goals.cartesian_goals import DifferentialDriveBaseGoal
 from giskardpy.motion_statechart.goals.templates import Parallel
 from giskardpy.motion_statechart.monitors.monitors import LocalMinimumReached
+from giskardpy.motion_statechart.monitors.payload_monitors import CountSeconds
 from giskardpy.motion_statechart.tasks.cartesian_tasks import (
     CartesianPose,
     CartesianPositionVelocityLimit,
@@ -515,12 +516,18 @@ def test_stretch_tool_center_point_accepts_a_local_minimum(
 
     assert isinstance(reaching_stage, Parallel)
     assert reaching_stage.minimum_success == 1
-    assert {type(node) for node in reaching_stage.nodes} == {
-        CartesianPose,
+    assert {type(node) for node in reaching_stage.nodes} == {CartesianPose, Parallel}
+    convergence_stage = next(
+        node for node in reaching_stage.nodes if isinstance(node, Parallel)
+    )
+    assert {type(node) for node in convergence_stage.nodes} == {
         LocalMinimumReached,
+        CountSeconds,
     }
     local_minimum = next(
-        node for node in reaching_stage.nodes if isinstance(node, LocalMinimumReached)
+        node
+        for node in convergence_stage.nodes
+        if isinstance(node, LocalMinimumReached)
     )
     assert local_minimum.joint_convergence_threshold == 0.025
 
