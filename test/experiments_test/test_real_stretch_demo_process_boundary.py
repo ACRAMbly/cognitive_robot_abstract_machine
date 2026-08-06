@@ -14,6 +14,7 @@ import numpy as np
 
 from coraplex.datastructures.enums import ExecutionType
 from experiments.real_stretch_apartment_demo.demo import StretchApartmentDemonstration
+from semantic_digital_twin.robots.stretch import Stretch
 
 RESULT_FETCH_TIMEOUT_SECONDS = 60
 """
@@ -42,7 +43,9 @@ def test_demonstration_runs_against_a_controller_in_another_process(
     proves the furniture and the transported object landed in the controller's own
     process rather than only in the demonstration's copy.
     """
-    StretchApartmentDemonstration(execution_type=ExecutionType.REAL).run()
+    StretchApartmentDemonstration(
+        execution_type=ExecutionType.REAL, used_robot=Stretch
+    ).run()
 
     controller_world = stretch_controller_process.session.fetch_world(
         timeout_seconds=RESULT_FETCH_TIMEOUT_SECONDS
