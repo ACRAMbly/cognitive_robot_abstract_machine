@@ -366,27 +366,29 @@ class GraphOfBoundingBoxes(GraphOfConvexSets):
         """
         Drop waypoints that a straight line can bypass without leaving free space.
 
-        Repeatedly inspects consecutive triples ``(a, b, c)``: if the straight segment
-        from ``a`` to ``c`` never leaves the union of the graph's bounding-box nodes,
-        ``b`` is redundant and gets dropped. Runs to a fixed point, so shortcuts cascade
-        (e.g. dropping ``b`` may then let ``a`` connect straight to ``d``).
+        Greedily extends the current anchor waypoint forward as far as a straight
+        line to it stays collision-free, then commits the farthest waypoint still
+        visible from it and continues from there (classic "string pulling"). Each
+        waypoint is tested against the current anchor at most once, so this is
+        linear in the number of waypoints rather than quadratic.
 
         :param waypoints: The waypoints of a path, in the search space's reference
             frame.
         :return: The shortcut waypoints.
         """
-        waypoints = list(waypoints)
-        shortened = True
-        while shortened and len(waypoints) > 2:
-            shortened = False
-            i = 0
-            while i < len(waypoints) - 2:
-                if self._segment_is_collision_free(waypoints[i], waypoints[i + 2]):
-                    del waypoints[i + 1]
-                    shortened = True
-                else:
-                    i += 1
-        return waypoints
+        if len(waypoints) <= 2:
+            return list(waypoints)
+
+        result = [waypoints[0]]
+        anchor_index = 0
+        for index in range(2, len(waypoints)):
+            if not self._segment_is_collision_free(
+                waypoints[anchor_index], waypoints[index]
+            ):
+                result.append(waypoints[index - 1])
+                anchor_index = index - 1
+        result.append(waypoints[-1])
+        return result
 
     def _segment_is_collision_free(self, start: Point3, end: Point3) -> bool:
         """
