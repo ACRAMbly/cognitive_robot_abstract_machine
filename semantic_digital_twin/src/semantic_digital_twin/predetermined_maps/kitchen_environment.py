@@ -53,21 +53,6 @@ from semantic_digital_twin.world_description.geometry import Cylinder
 from semantic_digital_twin.world_description.shape_collection import ShapeCollection
 from semantic_digital_twin.world_description.world_entity import Body
 
-HINGED_DOOR_VELOCITY_LIMIT = np.pi / 2
-"""
-Angular velocity limit of a hinged door in rad/s.
-
-Taken from the revolute joint limits of the apartment description in ``iai_apartment``,
-which uses this value for every one of its hinged doors.
-"""
-
-SLIDING_DRAWER_VELOCITY_LIMIT = 0.5
-"""
-Linear velocity limit of a sliding drawer in m/s.
-
-Taken from the prismatic joint limits of the apartment description in ``iai_apartment``.
-"""
-
 
 class KitchenEnvironment:
     """
@@ -216,6 +201,16 @@ class KitchenEnvironment:
         """
         Adds furniture items and room layouts to the scene graph.
         """
+
+        # Angular velocity limit of a hinged door in rad/s.
+        # Taken from the revolute joint limits of the apartment description in ``iai_apartment``,
+        # which uses this value for every one of its hinged doors.
+        hinged_door_velocity_limit = np.pi / 2
+
+        # Linear velocity limit of a sliding drawer in m/s.
+        # Taken from the prismatic joint limits of the apartment description in ``iai_apartment``.
+        sliding_drawer_velocity_limit = 0.5
+
         with world.modify_world():
             # --- TRASH CAN ---
             trash_can = TrashCan.get_specification(
@@ -263,10 +258,10 @@ class KitchenEnvironment:
                     axis=Vector3.Z(),
                     dof_limits=DegreeOfFreedomLimits(
                         lower=DerivativeMap[float](
-                            position=0.0, velocity=-HINGED_DOOR_VELOCITY_LIMIT
+                            position=0.0, velocity=-hinged_door_velocity_limit
                         ),
                         upper=DerivativeMap[float](
-                            position=np.pi / 2, velocity=HINGED_DOOR_VELOCITY_LIMIT
+                            position=np.pi / 2, velocity=hinged_door_velocity_limit
                         ),
                     ),
                 ),
@@ -307,10 +302,10 @@ class KitchenEnvironment:
                     axis=Vector3.NEGATIVE_X(),
                     dof_limits=DegreeOfFreedomLimits(
                         lower=DerivativeMap[float](
-                            position=0.0, velocity=-SLIDING_DRAWER_VELOCITY_LIMIT
+                            position=0.0, velocity=-sliding_drawer_velocity_limit
                         ),
                         upper=DerivativeMap[float](
-                            position=0.5, velocity=SLIDING_DRAWER_VELOCITY_LIMIT
+                            position=0.5, velocity=sliding_drawer_velocity_limit
                         ),
                     ),
                 ),
@@ -427,10 +422,10 @@ class KitchenEnvironment:
                     axis=Vector3.Z(),
                     dof_limits=DegreeOfFreedomLimits(
                         lower=DerivativeMap[float](
-                            position=0.0, velocity=-HINGED_DOOR_VELOCITY_LIMIT
+                            position=0.0, velocity=-hinged_door_velocity_limit
                         ),
                         upper=DerivativeMap[float](
-                            position=np.pi / 2, velocity=HINGED_DOOR_VELOCITY_LIMIT
+                            position=np.pi / 2, velocity=hinged_door_velocity_limit
                         ),
                     ),
                 ),
@@ -497,10 +492,10 @@ class KitchenEnvironment:
                     axis=Vector3.NEGATIVE_Y(),
                     dof_limits=DegreeOfFreedomLimits(
                         lower=DerivativeMap[float](
-                            position=0.0, velocity=-HINGED_DOOR_VELOCITY_LIMIT
+                            position=0.0, velocity=-hinged_door_velocity_limit
                         ),
                         upper=DerivativeMap[float](
-                            position=np.pi / 2, velocity=HINGED_DOOR_VELOCITY_LIMIT
+                            position=np.pi / 2, velocity=hinged_door_velocity_limit
                         ),
                     ),
                 ),
@@ -586,10 +581,10 @@ class KitchenEnvironment:
                         axis=Vector3.NEGATIVE_X(),
                         dof_limits=DegreeOfFreedomLimits(
                             lower=DerivativeMap[float](
-                                position=0.0, velocity=-SLIDING_DRAWER_VELOCITY_LIMIT
+                                position=0.0, velocity=-sliding_drawer_velocity_limit
                             ),
                             upper=DerivativeMap[float](
-                                position=0.25, velocity=SLIDING_DRAWER_VELOCITY_LIMIT
+                                position=0.25, velocity=sliding_drawer_velocity_limit
                             ),
                         ),
                     ),
@@ -657,10 +652,10 @@ class KitchenEnvironment:
                         axis=Vector3.NEGATIVE_X(),
                         dof_limits=DegreeOfFreedomLimits(
                             lower=DerivativeMap[float](
-                                velocity=-SLIDING_DRAWER_VELOCITY_LIMIT
+                                velocity=-sliding_drawer_velocity_limit
                             ),
                             upper=DerivativeMap[float](
-                                velocity=SLIDING_DRAWER_VELOCITY_LIMIT
+                                velocity=sliding_drawer_velocity_limit
                             ),
                         ),
                     ),
@@ -706,10 +701,10 @@ class KitchenEnvironment:
                     axis=Vector3.Z(),
                     dof_limits=DegreeOfFreedomLimits(
                         lower=DerivativeMap[float](
-                            position=0.0, velocity=-HINGED_DOOR_VELOCITY_LIMIT
+                            position=0.0, velocity=-hinged_door_velocity_limit
                         ),
                         upper=DerivativeMap[float](
-                            position=np.pi / 2, velocity=HINGED_DOOR_VELOCITY_LIMIT
+                            position=np.pi / 2, velocity=hinged_door_velocity_limit
                         ),
                     ),
                 ),
@@ -763,10 +758,10 @@ class KitchenEnvironment:
                     axis=Vector3.NEGATIVE_X(),
                     dof_limits=DegreeOfFreedomLimits(
                         lower=DerivativeMap[float](
-                            position=0.0, velocity=-SLIDING_DRAWER_VELOCITY_LIMIT
+                            position=0.0, velocity=-sliding_drawer_velocity_limit
                         ),
                         upper=DerivativeMap[float](
-                            position=0.25, velocity=SLIDING_DRAWER_VELOCITY_LIMIT
+                            position=0.25, velocity=sliding_drawer_velocity_limit
                         ),
                     ),
                 ),
@@ -805,10 +800,10 @@ class KitchenEnvironment:
                     axis=Vector3.NEGATIVE_Y(),
                     dof_limits=DegreeOfFreedomLimits(
                         lower=DerivativeMap[float](
-                            position=0.0, velocity=-HINGED_DOOR_VELOCITY_LIMIT
+                            position=0.0, velocity=-hinged_door_velocity_limit
                         ),
                         upper=DerivativeMap[float](
-                            position=np.pi / 2, velocity=HINGED_DOOR_VELOCITY_LIMIT
+                            position=np.pi / 2, velocity=hinged_door_velocity_limit
                         ),
                     ),
                 ),
@@ -930,11 +925,11 @@ class KitchenEnvironment:
                             dof_limits=DegreeOfFreedomLimits(
                                 lower=DerivativeMap[float](
                                     position=0.0,
-                                    velocity=-SLIDING_DRAWER_VELOCITY_LIMIT,
+                                    velocity=-sliding_drawer_velocity_limit,
                                 ),
                                 upper=DerivativeMap[float](
                                     position=0.25,
-                                    velocity=SLIDING_DRAWER_VELOCITY_LIMIT,
+                                    velocity=sliding_drawer_velocity_limit,
                                 ),
                             ),
                         ),
@@ -1027,11 +1022,11 @@ class KitchenEnvironment:
                         dof_limits=DegreeOfFreedomLimits(
                             lower=DerivativeMap[float](
                                 position=limits[0],
-                                velocity=-HINGED_DOOR_VELOCITY_LIMIT,
+                                velocity=-hinged_door_velocity_limit,
                             ),
                             upper=DerivativeMap[float](
                                 position=limits[1],
-                                velocity=HINGED_DOOR_VELOCITY_LIMIT,
+                                velocity=hinged_door_velocity_limit,
                             ),
                         ),
                     ),
@@ -1195,10 +1190,10 @@ class KitchenEnvironment:
                         axis=Vector3.NEGATIVE_X(),
                         dof_limits=DegreeOfFreedomLimits(
                             lower=DerivativeMap[float](
-                                position=0.0, velocity=-SLIDING_DRAWER_VELOCITY_LIMIT
+                                position=0.0, velocity=-sliding_drawer_velocity_limit
                             ),
                             upper=DerivativeMap[float](
-                                position=0.40, velocity=SLIDING_DRAWER_VELOCITY_LIMIT
+                                position=0.40, velocity=sliding_drawer_velocity_limit
                             ),
                         ),
                     ),

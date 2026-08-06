@@ -126,7 +126,7 @@ def cereal_perception_process(stretch_controller_process):
 
     position = CEREAL_SHELF_LAYER_T_CEREAL.to_position().to_np().flatten()[:3]
     with StandaloneProcess(
-        launcher_path=Path(__file__).parent
+        launcher_path=Path(__file__).parent.parent
         / "dataset"
         / "perception_pipeline_stand_in.py",
         is_ready=is_serving_queries,
