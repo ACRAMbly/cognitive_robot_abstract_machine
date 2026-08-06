@@ -48,7 +48,8 @@ logger = logging.getLogger(__name__)
 def _segment_box_overlap(
     coordinates: Tuple[float, float, float],
     deltas: Tuple[float, float, float],
-    box: BoundingBox,
+    lower: Tuple[float, float, float],
+    upper: Tuple[float, float, float],
 ) -> Optional[Tuple[float, float]]:
     """
     Clip the parametrized segment ``coordinates + t * deltas`` (``t`` in ``[0, 1]``)
@@ -56,24 +57,19 @@ def _segment_box_overlap(
 
     :param coordinates: The segment's start point, as plain floats.
     :param deltas: The vector from the segment's start to its end, as plain floats.
-    :param box: The box to clip the segment against.
+    :param lower: The box's minimum corner, as plain floats.
+    :param upper: The box's maximum corner, as plain floats.
     :return: The ``(t_min, t_max)`` sub-interval of the segment that lies inside
-        ``box``, or None if the segment misses ``box`` entirely.
+        the box, or None if the segment misses it entirely.
     """
-    bounds = (
-        (box.x_interval.lower, box.x_interval.upper),
-        (box.y_interval.lower, box.y_interval.upper),
-        (box.z_interval.lower, box.z_interval.upper),
-    )
-
     t_min, t_max = 0.0, 1.0
-    for coordinate, delta, (lower, upper) in zip(coordinates, deltas, bounds):
+    for coordinate, delta, lo, hi in zip(coordinates, deltas, lower, upper):
         if abs(delta) < 1e-12:
-            if coordinate < lower or coordinate > upper:
+            if coordinate < lo or coordinate > hi:
                 return None
             continue
-        t_enter = (lower - coordinate) / delta
-        t_exit = (upper - coordinate) / delta
+        t_enter = (lo - coordinate) / delta
+        t_exit = (hi - coordinate) / delta
         if t_enter > t_exit:
             t_enter, t_exit = t_exit, t_enter
         t_min = max(t_min, t_enter)
@@ -379,23 +375,42 @@ class GraphOfBoundingBoxes(GraphOfConvexSets):
         if len(waypoints) <= 2:
             return list(waypoints)
 
+        # BoundingBox.x_interval/y_interval/z_interval recompute symbolic arithmetic
+        # on every access, so every node's bounds are read as plain floats exactly
+        # once here rather than once per collision check below.
+        node_bounds = []
+        for node in self.graph.nodes():
+            x, y, z = node.x_interval, node.y_interval, node.z_interval
+            node_bounds.append(
+                ((x.lower, y.lower, z.lower), (x.upper, y.upper, z.upper))
+            )
+
         result = [waypoints[0]]
         anchor_index = 0
         for index in range(2, len(waypoints)):
             if not self._segment_is_collision_free(
-                waypoints[anchor_index], waypoints[index]
+                waypoints[anchor_index], waypoints[index], node_bounds
             ):
                 result.append(waypoints[index - 1])
                 anchor_index = index - 1
         result.append(waypoints[-1])
         return result
 
-    def _segment_is_collision_free(self, start: Point3, end: Point3) -> bool:
+    def _segment_is_collision_free(
+        self,
+        start: Point3,
+        end: Point3,
+        node_bounds: List[
+            Tuple[Tuple[float, float, float], Tuple[float, float, float]]
+        ],
+    ) -> bool:
         """
         Check whether a straight-line segment stays entirely within free space.
 
         :param start: The segment's start point, in the search space's reference frame.
         :param end: The segment's end point, in the search space's reference frame.
+        :param node_bounds: The graph's nodes' ``(lower, upper)`` corners, as plain
+            floats, in the same order as :meth:`_shortcut_waypoints` collected them.
         :return: True if the segment never leaves the union of the graph's bounding-box
             nodes.
         """
@@ -404,8 +419,9 @@ class GraphOfBoundingBoxes(GraphOfConvexSets):
         deltas = (float(direction.x), float(direction.y), float(direction.z))
         covered = [
             overlap
-            for node in self.graph.nodes()
-            if (overlap := _segment_box_overlap(coordinates, deltas, node)) is not None
+            for lower, upper in node_bounds
+            if (overlap := _segment_box_overlap(coordinates, deltas, lower, upper))
+            is not None
         ]
         return _covers_unit_interval(covered)
 
