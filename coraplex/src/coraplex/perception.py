@@ -10,7 +10,6 @@ from semantic_digital_twin.adapters.world_entity_kwargs_tracker import (
     WorldEntityWithIDKwargsTracker,
 )
 from semantic_digital_twin.reasoning.predicates import visible
-from semantic_digital_twin.reasoning.queries import annotation_class_by_label
 from semantic_digital_twin.robots.robot_parts import Camera, AbstractRobot
 from semantic_digital_twin.semantic_annotations.mixins import IsPerceivable
 from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix
@@ -154,9 +153,9 @@ class Detection:
     One object reported by a perception source.
     """
 
-    class_label: str
+    semantic_annotation: Type[SemanticAnnotation]
     """
-    Label the perception source named the object with, e.g. ``"cheezeit"``.
+    The annotation the perception source identified the object as.
     """
 
     pose: Pose
@@ -177,13 +176,11 @@ class Detection:
             orientation; useful while a perception source's orientation estimate is not
             yet reliable enough for grasp planning.
         :return: The annotations that were updated.
-        :raises PerceivedObjectNotInWorld: If no annotation matches the label.
-        :raises AmbiguousDetection: If the label names more than one body.
+        :raises PerceivedObjectNotInWorld: If the world holds no such annotation.
+        :raises AmbiguousDetection: If the annotation describes more than one body.
         """
-        annotations = self.resolve_annotations(world)
-        for annotation in annotations:
-            annotation.class_label = self.class_label
-        body = annotations[0].root
+        [annotation] = self.resolve_annotations(world)
+        body = annotation.root
         detected_origin = world.transform(self.pose, body.parent_connection.parent)
         if trust_orientation:
             body.parent_connection.origin = detected_origin.to_homogeneous_matrix()
@@ -200,28 +197,24 @@ class Detection:
 
     def resolve_annotations(self, world: World) -> List[IsPerceivable]:
         """
-        Find the annotations in ``world`` that this detection's label names.
+        Find the annotations in ``world`` that this detection identified.
 
-        Several annotations may describe the same body, which is not ambiguous; only a
-        label naming more than one body is.
+        Several annotations may describe the same body, which is not ambiguous; only an
+        annotation describing more than one body is.
 
         :param world: The world to search.
         :return: The matching annotations, all sharing one root body.
-        :raises PerceivedObjectNotInWorld: If the label names no annotation class known
-            to the world, or the world holds no instance of it.
+        :raises PerceivedObjectNotInWorld: If the world holds no instance of the
+            annotation.
         :raises AmbiguousDetection: If the matching annotations sit on different bodies.
         """
-        annotation_class = annotation_class_by_label(self.class_label)
-        if annotation_class is None:
-            raise PerceivedObjectNotInWorld(self.class_label)
-
-        candidates = world.get_semantic_annotations_by_type(annotation_class)
+        candidates = world.get_semantic_annotations_by_type(self.semantic_annotation)
         if not candidates:
-            raise PerceivedObjectNotInWorld(self.class_label)
+            raise PerceivedObjectNotInWorld(self.semantic_annotation)
 
         bodies = {annotation.root for annotation in candidates}
         if len(bodies) > 1:
-            raise AmbiguousDetection(self.class_label, len(bodies))
+            raise AmbiguousDetection(self.semantic_annotation, len(bodies))
         return candidates
 
 
@@ -273,17 +266,18 @@ class WorldPerception(PerceptionInterface):
     """
 
     def detect(self, query: PerceptionQuery) -> List[Detection]:
-        label_by_body = {}
+        annotation_by_body = {}
         for annotation in query.world.get_semantic_annotations_by_type(
             query.semantic_annotation
         ):
-            for body in annotation.bodies:
-                label_by_body.setdefault(body, type(annotation).__name__)
+            annotation_by_body.setdefault(annotation.root, type(annotation))
 
         return [
-            Detection(class_label=label_by_body[body], pose=body.global_pose)
+            Detection(
+                semantic_annotation=annotation_by_body[body], pose=body.global_pose
+            )
             for body in query.from_world()
-            if body in label_by_body
+            if body in annotation_by_body
         ]
 
 
@@ -329,11 +323,10 @@ class RoboKudoPerception(PerceptionInterface):
             if designator.pose and self._can_be_requested_object(designator, query)
         ]
 
-        requested_annotation = query.semantic_annotation.__name__
         if not detections:
-            raise NothingDetected(requested_annotation)
+            raise NothingDetected(query.semantic_annotation)
         if len(detections) > 1:
-            raise UnidentifiedDetections(requested_annotation, len(detections))
+            raise UnidentifiedDetections(query.semantic_annotation, len(detections))
         return detections
 
     @staticmethod
@@ -364,18 +357,18 @@ class RoboKudoPerception(PerceptionInterface):
         """
         Convert one RoboKudo object designator into a detection.
 
-        Falls back to the requested annotation's name when the pipeline reported no class
-        label: it answered where an object is, and the query says which one was asked for.
+        The detection is identified as the queried annotation: a pipeline that classifies
+        has already been narrowed to it by :meth:`_can_be_requested_object`, and one that
+        only localizes answered where the queried object is.
 
         :param designator: The designator RoboKudo reported.
-        :param query: The query it was answering, supplying the frame and the fallback
-            label.
-        :return: The detection carrying the designator's label and pose.
+        :param query: The query it was answering, supplying the annotation and the frame.
+        :return: The detection carrying the queried annotation and the reported pose.
         """
         world = query.world
         pose_stamped = designator.pose[0]
         return Detection(
-            class_label=designator.type or query.semantic_annotation.__name__,
+            semantic_annotation=query.semantic_annotation,
             pose=Pose.from_xyz_quaternion(
                 pose_stamped.pose.position.x,
                 pose_stamped.pose.position.y,

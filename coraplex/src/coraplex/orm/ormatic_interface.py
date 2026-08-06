@@ -3131,21 +3131,6 @@ class PoseTrajectoryDAO(
     )
 
 
-class AmbiguousDetectionDAO(
-    Base, DataAccessObject[coraplex.exceptions.AmbiguousDetection]
-):
-    __tablename__ = "AmbiguousDetectionDAO"
-
-    database_id: Mapped[builtins.int] = mapped_column(
-        Integer, primary_key=True, use_existing_column=True
-    )
-
-    class_label: Mapped[builtins.str] = mapped_column(
-        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
-    )
-    body_count: Mapped[builtins.int] = mapped_column(use_existing_column=True)
-
-
 class ContextIsUnavailableDAO(
     Base, DataAccessObject[coraplex.exceptions.ContextIsUnavailable]
 ):
@@ -3208,44 +3193,131 @@ class MissingWaypointsDAO(Base, DataAccessObject[coraplex.exceptions.MissingWayp
     )
 
 
-class NothingDetectedDAO(Base, DataAccessObject[coraplex.exceptions.NothingDetected]):
-    __tablename__ = "NothingDetectedDAO"
+class PerceptionExceptionDAO(
+    Base, DataAccessObject[coraplex.exceptions.PerceptionException]
+):
+    __tablename__ = "PerceptionExceptionDAO"
 
     database_id: Mapped[builtins.int] = mapped_column(
         Integer, primary_key=True, use_existing_column=True
     )
 
-    requested_annotation: Mapped[builtins.str] = mapped_column(
-        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
+    polymorphic_type: Mapped[str] = mapped_column(
+        String(255), nullable=False, use_existing_column=True
     )
+
+    __mapper_args__ = {
+        "polymorphic_on": "polymorphic_type",
+        "polymorphic_identity": "PerceptionExceptionDAO",
+    }
+
+
+class PerceptionExceptionWithSemanticAnnotationDAO(
+    PerceptionExceptionDAO,
+    DataAccessObject[coraplex.exceptions.PerceptionExceptionWithSemanticAnnotation],
+):
+    __tablename__ = "PerceptionExceptionWithSemanticAnnotationDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(PerceptionExceptionDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
+    )
+
+    semantic_annotation: Mapped[TypeType] = mapped_column(
+        TypeType, nullable=False, use_existing_column=True
+    )
+
+    __mapper_args__ = {
+        "polymorphic_identity": "PerceptionExceptionWithSemanticAnnotationDAO",
+        "inherit_condition": database_id == PerceptionExceptionDAO.database_id,
+        "polymorphic_load": "selectin",
+    }
+
+
+class AmbiguousDetectionDAO(
+    PerceptionExceptionWithSemanticAnnotationDAO,
+    DataAccessObject[coraplex.exceptions.AmbiguousDetection],
+):
+    __tablename__ = "AmbiguousDetectionDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(PerceptionExceptionWithSemanticAnnotationDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
+    )
+
+    body_count: Mapped[builtins.int] = mapped_column(use_existing_column=True)
+
+    __mapper_args__ = {
+        "polymorphic_identity": "AmbiguousDetectionDAO",
+        "inherit_condition": database_id
+        == PerceptionExceptionWithSemanticAnnotationDAO.database_id,
+        "polymorphic_load": "selectin",
+    }
+
+
+class NothingDetectedDAO(
+    PerceptionExceptionWithSemanticAnnotationDAO,
+    DataAccessObject[coraplex.exceptions.NothingDetected],
+):
+    __tablename__ = "NothingDetectedDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(PerceptionExceptionWithSemanticAnnotationDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
+    )
+
+    __mapper_args__ = {
+        "polymorphic_identity": "NothingDetectedDAO",
+        "inherit_condition": database_id
+        == PerceptionExceptionWithSemanticAnnotationDAO.database_id,
+        "polymorphic_load": "selectin",
+    }
 
 
 class PerceivedObjectNotInWorldDAO(
-    Base, DataAccessObject[coraplex.exceptions.PerceivedObjectNotInWorld]
+    PerceptionExceptionWithSemanticAnnotationDAO,
+    DataAccessObject[coraplex.exceptions.PerceivedObjectNotInWorld],
 ):
     __tablename__ = "PerceivedObjectNotInWorldDAO"
 
     database_id: Mapped[builtins.int] = mapped_column(
-        Integer, primary_key=True, use_existing_column=True
+        ForeignKey(PerceptionExceptionWithSemanticAnnotationDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
     )
 
-    class_label: Mapped[builtins.str] = mapped_column(
-        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
-    )
+    __mapper_args__ = {
+        "polymorphic_identity": "PerceivedObjectNotInWorldDAO",
+        "inherit_condition": database_id
+        == PerceptionExceptionWithSemanticAnnotationDAO.database_id,
+        "polymorphic_load": "selectin",
+    }
 
 
 class PerceptionSourceUnavailableDAO(
-    Base, DataAccessObject[coraplex.exceptions.PerceptionSourceUnavailable]
+    PerceptionExceptionDAO,
+    DataAccessObject[coraplex.exceptions.PerceptionSourceUnavailable],
 ):
     __tablename__ = "PerceptionSourceUnavailableDAO"
 
     database_id: Mapped[builtins.int] = mapped_column(
-        Integer, primary_key=True, use_existing_column=True
+        ForeignKey(PerceptionExceptionDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
     )
 
     action_name: Mapped[builtins.str] = mapped_column(
         sqlalchemy.sql.sqltypes.Text, use_existing_column=True
     )
+
+    __mapper_args__ = {
+        "polymorphic_identity": "PerceptionSourceUnavailableDAO",
+        "inherit_condition": database_id == PerceptionExceptionDAO.database_id,
+        "polymorphic_load": "selectin",
+    }
 
 
 class TipLinkDoesNotMatchAnyArmDAO(
@@ -3280,18 +3352,25 @@ class TipLinkDoesNotMatchAnyArmDAO(
 
 
 class UnidentifiedDetectionsDAO(
-    Base, DataAccessObject[coraplex.exceptions.UnidentifiedDetections]
+    PerceptionExceptionWithSemanticAnnotationDAO,
+    DataAccessObject[coraplex.exceptions.UnidentifiedDetections],
 ):
     __tablename__ = "UnidentifiedDetectionsDAO"
 
     database_id: Mapped[builtins.int] = mapped_column(
-        Integer, primary_key=True, use_existing_column=True
+        ForeignKey(PerceptionExceptionWithSemanticAnnotationDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
     )
 
-    requested_annotation: Mapped[builtins.str] = mapped_column(
-        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
-    )
     candidate_count: Mapped[builtins.int] = mapped_column(use_existing_column=True)
+
+    __mapper_args__ = {
+        "polymorphic_identity": "UnidentifiedDetectionsDAO",
+        "inherit_condition": database_id
+        == PerceptionExceptionWithSemanticAnnotationDAO.database_id,
+        "polymorphic_load": "selectin",
+    }
 
 
 class UnknownExecutionTypeDAO(
@@ -3784,8 +3863,8 @@ class DetectionDAO(Base, DataAccessObject[coraplex.perception.Detection]):
         Integer, primary_key=True, use_existing_column=True
     )
 
-    class_label: Mapped[builtins.str] = mapped_column(
-        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
+    semantic_annotation: Mapped[TypeType] = mapped_column(
+        TypeType, nullable=False, use_existing_column=True
     )
 
     pose_id: Mapped[int] = mapped_column(

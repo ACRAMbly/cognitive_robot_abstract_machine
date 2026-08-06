@@ -62,7 +62,7 @@ from semantic_digital_twin.adapters.world_entity_kwargs_tracker import (
 from giskardpy.motion_statechart.data_types import ObservationStateValues
 from giskardpy.motion_statechart.ros_context import RosContextExtension
 from giskardpy.motion_statechart.tasks.cartesian_tasks import CartesianPose
-from semantic_digital_twin.semantic_annotations.semantic_annotations import Milk
+from semantic_digital_twin.semantic_annotations.semantic_annotations import Bowl, Milk
 from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix
 from semantic_digital_twin.spatial_types.spatial_types import Pose
 from semantic_digital_twin.world import World
@@ -113,10 +113,11 @@ def test_detection_moves_the_annotated_body_to_the_perceived_pose(
         *PERCEIVED_MILK_POSITION, reference_frame=world.root
     )
 
-    annotations = Detection(class_label="Milk", pose=perceived_pose).apply_to(world)
+    annotations = Detection(semantic_annotation=Milk, pose=perceived_pose).apply_to(
+        world
+    )
 
     assert annotations == world.get_semantic_annotations_by_type(Milk)
-    assert [annotation.class_label for annotation in annotations] == ["Milk"]
     np.testing.assert_allclose(
         milk_body.global_pose.to_position().to_np().flatten()[:3],
         PERCEIVED_MILK_POSITION,
@@ -128,22 +129,22 @@ def test_detection_of_an_object_the_world_does_not_hold_is_rejected(
     immutable_model_world,
 ):
     """
-    A label with nothing behind it in the world has no body to write a pose to, so it
-    must not pass silently.
+    An annotation with nothing behind it in the world has no body to write a pose to, so
+    it must not pass silently.
     """
     world, view, context = immutable_model_world
 
     with pytest.raises(PerceivedObjectNotInWorld):
         Detection(
-            class_label="definitely_not_an_annotation",
+            semantic_annotation=Bowl,
             pose=Pose(reference_frame=world.root),
         ).apply_to(world)
 
 
 def test_detection_matching_several_bodies_is_rejected(mutable_model_world):
     """
-    With the label on two different bodies there is no way to tell which one was seen,
-    so the ambiguity is reported instead of guessed away.
+    With the annotation on two different bodies there is no way to tell which one was
+    seen, so the ambiguity is reported instead of guessed away.
 
     Uses the mutable world because adding an annotation is a model change, which the
     immutable fixture does not roll back.
@@ -153,9 +154,9 @@ def test_detection_matching_several_bodies_is_rejected(mutable_model_world):
         world.add_semantic_annotation(Milk(root=world.get_body_by_name("spoon.stl")))
 
     with pytest.raises(AmbiguousDetection):
-        Detection(class_label="Milk", pose=Pose(reference_frame=world.root)).apply_to(
-            world
-        )
+        Detection(
+            semantic_annotation=Milk, pose=Pose(reference_frame=world.root)
+        ).apply_to(world)
 
 
 def test_several_annotations_on_one_body_are_not_ambiguous(mutable_model_world):
@@ -171,7 +172,9 @@ def test_several_annotations_on_one_body_are_not_ambiguous(mutable_model_world):
         *PERCEIVED_MILK_POSITION, reference_frame=world.root
     )
 
-    annotations = Detection(class_label="Milk", pose=perceived_pose).apply_to(world)
+    annotations = Detection(semantic_annotation=Milk, pose=perceived_pose).apply_to(
+        world
+    )
 
     assert len(annotations) == 2
     assert {annotation.root for annotation in annotations} == {milk_body}
@@ -198,7 +201,7 @@ def test_untrusted_orientation_still_moves_the_body_to_the_perceived_position(
         *PERCEIVED_MILK_POSITION, yaw=np.pi / 2, reference_frame=world.root
     )
 
-    Detection(class_label="Milk", pose=perceived_pose).apply_to(
+    Detection(semantic_annotation=Milk, pose=perceived_pose).apply_to(
         world, trust_orientation=False
     )
 
@@ -225,7 +228,7 @@ def test_untrusted_orientation_keeps_the_bodys_existing_orientation(
         *PERCEIVED_MILK_POSITION, yaw=np.pi / 2, reference_frame=world.root
     )
 
-    Detection(class_label="Milk", pose=perceived_pose).apply_to(
+    Detection(semantic_annotation=Milk, pose=perceived_pose).apply_to(
         world, trust_orientation=False
     )
 
@@ -266,7 +269,7 @@ def test_world_perception_reports_the_pose_the_world_holds(
 
     detections = WorldPerception().detect(query)
 
-    assert [detection.class_label for detection in detections] == ["Milk"]
+    assert [detection.semantic_annotation for detection in detections] == [Milk]
     np.testing.assert_allclose(
         detections[0].pose.to_position().to_np().flatten()[:3],
         milk_body.global_pose.to_position().to_np().flatten()[:3],
@@ -352,7 +355,7 @@ def test_detection_corrects_a_grasp_planned_before_it(immutable_model_world):
     assert min(distances_to(PERCEIVED_MILK_POSITION)) > 1.0
 
     Detection(
-        class_label="Milk",
+        semantic_annotation=Milk,
         pose=Pose.from_xyz_rpy(*PERCEIVED_MILK_POSITION, reference_frame=world.root),
     ).apply_to(world)
 
@@ -477,8 +480,8 @@ def test_robokudo_detection_is_named_and_placed_by_the_pipeline(
     immutable_model_world, whole_scene_region, rclpy_node, robokudo_query_server
 ):
     """
-    The real source contributes the label and the pose; everything downstream treats it
-    the same as a simulated one.
+    The real source is asked for the queried annotation and contributes the pose;
+    everything downstream treats its detection the same as a simulated one.
     """
     world, view, context = immutable_model_world
     query = PerceptionQuery(Milk, whole_scene_region, view, world)
@@ -486,7 +489,7 @@ def test_robokudo_detection_is_named_and_placed_by_the_pipeline(
     detections = RoboKudoPerception(ros_node=rclpy_node).detect(query)
 
     assert robokudo_query_server.received_types == ["milk"]
-    assert [detection.class_label for detection in detections] == ["Milk"]
+    assert [detection.semantic_annotation for detection in detections] == [Milk]
     np.testing.assert_allclose(
         detections[0].pose.to_position().to_np().flatten()[:3],
         PERCEIVED_MILK_POSITION,
@@ -520,12 +523,12 @@ def test_robokudo_detection_moves_the_body_in_the_world(
 # %% pipelines that localize without recognizing
 
 
-def test_untyped_detection_is_labelled_from_the_query(
+def test_untyped_detection_is_identified_from_the_query(
     immutable_model_world, whole_scene_region, rclpy_node, query_server_reporting
 ):
     """
     A pipeline of plane and cluster annotators reports where an object is but not what
-    it is, so the label comes from what was asked for.
+    it is, so the annotation comes from what was asked for.
     """
     world, view, context = immutable_model_world
     query_server_reporting([ReportedObject("", PERCEIVED_MILK_POSITION)])
@@ -533,7 +536,7 @@ def test_untyped_detection_is_labelled_from_the_query(
 
     detections = RoboKudoPerception(ros_node=rclpy_node).detect(query)
 
-    assert [detection.class_label for detection in detections] == ["Milk"]
+    assert [detection.semantic_annotation for detection in detections] == [Milk]
     np.testing.assert_allclose(
         detections[0].pose.to_position().to_np().flatten()[:3],
         PERCEIVED_MILK_POSITION,
@@ -594,7 +597,7 @@ def test_labelled_candidates_are_narrowed_to_the_requested_type(
 
     detections = RoboKudoPerception(ros_node=rclpy_node).detect(query)
 
-    assert [detection.class_label for detection in detections] == ["Milk"]
+    assert [detection.semantic_annotation for detection in detections] == [Milk]
 
 
 # %% perception inside the motion chart

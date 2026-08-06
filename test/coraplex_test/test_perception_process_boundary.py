@@ -107,7 +107,7 @@ def test_detection_crosses_a_process_boundary(
 
     detections = RoboKudoPerception(ros_node=rclpy_node).detect(query)
 
-    assert [detection.class_label for detection in detections] == [REPORTED_CLASS_LABEL]
+    assert [detection.semantic_annotation for detection in detections] == [Milk]
     np.testing.assert_allclose(
         detections[0].pose.to_position().to_np().flatten()[:3],
         REPORTED_POSITION,
@@ -137,7 +137,7 @@ def test_untyped_detection_crosses_a_process_boundary(
 ):
     """
     The shape the real Stretch engine produces: a pipeline in another process that
-    localizes without recognizing, so the label has to come from what was asked for.
+    localizes without recognizing, so the annotation has to come from what was asked for.
     """
     world, view, context = immutable_model_world
     pipeline_process_reporting("")
@@ -145,7 +145,7 @@ def test_untyped_detection_crosses_a_process_boundary(
 
     detections = RoboKudoPerception(ros_node=rclpy_node).detect(query)
 
-    assert [detection.class_label for detection in detections] == [Milk.__name__]
+    assert [detection.semantic_annotation for detection in detections] == [Milk]
     np.testing.assert_allclose(
         detections[0].pose.to_position().to_np().flatten()[:3],
         REPORTED_POSITION,

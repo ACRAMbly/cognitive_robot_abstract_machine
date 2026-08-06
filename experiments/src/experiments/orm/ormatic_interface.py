@@ -61,6 +61,7 @@ import coraplex.robot_plans.motions.gripper
 import coraplex.robot_plans.motions.misc
 import coraplex.robot_plans.motions.navigation
 import coraplex.robot_plans.motions.robot_body
+import coraplex.testing
 import coraplex.training_environments.training_environment
 import coraplex.view_manager
 import datetime
@@ -68,6 +69,7 @@ import enum
 import experiments.demonstration
 import experiments.eql_experiments.monitoring_profile
 import experiments.experiment_definitions
+import experiments.free_space_volume_estimation
 import experiments.graph_of_convex_sets_experiments
 import experiments.ormatic_experiments.reliability
 import experiments.ormatic_experiments.scalability
@@ -538,6 +540,27 @@ class ExperimentsTableDAO_experiments_association(Base, AssociationDataAccessObj
     target: Mapped[ExperimentResultDAO] = relationship(
         "ExperimentResultDAO",
         foreign_keys=[target_experimentresultdao_id],
+        lazy="selectin",
+    )
+
+
+class MonteCarloFreeSpaceSamplerDAO_obstacle_containment_checkers_association(
+    Base, AssociationDataAccessObject
+):
+    __tablename__ = "_40096917417131016611267583495286757416612266059543318053167196"
+
+    database_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+
+    source_montecarlofreespacesamplerdao_id: Mapped[int] = mapped_column(
+        ForeignKey("MonteCarloFreeSpaceSamplerDAO.database_id")
+    )
+    target_obstaclecontainmentcheckerdao_id: Mapped[int] = mapped_column(
+        ForeignKey("ObstacleContainmentCheckerDAO.database_id")
+    )
+
+    target: Mapped[ObstacleContainmentCheckerDAO] = relationship(
+        "ObstacleContainmentCheckerDAO",
+        foreign_keys=[target_obstaclecontainmentcheckerdao_id],
         lazy="selectin",
     )
 
@@ -3162,21 +3185,6 @@ class PoseTrajectoryDAO(
     )
 
 
-class AmbiguousDetectionDAO(
-    Base, DataAccessObject[coraplex.exceptions.AmbiguousDetection]
-):
-    __tablename__ = "AmbiguousDetectionDAO"
-
-    database_id: Mapped[builtins.int] = mapped_column(
-        Integer, primary_key=True, use_existing_column=True
-    )
-
-    class_label: Mapped[builtins.str] = mapped_column(
-        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
-    )
-    body_count: Mapped[builtins.int] = mapped_column(use_existing_column=True)
-
-
 class ContextIsUnavailableDAO(
     Base, DataAccessObject[coraplex.exceptions.ContextIsUnavailable]
 ):
@@ -3239,44 +3247,131 @@ class MissingWaypointsDAO(Base, DataAccessObject[coraplex.exceptions.MissingWayp
     )
 
 
-class NothingDetectedDAO(Base, DataAccessObject[coraplex.exceptions.NothingDetected]):
-    __tablename__ = "NothingDetectedDAO"
+class PerceptionExceptionDAO(
+    Base, DataAccessObject[coraplex.exceptions.PerceptionException]
+):
+    __tablename__ = "PerceptionExceptionDAO"
 
     database_id: Mapped[builtins.int] = mapped_column(
         Integer, primary_key=True, use_existing_column=True
     )
 
-    requested_annotation: Mapped[builtins.str] = mapped_column(
-        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
+    polymorphic_type: Mapped[str] = mapped_column(
+        String(255), nullable=False, use_existing_column=True
     )
+
+    __mapper_args__ = {
+        "polymorphic_on": "polymorphic_type",
+        "polymorphic_identity": "PerceptionExceptionDAO",
+    }
+
+
+class PerceptionExceptionWithSemanticAnnotationDAO(
+    PerceptionExceptionDAO,
+    DataAccessObject[coraplex.exceptions.PerceptionExceptionWithSemanticAnnotation],
+):
+    __tablename__ = "PerceptionExceptionWithSemanticAnnotationDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(PerceptionExceptionDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
+    )
+
+    semantic_annotation: Mapped[TypeType] = mapped_column(
+        TypeType, nullable=False, use_existing_column=True
+    )
+
+    __mapper_args__ = {
+        "polymorphic_identity": "PerceptionExceptionWithSemanticAnnotationDAO",
+        "inherit_condition": database_id == PerceptionExceptionDAO.database_id,
+        "polymorphic_load": "selectin",
+    }
+
+
+class AmbiguousDetectionDAO(
+    PerceptionExceptionWithSemanticAnnotationDAO,
+    DataAccessObject[coraplex.exceptions.AmbiguousDetection],
+):
+    __tablename__ = "AmbiguousDetectionDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(PerceptionExceptionWithSemanticAnnotationDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
+    )
+
+    body_count: Mapped[builtins.int] = mapped_column(use_existing_column=True)
+
+    __mapper_args__ = {
+        "polymorphic_identity": "AmbiguousDetectionDAO",
+        "inherit_condition": database_id
+        == PerceptionExceptionWithSemanticAnnotationDAO.database_id,
+        "polymorphic_load": "selectin",
+    }
+
+
+class NothingDetectedDAO(
+    PerceptionExceptionWithSemanticAnnotationDAO,
+    DataAccessObject[coraplex.exceptions.NothingDetected],
+):
+    __tablename__ = "NothingDetectedDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(PerceptionExceptionWithSemanticAnnotationDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
+    )
+
+    __mapper_args__ = {
+        "polymorphic_identity": "NothingDetectedDAO",
+        "inherit_condition": database_id
+        == PerceptionExceptionWithSemanticAnnotationDAO.database_id,
+        "polymorphic_load": "selectin",
+    }
 
 
 class PerceivedObjectNotInWorldDAO(
-    Base, DataAccessObject[coraplex.exceptions.PerceivedObjectNotInWorld]
+    PerceptionExceptionWithSemanticAnnotationDAO,
+    DataAccessObject[coraplex.exceptions.PerceivedObjectNotInWorld],
 ):
     __tablename__ = "PerceivedObjectNotInWorldDAO"
 
     database_id: Mapped[builtins.int] = mapped_column(
-        Integer, primary_key=True, use_existing_column=True
+        ForeignKey(PerceptionExceptionWithSemanticAnnotationDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
     )
 
-    class_label: Mapped[builtins.str] = mapped_column(
-        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
-    )
+    __mapper_args__ = {
+        "polymorphic_identity": "PerceivedObjectNotInWorldDAO",
+        "inherit_condition": database_id
+        == PerceptionExceptionWithSemanticAnnotationDAO.database_id,
+        "polymorphic_load": "selectin",
+    }
 
 
 class PerceptionSourceUnavailableDAO(
-    Base, DataAccessObject[coraplex.exceptions.PerceptionSourceUnavailable]
+    PerceptionExceptionDAO,
+    DataAccessObject[coraplex.exceptions.PerceptionSourceUnavailable],
 ):
     __tablename__ = "PerceptionSourceUnavailableDAO"
 
     database_id: Mapped[builtins.int] = mapped_column(
-        Integer, primary_key=True, use_existing_column=True
+        ForeignKey(PerceptionExceptionDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
     )
 
     action_name: Mapped[builtins.str] = mapped_column(
         sqlalchemy.sql.sqltypes.Text, use_existing_column=True
     )
+
+    __mapper_args__ = {
+        "polymorphic_identity": "PerceptionSourceUnavailableDAO",
+        "inherit_condition": database_id == PerceptionExceptionDAO.database_id,
+        "polymorphic_load": "selectin",
+    }
 
 
 class TipLinkDoesNotMatchAnyArmDAO(
@@ -3311,18 +3406,25 @@ class TipLinkDoesNotMatchAnyArmDAO(
 
 
 class UnidentifiedDetectionsDAO(
-    Base, DataAccessObject[coraplex.exceptions.UnidentifiedDetections]
+    PerceptionExceptionWithSemanticAnnotationDAO,
+    DataAccessObject[coraplex.exceptions.UnidentifiedDetections],
 ):
     __tablename__ = "UnidentifiedDetectionsDAO"
 
     database_id: Mapped[builtins.int] = mapped_column(
-        Integer, primary_key=True, use_existing_column=True
+        ForeignKey(PerceptionExceptionWithSemanticAnnotationDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
     )
 
-    requested_annotation: Mapped[builtins.str] = mapped_column(
-        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
-    )
     candidate_count: Mapped[builtins.int] = mapped_column(use_existing_column=True)
+
+    __mapper_args__ = {
+        "polymorphic_identity": "UnidentifiedDetectionsDAO",
+        "inherit_condition": database_id
+        == PerceptionExceptionWithSemanticAnnotationDAO.database_id,
+        "polymorphic_load": "selectin",
+    }
 
 
 class UnknownExecutionTypeDAO(
@@ -3815,8 +3917,8 @@ class DetectionDAO(Base, DataAccessObject[coraplex.perception.Detection]):
         Integer, primary_key=True, use_existing_column=True
     )
 
-    class_label: Mapped[builtins.str] = mapped_column(
-        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
+    semantic_annotation: Mapped[TypeType] = mapped_column(
+        TypeType, nullable=False, use_existing_column=True
     )
 
     pose_id: Mapped[int] = mapped_column(
@@ -7251,6 +7353,24 @@ class MoveJointsMotionDAO(
     }
 
 
+class StandaloneProcessDAO(Base, DataAccessObject[coraplex.testing.StandaloneProcess]):
+    __tablename__ = "StandaloneProcessDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
+
+    ready_timeout: Mapped[builtins.float] = mapped_column(use_existing_column=True)
+    shutdown_timeout: Mapped[builtins.float] = mapped_column(use_existing_column=True)
+
+    launcher_path: Mapped[pathlib.Path] = mapped_column(
+        krrood.ormatic.custom_types.PathType, nullable=False, use_existing_column=True
+    )
+    arguments: Mapped[typing.List[builtins.str]] = mapped_column(
+        JSON, nullable=False, use_existing_column=True
+    )
+
+
 class TrainingEnvironmentDAO(
     Base,
     DataAccessObject[
@@ -7524,6 +7644,94 @@ class TypstRendererDAO(
     )
 
 
+class MonteCarloFreeSpaceSamplerDAO(
+    Base,
+    DataAccessObject[
+        experiments.free_space_volume_estimation.MonteCarloFreeSpaceSampler
+    ],
+):
+    __tablename__ = "MonteCarloFreeSpaceSamplerDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
+
+    sample_count: Mapped[builtins.int] = mapped_column(use_existing_column=True)
+    confidence_level: Mapped[builtins.float] = mapped_column(use_existing_column=True)
+    random_seed: Mapped[builtins.int] = mapped_column(use_existing_column=True)
+
+    search_space_bounding_box_id: Mapped[int] = mapped_column(
+        ForeignKey("BoundingBoxDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
+    )
+
+    search_space_bounding_box: Mapped[BoundingBoxDAO] = relationship(
+        "BoundingBoxDAO",
+        uselist=False,
+        foreign_keys=[search_space_bounding_box_id],
+        post_update=True,
+    )
+    obstacle_containment_checkers: Mapped[
+        builtins.list[
+            MonteCarloFreeSpaceSamplerDAO_obstacle_containment_checkers_association
+        ]
+    ] = relationship(
+        "MonteCarloFreeSpaceSamplerDAO_obstacle_containment_checkers_association",
+        collection_class=builtins.list,
+        cascade="all, delete-orphan",
+        foreign_keys="[MonteCarloFreeSpaceSamplerDAO_obstacle_containment_checkers_association.source_montecarlofreespacesamplerdao_id]",
+        lazy="selectin",
+    )
+
+
+class ObstacleContainmentCheckerDAO(
+    Base,
+    DataAccessObject[
+        experiments.free_space_volume_estimation.ObstacleContainmentChecker
+    ],
+):
+    __tablename__ = "ObstacleContainmentCheckerDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
+
+    world_meshes: Mapped[typing.List[trimesh.base.Trimesh]] = mapped_column(
+        JSON, nullable=False, use_existing_column=True
+    )
+
+    world_bounding_box_id: Mapped[int] = mapped_column(
+        ForeignKey("BoundingBoxDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
+    )
+
+    world_bounding_box: Mapped[BoundingBoxDAO] = relationship(
+        "BoundingBoxDAO",
+        uselist=False,
+        foreign_keys=[world_bounding_box_id],
+        post_update=True,
+    )
+
+
+class GraphOfConvexSetsFreespaceBenchmarkDAO(
+    Base,
+    DataAccessObject[
+        experiments.graph_of_convex_sets_experiments.GraphOfConvexSetsFreespaceBenchmark
+    ],
+):
+    __tablename__ = "GraphOfConvexSetsFreespaceBenchmarkDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
+
+    environment_name: Mapped[builtins.str] = mapped_column(
+        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
+    )
+
+
 class GraphOfConvexSetsFreespaceExperimentResultDAO(
     ExperimentResultDAO,
     DataAccessObject[
@@ -7550,7 +7758,19 @@ class GraphOfConvexSetsFreespaceExperimentResultDAO(
     )
     graph_node_count: Mapped[builtins.int] = mapped_column(use_existing_column=True)
     graph_edge_count: Mapped[builtins.int] = mapped_column(use_existing_column=True)
-    end_to_end_duration_milliseconds: Mapped[builtins.float] = mapped_column(
+    mesh_obstacle_volume_total: Mapped[builtins.float] = mapped_column(
+        use_existing_column=True
+    )
+    naive_free_volume_lower_bound: Mapped[builtins.float] = mapped_column(
+        use_existing_column=True
+    )
+    box_free_space_volume: Mapped[builtins.float] = mapped_column(
+        use_existing_column=True
+    )
+    graph_of_convex_polygons_region_count: Mapped[builtins.int] = mapped_column(
+        use_existing_column=True
+    )
+    graph_of_convex_polygons_region_volume_sum: Mapped[builtins.float] = mapped_column(
         use_existing_column=True
     )
     environment_name: Mapped[builtins.str] = mapped_column(
@@ -7569,6 +7789,33 @@ class GraphOfConvexSetsFreespaceExperimentResultDAO(
     )
     connectivity_duration_milliseconds_id: Mapped[int] = mapped_column(
         ForeignKey("MeanAndStandardDeviationDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
+    )
+    box_construction_duration_milliseconds_id: Mapped[int] = mapped_column(
+        ForeignKey("MeanAndStandardDeviationDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
+    )
+    true_free_volume_bound_id: Mapped[int] = mapped_column(
+        ForeignKey("VolumeBoundDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
+    )
+    graph_of_convex_polygons_construction_duration_milliseconds_id: Mapped[int] = (
+        mapped_column(
+            ForeignKey("MeanAndStandardDeviationDAO.database_id", use_alter=True),
+            nullable=True,
+            use_existing_column=True,
+        )
+    )
+    graph_of_convex_polygons_coverage_bound_id: Mapped[int] = mapped_column(
+        ForeignKey("VolumeBoundDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
+    )
+    graph_of_convex_polygons_coverage_percentage_id: Mapped[int] = mapped_column(
+        ForeignKey("PercentageBoundDAO.database_id", use_alter=True),
         nullable=True,
         use_existing_column=True,
     )
@@ -7594,6 +7841,42 @@ class GraphOfConvexSetsFreespaceExperimentResultDAO(
             "MeanAndStandardDeviationDAO",
             uselist=False,
             foreign_keys=[connectivity_duration_milliseconds_id],
+            post_update=True,
+        )
+    )
+    box_construction_duration_milliseconds: Mapped[MeanAndStandardDeviationDAO] = (
+        relationship(
+            "MeanAndStandardDeviationDAO",
+            uselist=False,
+            foreign_keys=[box_construction_duration_milliseconds_id],
+            post_update=True,
+        )
+    )
+    true_free_volume_bound: Mapped[VolumeBoundDAO] = relationship(
+        "VolumeBoundDAO",
+        uselist=False,
+        foreign_keys=[true_free_volume_bound_id],
+        post_update=True,
+    )
+    graph_of_convex_polygons_construction_duration_milliseconds: Mapped[
+        MeanAndStandardDeviationDAO
+    ] = relationship(
+        "MeanAndStandardDeviationDAO",
+        uselist=False,
+        foreign_keys=[graph_of_convex_polygons_construction_duration_milliseconds_id],
+        post_update=True,
+    )
+    graph_of_convex_polygons_coverage_bound: Mapped[VolumeBoundDAO] = relationship(
+        "VolumeBoundDAO",
+        uselist=False,
+        foreign_keys=[graph_of_convex_polygons_coverage_bound_id],
+        post_update=True,
+    )
+    graph_of_convex_polygons_coverage_percentage: Mapped[PercentageBoundDAO] = (
+        relationship(
+            "PercentageBoundDAO",
+            uselist=False,
+            foreign_keys=[graph_of_convex_polygons_coverage_percentage_id],
             post_update=True,
         )
     )
@@ -24964,6 +25247,53 @@ class BoundsDAO(
     database_id: Mapped[builtins.int] = mapped_column(
         Integer, primary_key=True, use_existing_column=True
     )
+
+    polymorphic_type: Mapped[str] = mapped_column(
+        String(255), nullable=False, use_existing_column=True
+    )
+
+    __mapper_args__ = {
+        "polymorphic_on": "polymorphic_type",
+        "polymorphic_identity": "BoundsDAO",
+    }
+
+
+class PercentageBoundDAO(
+    BoundsDAO, DataAccessObject[experiments.experiment_definitions.PercentageBound]
+):
+    __tablename__ = "PercentageBoundDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(BoundsDAO.database_id), primary_key=True, use_existing_column=True
+    )
+
+    lower: Mapped[builtins.float] = mapped_column(use_existing_column=True)
+    upper: Mapped[builtins.float] = mapped_column(use_existing_column=True)
+
+    __mapper_args__ = {
+        "polymorphic_identity": "PercentageBoundDAO",
+        "inherit_condition": database_id == BoundsDAO.database_id,
+        "polymorphic_load": "selectin",
+    }
+
+
+class VolumeBoundDAO(
+    BoundsDAO, DataAccessObject[experiments.experiment_definitions.VolumeBound]
+):
+    __tablename__ = "VolumeBoundDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(BoundsDAO.database_id), primary_key=True, use_existing_column=True
+    )
+
+    lower: Mapped[builtins.float] = mapped_column(use_existing_column=True)
+    upper: Mapped[builtins.float] = mapped_column(use_existing_column=True)
+
+    __mapper_args__ = {
+        "polymorphic_identity": "VolumeBoundDAO",
+        "inherit_condition": database_id == BoundsDAO.database_id,
+        "polymorphic_load": "selectin",
+    }
 
 
 class ColorDAO(

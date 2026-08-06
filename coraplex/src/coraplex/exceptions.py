@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from abc import ABC
 from dataclasses import dataclass
 from typing_extensions import TYPE_CHECKING, Type, List
 
@@ -15,6 +16,7 @@ if TYPE_CHECKING:
     from semantic_digital_twin.robots.robot_parts import AbstractRobot
     from semantic_digital_twin.world_description.world_entity import (
         KinematicStructureEntity,
+        SemanticAnnotation,
     )
 
 
@@ -174,48 +176,60 @@ class UnknownExecutionType(DataclassException):
 
 
 @dataclass
-class PerceivedObjectNotInWorld(DataclassException):
+class PerceptionException(DataclassException, ABC):
+    """
+    Represents a custom exception specific to perception-related errors.
+    """
+
+
+@dataclass
+class PerceptionExceptionWithSemanticAnnotation(PerceptionException, ABC):
+    """
+    For PerceptionExceptions that name the annotation the perception was about.
+    """
+
+    semantic_annotation: Type[SemanticAnnotation]
+    """
+    The annotation the perception was about.
+    """
+
+
+@dataclass
+class PerceivedObjectNotInWorld(PerceptionExceptionWithSemanticAnnotation):
     """
     Raised when a detection names an object the world does not hold, so there is nothing
     to write the perceived pose to.
     """
 
-    class_label: str
-    """
-    The label the perception source reported.
-    """
-
     def error_message(self) -> str:
-        return f"No annotation in the world matches the perceived label '{self.class_label}'."
+        return (
+            f"The world holds no {self.semantic_annotation.__name__} the perceived pose "
+            f"could be written to."
+        )
 
     def suggest_correction(self) -> str:
         return (
-            "spawn the object before detecting it, and make sure its annotation class "
-            "is a subclass of IsPerceivable whose name is contained in the label."
+            "spawn the object before detecting it, and annotate it with the semantic "
+            "annotation that was queried."
         )
 
 
 @dataclass
-class AmbiguousDetection(DataclassException):
+class AmbiguousDetection(PerceptionExceptionWithSemanticAnnotation):
     """
-    Raised when a detection's label matches several bodies, so the perceived pose cannot
-    be assigned to one of them.
-    """
-
-    class_label: str
-    """
-    The label the perception source reported.
+    Raised when a detection's annotation describes several bodies, so the perceived pose
+    cannot be assigned to one of them.
     """
 
     body_count: int
     """
-    How many distinct bodies the label matched.
+    How many distinct bodies the annotation described.
     """
 
     def error_message(self) -> str:
         return (
-            f"The perceived label '{self.class_label}' matches {self.body_count} "
-            f"bodies."
+            f"{self.semantic_annotation.__name__} describes {self.body_count} bodies in "
+            f"the world."
         )
 
     def suggest_correction(self) -> str:
@@ -223,7 +237,7 @@ class AmbiguousDetection(DataclassException):
 
 
 @dataclass
-class NothingDetected(DataclassException):
+class NothingDetected(PerceptionExceptionWithSemanticAnnotation):
     """
     Raised when a perception source answers a query without reporting any object.
 
@@ -231,13 +245,8 @@ class NothingDetected(DataclassException):
     the pose the object was spawned with while believing perception had confirmed it.
     """
 
-    requested_annotation: str
-    """
-    Name of the annotation that was asked for.
-    """
-
     def error_message(self) -> str:
-        return f"The perception source reported no {self.requested_annotation}."
+        return f"The perception source reported no {self.semantic_annotation.__name__}."
 
     def suggest_correction(self) -> str:
         return (
@@ -247,17 +256,12 @@ class NothingDetected(DataclassException):
 
 
 @dataclass
-class UnidentifiedDetections(DataclassException):
+class UnidentifiedDetections(PerceptionExceptionWithSemanticAnnotation):
     """
     Raised when a perception source reports several candidates it cannot tell apart.
 
     A pipeline that localizes without classifying gives no way to choose between them,
     so the choice is refused rather than made arbitrarily.
-    """
-
-    requested_annotation: str
-    """
-    Name of the annotation that was asked for.
     """
 
     candidate_count: int
@@ -268,7 +272,7 @@ class UnidentifiedDetections(DataclassException):
     def error_message(self) -> str:
         return (
             f"The perception source reported {self.candidate_count} candidates for "
-            f"{self.requested_annotation} and none of them carry a class label."
+            f"{self.semantic_annotation.__name__} and none of them carry a class label."
         )
 
     def suggest_correction(self) -> str:
@@ -279,7 +283,7 @@ class UnidentifiedDetections(DataclassException):
 
 
 @dataclass
-class PerceptionSourceUnavailable(DataclassException):
+class PerceptionSourceUnavailable(PerceptionException):
     """
     Raised when the perception pipeline does not answer within the configured timeout.
     """
