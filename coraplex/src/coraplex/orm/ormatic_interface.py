@@ -8805,16 +8805,16 @@ class MotionGoalDAO(
         Integer, primary_key=True, use_existing_column=True
     )
 
-    required_watermark_id: Mapped[typing.Optional[builtins.int]] = mapped_column(
-        ForeignKey("StateWatermarkDAO.database_id", use_alter=True),
+    required_position_id: Mapped[typing.Optional[builtins.int]] = mapped_column(
+        ForeignKey("StreamPositionDAO.database_id", use_alter=True),
         nullable=True,
         use_existing_column=True,
     )
 
-    required_watermark: Mapped[StateWatermarkDAO] = relationship(
-        "StateWatermarkDAO",
+    required_position: Mapped[StreamPositionDAO] = relationship(
+        "StreamPositionDAO",
         uselist=False,
-        foreign_keys=[required_watermark_id],
+        foreign_keys=[required_position_id],
         post_update=True,
     )
 
@@ -17826,10 +17826,10 @@ class ModificationBlockDAO(
     }
 
 
-class StateWatermarkDAO(
-    Base, DataAccessObject[semantic_digital_twin.adapters.ros.messages.StateWatermark]
+class StreamPositionDAO(
+    Base, DataAccessObject[semantic_digital_twin.adapters.ros.messages.StreamPosition]
 ):
-    __tablename__ = "StateWatermarkDAO"
+    __tablename__ = "StreamPositionDAO"
 
     database_id: Mapped[builtins.int] = mapped_column(
         Integer, primary_key=True, use_existing_column=True
