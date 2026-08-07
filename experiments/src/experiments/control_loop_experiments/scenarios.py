@@ -56,6 +56,9 @@ from semantic_digital_twin.spatial_types import (
 )
 from semantic_digital_twin.spatial_types.spatial_types import Pose
 from semantic_digital_twin.world import World
+from semantic_digital_twin.world_description.world_entity import (
+    KinematicStructureEntity,
+)
 
 # %% how much the measurement records
 
@@ -214,7 +217,7 @@ class BenchmarkRobot(GiskardTester):
         """
         return self.giskard.executor.context.qp_controller_config.control_dt
 
-    def get_kinematic_structure(self, name: str):
+    def get_kinematic_structure_entity(self, name: str) -> KinematicStructureEntity:
         """
         The kinematic structure entity of the given name.
 
@@ -326,11 +329,11 @@ class CartesianGoalScenario(BenchmarkScenario):
         return robot.default_joint_state
 
     def build_motion_statechart(self, robot: BenchmarkRobot) -> MotionStatechart:
-        tip = robot.get_kinematic_structure("r_gripper_tool_frame")
+        tip = robot.get_kinematic_structure_entity("r_gripper_tool_frame")
         motion_statechart = MotionStatechart()
         motion_statechart.add_node(
             cartesian_goal := CartesianPose(
-                root_link=robot.get_kinematic_structure("base_footprint"),
+                root_link=robot.get_kinematic_structure_entity("base_footprint"),
                 tip_link=tip,
                 goal_pose=HomogeneousTransformationMatrix.from_xyz_quaternion(
                     pos_x=-0.2, reference_frame=tip
@@ -357,7 +360,9 @@ class CollisionAvoidanceScenario(BenchmarkScenario):
             name="box",
             size=(1.0, 1.0, 1.0),
             pose=HomogeneousTransformationMatrix.from_xyz_rpy(
-                x=1.2, z=0.3, reference_frame=robot.get_kinematic_structure("map")
+                x=1.2,
+                z=0.3,
+                reference_frame=robot.get_kinematic_structure_entity("map"),
             ),
         )
 
@@ -366,7 +371,7 @@ class CollisionAvoidanceScenario(BenchmarkScenario):
         motion_statechart.add_node(
             CartesianPose(
                 root_link=robot.default_root,
-                tip_link=robot.get_kinematic_structure("r_gripper_tool_frame"),
+                tip_link=robot.get_kinematic_structure_entity("r_gripper_tool_frame"),
                 goal_pose=Pose.from_xyz_axis_angle(
                     x=0.8,
                     y=-0.38,
@@ -415,11 +420,11 @@ class ApartmentDrivingScenario(BenchmarkScenario):
         )
 
     def build_motion_statechart(self, robot: BenchmarkRobot) -> MotionStatechart:
-        base = robot.get_kinematic_structure("base_footprint")
+        base = robot.get_kinematic_structure_entity("base_footprint")
         motion_statechart = MotionStatechart()
         motion_statechart.add_node(
             cartesian_goal := CartesianPose(
-                root_link=robot.get_kinematic_structure("map"),
+                root_link=robot.get_kinematic_structure_entity("map"),
                 tip_link=base,
                 goal_pose=HomogeneousTransformationMatrix.from_xyz_rpy(
                     x=0.4, y=-2.0, reference_frame=base
@@ -450,11 +455,12 @@ class KitchenPointingScenario(BenchmarkScenario):
         )
 
     def build_motion_statechart(self, robot: BenchmarkRobot) -> MotionStatechart:
-        camera = robot.get_kinematic_structure("head_mount_kinect_rgb_link")
-        map_frame = robot.get_kinematic_structure("map")
+        camera = robot.get_kinematic_structure_entity("head_mount_kinect_rgb_link")
+        map_frame = robot.get_kinematic_structure_entity("map")
         pointing_axis = Vector3.X(reference_frame=camera)
         handle_point = robot.api.world.compute_forward_kinematics(
-            root=map_frame, tip=robot.get_kinematic_structure("iai_fridge_door_handle")
+            root=map_frame,
+            tip=robot.get_kinematic_structure_entity("iai_fridge_door_handle"),
         ).to_position()
         arm_pose = {
             name: position
@@ -481,14 +487,14 @@ class KitchenPointingScenario(BenchmarkScenario):
                             ),
                             CartesianPose(
                                 root_link=map_frame,
-                                tip_link=robot.get_kinematic_structure(
+                                tip_link=robot.get_kinematic_structure_entity(
                                     "base_footprint"
                                 ),
                                 goal_pose=HomogeneousTransformationMatrix.from_xyz_axis_angle(
                                     y=2.0,
                                     axis=Vector3.Z(),
                                     angle=1,
-                                    reference_frame=robot.get_kinematic_structure(
+                                    reference_frame=robot.get_kinematic_structure_entity(
                                         "base_footprint"
                                     ),
                                 ),
@@ -529,12 +535,12 @@ class LongSequenceScenario(BenchmarkScenario):
 
     def build_motion_statechart(self, robot: BenchmarkRobot) -> MotionStatechart:
         tips = [
-            robot.get_kinematic_structure("l_gripper_tool_frame"),
-            robot.get_kinematic_structure("r_gripper_tool_frame"),
+            robot.get_kinematic_structure_entity("l_gripper_tool_frame"),
+            robot.get_kinematic_structure_entity("r_gripper_tool_frame"),
         ]
         waypoints = [
             CartesianPose(
-                root_link=robot.get_kinematic_structure("base_footprint"),
+                root_link=robot.get_kinematic_structure_entity("base_footprint"),
                 tip_link=tips[index % len(tips)],
                 goal_pose=HomogeneousTransformationMatrix.from_xyz_quaternion(
                     pos_x=offset, reference_frame=tips[index % len(tips)]
