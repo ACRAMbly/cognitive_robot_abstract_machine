@@ -75,6 +75,7 @@ import experiments.ormatic_experiments.scalability
 import experiments.querying
 import experiments.random_events_experiments.complement_worst_case_experiment
 import experiments.random_events_experiments.curved_region_approximation
+import experiments.random_events_experiments.robocasa_set_export
 import experiments.random_events_experiments.scalability_experiment
 import experiments.random_events_experiments.task_condition_survey.condition_event_translation
 import experiments.random_events_experiments.task_condition_survey.condition_extraction
@@ -8227,6 +8228,260 @@ class RegionApproximationFidelityDAO(
         "inherit_condition": database_id == ExperimentResultDAO.database_id,
         "polymorphic_load": "selectin",
     }
+
+
+class AttachedForbiddenZoneDAO(
+    ExperimentResultDAO,
+    DataAccessObject[
+        experiments.random_events_experiments.robocasa_set_export.AttachedForbiddenZone
+    ],
+):
+    __tablename__ = "AttachedForbiddenZoneDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(ExperimentResultDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
+    )
+
+    task: Mapped[builtins.str] = mapped_column(
+        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
+    )
+    body_name: Mapped[builtins.str] = mapped_column(
+        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
+    )
+    radius: Mapped[builtins.float] = mapped_column(use_existing_column=True)
+    world_x: Mapped[builtins.float] = mapped_column(use_existing_column=True)
+    world_y: Mapped[builtins.float] = mapped_column(use_existing_column=True)
+    world_z: Mapped[builtins.float] = mapped_column(use_existing_column=True)
+
+    __mapper_args__ = {
+        "polymorphic_identity": "AttachedForbiddenZoneDAO",
+        "inherit_condition": database_id == ExperimentResultDAO.database_id,
+        "polymorphic_load": "selectin",
+    }
+
+
+class AttachedPlacementRegionDAO(
+    ExperimentResultDAO,
+    DataAccessObject[
+        experiments.random_events_experiments.robocasa_set_export.AttachedPlacementRegion
+    ],
+):
+    __tablename__ = "AttachedPlacementRegionDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(ExperimentResultDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
+    )
+
+    task: Mapped[builtins.str] = mapped_column(
+        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
+    )
+    object_name: Mapped[builtins.str] = mapped_column(
+        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
+    )
+    width: Mapped[builtins.float] = mapped_column(use_existing_column=True)
+    depth: Mapped[builtins.float] = mapped_column(use_existing_column=True)
+    world_x: Mapped[builtins.float] = mapped_column(use_existing_column=True)
+    world_y: Mapped[builtins.float] = mapped_column(use_existing_column=True)
+    world_z: Mapped[builtins.float] = mapped_column(use_existing_column=True)
+
+    __mapper_args__ = {
+        "polymorphic_identity": "AttachedPlacementRegionDAO",
+        "inherit_condition": database_id == ExperimentResultDAO.database_id,
+        "polymorphic_load": "selectin",
+    }
+
+
+class DiscreteFixtureStateDAO(
+    ExperimentResultDAO,
+    DataAccessObject[
+        experiments.random_events_experiments.robocasa_set_export.DiscreteFixtureState
+    ],
+):
+    __tablename__ = "DiscreteFixtureStateDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(ExperimentResultDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
+    )
+
+    task: Mapped[builtins.str] = mapped_column(
+        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
+    )
+    fixture_type: Mapped[builtins.str] = mapped_column(
+        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
+    )
+    state_key: Mapped[builtins.str] = mapped_column(
+        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
+    )
+
+    kind: Mapped[
+        experiments.random_events_experiments.robocasa_set_export.StateValueKind
+    ] = mapped_column(
+        krrood.ormatic.custom_types.PolymorphicEnumType,
+        nullable=False,
+        use_existing_column=True,
+    )
+
+    __mapper_args__ = {
+        "polymorphic_identity": "DiscreteFixtureStateDAO",
+        "inherit_condition": database_id == ExperimentResultDAO.database_id,
+        "polymorphic_load": "selectin",
+    }
+
+
+class ForbiddenZoneAttacherDAO(
+    Base,
+    DataAccessObject[
+        experiments.random_events_experiments.robocasa_set_export.ForbiddenZoneAttacher
+    ],
+):
+    __tablename__ = "ForbiddenZoneAttacherDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
+
+
+class JointOpennessIntervalDAO(
+    ExperimentResultDAO,
+    DataAccessObject[
+        experiments.random_events_experiments.robocasa_set_export.JointOpennessInterval
+    ],
+):
+    __tablename__ = "JointOpennessIntervalDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(ExperimentResultDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
+    )
+
+    task: Mapped[builtins.str] = mapped_column(
+        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
+    )
+    fixture_type: Mapped[builtins.str] = mapped_column(
+        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
+    )
+    joint_name: Mapped[builtins.str] = mapped_column(
+        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
+    )
+    physical_minimum: Mapped[builtins.float] = mapped_column(use_existing_column=True)
+    physical_maximum: Mapped[builtins.float] = mapped_column(use_existing_column=True)
+    open_threshold: Mapped[builtins.float] = mapped_column(use_existing_column=True)
+    closed_threshold: Mapped[builtins.float] = mapped_column(use_existing_column=True)
+    open_minimum: Mapped[builtins.float] = mapped_column(use_existing_column=True)
+    open_maximum: Mapped[builtins.float] = mapped_column(use_existing_column=True)
+    closed_minimum: Mapped[builtins.float] = mapped_column(use_existing_column=True)
+    closed_maximum: Mapped[builtins.float] = mapped_column(use_existing_column=True)
+
+    __mapper_args__ = {
+        "polymorphic_identity": "JointOpennessIntervalDAO",
+        "inherit_condition": database_id == ExperimentResultDAO.database_id,
+        "polymorphic_load": "selectin",
+    }
+
+
+class PlacementRegionAttacherDAO(
+    Base,
+    DataAccessObject[
+        experiments.random_events_experiments.robocasa_set_export.PlacementRegionAttacher
+    ],
+):
+    __tablename__ = "PlacementRegionAttacherDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
+
+    task_names: Mapped[typing.List[builtins.str]] = mapped_column(
+        JSON, nullable=False, use_existing_column=True
+    )
+
+
+class PlacementRegionFidelityDAO(
+    ExperimentResultDAO,
+    DataAccessObject[
+        experiments.random_events_experiments.robocasa_set_export.PlacementRegionFidelity
+    ],
+):
+    __tablename__ = "PlacementRegionFidelityDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(ExperimentResultDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
+    )
+
+    task: Mapped[builtins.str] = mapped_column(
+        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
+    )
+    object_name: Mapped[builtins.str] = mapped_column(
+        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
+    )
+    dimensions: Mapped[builtins.int] = mapped_column(use_existing_column=True)
+    simple_set_count: Mapped[builtins.int] = mapped_column(use_existing_column=True)
+    intersection_over_union: Mapped[builtins.float] = mapped_column(
+        use_existing_column=True
+    )
+    duration: Mapped[builtins.float] = mapped_column(use_existing_column=True)
+
+    __mapper_args__ = {
+        "polymorphic_identity": "PlacementRegionFidelityDAO",
+        "inherit_condition": database_id == ExperimentResultDAO.database_id,
+        "polymorphic_load": "selectin",
+    }
+
+
+class PlacementRegionFidelityMeasurerDAO(
+    Base,
+    DataAccessObject[
+        experiments.random_events_experiments.robocasa_set_export.PlacementRegionFidelityMeasurer
+    ],
+):
+    __tablename__ = "PlacementRegionFidelityMeasurerDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
+
+    task_names: Mapped[typing.List[builtins.str]] = mapped_column(
+        JSON, nullable=False, use_existing_column=True
+    )
+
+
+class ScalarStateExporterDAO(
+    Base,
+    DataAccessObject[
+        experiments.random_events_experiments.robocasa_set_export.ScalarStateExporter
+    ],
+):
+    __tablename__ = "ScalarStateExporterDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
+
+    task_names: Mapped[typing.List[builtins.str]] = mapped_column(
+        JSON, nullable=False, use_existing_column=True
+    )
+
+
+class SymbolicStateExporterDAO(
+    Base,
+    DataAccessObject[
+        experiments.random_events_experiments.robocasa_set_export.SymbolicStateExporter
+    ],
+):
+    __tablename__ = "SymbolicStateExporterDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
 
 
 class CompositeSetOperationMeasurementDAO(
