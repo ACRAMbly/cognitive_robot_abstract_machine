@@ -740,7 +740,7 @@ class Mesh(Shape):
         :param scale: Scale of the mesh.
         :param uv: UV coordinates to apply before exporting.
         :param texture_file_path: Path of a texture to apply before exporting.
-        :param directory: Where to place the mesh's own directory, defaulting to a root
+        :param directory: Where to place the mesh's own directory inside of /tmp, defaulting to a root
             that is removed when this process exits.
         :param file_type: Format to export the mesh in.
         :return: Mesh reading from the exported file.
@@ -848,9 +848,9 @@ class Mesh(Shape):
         """
         points = np.asarray([point.to_np()[:3] for point in points_3d], dtype=float)
         points = np.unique(points, axis=0)
-        assert len(points) >= 3, (
-            "At least 4 unique points are required to define a 3D region."
-        )
+        assert (
+            len(points) >= 3
+        ), "At least 4 unique points are required to define a 3D region."
 
         centered_points = points - points.mean(axis=0, keepdims=True)
         assert np.any(centered_points), "Points must not be all identical."
@@ -1489,9 +1489,9 @@ class BoundingBox:
         :param min_point: The minimum point
         :param max_point: The maximum point
         """
-        assert min_point.reference_frame == max_point.reference_frame, (
-            "The reference frames of the minimum and maximum points must be the same."
-        )
+        assert (
+            min_point.reference_frame == max_point.reference_frame
+        ), "The reference frames of the minimum and maximum points must be the same."
         return cls(*min_point.to_np()[:3], *max_point.to_np()[:3], origin=origin)
 
     def as_shape(self) -> Box:
