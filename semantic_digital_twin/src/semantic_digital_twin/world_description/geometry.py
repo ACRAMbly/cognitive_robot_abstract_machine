@@ -1136,6 +1136,13 @@ class Bounds(Generic[T], SubClassSafeGeneric):
         Assumes ``lower``/``upper`` are plain numeric arrays, as returned by
         :meth:`BoundingBox.to_array_bounds`.
 
+        .. note::
+            ``start``/``direction`` are plain arrays rather than :class:`Point3`/
+            :class:`Vector3` on purpose: this runs once per graph node on every
+            collision check, and :class:`Point3`/:class:`Vector3` arithmetic pays a
+            symbolic (casadi) cost on every access. Callers should convert to arrays
+            once before looping, not per call.
+
         :param start: The segment's start point.
         :param direction: The vector from the segment's start to its end.
         :return: The sub-interval of ``t`` for which the segment lies inside this
