@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from functools import cached_property
 
 from typing_extensions import (
     Optional,
@@ -18,6 +17,7 @@ from krrood.entity_query_language.backends import (
     EntityQueryLanguageGenerativeBackend,
 )
 from krrood.class_diagrams.mocking import MockedClass, MockedModule
+from krrood.utils import memoize
 from coraplex.plans.plan import Plan
 from coraplex.plans.plan_entity import PlanEntity
 from semantic_digital_twin.robots.robot_parts import AbstractRobot
@@ -38,7 +38,7 @@ except ImportError as e:
     rclpy = mocked_rclpy
 
 
-@dataclass
+@dataclass(eq=False)
 class Context(PlanEntity):
     """
     A dataclass for storing the context of a plan.
@@ -108,12 +108,26 @@ class Context(PlanEntity):
             logging.DEBUG if self.debug else logging.INFO
         )
 
-    @cached_property
+    def __eq__(self, other):
+        return self is other
+
+    def __hash__(self):
+        return hash(id(self))
+
+    @property
+    @memoize
     def giskard_wrapper(self):
+        """
+        The Giskard wrapper used to communicate with a running Giskard instance.
+
+        Memoized (not ``functools.cached_property``) so the cached wrapper, which
+        holds a reference to :attr:`world`, can be invalidated explicitly via
+        :func:`krrood.utils.clear_memoization_cache` if the world it was built for is
+        ever replaced.
+        """
         from giskardpy.middleware.ros2.python_interface import GiskardWrapper
 
         return GiskardWrapper(self.ros_node, world=self.world)
-
 
     @classmethod
     def from_world(

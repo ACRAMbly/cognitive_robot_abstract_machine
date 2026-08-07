@@ -26,6 +26,12 @@ class RosContextExtension(ContextExtension):
     """
     Action clients keyed by action topic. Reused across every task that targets the
     same topic instead of constructing (and waiting on) a new client per task build.
+
+    Safe to share between multiple tasks that are active at the same time: each
+    ``send_goal_async``/``get_result_async`` call returns its own future tracking that
+    specific goal, and callers (:class:`~giskardpy.motion_statechart.ros2_nodes.ros_tasks.ActionServerTask`)
+    keep their own goal message and result on the task instance, not on the client. No
+    state on the client itself is mutated per-goal.
     """
 
     def get_or_create_action_client(

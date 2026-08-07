@@ -4227,6 +4227,9 @@ class ContextDAO(
     )
 
     evaluate_conditions: Mapped[builtins.bool] = mapped_column(use_existing_column=True)
+    teleport_to_navigate_in_simulation: Mapped[builtins.bool] = mapped_column(
+        use_existing_column=True
+    )
 
     world_id: Mapped[int] = mapped_column(
         ForeignKey("WorldMappingDAO.database_id", use_alter=True),
@@ -8254,6 +8257,38 @@ class MotionStatechartErrorDAO(
     __mapper_args__ = {
         "polymorphic_on": "polymorphic_type",
         "polymorphic_identity": "MotionStatechartErrorDAO",
+    }
+
+
+class ActionClientTypeMismatchErrorDAO(
+    MotionStatechartErrorDAO,
+    DataAccessObject[
+        giskardpy.motion_statechart.exceptions.ActionClientTypeMismatchError
+    ],
+):
+    __tablename__ = "ActionClientTypeMismatchErrorDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(MotionStatechartErrorDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
+    )
+
+    action_topic: Mapped[builtins.str] = mapped_column(
+        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
+    )
+
+    existing_message_type: Mapped[TypeType] = mapped_column(
+        TypeType, nullable=False, use_existing_column=True
+    )
+    requested_message_type: Mapped[TypeType] = mapped_column(
+        TypeType, nullable=False, use_existing_column=True
+    )
+
+    __mapper_args__ = {
+        "polymorphic_identity": "ActionClientTypeMismatchErrorDAO",
+        "inherit_condition": database_id == MotionStatechartErrorDAO.database_id,
+        "polymorphic_load": "selectin",
     }
 
 

@@ -259,8 +259,19 @@ class ActionClientTypeMismatchError(MotionStatechartError):
     """
 
     action_topic: str
+    """
+    The action topic that was requested with two different message types.
+    """
+
     existing_message_type: Type
+    """
+    The message type the cached action client for this topic was created with.
+    """
+
     requested_message_type: Type
+    """
+    The message type that was requested for this topic instead.
+    """
 
     def error_message(self) -> str:
         return (
