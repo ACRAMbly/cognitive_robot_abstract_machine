@@ -74,6 +74,7 @@ import experiments.ormatic_experiments.reliability
 import experiments.ormatic_experiments.scalability
 import experiments.querying
 import experiments.random_events_experiments.complement_worst_case_experiment
+import experiments.random_events_experiments.curved_region_approximation
 import experiments.random_events_experiments.scalability_experiment
 import experiments.random_events_experiments.task_condition_survey.condition_event_translation
 import experiments.random_events_experiments.task_condition_survey.condition_extraction
@@ -1658,6 +1659,48 @@ class WorldModelManagerDAO_model_modification_blocks_association(
     target: Mapped[WorldModelModificationBlockDAO] = relationship(
         "WorldModelModificationBlockDAO",
         foreign_keys=[target_worldmodelmodificationblockdao_id],
+        lazy="selectin",
+    )
+
+
+class EuclideanDiscDAO_simulator_additional_properties_association(
+    Base, AssociationDataAccessObject
+):
+    __tablename__ = "_11115287851826298203696335155775997121744729343730643759500171"
+
+    database_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+
+    source_euclideandiscdao_id: Mapped[int] = mapped_column(
+        ForeignKey("EuclideanDiscDAO.database_id")
+    )
+    target_simulatoradditionalpropertydao_id: Mapped[int] = mapped_column(
+        ForeignKey("SimulatorAdditionalPropertyDAO.database_id")
+    )
+
+    target: Mapped[SimulatorAdditionalPropertyDAO] = relationship(
+        "SimulatorAdditionalPropertyDAO",
+        foreign_keys=[target_simulatoradditionalpropertydao_id],
+        lazy="selectin",
+    )
+
+
+class EuclideanBallDAO_simulator_additional_properties_association(
+    Base, AssociationDataAccessObject
+):
+    __tablename__ = "_82260316691949448872856648697877348752892324122982309364577090"
+
+    database_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+
+    source_euclideanballdao_id: Mapped[int] = mapped_column(
+        ForeignKey("EuclideanBallDAO.database_id")
+    )
+    target_simulatoradditionalpropertydao_id: Mapped[int] = mapped_column(
+        ForeignKey("SimulatorAdditionalPropertyDAO.database_id")
+    )
+
+    target: Mapped[SimulatorAdditionalPropertyDAO] = relationship(
+        "SimulatorAdditionalPropertyDAO",
+        foreign_keys=[target_simulatoradditionalpropertydao_id],
         lazy="selectin",
     )
 
@@ -8091,6 +8134,96 @@ class ComplementWorstCaseExperimentResultDAO(
 
     __mapper_args__ = {
         "polymorphic_identity": "ComplementWorstCaseExperimentResultDAO",
+        "inherit_condition": database_id == ExperimentResultDAO.database_id,
+        "polymorphic_load": "selectin",
+    }
+
+
+class CoveringApproximationDAO(
+    Base,
+    DataAccessObject[
+        experiments.random_events_experiments.curved_region_approximation.CoveringApproximation
+    ],
+):
+    __tablename__ = "CoveringApproximationDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
+
+    subdivisions: Mapped[builtins.int] = mapped_column(use_existing_column=True)
+
+    region_id: Mapped[int] = mapped_column(
+        ForeignKey("CurvedRegionDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
+    )
+
+    region: Mapped[CurvedRegionDAO] = relationship(
+        "CurvedRegionDAO", uselist=False, foreign_keys=[region_id], post_update=True
+    )
+
+
+class CurvedRegionDAO(
+    Base,
+    DataAccessObject[
+        experiments.random_events_experiments.curved_region_approximation.CurvedRegion
+    ],
+):
+    __tablename__ = "CurvedRegionDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
+
+    polymorphic_type: Mapped[str] = mapped_column(
+        String(255), nullable=False, use_existing_column=True
+    )
+
+    __mapper_args__ = {
+        "polymorphic_on": "polymorphic_type",
+        "polymorphic_identity": "CurvedRegionDAO",
+    }
+
+
+class RegionApproximationExperimentDAO(
+    Base,
+    DataAccessObject[
+        experiments.random_events_experiments.curved_region_approximation.RegionApproximationExperiment
+    ],
+):
+    __tablename__ = "RegionApproximationExperimentDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
+
+
+class RegionApproximationFidelityDAO(
+    ExperimentResultDAO,
+    DataAccessObject[
+        experiments.random_events_experiments.curved_region_approximation.RegionApproximationFidelity
+    ],
+):
+    __tablename__ = "RegionApproximationFidelityDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(ExperimentResultDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
+    )
+
+    region: Mapped[builtins.str] = mapped_column(
+        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
+    )
+    subdivisions: Mapped[builtins.int] = mapped_column(use_existing_column=True)
+    simple_sets: Mapped[builtins.int] = mapped_column(use_existing_column=True)
+    intersection_over_union: Mapped[builtins.float] = mapped_column(
+        use_existing_column=True
+    )
+
+    __mapper_args__ = {
+        "polymorphic_identity": "RegionApproximationFidelityDAO",
         "inherit_condition": database_id == ExperimentResultDAO.database_id,
         "polymorphic_load": "selectin",
     }
@@ -26214,6 +26347,70 @@ class CylinderDAO(
     }
 
 
+class EuclideanDiscDAO(
+    CurvedRegionDAO,
+    DataAccessObject[
+        experiments.random_events_experiments.curved_region_approximation.EuclideanDisc
+    ],
+):
+    __tablename__ = "EuclideanDiscDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(CurvedRegionDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
+    )
+
+    width: Mapped[builtins.float] = mapped_column(use_existing_column=True)
+    height: Mapped[builtins.float] = mapped_column(use_existing_column=True)
+
+    origin_id: Mapped[int] = mapped_column(
+        ForeignKey(
+            "HomogeneousTransformationMatrixMappingDAO.database_id", use_alter=True
+        ),
+        nullable=True,
+        use_existing_column=True,
+    )
+    color_id: Mapped[int] = mapped_column(
+        ForeignKey("ColorDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
+    )
+    texture_id: Mapped[typing.Optional[builtins.int]] = mapped_column(
+        ForeignKey("TextureDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
+    )
+
+    simulator_additional_properties: Mapped[
+        builtins.list[EuclideanDiscDAO_simulator_additional_properties_association]
+    ] = relationship(
+        "EuclideanDiscDAO_simulator_additional_properties_association",
+        collection_class=builtins.list,
+        cascade="all, delete-orphan",
+        foreign_keys="[EuclideanDiscDAO_simulator_additional_properties_association.source_euclideandiscdao_id]",
+        lazy="selectin",
+    )
+    origin: Mapped[HomogeneousTransformationMatrixMappingDAO] = relationship(
+        "HomogeneousTransformationMatrixMappingDAO",
+        uselist=False,
+        foreign_keys=[origin_id],
+        post_update=True,
+    )
+    color: Mapped[ColorDAO] = relationship(
+        "ColorDAO", uselist=False, foreign_keys=[color_id], post_update=True
+    )
+    texture: Mapped[TextureDAO] = relationship(
+        "TextureDAO", uselist=False, foreign_keys=[texture_id], post_update=True
+    )
+
+    __mapper_args__ = {
+        "polymorphic_identity": "EuclideanDiscDAO",
+        "inherit_condition": database_id == CurvedRegionDAO.database_id,
+        "polymorphic_load": "selectin",
+    }
+
+
 class MeshDAO(
     ShapeDAO, DataAccessObject[semantic_digital_twin.world_description.geometry.Mesh]
 ):
@@ -26258,6 +26455,69 @@ class SphereDAO(
     __mapper_args__ = {
         "polymorphic_identity": "SphereDAO",
         "inherit_condition": database_id == ShapeDAO.database_id,
+        "polymorphic_load": "selectin",
+    }
+
+
+class EuclideanBallDAO(
+    CurvedRegionDAO,
+    DataAccessObject[
+        experiments.random_events_experiments.curved_region_approximation.EuclideanBall
+    ],
+):
+    __tablename__ = "EuclideanBallDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(CurvedRegionDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
+    )
+
+    radius: Mapped[builtins.float] = mapped_column(use_existing_column=True)
+
+    origin_id: Mapped[int] = mapped_column(
+        ForeignKey(
+            "HomogeneousTransformationMatrixMappingDAO.database_id", use_alter=True
+        ),
+        nullable=True,
+        use_existing_column=True,
+    )
+    color_id: Mapped[int] = mapped_column(
+        ForeignKey("ColorDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
+    )
+    texture_id: Mapped[typing.Optional[builtins.int]] = mapped_column(
+        ForeignKey("TextureDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
+    )
+
+    simulator_additional_properties: Mapped[
+        builtins.list[EuclideanBallDAO_simulator_additional_properties_association]
+    ] = relationship(
+        "EuclideanBallDAO_simulator_additional_properties_association",
+        collection_class=builtins.list,
+        cascade="all, delete-orphan",
+        foreign_keys="[EuclideanBallDAO_simulator_additional_properties_association.source_euclideanballdao_id]",
+        lazy="selectin",
+    )
+    origin: Mapped[HomogeneousTransformationMatrixMappingDAO] = relationship(
+        "HomogeneousTransformationMatrixMappingDAO",
+        uselist=False,
+        foreign_keys=[origin_id],
+        post_update=True,
+    )
+    color: Mapped[ColorDAO] = relationship(
+        "ColorDAO", uselist=False, foreign_keys=[color_id], post_update=True
+    )
+    texture: Mapped[TextureDAO] = relationship(
+        "TextureDAO", uselist=False, foreign_keys=[texture_id], post_update=True
+    )
+
+    __mapper_args__ = {
+        "polymorphic_identity": "EuclideanBallDAO",
+        "inherit_condition": database_id == CurvedRegionDAO.database_id,
         "polymorphic_load": "selectin",
     }
 
