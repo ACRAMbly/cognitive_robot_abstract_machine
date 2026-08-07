@@ -52,14 +52,14 @@ def test_evaluation_releases_its_context_when_it_finishes():
     assert get_evaluation_context() is None
 
 
-def test_evaluating_query_root_falls_back_to_the_structural_root_outside_an_evaluation():
+def test_evaluation_root_query_falls_back_to_the_structural_root_outside_an_evaluation():
     """
     With no evaluation active there is no outermost query to resolve from, so
-    :attr:`SymbolicExpression._evaluating_query_root_` must fall back to
+    :attr:`SymbolicExpression._evaluation_root_query_` must fall back to
     :attr:`SymbolicExpression._root_`.
     """
     subject = variable(int, [1, 2, 3])
     entity(subject)
 
     assert get_evaluation_context() is None
-    assert subject._evaluating_query_root_ is subject._root_
+    assert subject._evaluation_root_query_ is subject._root_
