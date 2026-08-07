@@ -4,7 +4,7 @@ import cProfile
 from abc import ABC, abstractmethod
 from contextlib import AbstractContextManager
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from typing import ClassVar, Dict, List, Type
 
 import numpy as np
@@ -63,7 +63,7 @@ from semantic_digital_twin.world_description.world_entity import (
 # %% how much the measurement records
 
 
-class PlotterMode(Enum):
+class PlotterMode(StrEnum):
     """
     Whether the post goal plotters record the motion while it is measured.
 
@@ -89,9 +89,6 @@ class PlotterMode(Enum):
         :return: True if the trajectory has to be kept.
         """
         return self is PlotterMode.DEBUG
-
-    def __str__(self) -> str:
-        return self.value
 
 
 # %% the robot under measurement
