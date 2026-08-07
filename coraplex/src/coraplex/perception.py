@@ -179,8 +179,8 @@ class Detection:
         :raises PerceivedObjectNotInWorld: If the world holds no such annotation.
         :raises AmbiguousDetection: If the annotation describes more than one body.
         """
-        [annotation] = self.resolve_annotations(world)
-        body = annotation.root
+        matching_annotations = self.resolve_annotations(world)
+        body = matching_annotations[0].root
         detected_origin = world.transform(self.pose, body.parent_connection.parent)
         if trust_orientation:
             body.parent_connection.origin = detected_origin.to_homogeneous_matrix()
@@ -193,7 +193,7 @@ class Detection:
                     reference_frame=body.parent_connection.parent,
                 )
             )
-        return annotations
+        return matching_annotations
 
     def resolve_annotations(self, world: World) -> List[IsPerceivable]:
         """
