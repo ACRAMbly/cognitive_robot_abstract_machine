@@ -97,7 +97,7 @@ class MJCFParser(WorldModelParser):
         file_path: str,
         prefix: Optional[str] = None,
         mimic_joints: Optional[Dict[str, str]] = None,
-    ) -> "MJCFParser":
+    ) -> Self:
         """
         Creates a parser for a scene file.
 

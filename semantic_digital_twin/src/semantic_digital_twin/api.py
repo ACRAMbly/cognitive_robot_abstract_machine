@@ -1174,7 +1174,7 @@ class WorldSpecification:
     then spawns all starting objects, and returns the augmented environment world.
     """
 
-    world_parser: WorldModelParser | None
+    world_parser: WorldModelParser | None = None
     """
     The parser building the environment the robots and starting objects are added to.
 
