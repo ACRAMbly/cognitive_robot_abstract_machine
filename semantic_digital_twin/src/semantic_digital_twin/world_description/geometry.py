@@ -12,6 +12,7 @@ from dataclasses import dataclass, field, fields
 from functools import cached_property
 
 import numpy as np
+import numpy.typing as npt
 import trimesh
 import trimesh.exchange.stl
 from PIL import Image
@@ -1127,7 +1128,7 @@ class Bounds(Generic[T], SubClassSafeGeneric):
     """
 
     def clip_segment(
-        self, start: np.ndarray, direction: np.ndarray
+        self, start: npt.NDArray[np.float64], direction: npt.NDArray[np.float64]
     ) -> Optional[SimpleInterval]:
         """
         Clip the parametrized segment ``start + t * direction`` (``t`` in ``[0, 1]``)
