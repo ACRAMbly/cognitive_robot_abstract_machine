@@ -33,7 +33,7 @@ from giskardpy.motion_statechart.monitors.payload_monitors import (
 @dataclass(eq=False, repr=False)
 class NotApproachingGoal(MotionStatechartNode):
     """
-    Turns True while `monitored_task` is not closing on its goal fast enough.
+    Turns ``True`` while :attr:`monitored_task` is not closing on its goal fast enough.
 
     A task that is not running has no meaningful convergence rate, so it is reported as
     not approaching. That makes this node safe to combine with others, but it means the
@@ -102,8 +102,8 @@ class NotApproachingGoal(MotionStatechartNode):
 
     def _monitored_task_is_not_running(self) -> Scalar:
         """
-        :return: True while the monitored task is in any life cycle state other than
-            RUNNING.
+        :return: ``True`` while the monitored task is in any life cycle state other
+            than :attr:`~giskardpy.motion_statechart.data_types.LifeCycleValues.RUNNING`.
         """
         return sm.Scalar(
             self.monitored_task.life_cycle_variable != int(LifeCycleValues.RUNNING)
@@ -118,8 +118,8 @@ class NotApproachingGoal(MotionStatechartNode):
         """
         Measure the convergence rate of an error that cannot be differentiated.
 
-        Returns None for a differentiable error, leaving the observation to the
-        expression built in :meth:`build`.
+        :return: For a differentiable error, ``None``, leaving the observation to the
+            expression built in :meth:`build_artifacts`.
         """
         if self._sampled_error is None:
             return None
@@ -143,7 +143,7 @@ class NotApproachingGoal(MotionStatechartNode):
 @dataclass(eq=False, repr=False)
 class AnyMonitoredTaskRunning(MotionStatechartNode):
     """
-    Turns True while at least one of `monitored_tasks` is running.
+    Turns ``True`` while at least one of :attr:`monitored_tasks` is running.
 
     Without this, a set of tasks that have all finished, or have not started, would read
     as "nothing is approaching its goal" and be mistaken for a stall.
@@ -156,8 +156,8 @@ class AnyMonitoredTaskRunning(MotionStatechartNode):
 
     def build_artifacts(self, context: MotionStatechartContext) -> NodeArtifacts:
         """
-        Each life cycle comparison is 0 or 1, so their maximum is 1 exactly when at
-        least one task runs.
+        Each life cycle comparison is ``0`` or ``1``, so their maximum is ``1`` exactly
+        when at least one task runs.
 
         That also stays correct for a single task, unlike an n-ary or.
         """
@@ -181,8 +181,8 @@ class AnyMonitoredTaskRunning(MotionStatechartNode):
 @dataclass(eq=False, repr=False)
 class ProgressStalled(Goal):
     """
-    Turns True once nothing under `monitored_node` has approached its goal for `timeout`
-    seconds.
+    Turns ``True`` once nothing under :attr:`monitored_node` has approached its goal for
+    :attr:`timeout` seconds.
 
     Watching each converging task separately, rather than one combined error, keeps the
     measure meaningful for a :class:`~giskardpy.motion_statechart.goals.templates.Sequence`,
@@ -199,7 +199,7 @@ class ProgressStalled(Goal):
 
     timeout: float = field(default=5.0, kw_only=True)
     """
-    Seconds of simulated time without progress after which this turns True.
+    Seconds of simulated time without progress after which this turns ``True``.
     """
 
     minimum_convergence_rate: float = field(default=0.05, kw_only=True)
@@ -255,7 +255,7 @@ class ProgressStalled(Goal):
         """
         :return: A node that aborts the motion with a
             :class:`~giskardpy.motion_statechart.exceptions.NoProgressError` once this
-            node turns True.
+            node turns ``True``.
         """
         cancel = _CancelBecauseNoProgress(progress_monitor=self)
         cancel.start_condition = self.observation_variable
@@ -296,7 +296,7 @@ class ProgressStalled(Goal):
         self, node: MotionStatechartNode
     ) -> List[ConvergingTask]:
         """
-        Collect every converging task at or below `node`.
+        Collect every converging task at or below ``node``.
 
         :param node: The node to search.
         :return: The converging tasks found, depth first.
@@ -325,8 +325,8 @@ class _CancelBecauseNoProgress(CancelMotion):
 
     exception: Exception = field(init=False, default=Exception)
     """
-    Set to init=False, because this class creates its own exception once it knows which
-    tasks are stalled.
+    Set to ``init=False``, because this class creates its own exception once it knows
+    which tasks are stalled.
     """
 
     def on_tick(self, context: MotionStatechartContext) -> Optional[float]:
