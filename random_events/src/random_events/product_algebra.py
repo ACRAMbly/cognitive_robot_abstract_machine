@@ -133,11 +133,15 @@ class SimpleEvent(AbstractSimpleSet, VariableMap):
         the size of the values it assigns them.
 
         A variable left out of the event is left out of the product, so the size is the
-        one taken over the variables the event constrains.
+        one taken over the variables the event constrains. An event that constrains no
+        variable at all is the empty event rather than an empty product, so it has no
+        size.
 
         :return: The size of this event, which is zero as soon as one variable is
             assigned nothing of size and infinite when one is unbounded.
         """
+        if self.is_empty():
+            return 0.0
         factors = [assignment.size for assignment in self.assignments]
         if any(factor == 0.0 for factor in factors):
             return 0.0

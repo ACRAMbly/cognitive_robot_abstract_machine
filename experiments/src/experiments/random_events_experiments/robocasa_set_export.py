@@ -812,7 +812,11 @@ def as_json_value(value: Any) -> Any:
     return value
 
 
-def main():
+def main() -> None:
+    """
+    Exports each track of RoboCasa's ground truth for the surveyed tasks, printing a
+    table per track and recording its rows alongside.
+    """
     output_directory = pathlib.Path("robocasa_set_export_output")
     output_directory.mkdir(parents=True, exist_ok=True)
 

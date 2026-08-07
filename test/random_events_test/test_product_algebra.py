@@ -369,6 +369,16 @@ class EventTestCase(unittest.TestCase):
         )
         self.assertEqual(singleton_in_x.size, 0)
 
+    def test_size_of_an_event_constraining_no_variable(self):
+        nothing = SimpleEvent.from_data({})
+        self.assertTrue(nothing.is_empty())
+        self.assertEqual(nothing.size, 0)
+
+    def test_size_of_an_event_assigning_a_variable_nothing(self):
+        nothing_in_x = SimpleEvent.from_data({self.x: Interval(), self.y: closed(0, 3)})
+        self.assertTrue(nothing_in_x.is_empty())
+        self.assertEqual(nothing_in_x.size, 0)
+
     def test_size_of_an_unbounded_event(self):
         slab = SimpleEvent.from_data({self.x: closed(0, 2), self.y: reals()})
         self.assertEqual(slab.size, float("inf"))
