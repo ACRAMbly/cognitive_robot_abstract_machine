@@ -25,6 +25,7 @@ from krrood.entity_query_language.factories import (
     an,
 )
 from krrood.entity_query_language.operators.comparator import Comparator
+from krrood.entity_query_language.operators.core_logical_operators import AND, OR
 from krrood.entity_query_language.query.query import Query
 from krrood.entity_query_language.query_graph import QueryGraph
 from krrood.symbol_graph.symbol_graph import Symbol
@@ -307,6 +308,16 @@ def _get_true_results(query: Query):
     return list(query._true_results_())
 
 
+def _get_satisfied_names(ids, condition_root):
+    """
+    Get expression names from satisfied condition IDs by traversing the condition tree.
+    """
+    return {
+        expression._name_
+        for expression in condition_root._subtree_expressions_with_ids_(ids)
+    }
+
+
 def test_satisfied_conditions_simple():
     """
     A single Comparator condition tracks its ID as satisfied.
@@ -399,6 +410,27 @@ def test_satisfied_conditions_or_first_true():
 
     # Exact set: the short-circuited right side is absent rather than satisfied.
     assert set(result.satisfied_condition_ids) == {condition._id_, greater._id_}
+
+
+def test_satisfied_conditions_exclude_a_short_circuited_operator():
+    """
+    A whole operator skipped by a short-circuit is not satisfied.
+
+    The operand-level cases above only pin a skipped comparator; an operator that was
+    never evaluated must be excluded on the same grounds, since it made no truth claim
+    for this evaluation at all.
+    """
+    val = variable_from([6])
+    query = entity(val).where(or_(val > 5, and_(val < 10, val != 0)))
+
+    true_results = _get_true_results(query)
+    assert len(true_results) == 1
+
+    satisfied = val._conditions_root_._subtree_expressions_with_ids_(
+        true_results[0].satisfied_condition_ids
+    )
+    assert any(isinstance(expression, OR) for expression in satisfied)
+    assert not any(isinstance(expression, AND) for expression in satisfied)
 
 
 def test_satisfied_conditions_or_fallback():
@@ -759,22 +791,19 @@ def test_query_graph_marks_a_shared_bare_condition_satisfied_from_its_own_query(
     assert not flag_node.faded
 
 
-def test_query_graph_marks_a_bare_condition_satisfied_when_also_reused_as_a_comparator_operand_in_the_same_query():
+def test_query_graph_marks_a_node_reused_at_two_positions_satisfied_regardless_of_visit_order():
     """
-    A node reused at two different positions within one query's own tree -- once as a
-    bare ``TruthValueOperator`` child, once as a ``Comparator`` operand -- must be
-    classified correctly at the position ``construct_graph`` visits it as its own direct
-    condition, regardless of which of the two positions is visited first.
+    A node reused at two positions within one query's own tree -- once as a bare
+    ``TruthValueOperator`` child, once as a ``Comparator`` operand -- is marked
+    satisfied whenever it is in ``satisfied_condition_ids``, whichever of the two
+    positions ``construct_graph`` visits first.
 
     ``construct_graph`` memoizes exactly one ``QueryNode`` per expression
-    (``expression_node_map``), so the first-visited position's
-    ``is_condition_participant`` classification is computed and cached; a later visit
-    through a different parent returns the cached node unchanged instead of re-
-    classifying it for that position. ``and_(flag == True, flag)`` visits the
-    ``Comparator`` operand position first (``flag`` is not a condition participant
-    there, since ``Comparator`` is not a ``TruthValueOperator``), caching
-    ``is_satisfied=False`` before the bare ``AND`` child position -- where ``flag``
-    truly is a condition participant and was evaluated true -- is ever visited.
+    (``expression_node_map``), so any position-dependent term in the satisfaction
+    check would be computed at the first-visited position and then reused for every
+    other one. ``and_(flag == True, flag)`` reaches the ``Comparator`` operand
+    position before the bare ``AND`` child position, so it pins that the classification
+    stays independent of visit order.
     """
     flag = variable_from([True])
     sink = variable_from([1])
@@ -782,7 +811,7 @@ def test_query_graph_marks_a_bare_condition_satisfied_when_also_reused_as_a_comp
     query = entity(sink).where(and_(flag == True, flag))
     assert (
         len(flag._parents_) == 2
-    ), "flag must be a genuinely shared DAG node for this to exercise the bug"
+    ), "flag must be a genuinely shared DAG node for this to exercise the behaviour"
 
     true_results = _get_true_results(query)
     result = true_results[0]

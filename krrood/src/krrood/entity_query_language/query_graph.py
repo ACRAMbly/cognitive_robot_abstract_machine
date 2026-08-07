@@ -51,13 +51,13 @@ def _is_faded_gate(node, satisfied_condition_ids: OrderedSet[UUID]) -> bool:
     Such nodes act as "gates" that the BFS in
     :meth:`QueryGraph._propagate_faded_subtrees` refuses to traverse through.
     """
-    expr = node.data
-    if expr is None:
+    expression = node.data
+    if expression is None:
         return False
-    parent_expr = node.parent.data if node.parent is not None else None
-    if not is_condition_participant(expr, parent=parent_expr):
+    parent_expression = node.parent.data if node.parent is not None else None
+    if not is_condition_participant(expression, parent=parent_expression):
         return False
-    return expr._id_ not in satisfied_condition_ids
+    return expression._id_ not in satisfied_condition_ids
 
 
 @dataclass
@@ -218,41 +218,28 @@ class QueryGraph:
     def construct_graph(
         self,
         expression: Optional[SymbolicExpression] = None,
-        parent: Optional[SymbolicExpression] = None,
     ) -> QueryNode:
         """
         Construct the graph representation of the query, used for visualization and
         introspection.
 
         :param expression: The expression to add, defaulting to the query's root.
-        :param parent: The parent *expression* was reached through, when known (that is,
-            whenever this is a recursive call from :meth:`_add_children_to_graph` rather
-            than the initial call). Passed on to :func:`is_condition_participant`
-            instead of letting it fall back to *expression*'s structural, first-
-            attachment-wins ``_parent_``, which may belong to an unrelated position if
-            *expression* is a node shared elsewhere in the DAG.
         """
         expression = expression if expression is not None else self.query._root_
 
         if expression in self.expression_node_map:
-            node = self.expression_node_map[expression]
-            # A node reached via more than one parent within this same query's own tree
-            # (for example used both as a bare TruthValueOperator condition and as a
-            # Comparator operand) is only classified here, not re-added; folding each
-            # extra visit's own satisfaction into the already-memoized node with `or`
-            # keeps the node satisfied once *any* of its positions qualifies, regardless
-            # of which position construct_graph happened to visit first.
-            node.is_satisfied = node.is_satisfied or self._is_satisfied(
-                expression, parent
-            )
-            return node
+            return self.expression_node_map[expression]
 
+        is_satisfied = (
+            self.satisfied_condition_ids is not None
+            and expression._id_ in self.satisfied_condition_ids
+        )
         node = QueryNode(
             self.get_expression_name(expression),
             self.graph,
             color=ColorLegend.from_expression(expression, self.satisfied_condition_ids),
             data=expression,
-            is_satisfied=self._is_satisfied(expression, parent),
+            is_satisfied=is_satisfied,
         )
         self.expression_node_map[expression] = node
 
@@ -262,24 +249,6 @@ class QueryGraph:
         self._add_children_to_graph(node)
 
         return node
-
-    def _is_satisfied(
-        self,
-        expression: SymbolicExpression,
-        parent: Optional[SymbolicExpression],
-    ) -> bool:
-        """
-        :param expression: The expression to classify.
-        :param parent: The parent *expression* was reached through at this visit, or
-            ``None``.
-        :return: Whether *expression*, reached through *parent*, is a satisfied
-            condition participant.
-        """
-        return (
-            self.satisfied_condition_ids is not None
-            and is_condition_participant(expression, parent=parent)
-            and expression._id_ in self.satisfied_condition_ids
-        )
 
     def _add_children_to_graph(
         self,
@@ -297,7 +266,7 @@ class QueryGraph:
             else []
         )
         for child in parent_expression._children_:
-            child_node = self.construct_graph(child, parent=parent_expression)
+            child_node = self.construct_graph(child)
             if child._id_ in selected_var_ids:
                 child_node.enclosed = True
             child_node.parent = parent_node
@@ -333,7 +302,6 @@ class ColorLegend(RXUtilsColorLegend):
             case Variable():
                 color = "cornflowerblue"
             case Concatenation():
-                name = "Union"
                 color = "#949292"
             case MappedVariable():
                 name = "DomainMapping"
