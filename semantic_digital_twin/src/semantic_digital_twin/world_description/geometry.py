@@ -1312,6 +1312,13 @@ class BoundingBox:
         )
 
     @property
+    def volume(self) -> float:
+        """
+        :return: The volume the bounding box encloses.
+        """
+        return self.depth * self.width * self.height
+
+    @property
     def dimensions(self) -> List[float]:
         """
         :return: The dimensions of the bounding box as a list [width, depth, height].
