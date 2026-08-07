@@ -331,6 +331,9 @@ class TestCartesianTasks:
         The goal pose here only differs from the start pose by a 0.05 rad yaw, so on the
         very first tick the position error is exactly zero while the rotation error is
         0.05 rad -- isolating the rotation half of the observation.
+
+        The orientation sub-tasks are inspected directly, because the observation of the
+        enclosing :class:`Parallel` only reflects its children on the following tick.
         """
         tip = cylinder_bot_world.get_kinematic_structure_entity_by_name("bot")
         goal_pose = Pose.from_xyz_rpy(yaw=0.05, reference_frame=cylinder_bot_world.root)
@@ -361,8 +364,14 @@ class TestCartesianTasks:
         executor.compile(motion_statechart=motion_statechart)
         executor.tick()
 
-        assert strict.observation_state == ObservationStateValues.FALSE
-        assert loose.observation_state == ObservationStateValues.TRUE
+        strict_orientation = next(
+            node for node in strict.nodes if isinstance(node, CartesianOrientation)
+        )
+        loose_orientation = next(
+            node for node in loose.nodes if isinstance(node, CartesianOrientation)
+        )
+        assert strict_orientation.observation_state == ObservationStateValues.FALSE
+        assert loose_orientation.observation_state == ObservationStateValues.TRUE
 
     def test_end_motion_waits_for_convergence(self, cylinder_bot_world: World):
         """
