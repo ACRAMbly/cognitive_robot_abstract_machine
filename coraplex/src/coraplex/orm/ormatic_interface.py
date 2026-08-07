@@ -276,7 +276,7 @@ class Base(DeclarativeBase):
         uuid.UUID: sqlalchemy.sql.sqltypes.UUID,
         pathlib.Path: krrood.ormatic.custom_types.PathType,
         krrood.adapters.json_serializer.JSONData: krrood.ormatic.custom_types.JSONDataType,
-        numpy.ndarray: coraplex.orm.model.NumpyType,
+        numpy.ndarray: krrood.ormatic.custom_types.NumpyType,
     }
 
 
@@ -3036,10 +3036,10 @@ class ExecutionDataDAO(
     )
 
     execution_start_world_state: Mapped[numpy.ndarray] = mapped_column(
-        coraplex.orm.model.NumpyType, nullable=False, use_existing_column=True
+        krrood.ormatic.custom_types.NumpyType, nullable=False, use_existing_column=True
     )
     execution_end_world_state: Mapped[typing.Optional[numpy.ndarray]] = mapped_column(
-        coraplex.orm.model.NumpyType, nullable=True, use_existing_column=True
+        krrood.ormatic.custom_types.NumpyType, nullable=True, use_existing_column=True
     )
 
     execution_start_pose_id: Mapped[int] = mapped_column(
@@ -8423,6 +8423,9 @@ class RequiredWorldUpdateNotReceivedErrorDAO(
     publisher_name: Mapped[builtins.str] = mapped_column(
         sqlalchemy.sql.sqltypes.Text, use_existing_column=True
     )
+    current_sequence_number: Mapped[builtins.int] = mapped_column(
+        use_existing_column=True
+    )
     awaited_sequence_number: Mapped[builtins.int] = mapped_column(
         use_existing_column=True
     )
@@ -12780,7 +12783,7 @@ class StateDAO(
     )
 
     data: Mapped[numpy.ndarray] = mapped_column(
-        coraplex.orm.model.NumpyType, nullable=False, use_existing_column=True
+        krrood.ormatic.custom_types.NumpyType, nullable=False, use_existing_column=True
     )
     polymorphic_type: Mapped[str] = mapped_column(
         String(255), nullable=False, use_existing_column=True
@@ -15063,25 +15066,25 @@ class QPDataExplicitDAO(
     )
 
     quadratic_weights: Mapped[numpy.ndarray] = mapped_column(
-        coraplex.orm.model.NumpyType, nullable=False, use_existing_column=True
+        krrood.ormatic.custom_types.NumpyType, nullable=False, use_existing_column=True
     )
     linear_weights: Mapped[numpy.ndarray] = mapped_column(
-        coraplex.orm.model.NumpyType, nullable=False, use_existing_column=True
+        krrood.ormatic.custom_types.NumpyType, nullable=False, use_existing_column=True
     )
     box_lower_constraints: Mapped[numpy.ndarray] = mapped_column(
-        coraplex.orm.model.NumpyType, nullable=False, use_existing_column=True
+        krrood.ormatic.custom_types.NumpyType, nullable=False, use_existing_column=True
     )
     box_upper_constraints: Mapped[numpy.ndarray] = mapped_column(
-        coraplex.orm.model.NumpyType, nullable=False, use_existing_column=True
+        krrood.ormatic.custom_types.NumpyType, nullable=False, use_existing_column=True
     )
     equality_bounds: Mapped[numpy.ndarray] = mapped_column(
-        coraplex.orm.model.NumpyType, nullable=False, use_existing_column=True
+        krrood.ormatic.custom_types.NumpyType, nullable=False, use_existing_column=True
     )
     inequality_lower_bounds: Mapped[numpy.ndarray] = mapped_column(
-        coraplex.orm.model.NumpyType, nullable=False, use_existing_column=True
+        krrood.ormatic.custom_types.NumpyType, nullable=False, use_existing_column=True
     )
     inequality_upper_bounds: Mapped[numpy.ndarray] = mapped_column(
-        coraplex.orm.model.NumpyType, nullable=False, use_existing_column=True
+        krrood.ormatic.custom_types.NumpyType, nullable=False, use_existing_column=True
     )
 
     __mapper_args__ = {
@@ -15101,16 +15104,16 @@ class QPDataTwoSidedInequalityDAO(
     )
 
     quadratic_weights: Mapped[numpy.ndarray] = mapped_column(
-        coraplex.orm.model.NumpyType, nullable=False, use_existing_column=True
+        krrood.ormatic.custom_types.NumpyType, nullable=False, use_existing_column=True
     )
     linear_weights: Mapped[numpy.ndarray] = mapped_column(
-        coraplex.orm.model.NumpyType, nullable=False, use_existing_column=True
+        krrood.ormatic.custom_types.NumpyType, nullable=False, use_existing_column=True
     )
     inequality_lower_bounds: Mapped[numpy.ndarray] = mapped_column(
-        coraplex.orm.model.NumpyType, nullable=False, use_existing_column=True
+        krrood.ormatic.custom_types.NumpyType, nullable=False, use_existing_column=True
     )
     inequality_upper_bounds: Mapped[numpy.ndarray] = mapped_column(
-        coraplex.orm.model.NumpyType, nullable=False, use_existing_column=True
+        krrood.ormatic.custom_types.NumpyType, nullable=False, use_existing_column=True
     )
 
     __mapper_args__ = {
@@ -15254,7 +15257,7 @@ class QuadraticProgramDebuggerDAO(
     )
 
     current_solution: Mapped[typing.Optional[numpy.ndarray]] = mapped_column(
-        coraplex.orm.model.NumpyType, nullable=True, use_existing_column=True
+        krrood.ormatic.custom_types.NumpyType, nullable=True, use_existing_column=True
     )
 
     qp_data_symbolic_id: Mapped[int] = mapped_column(
@@ -19739,13 +19742,13 @@ class ClosestPointsDAO(
     distance: Mapped[builtins.float] = mapped_column(use_existing_column=True)
 
     root_P_point_on_body_a: Mapped[numpy.ndarray] = mapped_column(
-        coraplex.orm.model.NumpyType, nullable=False, use_existing_column=True
+        krrood.ormatic.custom_types.NumpyType, nullable=False, use_existing_column=True
     )
     root_P_point_on_body_b: Mapped[numpy.ndarray] = mapped_column(
-        coraplex.orm.model.NumpyType, nullable=False, use_existing_column=True
+        krrood.ormatic.custom_types.NumpyType, nullable=False, use_existing_column=True
     )
     root_V_contact_normal_from_b_to_a: Mapped[numpy.ndarray] = mapped_column(
-        coraplex.orm.model.NumpyType, nullable=False, use_existing_column=True
+        krrood.ormatic.custom_types.NumpyType, nullable=False, use_existing_column=True
     )
 
     body_a_id: Mapped[int] = mapped_column(
@@ -24339,19 +24342,19 @@ class QPMatricesDAO(
     )
 
     H: Mapped[numpy.ndarray] = mapped_column(
-        coraplex.orm.model.NumpyType, nullable=False, use_existing_column=True
+        krrood.ormatic.custom_types.NumpyType, nullable=False, use_existing_column=True
     )
     g: Mapped[numpy.ndarray] = mapped_column(
-        coraplex.orm.model.NumpyType, nullable=False, use_existing_column=True
+        krrood.ormatic.custom_types.NumpyType, nullable=False, use_existing_column=True
     )
     A: Mapped[numpy.ndarray] = mapped_column(
-        coraplex.orm.model.NumpyType, nullable=False, use_existing_column=True
+        krrood.ormatic.custom_types.NumpyType, nullable=False, use_existing_column=True
     )
     l: Mapped[numpy.ndarray] = mapped_column(
-        coraplex.orm.model.NumpyType, nullable=False, use_existing_column=True
+        krrood.ormatic.custom_types.NumpyType, nullable=False, use_existing_column=True
     )
     u: Mapped[numpy.ndarray] = mapped_column(
-        coraplex.orm.model.NumpyType, nullable=False, use_existing_column=True
+        krrood.ormatic.custom_types.NumpyType, nullable=False, use_existing_column=True
     )
 
 
@@ -25355,6 +25358,110 @@ class IrisSeedingSettingsDAO(
 
     grid_resolution: Mapped[builtins.int] = mapped_column(use_existing_column=True)
     max_regions: Mapped[builtins.int] = mapped_column(use_existing_column=True)
+
+
+class _MockedConvexSetDAO(
+    Base,
+    DataAccessObject[
+        semantic_digital_twin.world_description.graph_of_convex_sets.polygons._MockedConvexSet
+    ],
+):
+    __tablename__ = "_MockedConvexSetDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
+
+
+class _MockedGcsTrajectoryOptimizationDAO(
+    Base,
+    DataAccessObject[
+        semantic_digital_twin.world_description.graph_of_convex_sets.polygons._MockedGcsTrajectoryOptimization
+    ],
+):
+    __tablename__ = "_MockedGcsTrajectoryOptimizationDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
+
+
+class _MockedHPolyhedronDAO(
+    Base,
+    DataAccessObject[
+        semantic_digital_twin.world_description.graph_of_convex_sets.polygons._MockedHPolyhedron
+    ],
+):
+    __tablename__ = "_MockedHPolyhedronDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
+
+
+class _MockedIrisDAO(
+    Base,
+    DataAccessObject[
+        semantic_digital_twin.world_description.graph_of_convex_sets.polygons._MockedIris
+    ],
+):
+    __tablename__ = "_MockedIrisDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
+
+
+class _MockedIrisOptionsDAO(
+    Base,
+    DataAccessObject[
+        semantic_digital_twin.world_description.graph_of_convex_sets.polygons._MockedIrisOptions
+    ],
+):
+    __tablename__ = "_MockedIrisOptionsDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
+
+
+class _MockedPointDAO(
+    Base,
+    DataAccessObject[
+        semantic_digital_twin.world_description.graph_of_convex_sets.polygons._MockedPoint
+    ],
+):
+    __tablename__ = "_MockedPointDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
+
+
+class _MockedSubgraphDAO(
+    Base,
+    DataAccessObject[
+        semantic_digital_twin.world_description.graph_of_convex_sets.polygons._MockedSubgraph
+    ],
+):
+    __tablename__ = "_MockedSubgraphDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
+
+
+class _MockedVPolytopeDAO(
+    Base,
+    DataAccessObject[
+        semantic_digital_twin.world_description.graph_of_convex_sets.polygons._MockedVPolytope
+    ],
+):
+    __tablename__ = "_MockedVPolytopeDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
 
 
 class InertialDAO(
@@ -37546,7 +37653,7 @@ class WorldStateEntryViewDAO(
     )
 
     data: Mapped[numpy.ndarray] = mapped_column(
-        coraplex.orm.model.NumpyType, nullable=False, use_existing_column=True
+        krrood.ormatic.custom_types.NumpyType, nullable=False, use_existing_column=True
     )
 
 
