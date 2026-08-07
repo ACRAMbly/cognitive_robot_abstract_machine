@@ -37,7 +37,7 @@ class Sequence(Goal):
                 node.end_condition = node.observation_variable
             last_node = node
 
-    def build(self, context: MotionStatechartContext) -> NodeArtifacts:
+    def build_artifacts(self, context: MotionStatechartContext) -> NodeArtifacts:
         return NodeArtifacts(observation=self.nodes[-1].observation_variable)
 
 
@@ -62,7 +62,7 @@ class Parallel(Goal):
         for node in self.nodes:
             self.add_node(node)
 
-    def build(self, context: MotionStatechartContext) -> NodeArtifacts:
+    def build_artifacts(self, context: MotionStatechartContext) -> NodeArtifacts:
         true_observation_variables = [
             x.observation_variable == True for x in self.nodes
         ]

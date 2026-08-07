@@ -12,7 +12,7 @@ from semantic_digital_twin.world_description.world_entity import (
 )
 from giskardpy.motion_statechart.context import MotionStatechartContext
 from giskardpy.motion_statechart.data_types import DefaultWeights
-from giskardpy.motion_statechart.error_signals import ErrorSignal, SymbolicErrorSignal
+from giskardpy.motion_statechart.error_signals import SymbolicErrorSignal
 from giskardpy.motion_statechart.graph_node import (
     ConvergingTask,
     NodeArtifacts,
@@ -153,16 +153,14 @@ class AlignPerpendicular(FeatureFunctionGoal):
     def get_controlled_and_reference_features(self):
         return self.tip_normal, self.reference_normal
 
-    def build_error(
-        self, context: MotionStatechartContext, artifacts: NodeArtifacts
-    ) -> ErrorSignal:
+    def build_artifacts(self, context: MotionStatechartContext) -> NodeArtifacts:
         """
         Build a constraint that drives the two normals perpendicular.
 
         :param context: Provides access to world model and kinematic expressions.
-        :param artifacts: The artifacts to add constraints to.
-        :return: How far the dot product of the two normals is from zero.
+        :return: The artifacts of this task, whose error is how far the dot product of the two normals is from zero.
         """
+        artifacts = NodeArtifacts()
         expr = self.root_V_reference_feature @ self.root_V_controlled_feature
 
         artifacts.constraints.add_equality_constraint(
@@ -172,7 +170,8 @@ class AlignPerpendicular(FeatureFunctionGoal):
             task_expression=expr,
             name=f"{self.name}_constraint",
         )
-        return SymbolicErrorSignal(sm.abs(expr))
+        artifacts.error = SymbolicErrorSignal(sm.abs(expr))
+        return artifacts
 
 
 @dataclass(eq=False, repr=False)
@@ -216,16 +215,14 @@ class HeightGoal(FeatureFunctionGoal):
     def get_controlled_and_reference_features(self):
         return self.tip_point, self.reference_point
 
-    def build_error(
-        self, context: MotionStatechartContext, artifacts: NodeArtifacts
-    ) -> ErrorSignal:
+    def build_artifacts(self, context: MotionStatechartContext) -> NodeArtifacts:
         """
         Build a constraint that keeps the height difference within the limits.
 
         :param context: Provides access to world model and kinematic expressions.
-        :param artifacts: The artifacts to add constraints to.
-        :return: How far the height difference lies outside the limits.
+        :return: The artifacts of this task, whose error is how far the height difference lies outside the limits.
         """
+        artifacts = NodeArtifacts()
         expr = (
             self.root_P_controlled_feature - self.root_P_reference_feature
         ) @ Vector3.Z()
@@ -239,9 +236,10 @@ class HeightGoal(FeatureFunctionGoal):
             name=f"{self.name}_constraint",
         )
 
-        return SymbolicErrorSignal(
+        artifacts.error = SymbolicErrorSignal(
             sm.max(self.lower_limit - expr, expr - self.upper_limit)
         )
+        return artifacts
 
 
 @dataclass(eq=False, repr=False)
@@ -285,16 +283,14 @@ class DistanceGoal(FeatureFunctionGoal):
     def get_controlled_and_reference_features(self):
         return self.tip_point, self.reference_point
 
-    def build_error(
-        self, context: MotionStatechartContext, artifacts: NodeArtifacts
-    ) -> ErrorSignal:
+    def build_artifacts(self, context: MotionStatechartContext) -> NodeArtifacts:
         """
         Build a constraint that keeps the planar distance within the limits.
 
         :param context: Provides access to world model and kinematic expressions.
-        :param artifacts: The artifacts to add constraints to.
-        :return: How far the planar distance lies outside the limits.
+        :return: The artifacts of this task, whose error is how far the planar distance lies outside the limits.
         """
+        artifacts = NodeArtifacts()
         root_V_diff = self.root_P_controlled_feature - self.root_P_reference_feature
         root_V_diff[2] = 0.0
         expr = root_V_diff.norm()
@@ -319,9 +315,10 @@ class DistanceGoal(FeatureFunctionGoal):
                 name=f"{self.name}_extra_{axis_name}",
             )
 
-        return SymbolicErrorSignal(
+        artifacts.error = SymbolicErrorSignal(
             sm.max(self.lower_limit - expr, expr - self.upper_limit)
         )
+        return artifacts
 
 
 @dataclass(eq=False, repr=False)
@@ -365,16 +362,14 @@ class AngleGoal(FeatureFunctionGoal):
     def get_controlled_and_reference_features(self):
         return self.tip_vector, self.reference_vector
 
-    def build_error(
-        self, context: MotionStatechartContext, artifacts: NodeArtifacts
-    ) -> ErrorSignal:
+    def build_artifacts(self, context: MotionStatechartContext) -> NodeArtifacts:
         """
         Build a constraint that keeps the angle between the vectors within the limits.
 
         :param context: Provides access to world model and kinematic expressions.
-        :param artifacts: The artifacts to add constraints to.
-        :return: How far the angle lies outside the limits.
+        :return: The artifacts of this task, whose error is how far the angle lies outside the limits.
         """
+        artifacts = NodeArtifacts()
         expr = self.root_V_reference_feature.angle_between(
             self.root_V_controlled_feature
         )
@@ -388,6 +383,7 @@ class AngleGoal(FeatureFunctionGoal):
             name=f"{self.name}_constraint",
         )
 
-        return SymbolicErrorSignal(
+        artifacts.error = SymbolicErrorSignal(
             sm.max(self.lower_angle - expr, expr - self.upper_angle)
         )
+        return artifacts

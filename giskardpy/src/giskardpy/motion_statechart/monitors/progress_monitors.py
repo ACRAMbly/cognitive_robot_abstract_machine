@@ -74,7 +74,7 @@ class NotApproachingGoal(MotionStatechartNode):
     def prerequisite_nodes(self) -> List[MotionStatechartNode]:
         return [self.monitored_task]
 
-    def build(self, context: MotionStatechartContext) -> NodeArtifacts:
+    def build_artifacts(self, context: MotionStatechartContext) -> NodeArtifacts:
         """
         Compare the rate of change of the monitored task's error against
         :attr:`minimum_convergence_rate`.
@@ -154,7 +154,7 @@ class AnyMonitoredTaskRunning(MotionStatechartNode):
     The tasks whose life cycle states are watched.
     """
 
-    def build(self, context: MotionStatechartContext) -> NodeArtifacts:
+    def build_artifacts(self, context: MotionStatechartContext) -> NodeArtifacts:
         """
         Each life cycle comparison is 0 or 1, so their maximum is 1 exactly when at
         least one task runs.
@@ -289,7 +289,7 @@ class ProgressStalled(Goal):
         self._timer.start_condition = stalled_now
         self._timer.reset_condition = sm.trinary_logic_not(stalled_now)
 
-    def build(self, context: MotionStatechartContext) -> NodeArtifacts:
+    def build_artifacts(self, context: MotionStatechartContext) -> NodeArtifacts:
         return NodeArtifacts(observation=self._timer.observation_variable)
 
     def _find_converging_tasks(

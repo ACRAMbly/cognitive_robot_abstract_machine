@@ -139,6 +139,21 @@ class NodeNotBuiltError(NodeInitializationError):
 
 
 @dataclass
+class MissingErrorSignalError(NodeInitializationError):
+    def error_message(self) -> str:
+        return (
+            f'Converging task "{self.node.unique_name}" built artifacts without an error '
+            f"signal, so there is nothing to compare against its threshold."
+        )
+
+    def suggest_correction(self) -> str:
+        return (
+            "Set NodeArtifacts.error in build_artifacts to the error the task's constraints "
+            "drive to zero."
+        )
+
+
+@dataclass
 class NoConvergingTaskError(NodeInitializationError):
     monitored_node: MotionStatechartNode
 

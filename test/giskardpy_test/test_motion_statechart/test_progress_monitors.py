@@ -115,7 +115,7 @@ class NodeWithDeclaredDependencies(MotionStatechartNode):
     def prerequisite_nodes(self) -> List[MotionStatechartNode]:
         return self.dependencies
 
-    def build(self, context: MotionStatechartContext) -> NodeArtifacts:
+    def build_artifacts(self, context: MotionStatechartContext) -> NodeArtifacts:
         self.built_after.append(self.name)
         return NodeArtifacts(observation=Scalar.const_true())
 

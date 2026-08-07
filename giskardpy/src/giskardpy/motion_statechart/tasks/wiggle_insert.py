@@ -12,7 +12,7 @@ from giskardpy.motion_statechart.data_types import (
     DefaultWeights,
     ObservationStateValues,
 )
-from giskardpy.motion_statechart.error_signals import ErrorSignal, SymbolicErrorSignal
+from giskardpy.motion_statechart.error_signals import SymbolicErrorSignal
 from giskardpy.motion_statechart.graph_node import (
     ConvergingTask,
     DebugExpression,
@@ -161,16 +161,15 @@ class WiggleInsert(ConvergingTask):
     Auxiliary variable holding the current angular noise.
     """
 
-    def build_error(
-        self, context: MotionStatechartContext, artifacts: NodeArtifacts
-    ) -> ErrorSignal:
+    def build_artifacts(self, context: MotionStatechartContext) -> NodeArtifacts:
         """
         Build motion constraints that press the tip into the hole while wiggling.
 
         :param context: Provides access to world model and kinematic expressions.
-        :param artifacts: The artifacts to add constraints and debug expressions to.
-        :return: The distance between the tip and the hole.
+        :return: The artifacts of this task, whose error is the distance between the tip
+            and the hole.
         """
+        artifacts = NodeArtifacts()
         # The previous default was a zero vector, which has no well-defined perpendicular plane;
         # the root z-axis is used instead so the default is usable.
         hole_normal = context.world.transform(
@@ -243,7 +242,10 @@ class WiggleInsert(ConvergingTask):
             DebugExpression(f"{self.name}/root_P_hole_wiggled", root_P_hole_wiggled)
         )
 
-        return SymbolicErrorSignal(root_P_current.euclidean_distance(root_P_hole))
+        artifacts.error = SymbolicErrorSignal(
+            root_P_current.euclidean_distance(root_P_hole)
+        )
+        return artifacts
 
     def on_tick(
         self, context: MotionStatechartContext

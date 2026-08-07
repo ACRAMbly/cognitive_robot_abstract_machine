@@ -20,7 +20,6 @@ from giskardpy.motion_statechart.data_types import (
 from giskardpy.motion_statechart.exceptions import GoalPointsReferenceFrameMismatchError
 from giskardpy.motion_statechart.goals.templates import Parallel
 from giskardpy.motion_statechart.error_signals import (
-    ErrorSignal,
     SampledErrorSignal,
     SymbolicErrorSignal,
     joint_position_and_velocity_variables,
@@ -57,7 +56,7 @@ class CartesianTask(ConvergingTask, ABC):
     """
     Base class for all cartesian tasks.
     Offers goal binding policy functionality to subclasses.
-    .. note:: subclasses describe their goal by implementing `build_error`.
+    .. note:: subclasses describe their goal by implementing `build_artifacts`.
     """
 
     root_link: KinematicStructureEntity = field(kw_only=True)
@@ -160,16 +159,14 @@ class CartesianPosition(CartesianTask):
     def goal_reference_frame(self) -> KinematicStructureEntity:
         return self.goal_point.reference_frame
 
-    def build_error(
-        self, context: MotionStatechartContext, artifacts: NodeArtifacts
-    ) -> ErrorSignal:
+    def build_artifacts(self, context: MotionStatechartContext) -> NodeArtifacts:
         """
         Build motion constraints for reaching the goal position.
 
         :param context: Provides access to world model and kinematic expressions.
-        :param artifacts: The artifacts to add constraints and debug expressions to.
-        :return: The distance between the tip and the goal point.
+        :return: The artifacts of this task, whose error is the distance between the tip and the goal point.
         """
+        artifacts = NodeArtifacts()
         root_P_goal = self.root_T_goal_reference_frame @ self.goal_point
 
         # Get current tip position in root frame
@@ -189,7 +186,10 @@ class CartesianPosition(CartesianTask):
             artifacts, goal=root_P_goal, current=root_P_current
         )
 
-        return SymbolicErrorSignal(root_P_goal.euclidean_distance(root_P_current))
+        artifacts.error = SymbolicErrorSignal(
+            root_P_goal.euclidean_distance(root_P_current)
+        )
+        return artifacts
 
 
 @dataclass(eq=False, repr=False)
@@ -261,18 +261,16 @@ class CartesianPositionTrajectory(CartesianTask):
         self._goal_points_to_np()
         return super().build(context)
 
-    def build_error(
-        self, context: MotionStatechartContext, artifacts: NodeArtifacts
-    ) -> ErrorSignal:
+    def build_artifacts(self, context: MotionStatechartContext) -> NodeArtifacts:
         """
         Build motion constraints that pull the tip along the trajectory.
 
         :param context: Provides access to world model and kinematic expressions.
-        :param artifacts: The artifacts to add constraints and debug expressions to.
-        :return: The distance still to travel along the trajectory, which only
+        :return: The artifacts of this task, whose error is the distance still to travel along the trajectory, which only
             :meth:`on_tick` can compute because it depends on how far along the
             trajectory the tip already is.
         """
+        artifacts = NodeArtifacts()
         self._init_goal_reference_frame_P_current_target_point(
             context.float_variable_data
         )
@@ -301,7 +299,8 @@ class CartesianPositionTrajectory(CartesianTask):
         )
 
         self.compile_current_point_on_tick(context)
-        return SampledErrorSignal(self.remaining_distance)
+        artifacts.error = SampledErrorSignal(self.remaining_distance)
+        return artifacts
 
     def _init_remaining_distance(self, float_variable_data: FloatVariableData) -> None:
         """
@@ -487,9 +486,7 @@ class CartesianPositionStraight(CartesianTask):
     def goal_reference_frame(self) -> KinematicStructureEntity:
         return self.goal_point.reference_frame
 
-    def build_error(
-        self, context: MotionStatechartContext, artifacts: NodeArtifacts
-    ) -> ErrorSignal:
+    def build_artifacts(self, context: MotionStatechartContext) -> NodeArtifacts:
         """
         Build motion constraints for reaching the goal along a straight line.
 
@@ -497,9 +494,9 @@ class CartesianPositionStraight(CartesianTask):
         constrains motion to stay on that line.
 
         :param context: Provides access to world model and kinematic expressions.
-        :param artifacts: The artifacts to add constraints and debug expressions to.
-        :return: The distance between the tip and the goal point.
+        :return: The artifacts of this task, whose error is the distance between the tip and the goal point.
         """
+        artifacts = NodeArtifacts()
         root_P_goal = self.root_T_goal_reference_frame @ self.goal_point
 
         # Get current tip position and transformations
@@ -572,7 +569,8 @@ class CartesianPositionStraight(CartesianTask):
             artifacts, goal=root_P_goal, current=root_P_tip
         )
 
-        return SymbolicErrorSignal(dist)
+        artifacts.error = SymbolicErrorSignal(dist)
+        return artifacts
 
 
 @dataclass(eq=False, repr=False)
@@ -603,16 +601,14 @@ class CartesianOrientation(CartesianTask):
     def goal_reference_frame(self) -> KinematicStructureEntity:
         return self.goal_orientation.reference_frame
 
-    def build_error(
-        self, context: MotionStatechartContext, artifacts: NodeArtifacts
-    ) -> ErrorSignal:
+    def build_artifacts(self, context: MotionStatechartContext) -> NodeArtifacts:
         """
         Build motion constraints for reaching the goal orientation.
 
         :param context: Provides access to world model and kinematic expressions.
-        :param artifacts: The artifacts to add constraints and debug expressions to.
-        :return: The angle between the tip orientation and the goal orientation.
+        :return: The artifacts of this task, whose error is the angle between the tip orientation and the goal orientation.
         """
+        artifacts = NodeArtifacts()
         root_R_goal = self.root_T_goal_reference_frame @ self.goal_orientation
 
         # Get current tip orientation in root frame
@@ -633,7 +629,10 @@ class CartesianOrientation(CartesianTask):
             artifacts, goal=root_R_goal, current=root_R_current
         )
 
-        return SymbolicErrorSignal(sm.abs(root_R_current.rotational_error(root_R_goal)))
+        artifacts.error = SymbolicErrorSignal(
+            sm.abs(root_R_current.rotational_error(root_R_goal))
+        )
+        return artifacts
 
 
 @dataclass(eq=False, repr=False)
@@ -759,7 +758,7 @@ class CartesianPositionVelocityLimit(Task):
     over lower weighted constraints when conflicts occur.
     """
 
-    def build(self, context: MotionStatechartContext) -> NodeArtifacts:
+    def build_artifacts(self, context: MotionStatechartContext) -> NodeArtifacts:
         artifacts = NodeArtifacts()
         root_P_tip = context.world.compose_forward_kinematics_expression(
             self.root_link, self.tip_link
@@ -816,7 +815,7 @@ class CartesianRotationVelocityLimit(Task):
     limit is enforced. Higher weights give this constraint soft priority
     over lower weighted constraints when conflicts occur."""
 
-    def build(self, context: MotionStatechartContext) -> NodeArtifacts:
+    def build_artifacts(self, context: MotionStatechartContext) -> NodeArtifacts:
         artifacts = NodeArtifacts()
 
         root_R_tip = context.world.compose_forward_kinematics_expression(

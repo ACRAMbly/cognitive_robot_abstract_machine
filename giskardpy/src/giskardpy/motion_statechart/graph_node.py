@@ -57,6 +57,7 @@ from giskardpy.motion_statechart.exceptions import (
     NodeAlreadyBelongsToDifferentNodeError,
     NodeNotBuiltError,
     TerminalNodeInConditionError,
+    MissingErrorSignalError,
 )
 from giskardpy.motion_statechart.error_signals import ErrorSignal
 from giskardpy.motion_statechart.plotters.plot_specs import NodePlotSpec
@@ -368,7 +369,7 @@ class DebugExpression:
 @dataclass
 class NodeArtifacts:
     """
-    Represents the artifacts produced by the `build` method of a node.
+    Represents the artifacts produced by the `build_artifacts` method of a node.
     It makes explicit what artifacts are produced by a node.
     """
 
@@ -780,8 +781,18 @@ class MotionStatechartNode:
     def build(self, context: MotionStatechartContext) -> NodeArtifacts:
         """
         Called exactly once during motion statechart compilation.
-        Use this method for any setup steps.
+        Override this method for setup steps that produce no artifacts.
         .. warning:: Don't create other nodes within this function.
+        .. warning:: An override must return ``super().build(context)``, otherwise
+            :meth:`build_artifacts` never runs.
+        :param context: The context that contains data that can be used to build this node.
+        :return: A NodeArtifacts instance that describes this node.
+        """
+        return self.build_artifacts(context)
+
+    def build_artifacts(self, context: MotionStatechartContext) -> NodeArtifacts:
+        """
+        Describe this node in terms of constraints, observation and debug expressions.
         :param context: The context that contains data that can be used to build this node.
         :return: A NodeArtifacts instance that describes this node. It is normal for nodes that don't directly affect the motion to return empty NodeArtifacts.
         """
@@ -1001,7 +1012,7 @@ class Task(MotionStatechartNode):
 
 
 @dataclass(eq=False, repr=False)
-class ConvergingTask(Task, ABC):
+class ConvergingTask(ABC, Task):
     """
     A task that drives a single scalar error towards zero and succeeds once that error is
     within :attr:`threshold`.
@@ -1021,22 +1032,20 @@ class ConvergingTask(Task, ABC):
         Build the task and derive its observation from its error.
         """
         artifacts = super().build(context)
-        artifacts.error = self.build_error(context, artifacts)
+        if artifacts.error is None:
+            raise MissingErrorSignalError(node=self)
         artifacts.observation = artifacts.error.expression <= self.threshold
         return artifacts
 
     @abstractmethod
-    def build_error(
-        self, context: MotionStatechartContext, artifacts: NodeArtifacts
-    ) -> ErrorSignal:
+    def build_artifacts(self, context: MotionStatechartContext) -> NodeArtifacts:
         """
-        Add the motion constraints of this task and describe the error they drive to
-        zero.
+        Add the motion constraints of this task and set :attr:`NodeArtifacts.error` to
+        the error they drive to zero.
 
         :param context: The context that contains data that can be used to build this
             task.
-        :param artifacts: The artifacts to add constraints and debug expressions to.
-        :return: The error signal of this task.
+        :return: The artifacts describing this task.
         """
 
     @property
@@ -1102,7 +1111,7 @@ class Goal(MotionStatechartNode):
 
 
 @dataclass(eq=False, repr=False)
-class ThreadPayloadMonitor(MotionStatechartNode, ABC):
+class ThreadPayloadMonitor(ABC, MotionStatechartNode):
     """
     Payload monitor that evaluates _compute_observation in a background thread.
 
@@ -1171,7 +1180,7 @@ class ThreadPayloadMonitor(MotionStatechartNode, ABC):
 
 
 @dataclass(eq=False, repr=False)
-class TerminalNode(MotionStatechartNode, ABC):
+class TerminalNode(ABC, MotionStatechartNode):
     """
     A node that ends the whole motion once its observation state turns true.
 
@@ -1203,7 +1212,7 @@ class EndMotion(TerminalNode):
     Upper bound for the per-degree-of-freedom velocity threshold.
     """
 
-    def build(self, context: MotionStatechartContext) -> NodeArtifacts:
+    def build_artifacts(self, context: MotionStatechartContext) -> NodeArtifacts:
         """
         Reports "done" only once the world has actually settled, so the motion isn't
         cut short while the controller is still commanding nonzero velocity.
@@ -1272,7 +1281,7 @@ class CancelMotion(TerminalNode):
         default_factory=NodePlotSpec.create_cancel_style, kw_only=True, init=False
     )
 
-    def build(self, context: MotionStatechartContext) -> NodeArtifacts:
+    def build_artifacts(self, context: MotionStatechartContext) -> NodeArtifacts:
         return NodeArtifacts(observation=Scalar.const_true())
 
     def on_tick(self, context: MotionStatechartContext) -> Optional[float]:

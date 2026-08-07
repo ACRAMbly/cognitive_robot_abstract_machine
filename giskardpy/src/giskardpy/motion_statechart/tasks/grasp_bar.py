@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 
 from giskardpy.motion_statechart.context import MotionStatechartContext
 from giskardpy.motion_statechart.data_types import DefaultWeights
-from giskardpy.motion_statechart.error_signals import ErrorSignal, SymbolicErrorSignal
+from giskardpy.motion_statechart.error_signals import SymbolicErrorSignal
 from giskardpy.motion_statechart.graph_node import NodeArtifacts, ConvergingTask
 from semantic_digital_twin.spatial_types import Point3, Vector3
 from semantic_digital_twin.world_description.world_entity import Body
@@ -71,16 +71,15 @@ class GraspBar(ConvergingTask):
     Priority weight relative to other tasks.
     """
 
-    def build_error(
-        self, context: MotionStatechartContext, artifacts: NodeArtifacts
-    ) -> ErrorSignal:
+    def build_artifacts(self, context: MotionStatechartContext) -> NodeArtifacts:
         """
         Build motion constraints that pull the tip onto the bar.
 
         :param context: Provides access to world model and kinematic expressions.
-        :param artifacts: The artifacts to add constraints and debug expressions to.
-        :return: The distance between the tip and the bar segment.
+        :return: The artifacts of this task, whose error is the distance between the tip
+            and the bar segment.
         """
+        artifacts = NodeArtifacts()
         root_P_bar_center = context.world.transform(
             target_frame=self.root_link, spatial_object=self.bar_center
         )
@@ -123,4 +122,5 @@ class GraspBar(ConvergingTask):
             quadratic_weight=self.weight,
         )
 
-        return SymbolicErrorSignal(distance)
+        artifacts.error = SymbolicErrorSignal(distance)
+        return artifacts

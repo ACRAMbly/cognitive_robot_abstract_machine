@@ -7,7 +7,7 @@ import krrood.symbolic_math.symbolic_math as sm
 from giskardpy.motion_statechart.context import MotionStatechartContext
 from giskardpy.motion_statechart.data_types import DefaultWeights
 from giskardpy.motion_statechart.exceptions import EmptyGoalStateError
-from giskardpy.motion_statechart.error_signals import ErrorSignal, SymbolicErrorSignal
+from giskardpy.motion_statechart.error_signals import SymbolicErrorSignal
 from giskardpy.motion_statechart.graph_node import NodeArtifacts, Task
 from giskardpy.motion_statechart.graph_node import ConvergingTask
 from semantic_digital_twin.datastructures.joint_state import JointState
@@ -50,20 +50,19 @@ class JointPositionList(ConvergingTask):
     The maximum velocity of the joints.
     """
 
-    def build_error(
-        self, context: MotionStatechartContext, artifacts: NodeArtifacts
-    ) -> ErrorSignal:
+    def build_artifacts(self, context: MotionStatechartContext) -> NodeArtifacts:
         """
         Build one equality constraint per joint of the goal state.
 
         :param context: Provides access to world model and kinematic expressions.
-        :param artifacts: The artifacts to add constraints to.
-        :return: The largest absolute joint position error, so the task succeeds only
-            once every joint is within the threshold.
+        :return: The artifacts of this task, whose error is the largest absolute joint
+            position error, so the task succeeds only once every joint is within the
+            threshold.
         """
         if len(self.goal_state) == 0:
             raise EmptyGoalStateError(node=self)
 
+        artifacts = NodeArtifacts()
         errors = []
         for connection, target in self.goal_state.items():
             current = connection.dof.variables.position
@@ -84,7 +83,8 @@ class JointPositionList(ConvergingTask):
                 task_expression=current,
             )
             errors.append(sm.abs(error))
-        return SymbolicErrorSignal(sm.max(sm.Vector(errors)))
+        artifacts.error = SymbolicErrorSignal(sm.max(sm.Vector(errors)))
+        return artifacts
 
     def apply_limits_to_target(
         self, target: float, connection: ActiveConnection1DOF
@@ -138,7 +138,7 @@ class JointVelocityLimit(Task):
     :class:`JointPositionList`).
     """
 
-    def build(self, context: MotionStatechartContext) -> NodeArtifacts:
+    def build_artifacts(self, context: MotionStatechartContext) -> NodeArtifacts:
         artifacts = NodeArtifacts()
         velocities = []
         for connection in self.connections:
