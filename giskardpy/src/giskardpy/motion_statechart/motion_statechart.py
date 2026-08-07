@@ -47,8 +47,19 @@ class State(MutableMapping[MotionStatechartNode, float], SubclassJSONSerializer)
     """
 
     motion_statechart: MotionStatechart
+    """
+    The motion statechart whose nodes are the keys of this mapping.
+    """
+
     default_value: ClassVar[float] = field(init=False)
+    """
+    The value that :meth:`grow` appends for a newly added node.
+    """
+
     data: np.ndarray = field(default_factory=lambda: np.array([], dtype=np.float64))
+    """
+    One entry per node, ordered by :attr:`~MotionStatechartNode.index`.
+    """
 
     def grow(self) -> None:
         """
@@ -172,7 +183,14 @@ class LifeCycleState(State):
     """
 
     default_value: ClassVar[float] = LifeCycleValues.NOT_STARTED
+    """
+    Every node starts out as not started.
+    """
+
     _compiled_updater: sm.CompiledFunction = field(init=False)
+    """
+    The state machine of every node, compiled into one function by :meth:`compile`.
+    """
 
     def compile(self):
         """
@@ -249,8 +267,15 @@ class ObservationState(State):
     """
 
     default_value: ClassVar[ObservationStateValues] = ObservationStateValues.UNKNOWN
+    """
+    A node has made no observation until it runs for the first time.
+    """
 
     _compiled_updater: sm.CompiledFunction = field(init=False)
+    """
+    The observation expression of every node, compiled into one function by
+    :meth:`compile`.
+    """
 
     def compile(self, context: MotionStatechartContext):
         """
@@ -319,8 +344,19 @@ class StateHistoryItem:
     """
 
     control_cycle: int
+    """
+    The control cycle at which the snapshot was taken.
+    """
+
     life_cycle_state: LifeCycleState
+    """
+    The life cycle state of every node at that control cycle.
+    """
+
     observation_state: ObservationState
+    """
+    The observation state of every node at that control cycle.
+    """
 
     def __post_init__(self):
         """
@@ -362,6 +398,10 @@ class StateHistory:
     """
 
     history: List[StateHistoryItem] = field(default_factory=list)
+    """
+    The snapshots in the order in which they were recorded, without consecutive
+    duplicates.
+    """
 
     def append(self, next_item: StateHistoryItem):
         """
