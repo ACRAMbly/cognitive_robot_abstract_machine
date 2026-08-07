@@ -12,7 +12,7 @@ import math
 
 from krrood.entity_query_language.factories import and_, exists, for_all, or_
 
-from experiments.random_events_experiments.set_kind_survey import (
+from experiments.random_events_experiments.task_condition_survey.set_kind_survey import (
     GeometryMarker,
     PredicateGeometry,
     PredicateGeometryVocabulary,
@@ -20,7 +20,7 @@ from experiments.random_events_experiments.set_kind_survey import (
     SetKindSurvey,
     SurveyedDataset,
 )
-from experiments.random_events_experiments.task_conditions import (
+from experiments.random_events_experiments.task_condition_survey.task_conditions import (
     ConditionKind,
     PredicateKind,
     SceneObject,

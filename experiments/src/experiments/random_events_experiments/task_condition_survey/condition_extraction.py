@@ -15,7 +15,7 @@ property of the suite rather than of the tasks someone picked.
 What is recovered is an expression of the Entity Query Language: a suite's control flow
 -- named intermediates, guard clauses returning early, loops deciding on the first
 object -- is read back into EQL's conjunction, disjunction, negation and quantifiers
-over the vocabulary of :mod:`experiments.random_events_experiments.task_conditions`.
+over the vocabulary of :mod:`experiments.random_events_experiments.task_condition_survey.task_conditions`.
 Whatever is not recognised becomes an :class:`~...task_conditions.UnreadCondition`
 rather than a guess.
 
@@ -52,7 +52,7 @@ from krrood.entity_query_language.operators.logical_quantifiers import (
 )
 from krrood.exceptions import DataclassException
 
-from experiments.random_events_experiments.task_conditions import (
+from experiments.random_events_experiments.task_condition_survey.task_conditions import (
     ConstantCondition,
     PredicateVocabulary,
     SceneObject,
@@ -172,7 +172,7 @@ class ConditionExtractor:
     that return early, and loops that return on the first object to decide the outcome.
     This reads that control flow back into the EQL condition it computes, and records
     whatever it does not recognise as an
-    :class:`~experiments.random_events_experiments.task_conditions.UnreadCondition` rather
+    :class:`~experiments.random_events_experiments.task_condition_survey.task_conditions.UnreadCondition` rather
     than guessing.
     """
 

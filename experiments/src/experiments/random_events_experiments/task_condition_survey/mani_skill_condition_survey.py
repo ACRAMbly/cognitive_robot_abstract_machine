@@ -15,12 +15,12 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing_extensions import ClassVar
 
-from experiments.random_events_experiments.condition_extraction import (
+from experiments.random_events_experiments.task_condition_survey.condition_extraction import (
     ComputedConditionReader,
     ReturnedEntry,
     StatedOutcome,
 )
-from experiments.random_events_experiments.task_conditions import (
+from experiments.random_events_experiments.task_condition_survey.task_conditions import (
     PredicateKind,
     PredicateNameRule,
     PredicateVocabulary,

@@ -12,11 +12,11 @@ import textwrap
 
 from krrood.entity_query_language.operators.core_logical_operators import AND, OR, Not
 
-from experiments.random_events_experiments.rlbench_condition_survey import (
+from experiments.random_events_experiments.task_condition_survey.rlbench_condition_survey import (
     RLBenchConditionSurvey,
     RLBenchPredicateVocabulary,
 )
-from experiments.random_events_experiments.task_conditions import (
+from experiments.random_events_experiments.task_condition_survey.task_conditions import (
     ConditionKind,
     PredicateKind,
     StatedTaskCondition,

@@ -74,14 +74,14 @@ import experiments.ormatic_experiments.reliability
 import experiments.ormatic_experiments.scalability
 import experiments.querying
 import experiments.random_events_experiments.complement_worst_case_experiment
-import experiments.random_events_experiments.condition_event_translation
-import experiments.random_events_experiments.condition_extraction
-import experiments.random_events_experiments.mani_skill_condition_survey
-import experiments.random_events_experiments.rlbench_condition_survey
-import experiments.random_events_experiments.robocasa_condition_survey
 import experiments.random_events_experiments.scalability_experiment
-import experiments.random_events_experiments.set_kind_survey
-import experiments.random_events_experiments.task_conditions
+import experiments.random_events_experiments.task_condition_survey.condition_event_translation
+import experiments.random_events_experiments.task_condition_survey.condition_extraction
+import experiments.random_events_experiments.task_condition_survey.mani_skill_condition_survey
+import experiments.random_events_experiments.task_condition_survey.rlbench_condition_survey
+import experiments.random_events_experiments.task_condition_survey.robocasa_condition_survey
+import experiments.random_events_experiments.task_condition_survey.set_kind_survey
+import experiments.random_events_experiments.task_condition_survey.task_conditions
 import experiments.robocasa_kitchen_demo
 import experiments.sage_10k.demos
 import experiments.sage_10k.sage10k_actions
@@ -8096,244 +8096,6 @@ class ComplementWorstCaseExperimentResultDAO(
     }
 
 
-class ConditionEventTranslatorDAO(
-    Base,
-    DataAccessObject[
-        experiments.random_events_experiments.condition_event_translation.ConditionEventTranslator
-    ],
-):
-    __tablename__ = "ConditionEventTranslatorDAO"
-
-    database_id: Mapped[builtins.int] = mapped_column(
-        Integer, primary_key=True, use_existing_column=True
-    )
-
-
-class ConditionNotFullyReadDAO(
-    Base,
-    DataAccessObject[
-        experiments.random_events_experiments.condition_event_translation.ConditionNotFullyRead
-    ],
-):
-    __tablename__ = "ConditionNotFullyReadDAO"
-
-    database_id: Mapped[builtins.int] = mapped_column(
-        Integer, primary_key=True, use_existing_column=True
-    )
-
-    unread: Mapped[builtins.str] = mapped_column(
-        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
-    )
-
-
-class ConditionExtractorDAO(
-    Base,
-    DataAccessObject[
-        experiments.random_events_experiments.condition_extraction.ConditionExtractor
-    ],
-):
-    __tablename__ = "ConditionExtractorDAO"
-
-    database_id: Mapped[builtins.int] = mapped_column(
-        Integer, primary_key=True, use_existing_column=True
-    )
-
-    vocabulary_id: Mapped[int] = mapped_column(
-        ForeignKey("PredicateVocabularyDAO.database_id", use_alter=True),
-        nullable=True,
-        use_existing_column=True,
-    )
-
-    vocabulary: Mapped[PredicateVocabularyDAO] = relationship(
-        "PredicateVocabularyDAO",
-        uselist=False,
-        foreign_keys=[vocabulary_id],
-        post_update=True,
-    )
-
-
-class QuantifiedConditionDAO(
-    Base,
-    DataAccessObject[
-        experiments.random_events_experiments.condition_extraction.QuantifiedCondition
-    ],
-):
-    __tablename__ = "QuantifiedConditionDAO"
-
-    database_id: Mapped[builtins.int] = mapped_column(
-        Integer, primary_key=True, use_existing_column=True
-    )
-
-
-class ReturnedEntryDAO(
-    Base,
-    DataAccessObject[
-        experiments.random_events_experiments.condition_extraction.ReturnedEntry
-    ],
-):
-    __tablename__ = "ReturnedEntryDAO"
-
-    database_id: Mapped[builtins.int] = mapped_column(
-        Integer, primary_key=True, use_existing_column=True
-    )
-
-    key: Mapped[builtins.str] = mapped_column(
-        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
-    )
-
-
-class ReturnedValueDAO(
-    Base,
-    DataAccessObject[
-        experiments.random_events_experiments.condition_extraction.ReturnedValue
-    ],
-):
-    __tablename__ = "ReturnedValueDAO"
-
-    database_id: Mapped[builtins.int] = mapped_column(
-        Integer, primary_key=True, use_existing_column=True
-    )
-
-
-class SuiteSourceNotFoundDAO(
-    Base,
-    DataAccessObject[
-        experiments.random_events_experiments.condition_extraction.SuiteSourceNotFound
-    ],
-):
-    __tablename__ = "SuiteSourceNotFoundDAO"
-
-    database_id: Mapped[builtins.int] = mapped_column(
-        Integer, primary_key=True, use_existing_column=True
-    )
-
-    package_name: Mapped[builtins.str] = mapped_column(
-        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
-    )
-
-
-class TaskConditionReaderDAO(
-    Base,
-    DataAccessObject[
-        experiments.random_events_experiments.condition_extraction.TaskConditionReader
-    ],
-):
-    __tablename__ = "TaskConditionReaderDAO"
-
-    database_id: Mapped[builtins.int] = mapped_column(
-        Integer, primary_key=True, use_existing_column=True
-    )
-
-    task_root: Mapped[pathlib.Path] = mapped_column(
-        krrood.ormatic.custom_types.PathType, nullable=False, use_existing_column=True
-    )
-    polymorphic_type: Mapped[str] = mapped_column(
-        String(255), nullable=False, use_existing_column=True
-    )
-
-    vocabulary_id: Mapped[int] = mapped_column(
-        ForeignKey("PredicateVocabularyDAO.database_id", use_alter=True),
-        nullable=True,
-        use_existing_column=True,
-    )
-
-    vocabulary: Mapped[PredicateVocabularyDAO] = relationship(
-        "PredicateVocabularyDAO",
-        uselist=False,
-        foreign_keys=[vocabulary_id],
-        post_update=True,
-    )
-
-    __mapper_args__ = {
-        "polymorphic_on": "polymorphic_type",
-        "polymorphic_identity": "TaskConditionReaderDAO",
-    }
-
-
-class ComputedConditionReaderDAO(
-    TaskConditionReaderDAO,
-    DataAccessObject[
-        experiments.random_events_experiments.condition_extraction.ComputedConditionReader
-    ],
-):
-    __tablename__ = "ComputedConditionReaderDAO"
-
-    database_id: Mapped[builtins.int] = mapped_column(
-        ForeignKey(TaskConditionReaderDAO.database_id),
-        primary_key=True,
-        use_existing_column=True,
-    )
-
-    __mapper_args__ = {
-        "polymorphic_identity": "ComputedConditionReaderDAO",
-        "inherit_condition": database_id == TaskConditionReaderDAO.database_id,
-        "polymorphic_load": "selectin",
-    }
-
-
-class ManiSkillConditionSurveyDAO(
-    ComputedConditionReaderDAO,
-    DataAccessObject[
-        experiments.random_events_experiments.mani_skill_condition_survey.ManiSkillConditionSurvey
-    ],
-):
-    __tablename__ = "ManiSkillConditionSurveyDAO"
-
-    database_id: Mapped[builtins.int] = mapped_column(
-        ForeignKey(ComputedConditionReaderDAO.database_id),
-        primary_key=True,
-        use_existing_column=True,
-    )
-
-    __mapper_args__ = {
-        "polymorphic_identity": "ManiSkillConditionSurveyDAO",
-        "inherit_condition": database_id == ComputedConditionReaderDAO.database_id,
-        "polymorphic_load": "selectin",
-    }
-
-
-class RLBenchConditionSurveyDAO(
-    TaskConditionReaderDAO,
-    DataAccessObject[
-        experiments.random_events_experiments.rlbench_condition_survey.RLBenchConditionSurvey
-    ],
-):
-    __tablename__ = "RLBenchConditionSurveyDAO"
-
-    database_id: Mapped[builtins.int] = mapped_column(
-        ForeignKey(TaskConditionReaderDAO.database_id),
-        primary_key=True,
-        use_existing_column=True,
-    )
-
-    __mapper_args__ = {
-        "polymorphic_identity": "RLBenchConditionSurveyDAO",
-        "inherit_condition": database_id == TaskConditionReaderDAO.database_id,
-        "polymorphic_load": "selectin",
-    }
-
-
-class RoboCasaConditionSurveyDAO(
-    ComputedConditionReaderDAO,
-    DataAccessObject[
-        experiments.random_events_experiments.robocasa_condition_survey.RoboCasaConditionSurvey
-    ],
-):
-    __tablename__ = "RoboCasaConditionSurveyDAO"
-
-    database_id: Mapped[builtins.int] = mapped_column(
-        ForeignKey(ComputedConditionReaderDAO.database_id),
-        primary_key=True,
-        use_existing_column=True,
-    )
-
-    __mapper_args__ = {
-        "polymorphic_identity": "RoboCasaConditionSurveyDAO",
-        "inherit_condition": database_id == ComputedConditionReaderDAO.database_id,
-        "polymorphic_load": "selectin",
-    }
-
-
 class CompositeSetOperationMeasurementDAO(
     Base,
     DataAccessObject[
@@ -8657,10 +8419,248 @@ class ScalabilitySweepDAO(
     )
 
 
+class ConditionEventTranslatorDAO(
+    Base,
+    DataAccessObject[
+        experiments.random_events_experiments.task_condition_survey.condition_event_translation.ConditionEventTranslator
+    ],
+):
+    __tablename__ = "ConditionEventTranslatorDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
+
+
+class ConditionNotFullyReadDAO(
+    Base,
+    DataAccessObject[
+        experiments.random_events_experiments.task_condition_survey.condition_event_translation.ConditionNotFullyRead
+    ],
+):
+    __tablename__ = "ConditionNotFullyReadDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
+
+    unread: Mapped[builtins.str] = mapped_column(
+        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
+    )
+
+
+class ConditionExtractorDAO(
+    Base,
+    DataAccessObject[
+        experiments.random_events_experiments.task_condition_survey.condition_extraction.ConditionExtractor
+    ],
+):
+    __tablename__ = "ConditionExtractorDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
+
+    vocabulary_id: Mapped[int] = mapped_column(
+        ForeignKey("PredicateVocabularyDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
+    )
+
+    vocabulary: Mapped[PredicateVocabularyDAO] = relationship(
+        "PredicateVocabularyDAO",
+        uselist=False,
+        foreign_keys=[vocabulary_id],
+        post_update=True,
+    )
+
+
+class QuantifiedConditionDAO(
+    Base,
+    DataAccessObject[
+        experiments.random_events_experiments.task_condition_survey.condition_extraction.QuantifiedCondition
+    ],
+):
+    __tablename__ = "QuantifiedConditionDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
+
+
+class ReturnedEntryDAO(
+    Base,
+    DataAccessObject[
+        experiments.random_events_experiments.task_condition_survey.condition_extraction.ReturnedEntry
+    ],
+):
+    __tablename__ = "ReturnedEntryDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
+
+    key: Mapped[builtins.str] = mapped_column(
+        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
+    )
+
+
+class ReturnedValueDAO(
+    Base,
+    DataAccessObject[
+        experiments.random_events_experiments.task_condition_survey.condition_extraction.ReturnedValue
+    ],
+):
+    __tablename__ = "ReturnedValueDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
+
+
+class SuiteSourceNotFoundDAO(
+    Base,
+    DataAccessObject[
+        experiments.random_events_experiments.task_condition_survey.condition_extraction.SuiteSourceNotFound
+    ],
+):
+    __tablename__ = "SuiteSourceNotFoundDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
+
+    package_name: Mapped[builtins.str] = mapped_column(
+        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
+    )
+
+
+class TaskConditionReaderDAO(
+    Base,
+    DataAccessObject[
+        experiments.random_events_experiments.task_condition_survey.condition_extraction.TaskConditionReader
+    ],
+):
+    __tablename__ = "TaskConditionReaderDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
+
+    task_root: Mapped[pathlib.Path] = mapped_column(
+        krrood.ormatic.custom_types.PathType, nullable=False, use_existing_column=True
+    )
+    polymorphic_type: Mapped[str] = mapped_column(
+        String(255), nullable=False, use_existing_column=True
+    )
+
+    vocabulary_id: Mapped[int] = mapped_column(
+        ForeignKey("PredicateVocabularyDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
+    )
+
+    vocabulary: Mapped[PredicateVocabularyDAO] = relationship(
+        "PredicateVocabularyDAO",
+        uselist=False,
+        foreign_keys=[vocabulary_id],
+        post_update=True,
+    )
+
+    __mapper_args__ = {
+        "polymorphic_on": "polymorphic_type",
+        "polymorphic_identity": "TaskConditionReaderDAO",
+    }
+
+
+class ComputedConditionReaderDAO(
+    TaskConditionReaderDAO,
+    DataAccessObject[
+        experiments.random_events_experiments.task_condition_survey.condition_extraction.ComputedConditionReader
+    ],
+):
+    __tablename__ = "ComputedConditionReaderDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(TaskConditionReaderDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
+    )
+
+    __mapper_args__ = {
+        "polymorphic_identity": "ComputedConditionReaderDAO",
+        "inherit_condition": database_id == TaskConditionReaderDAO.database_id,
+        "polymorphic_load": "selectin",
+    }
+
+
+class ManiSkillConditionSurveyDAO(
+    ComputedConditionReaderDAO,
+    DataAccessObject[
+        experiments.random_events_experiments.task_condition_survey.mani_skill_condition_survey.ManiSkillConditionSurvey
+    ],
+):
+    __tablename__ = "ManiSkillConditionSurveyDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(ComputedConditionReaderDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
+    )
+
+    __mapper_args__ = {
+        "polymorphic_identity": "ManiSkillConditionSurveyDAO",
+        "inherit_condition": database_id == ComputedConditionReaderDAO.database_id,
+        "polymorphic_load": "selectin",
+    }
+
+
+class RLBenchConditionSurveyDAO(
+    TaskConditionReaderDAO,
+    DataAccessObject[
+        experiments.random_events_experiments.task_condition_survey.rlbench_condition_survey.RLBenchConditionSurvey
+    ],
+):
+    __tablename__ = "RLBenchConditionSurveyDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(TaskConditionReaderDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
+    )
+
+    __mapper_args__ = {
+        "polymorphic_identity": "RLBenchConditionSurveyDAO",
+        "inherit_condition": database_id == TaskConditionReaderDAO.database_id,
+        "polymorphic_load": "selectin",
+    }
+
+
+class RoboCasaConditionSurveyDAO(
+    ComputedConditionReaderDAO,
+    DataAccessObject[
+        experiments.random_events_experiments.task_condition_survey.robocasa_condition_survey.RoboCasaConditionSurvey
+    ],
+):
+    __tablename__ = "RoboCasaConditionSurveyDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(ComputedConditionReaderDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
+    )
+
+    __mapper_args__ = {
+        "polymorphic_identity": "RoboCasaConditionSurveyDAO",
+        "inherit_condition": database_id == ComputedConditionReaderDAO.database_id,
+        "polymorphic_load": "selectin",
+    }
+
+
 class GeometryMarkerDAO(
     Base,
     DataAccessObject[
-        experiments.random_events_experiments.set_kind_survey.GeometryMarker
+        experiments.random_events_experiments.task_condition_survey.set_kind_survey.GeometryMarker
     ],
 ):
     __tablename__ = "GeometryMarkerDAO"
@@ -8674,7 +8674,7 @@ class GeometryMarkerDAO(
     )
 
     geometry: Mapped[
-        experiments.random_events_experiments.set_kind_survey.PredicateGeometry
+        experiments.random_events_experiments.task_condition_survey.set_kind_survey.PredicateGeometry
     ] = mapped_column(
         krrood.ormatic.custom_types.PolymorphicEnumType,
         nullable=False,
@@ -8685,7 +8685,7 @@ class GeometryMarkerDAO(
 class PredicateGeometryVocabularyDAO(
     Base,
     DataAccessObject[
-        experiments.random_events_experiments.set_kind_survey.PredicateGeometryVocabulary
+        experiments.random_events_experiments.task_condition_survey.set_kind_survey.PredicateGeometryVocabulary
     ],
 ):
     __tablename__ = "PredicateGeometryVocabularyDAO"
@@ -8726,7 +8726,7 @@ class PredicateGeometryVocabularyDAO(
 class ManiSkillPredicateGeometryDAO(
     PredicateGeometryVocabularyDAO,
     DataAccessObject[
-        experiments.random_events_experiments.set_kind_survey.ManiSkillPredicateGeometry
+        experiments.random_events_experiments.task_condition_survey.set_kind_survey.ManiSkillPredicateGeometry
     ],
 ):
     __tablename__ = "ManiSkillPredicateGeometryDAO"
@@ -8747,7 +8747,7 @@ class ManiSkillPredicateGeometryDAO(
 class RLBenchPredicateGeometryDAO(
     PredicateGeometryVocabularyDAO,
     DataAccessObject[
-        experiments.random_events_experiments.set_kind_survey.RLBenchPredicateGeometry
+        experiments.random_events_experiments.task_condition_survey.set_kind_survey.RLBenchPredicateGeometry
     ],
 ):
     __tablename__ = "RLBenchPredicateGeometryDAO"
@@ -8768,7 +8768,7 @@ class RLBenchPredicateGeometryDAO(
 class RoboCasaPredicateGeometryDAO(
     PredicateGeometryVocabularyDAO,
     DataAccessObject[
-        experiments.random_events_experiments.set_kind_survey.RoboCasaPredicateGeometry
+        experiments.random_events_experiments.task_condition_survey.set_kind_survey.RoboCasaPredicateGeometry
     ],
 ):
     __tablename__ = "RoboCasaPredicateGeometryDAO"
@@ -8789,7 +8789,7 @@ class RoboCasaPredicateGeometryDAO(
 class SetKindFrequencyDAO(
     ExperimentResultDAO,
     DataAccessObject[
-        experiments.random_events_experiments.set_kind_survey.SetKindFrequency
+        experiments.random_events_experiments.task_condition_survey.set_kind_survey.SetKindFrequency
     ],
 ):
     __tablename__ = "SetKindFrequencyDAO"
@@ -8816,7 +8816,7 @@ class SetKindFrequencyDAO(
     )
 
     set_kind: Mapped[
-        experiments.random_events_experiments.task_conditions.ConditionKind
+        experiments.random_events_experiments.task_condition_survey.task_conditions.ConditionKind
     ] = mapped_column(
         krrood.ormatic.custom_types.PolymorphicEnumType,
         nullable=False,
@@ -8833,7 +8833,7 @@ class SetKindFrequencyDAO(
 class SetKindSurveyDAO(
     Base,
     DataAccessObject[
-        experiments.random_events_experiments.set_kind_survey.SetKindSurvey
+        experiments.random_events_experiments.task_condition_survey.set_kind_survey.SetKindSurvey
     ],
 ):
     __tablename__ = "SetKindSurveyDAO"
@@ -8856,7 +8856,7 @@ class SetKindSurveyDAO(
 class SurveyedDatasetDAO(
     Base,
     DataAccessObject[
-        experiments.random_events_experiments.set_kind_survey.SurveyedDataset
+        experiments.random_events_experiments.task_condition_survey.set_kind_survey.SurveyedDataset
     ],
 ):
     __tablename__ = "SurveyedDatasetDAO"
@@ -8886,7 +8886,7 @@ class SurveyedDatasetDAO(
 class ConditionIsNotObservableDAO(
     Base,
     DataAccessObject[
-        experiments.random_events_experiments.task_conditions.ConditionIsNotObservable
+        experiments.random_events_experiments.task_condition_survey.task_conditions.ConditionIsNotObservable
     ],
 ):
     __tablename__ = "ConditionIsNotObservableDAO"
@@ -8903,7 +8903,7 @@ class ConditionIsNotObservableDAO(
 class MeasuredValueDAO(
     Base,
     DataAccessObject[
-        experiments.random_events_experiments.task_conditions.MeasuredValue
+        experiments.random_events_experiments.task_condition_survey.task_conditions.MeasuredValue
     ],
 ):
     __tablename__ = "MeasuredValueDAO"
@@ -8929,7 +8929,7 @@ class MeasuredValueDAO(
 class ContinuousValueDAO(
     MeasuredValueDAO,
     DataAccessObject[
-        experiments.random_events_experiments.task_conditions.ContinuousValue
+        experiments.random_events_experiments.task_condition_survey.task_conditions.ContinuousValue
     ],
 ):
     __tablename__ = "ContinuousValueDAO"
@@ -8950,7 +8950,7 @@ class ContinuousValueDAO(
 class DiscreteValueDAO(
     MeasuredValueDAO,
     DataAccessObject[
-        experiments.random_events_experiments.task_conditions.DiscreteValue
+        experiments.random_events_experiments.task_condition_survey.task_conditions.DiscreteValue
     ],
 ):
     __tablename__ = "DiscreteValueDAO"
@@ -8971,7 +8971,7 @@ class DiscreteValueDAO(
 class PredicateNameRuleDAO(
     Base,
     DataAccessObject[
-        experiments.random_events_experiments.task_conditions.PredicateNameRule
+        experiments.random_events_experiments.task_condition_survey.task_conditions.PredicateNameRule
     ],
 ):
     __tablename__ = "PredicateNameRuleDAO"
@@ -8985,7 +8985,7 @@ class PredicateNameRuleDAO(
     )
 
     kind: Mapped[
-        experiments.random_events_experiments.task_conditions.PredicateKind
+        experiments.random_events_experiments.task_condition_survey.task_conditions.PredicateKind
     ] = mapped_column(
         krrood.ormatic.custom_types.PolymorphicEnumType,
         nullable=False,
@@ -8996,7 +8996,7 @@ class PredicateNameRuleDAO(
 class PredicateVocabularyDAO(
     Base,
     DataAccessObject[
-        experiments.random_events_experiments.task_conditions.PredicateVocabulary
+        experiments.random_events_experiments.task_condition_survey.task_conditions.PredicateVocabulary
     ],
 ):
     __tablename__ = "PredicateVocabularyDAO"
@@ -9028,7 +9028,7 @@ class PredicateVocabularyDAO(
 class ManiSkillPredicateVocabularyDAO(
     PredicateVocabularyDAO,
     DataAccessObject[
-        experiments.random_events_experiments.mani_skill_condition_survey.ManiSkillPredicateVocabulary
+        experiments.random_events_experiments.task_condition_survey.mani_skill_condition_survey.ManiSkillPredicateVocabulary
     ],
 ):
     __tablename__ = "ManiSkillPredicateVocabularyDAO"
@@ -9049,7 +9049,7 @@ class ManiSkillPredicateVocabularyDAO(
 class RLBenchPredicateVocabularyDAO(
     PredicateVocabularyDAO,
     DataAccessObject[
-        experiments.random_events_experiments.rlbench_condition_survey.RLBenchPredicateVocabulary
+        experiments.random_events_experiments.task_condition_survey.rlbench_condition_survey.RLBenchPredicateVocabulary
     ],
 ):
     __tablename__ = "RLBenchPredicateVocabularyDAO"
@@ -9070,7 +9070,7 @@ class RLBenchPredicateVocabularyDAO(
 class RoboCasaPredicateVocabularyDAO(
     PredicateVocabularyDAO,
     DataAccessObject[
-        experiments.random_events_experiments.robocasa_condition_survey.RoboCasaPredicateVocabulary
+        experiments.random_events_experiments.task_condition_survey.robocasa_condition_survey.RoboCasaPredicateVocabulary
     ],
 ):
     __tablename__ = "RoboCasaPredicateVocabularyDAO"
@@ -9090,7 +9090,9 @@ class RoboCasaPredicateVocabularyDAO(
 
 class SceneObjectDAO(
     Base,
-    DataAccessObject[experiments.random_events_experiments.task_conditions.SceneObject],
+    DataAccessObject[
+        experiments.random_events_experiments.task_condition_survey.task_conditions.SceneObject
+    ],
 ):
     __tablename__ = "SceneObjectDAO"
 
@@ -9106,7 +9108,7 @@ class SceneObjectDAO(
 class StatedPropositionDAO(
     Base,
     DataAccessObject[
-        experiments.random_events_experiments.task_conditions.StatedProposition
+        experiments.random_events_experiments.task_condition_survey.task_conditions.StatedProposition
     ],
 ):
     __tablename__ = "StatedPropositionDAO"
@@ -9128,7 +9130,7 @@ class StatedPropositionDAO(
 class AssertedRelationDAO(
     StatedPropositionDAO,
     DataAccessObject[
-        experiments.random_events_experiments.task_conditions.AssertedRelation
+        experiments.random_events_experiments.task_condition_survey.task_conditions.AssertedRelation
     ],
 ):
     __tablename__ = "AssertedRelationDAO"
@@ -9149,7 +9151,7 @@ class AssertedRelationDAO(
 class MeasuredComparisonDAO(
     StatedPropositionDAO,
     DataAccessObject[
-        experiments.random_events_experiments.task_conditions.MeasuredComparison
+        experiments.random_events_experiments.task_condition_survey.task_conditions.MeasuredComparison
     ],
 ):
     __tablename__ = "MeasuredComparisonDAO"
@@ -9170,7 +9172,7 @@ class MeasuredComparisonDAO(
 class StatedRelationDAO(
     Base,
     DataAccessObject[
-        experiments.random_events_experiments.task_conditions.StatedRelation
+        experiments.random_events_experiments.task_condition_survey.task_conditions.StatedRelation
     ],
 ):
     __tablename__ = "StatedRelationDAO"
@@ -9196,7 +9198,7 @@ class StatedRelationDAO(
 class ContinuousRelationDAO(
     StatedRelationDAO,
     DataAccessObject[
-        experiments.random_events_experiments.task_conditions.ContinuousRelation
+        experiments.random_events_experiments.task_condition_survey.task_conditions.ContinuousRelation
     ],
 ):
     __tablename__ = "ContinuousRelationDAO"
@@ -9217,7 +9219,7 @@ class ContinuousRelationDAO(
 class DiscreteRelationDAO(
     StatedRelationDAO,
     DataAccessObject[
-        experiments.random_events_experiments.task_conditions.DiscreteRelation
+        experiments.random_events_experiments.task_condition_survey.task_conditions.DiscreteRelation
     ],
 ):
     __tablename__ = "DiscreteRelationDAO"
@@ -9238,7 +9240,7 @@ class DiscreteRelationDAO(
 class StatedTaskConditionDAO(
     Base,
     DataAccessObject[
-        experiments.random_events_experiments.task_conditions.StatedTaskCondition
+        experiments.random_events_experiments.task_condition_survey.task_conditions.StatedTaskCondition
     ],
 ):
     __tablename__ = "StatedTaskConditionDAO"
@@ -9251,7 +9253,7 @@ class StatedTaskConditionDAO(
 class UnclassifiedRelationDAO(
     StatedRelationDAO,
     DataAccessObject[
-        experiments.random_events_experiments.task_conditions.UnclassifiedRelation
+        experiments.random_events_experiments.task_condition_survey.task_conditions.UnclassifiedRelation
     ],
 ):
     __tablename__ = "UnclassifiedRelationDAO"
@@ -9272,7 +9274,7 @@ class UnclassifiedRelationDAO(
 class UnclassifiedValueDAO(
     MeasuredValueDAO,
     DataAccessObject[
-        experiments.random_events_experiments.task_conditions.UnclassifiedValue
+        experiments.random_events_experiments.task_condition_survey.task_conditions.UnclassifiedValue
     ],
 ):
     __tablename__ = "UnclassifiedValueDAO"
@@ -9293,7 +9295,7 @@ class UnclassifiedValueDAO(
 class UnreadConditionDAO(
     Base,
     DataAccessObject[
-        experiments.random_events_experiments.task_conditions.UnreadCondition
+        experiments.random_events_experiments.task_condition_survey.task_conditions.UnreadCondition
     ],
 ):
     __tablename__ = "UnreadConditionDAO"

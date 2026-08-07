@@ -10,15 +10,15 @@ pins one of those phrasings, or one classification the suite's own vocabulary ma
 import pathlib
 import textwrap
 
-from experiments.random_events_experiments.mani_skill_condition_survey import (
+from experiments.random_events_experiments.task_condition_survey.mani_skill_condition_survey import (
     ManiSkillConditionSurvey,
     ManiSkillPredicateVocabulary,
 )
-from experiments.random_events_experiments.set_kind_survey import (
+from experiments.random_events_experiments.task_condition_survey.set_kind_survey import (
     ManiSkillPredicateGeometry,
     PredicateGeometry,
 )
-from experiments.random_events_experiments.task_conditions import (
+from experiments.random_events_experiments.task_condition_survey.task_conditions import (
     ConditionKind,
     PredicateKind,
     StatedTaskCondition,

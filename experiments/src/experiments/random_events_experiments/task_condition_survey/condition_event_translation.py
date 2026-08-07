@@ -35,7 +35,7 @@ from random_events.product_algebra import Event, SimpleEvent
 from random_events.set import Set
 from random_events.variable import Symbolic
 
-from experiments.random_events_experiments.task_conditions import (
+from experiments.random_events_experiments.task_condition_survey.task_conditions import (
     ConstantCondition,
     StatedProposition,
     StatedTaskCondition,

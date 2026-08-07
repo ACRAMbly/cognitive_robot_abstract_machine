@@ -11,11 +11,11 @@ from krrood.entity_query_language.factories import and_, exists, for_all, not_, 
 from krrood.parametrization.exceptions import WhereExpressionIsFirstOrder
 from random_events.product_algebra import Event
 
-from experiments.random_events_experiments.condition_event_translation import (
+from experiments.random_events_experiments.task_condition_survey.condition_event_translation import (
     ConditionEventTranslator,
     ConditionNotFullyRead,
 )
-from experiments.random_events_experiments.task_conditions import (
+from experiments.random_events_experiments.task_condition_survey.task_conditions import (
     ConstantCondition,
     SceneObject,
     UnreadCondition,

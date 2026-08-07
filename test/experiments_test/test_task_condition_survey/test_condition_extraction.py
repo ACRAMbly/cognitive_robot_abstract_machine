@@ -15,17 +15,17 @@ import textwrap
 from krrood.entity_query_language.operators.core_logical_operators import AND, OR, Not
 from krrood.entity_query_language.operators.logical_quantifiers import Exists, ForAll
 
-from experiments.random_events_experiments.condition_extraction import (
+from experiments.random_events_experiments.task_condition_survey.condition_extraction import (
     ConditionExtractor,
     ReturnedEntry,
     ReturnedValue,
     StatedOutcome,
 )
-from experiments.random_events_experiments.robocasa_condition_survey import (
+from experiments.random_events_experiments.task_condition_survey.robocasa_condition_survey import (
     RoboCasaConditionSurvey,
     RoboCasaPredicateVocabulary,
 )
-from experiments.random_events_experiments.task_conditions import (
+from experiments.random_events_experiments.task_condition_survey.task_conditions import (
     PredicateKind,
     StatedTaskCondition,
 )

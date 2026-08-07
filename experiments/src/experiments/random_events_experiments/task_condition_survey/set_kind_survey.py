@@ -37,25 +37,25 @@ from experiments.experiment_definitions import (
     ExperimentsTable,
     TypstRenderer,
 )
-from experiments.random_events_experiments.condition_event_translation import (
+from experiments.random_events_experiments.task_condition_survey.condition_event_translation import (
     ConditionEventTranslator,
 )
-from experiments.random_events_experiments.condition_extraction import (
+from experiments.random_events_experiments.task_condition_survey.condition_extraction import (
     TaskConditionReader,
 )
-from experiments.random_events_experiments.task_conditions import (
+from experiments.random_events_experiments.task_condition_survey.task_conditions import (
     ConditionKind,
     PredicateKind,
     StatedProposition,
     StatedTaskCondition,
 )
-from experiments.random_events_experiments.mani_skill_condition_survey import (
+from experiments.random_events_experiments.task_condition_survey.mani_skill_condition_survey import (
     ManiSkillConditionSurvey,
 )
-from experiments.random_events_experiments.rlbench_condition_survey import (
+from experiments.random_events_experiments.task_condition_survey.rlbench_condition_survey import (
     RLBenchConditionSurvey,
 )
-from experiments.random_events_experiments.robocasa_condition_survey import (
+from experiments.random_events_experiments.task_condition_survey.robocasa_condition_survey import (
     RoboCasaConditionSurvey,
 )
 

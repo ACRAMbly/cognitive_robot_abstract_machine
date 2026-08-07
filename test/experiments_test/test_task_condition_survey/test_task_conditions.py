@@ -9,7 +9,7 @@ it.
 
 from krrood.entity_query_language.factories import and_, exists, for_all, not_, or_
 
-from experiments.random_events_experiments.task_conditions import (
+from experiments.random_events_experiments.task_condition_survey.task_conditions import (
     ConditionKind,
     ConstantCondition,
     ContinuousRelation,

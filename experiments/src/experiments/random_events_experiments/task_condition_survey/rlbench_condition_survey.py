@@ -24,10 +24,10 @@ from typing_extensions import Callable, ClassVar
 from krrood.entity_query_language.core.base_expressions import SymbolicExpression
 from krrood.entity_query_language.factories import and_, not_, or_
 
-from experiments.random_events_experiments.condition_extraction import (
+from experiments.random_events_experiments.task_condition_survey.condition_extraction import (
     TaskConditionReader,
 )
-from experiments.random_events_experiments.task_conditions import (
+from experiments.random_events_experiments.task_condition_survey.task_conditions import (
     PredicateKind,
     PredicateNameRule,
     PredicateVocabulary,
