@@ -142,12 +142,12 @@ class TestRepetitionAggregation:
             "scenario_name",
             "plotter_mode",
             "control_cycles",
-            "cycle_mean_milliseconds",
-            "cycle_p95_milliseconds",
-            "cycle_maximum_milliseconds",
+            "cycle_mean",
+            "cycle_p95",
+            "cycle_maximum",
             "budget_utilization",
             "cycles_per_second",
-            "compile_milliseconds",
+            "compile_duration",
         ]
 
 
