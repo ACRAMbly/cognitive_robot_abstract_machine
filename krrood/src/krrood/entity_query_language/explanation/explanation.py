@@ -23,7 +23,6 @@ from krrood.entity_query_language.core.mapped_variable import (
     FlatVariable,
 )
 from krrood.entity_query_language.core.variable import InstantiatedVariable
-from krrood.entity_query_language.evaluation_context import get_evaluation_context
 from krrood.entity_query_language.factories import (
     and_,
     contains,
@@ -657,7 +656,7 @@ def register_inference(
     explanation = InferenceExplanation(
         query_node=variable_node,
         stack=monitored.get_stack(variable_node) or CallStack([]),
-        query_root=_resolve_query_root(variable_node),
+        query_root=variable_node._evaluating_query_root_,
         satisfied_condition_ids=satisfied_ids,
         operation_result=result,
     )
@@ -666,29 +665,6 @@ def register_inference(
     except TypeError:
         explanation._instance_ref = lambda: instance  # type: ignore[assignment]
     instance._inference_explanation_ = explanation
-
-
-def _resolve_query_root(variable_node: SymbolicExpression) -> SymbolicExpression:
-    """
-    :param variable_node: The variable node that produced an inferred instance.
-    :return: The query actually evaluating *variable_node*.
-
-    ..note:: A variable reused as the selected variable of more than one query keeps a
-        direct parent per query, but only the first-ever attachment becomes its
-        structural, primary ``_parent_`` — which may belong to an unrelated, earlier
-        query. Reading the current evaluation's own outermost-query claim (see
-        :class:`~krrood.entity_query_language.evaluation_context.OutermostQueryClaim`)
-        instead of walking that structural chain via :attr:`SymbolicExpression._root_`
-        resolves to whichever query is actually producing this inference. Outside an
-        active evaluation, the structural root is the only signal left.
-    """
-    evaluation_context = get_evaluation_context()
-    if (
-        evaluation_context is not None
-        and evaluation_context.outermost_query_claim.node is not None
-    ):
-        return evaluation_context.outermost_query_claim.node
-    return variable_node._root_
 
 
 def explain_inference(instance: Any) -> Optional[InferenceExplanation]:
