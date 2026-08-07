@@ -15,6 +15,7 @@
 - All new features and fixes must be covered by tests
 - Name test classes (and the mimic classes used by tests) after the pattern or behaviour they exercise, not after the concrete external class they happen to stand in for
 - Make assertions as specific as possible: when the correct expected value can be determined, assert equality to that value rather than only a weaker check such as not-None or not-empty
+- Assert against the definition rather than a copy of it: compare to the enum member, the named constant, or the value read from the fixture the code under test consumed. Where a type distinguishes the case, assert the type - a distinct exception class or enum member - instead of matching on message text. A literal retyped into the test is a second copy of the thing the test exists to check, and it keeps passing when the original changes
 - Keep each test focused on the one behaviour it names: assert exactly the values that behaviour determines, and do not also pin down incidental output a change unrelated to that behaviour could alter (for example, an unrelated wording tweak to an error message a test isn't about). Prefer deriving an expected value from the same production code that computes it (e.g. by calling the lower-level function under test and reusing its result) over hardcoding a second literal copy of output another test already asserts exactly — a hardcoded copy duplicates coverage and turns one wording change into two unrelated test failures. Tests should be separable and independent, each failing only for its own reason.
 - CI safety: All added tests must be part of the CI suite, but only need to execute there if they can run without live external calls or missing credentials — tests requiring unavailable credentials must be skipped (or removed if new), not left to break the pipeline.
 - Credentials: Any test requiring credentials to run in CI must be pre-approved by the user and have those credentials available in CI; otherwise it must be skipped there.
@@ -62,7 +63,12 @@
   - The main branch of a function should hold the main output with the biggest compute; alternative outputs should be realized via guard clauses beforehand
   - When dealing with nested if statements and branching methods, use guard clauses to reduce nesting by inverting conditions and returning early
 - Dont use try except blocks, programs in illegal states should raise appropriate exceptions.
-- Instead of passing around strings, use enums instead
+- Prefer structured data over bare strings, hardcoded values, and meaningless numbers. This is the default, not a preference to weigh: reach for the structured form first and justify the literal, never the other way round.
+  - Never hardcode a string that names a fixed thing - a payload key, a state, a label, a filename, an environment variable, a command flag, a status. Give it a `StrEnum` member and use that. A value spelled in two places has no single source to rename, and nothing fails when the two drift apart.
+  - Replace a magic number with a named constant or an enum member. A bare literal that carries meaning is unreadable where it is used and unsearchable everywhere else.
+  - Parse external data - JSON, API responses, configuration - into dataclasses that mirror its structure, with a `from_...` classmethod doing the reading. The field names and the access path into the payload are then written once, instead of at every use site.
+  - Replace a tuple whose positions carry meaning with a dataclass, so the fields are named rather than counted.
+  - Keep a long literal document - a query, a template, a schema - in a file of its own type and read it in, rather than embedding it as a string.
 - If there are methods that are never used outside of tests, consult the developer if they can be removed.
 
 ## Type Hints
