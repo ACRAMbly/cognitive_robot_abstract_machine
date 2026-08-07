@@ -184,6 +184,7 @@ class MotionServer:
                 return
             if time.monotonic() >= deadline:
                 raise RequiredWorldUpdateNotReceivedError(
+                    current_sequence_number=self.world_synchronizer.published_sequence_number,
                     publisher_name=required_position.origin.node_name,
                     awaited_sequence_number=required_position.sequence_number,
                     timeout=self.world_update_timeout,
