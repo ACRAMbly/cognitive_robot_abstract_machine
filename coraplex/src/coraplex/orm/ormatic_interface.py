@@ -26,6 +26,7 @@ import coraplex.datastructures.execution_data
 import coraplex.datastructures.grasp
 import coraplex.datastructures.grasp_scoring
 import coraplex.datastructures.trajectory
+import coraplex.demonstrations
 import coraplex.exceptions
 import coraplex.execution_environment
 import coraplex.language
@@ -3129,6 +3130,39 @@ class PoseTrajectoryDAO(
         foreign_keys="[PoseTrajectoryDAO_poses_association.source_posetrajectorydao_id]",
         lazy="selectin",
     )
+
+
+class RobotDemonstrationDAO(
+    Base, DataAccessObject[coraplex.demonstrations.RobotDemonstration]
+):
+    __tablename__ = "RobotDemonstrationDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
+
+    collision_avoidance: Mapped[builtins.bool] = mapped_column(use_existing_column=True)
+
+    used_robot: Mapped[TypeType] = mapped_column(
+        TypeType, nullable=False, use_existing_column=True
+    )
+    execution_type: Mapped[coraplex.datastructures.enums.ExecutionType] = mapped_column(
+        krrood.ormatic.custom_types.PolymorphicEnumType,
+        nullable=False,
+        use_existing_column=True,
+    )
+
+
+class RobotDemonstrationRosSessionDAO(
+    Base, DataAccessObject[coraplex.demonstrations.RobotDemonstrationRosSession]
+):
+    __tablename__ = "RobotDemonstrationRosSessionDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
+
+    owns_context: Mapped[builtins.bool] = mapped_column(use_existing_column=True)
 
 
 class ContextIsUnavailableDAO(

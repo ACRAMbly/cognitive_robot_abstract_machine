@@ -41,6 +41,7 @@ from coraplex.datastructures.enums import (
     VerticalAlignment,
 )
 from coraplex.datastructures.grasp import GraspDescription
+from coraplex.demonstrations import RobotDemonstration
 from coraplex.plans.factories import sequential
 from coraplex.plans.plan_node import PlanNode
 from coraplex.robot_plans.actions.core.misc import DetectAction
@@ -49,7 +50,6 @@ from coraplex.robot_plans.actions.core.pick_up import PickUpAction
 from coraplex.robot_plans.actions.core.placing import PlaceAction
 from coraplex.robot_plans.actions.core.robot_body import ParkArmsAction
 from coraplex.view_manager import ViewManager
-from experiments.demonstration import RobotDemonstration
 from semantic_digital_twin.adapters.package_resolver import CompositePathResolver
 from semantic_digital_twin.api import (
     BodySpecification,

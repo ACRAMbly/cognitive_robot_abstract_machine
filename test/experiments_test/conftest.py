@@ -11,8 +11,8 @@ from pathlib import Path
 import pytest
 from rclpy.action import get_action_names_and_types
 
+from coraplex.demonstrations import RobotDemonstrationRosSession
 from coraplex.perception import ROBOKUDO_QUERY_ACTION_NAME
-from experiments.demonstration import RobotDemonstrationRosSession
 from experiments.real_stretch_apartment_demo.demo import (
     CEREAL_SHELF_LAYER_NAME,
     CEREAL_SHELF_LAYER_T_CEREAL,

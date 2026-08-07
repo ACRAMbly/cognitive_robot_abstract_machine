@@ -16,7 +16,7 @@ from coraplex.datastructures.enums import ExecutionType
 from coraplex.plans.executables import GiskardExecutable
 from coraplex.plans.factories import code
 from coraplex.plans.plan_node import PlanNode
-from experiments.demonstration import RobotDemonstration, RobotDemonstrationRosSession
+from coraplex.demonstrations import RobotDemonstration, RobotDemonstrationRosSession
 from semantic_digital_twin.robots.minimal_robot import MinimalRobot
 from semantic_digital_twin.world import World
 
