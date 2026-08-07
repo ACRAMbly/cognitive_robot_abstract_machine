@@ -74,43 +74,47 @@ class FeatureFunctionGoal(ConvergingTask, ABC):
         )
         if isinstance(self.controlled_feature, Point3):
             self.root_P_controlled_feature = root_T_tip @ tip_controlled_feature
-            dbg = DebugExpression(
-                name="root_P_controlled_feature",
-                expression=self.root_P_controlled_feature,
-                color=Color(1, 0, 0, 1),
+            feature_debug_expressions.append(
+                DebugExpression(
+                    name="root_P_controlled_feature",
+                    expression=self.root_P_controlled_feature,
+                    color=Color(1, 0, 0, 1),
+                )
             )
-            feature_debug_expressions.append(dbg)
         elif isinstance(self.controlled_feature, Vector3):
             self.root_V_controlled_feature = root_T_tip @ tip_controlled_feature
             self.root_V_controlled_feature.visualisation_frame = (
                 self.controlled_feature.visualisation_frame
             )
-            dbg = DebugExpression(
-                name="root_V_controlled_feature",
-                expression=self.root_V_controlled_feature,
-                color=Color(1, 0, 0, 1),
+            feature_debug_expressions.append(
+                DebugExpression(
+                    name="root_V_controlled_feature",
+                    expression=self.root_V_controlled_feature,
+                    color=Color(1, 0, 0, 1),
+                )
             )
-            feature_debug_expressions.append(dbg)
 
         if isinstance(self.reference_feature, Point3):
             self.root_P_reference_feature = root_reference_feature
-            dbg = DebugExpression(
-                name="root_P_reference_feature",
-                expression=self.root_P_reference_feature,
-                color=Color(0, 1, 0, 1),
+            feature_debug_expressions.append(
+                DebugExpression(
+                    name="root_P_reference_feature",
+                    expression=self.root_P_reference_feature,
+                    color=Color(0, 1, 0, 1),
+                )
             )
-            feature_debug_expressions.append(dbg)
         elif isinstance(self.reference_feature, Vector3):
             self.root_V_reference_feature = root_reference_feature
             self.root_V_reference_feature.visualisation_frame = (
                 self.reference_feature.visualisation_frame
             )
-            dbg = DebugExpression(
-                name="root_V_reference_feature",
-                expression=self.root_V_reference_feature,
-                color=Color(0, 1, 0, 1),
+            feature_debug_expressions.append(
+                DebugExpression(
+                    name="root_V_reference_feature",
+                    expression=self.root_V_reference_feature,
+                    color=Color(0, 1, 0, 1),
+                )
             )
-            feature_debug_expressions.append(dbg)
 
         artifacts = super().build(context)
         artifacts.debug_expressions.extend(feature_debug_expressions)
