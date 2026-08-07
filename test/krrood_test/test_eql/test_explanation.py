@@ -799,11 +799,11 @@ def test_query_graph_marks_a_node_reused_at_two_positions_satisfied_regardless_o
     positions ``construct_graph`` visits first.
 
     ``construct_graph`` memoizes exactly one ``QueryNode`` per expression
-    (``expression_node_map``), so any position-dependent term in the satisfaction
-    check would be computed at the first-visited position and then reused for every
-    other one. ``and_(flag == True, flag)`` reaches the ``Comparator`` operand
-    position before the bare ``AND`` child position, so it pins that the classification
-    stays independent of visit order.
+    (``expression_node_map``), so any position-dependent term in the satisfaction check
+    would be computed at the first-visited position and then reused for every other one.
+    ``and_(flag == True, flag)`` reaches the ``Comparator`` operand position before the
+    bare ``AND`` child position, so it pins that the classification stays independent of
+    visit order.
     """
     flag = variable_from([True])
     sink = variable_from([1])
