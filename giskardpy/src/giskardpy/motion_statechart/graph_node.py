@@ -448,6 +448,9 @@ class MotionStatechartNode:
     """
 
     plot_specifications: NodePlotSpec = plot_specification_field(NodePlotSpec.create_monitor_style)
+    """
+    Describes how this node is plotted during a MotionStatechart.draw call or in the MotionStatechartInspector.
+    """
 
     def __post_init__(self):
         if self.name is None:
