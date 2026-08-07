@@ -211,7 +211,6 @@ class Detection:
         candidates = world.get_semantic_annotations_by_type(self.semantic_annotation)
         if not candidates:
             raise PerceivedObjectNotInWorld(self.semantic_annotation)
-
         bodies = {annotation.root for annotation in candidates}
         if len(bodies) > 1:
             raise AmbiguousDetection(self.semantic_annotation, len(bodies))
