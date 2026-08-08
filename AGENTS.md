@@ -66,8 +66,9 @@
 - Prefer structured data over bare strings, hardcoded values, and meaningless numbers. This is the default, not a preference to weigh: reach for the structured form first and justify the literal, never the other way round.
   - Never hardcode a string that names a fixed thing - a payload key, a state, a label, a filename, an environment variable, a command flag, a status. Give it a `StrEnum` member and use that. A value spelled in two places has no single source to rename, and nothing fails when the two drift apart.
   - Replace a magic number with a named constant or an enum member. A bare literal that carries meaning is unreadable where it is used and unsearchable everywhere else.
-  - Parse external data - JSON, API responses, configuration - into dataclasses that mirror its structure, with a `from_...` classmethod doing the reading. The field names and the access path into the payload are then written once, instead of at every use site.
-  - Replace a tuple whose positions carry meaning with a dataclass, so the fields are named rather than counted.
+  - For JSON our own classes round-trip, reuse `krrood.adapters.json_serializer.SubclassJSONSerializer` rather than hand-writing `to_json`/`from_json` - it already resolves the concrete subclass from the stored type name.
+  - For data whose shape someone else controls - an API response, a configuration file - that serializer does not apply, since the payload carries no type of ours. Mirror the structure in dataclasses instead and parse into them the same way, with a `from_json` classmethod doing the reading, so the field names and the access path into the payload are written once rather than at every use site.
+  - Replace a tuple whose positions carry meaning with a dataclass, or with an enum when the positions are a fixed set of alternatives rather than fields, so the parts are named rather than counted.
   - Keep a long literal document - a query, a template, a schema - in a file of its own type and read it in, rather than embedding it as a string.
 - If there are methods that are never used outside of tests, consult the developer if they can be removed.
 
