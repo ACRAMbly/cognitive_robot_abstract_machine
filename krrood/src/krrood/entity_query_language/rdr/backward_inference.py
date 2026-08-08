@@ -32,13 +32,9 @@ from typing_extensions import (
 
 from krrood.entity_query_language.factories import not_
 from krrood.entity_query_language.operators.core_logical_operators import Not
+from krrood.entity_query_language.rdr.branch_semantics import SelectorBranchSemantics
 from krrood.entity_query_language.rules.conclusion import Add
-from krrood.entity_query_language.rules.conclusion_selector import (
-    Alternative,
-    ConclusionSelector,
-    Next,
-    Refinement,
-)
+from krrood.entity_query_language.rules.conclusion_selector import ConclusionSelector
 
 if TYPE_CHECKING:
     from krrood.entity_query_language.core.base_expressions import SymbolicExpression
@@ -171,55 +167,28 @@ def _leaf_guards(
         expression: SymbolicExpression,
         negated: bool,
 ) -> List[GuardCondition]:
-    """Decompose a ConclusionSelector into leaf-level branch-choice predicates.
+    """Decompose an expression into leaf-level branch-choice predicates.
 
-    This is NOT tree traversal — it is predicate decomposition.  It answers the
-    question: "when this ``ConclusionSelector`` appears as a path guard (i.e. a
-    competing sibling branch), what are the minimal leaf conditions that capture
-    whether that sibling's branch was taken?"
+    This is not tree traversal — it is predicate decomposition. It answers the question:
+    "when this expression appears as a path guard (i.e. a competing sibling branch), what
+    are the minimal leaf conditions that capture whether that sibling's branch was taken?"
 
-    The result is always leaf-level ``GuardCondition`` objects (never
-    ``ConclusionSelectors``), so guards remain human-readable and semantically
-    precise.
+    Each selector's own rule lives on its
+    :class:`~krrood.entity_query_language.rdr.branch_semantics.SelectorBranchSemantics`;
+    handled here are only the two cases that are not selector-specific — pushing a negation
+    through a wrapped selector, and bottoming out on a leaf predicate.
 
-    Decomposition rules (each explained in terms of "the sibling's branch was
-    taken"):
-
-    * ``Alternative(A, B)`` — the sibling's branch was taken if A OR B passed.
-      When negated: NOT(A) AND NOT(B) (De Morgan).
-      Both children contribute because Alternative is a simple OR.
-
-    * ``Refinement(A, B)`` — the sibling's refinement branch was taken if A
-      passed.  B (the parent default fallback) is a separate rule subtree,
-      not a condition on the refinement being taken.  It is ignored.
-      When negated: NOT(A).
-
-    * ``Next(...)`` — each child is an independent disjunct at the same depth.
-      Propagate the predicate to each child independently.
-
-    * ``Not(ConclusionSelector)`` — push negation inward so that
-      NOT(Refinement(A, B)) → NOT(A), and
-      NOT(Alternative(A, B)) → NOT(A) AND NOT(B).
+    The result is always leaf-level :class:`GuardCondition` objects, never selectors, so
+    guards remain human-readable and directly evaluable.
 
     :param expression: The expression to decompose into leaf guards.
     :param negated: Whether the guard polarity is negated.
     :return: The flat list of leaf :class:`GuardCondition` objects.
     """
-    if isinstance(expression, Alternative):
-        if negated:
-            # NOT(A OR B) == NOT(A) AND NOT(B)
-            return _leaf_guards(expression.left, True) + _leaf_guards(expression.right, True)
-        # A OR (NOT(A) AND B) — decomposed to both sides as leaf conditions
-        return _leaf_guards(expression.left, False) + _leaf_guards(expression.right, False)
-    if isinstance(expression, Refinement):
-        return _leaf_guards(expression.left, negated)
-    if isinstance(expression, Next):
-        result: List[GuardCondition] = []
-        for child in expression._operation_children_:
-            result.extend(_leaf_guards(child, negated))
-        return result
+    semantics = SelectorBranchSemantics.most_specific_for(expression)
+    if semantics is not None:
+        return semantics.sibling_guards(expression, negated, _leaf_guards)
     if isinstance(expression, Not) and isinstance(expression._child_, ConclusionSelector):
-        # Push negation through the selector — refines NOT(Refinement), NOT(Alternative), NOT(Next)
         return _leaf_guards(expression._child_, not negated)
     return [GuardCondition(expression, negated)]
 
@@ -230,43 +199,28 @@ def _collect_rule_paths(
 ) -> Iterator[_RulePath]:
     """Recursively walk the selector DAG, yielding a path for every leaf rule.
 
-    The *guard* list accumulates path conditions as selectors are descended:
-    * ``Alternative(left, right)``: left applies directly; right applies only when
-      ``NOT(left)``.
-    * ``Refinement(left, right)``: left applies when ``NOT(right)`` (refinement doesn't
-      override); right applies when ``left`` (parent applied — positive guard).
-    * ``Next``: each child is a separate disjunct (same depth, no cross-guards).
+    Which children a selector is descended into, and what entering each one contributes to
+    the accumulated *guard*, is the selector's own
+    :class:`~krrood.entity_query_language.rdr.branch_semantics.SelectorBranchSemantics`.
+    A node with no such semantics is a leaf rule: it guards itself positively and
+    terminates the path.
 
-    Guards that are ConclusionSelector nodes are decomposed via
-    :func:`_leaf_guards` — a single ``NOT(Alternative(A, B))`` becomes the
-    two guards ``NOT(A), NOT(B)``, and ``Refinement(A, B)`` reduces to ``A``.
-    This keeps the guard list semantically precise and human-readable.
+    :param node: The rule-tree node to walk.
+    :param guard: The guard conditions accumulated on the way to *node*.
+    :return: One :class:`_RulePath` per leaf rule reachable from *node*.
     """
-    if isinstance(node, Refinement):
-        yield from _collect_rule_paths(
-            node.left,
-            guard + _leaf_guards(node.right, negated=True),
-        )
-        yield from _collect_rule_paths(
-            node.right,
-            guard + _leaf_guards(node.left, negated=False),
-        )
-    elif isinstance(node, Alternative):
-        yield from _collect_rule_paths(node.left, guard)
-        yield from _collect_rule_paths(
-            node.right,
-            guard + _leaf_guards(node.left, negated=True),
-        )
-    elif isinstance(node, Next):
-        for child in node._operation_children_:
-            yield from _collect_rule_paths(child, guard)
-    else:
+    semantics = SelectorBranchSemantics.most_specific_for(node)
+    if semantics is None:
         add_nodes = node.conclusions_of_type(Add)
         if add_nodes:
             yield _RulePath(
                 conditions=tuple(guard + [GuardCondition(node, negated=False)]),
                 add_nodes=tuple(add_nodes),
             )
+        return
+
+    for branch in semantics.branches(node, _leaf_guards):
+        yield from _collect_rule_paths(branch.node, guard + list(branch.entry_guards))
 
 
 # %%

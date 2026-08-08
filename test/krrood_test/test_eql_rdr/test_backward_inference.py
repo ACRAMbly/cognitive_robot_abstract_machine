@@ -45,9 +45,7 @@ class Species(Enum):
     REPTILE = "reptile"
 
 
-# ---------------------------------------------------------------------------
-# Guard/SufficientConditionSet/ConclusionKnowledge primitives
-# ---------------------------------------------------------------------------
+# %% guard and sufficient-condition-set primitives
 
 
 def test_guard_condition_holds_for_a_true_case():
@@ -119,9 +117,7 @@ def test_conclusion_knowledge_is_satisfiable_only_with_at_least_one_path():
     assert satisfiable.is_satisfiable() is True
 
 
-# ---------------------------------------------------------------------------
-# what_do_we_know_about over real rule trees
-# ---------------------------------------------------------------------------
+# %% sufficient conditions over real rule trees
 
 
 def test_bare_condition_rule_is_its_own_sufficient_guard():
@@ -259,9 +255,7 @@ def test_ambiguous_value_produces_one_sufficient_condition_set_per_path():
     assert len(knowledge.sufficient_condition_sets) == 2
 
 
-# ---------------------------------------------------------------------------
-# holds_for evaluation contract
-# ---------------------------------------------------------------------------
+# %% holds_for evaluation contract
 
 
 def test_guard_condition_holds_for_a_not_wrapped_expression():
@@ -298,9 +292,7 @@ def test_guard_expressions_evaluate_to_plain_values_never_operation_results():
         )
 
 
-# ---------------------------------------------------------------------------
-# _leaf_guards: Not(ConclusionSelector) decomposition
-# ---------------------------------------------------------------------------
+# %% _leaf_guards: Not(ConclusionSelector) decomposition
 
 
 def test_not_of_refinement_decomposes_to_the_negated_base_condition():
@@ -314,9 +306,7 @@ def test_not_of_refinement_decomposes_to_the_negated_base_condition():
     assert guards[0].negated is True
 
 
-# ---------------------------------------------------------------------------
-# BackwardInferenceIndex caching
-# ---------------------------------------------------------------------------
+# %% BackwardInferenceIndex caching
 
 
 def test_index_builds_once_and_serves_every_conclusion_value_from_cache():
