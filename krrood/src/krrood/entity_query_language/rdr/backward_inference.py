@@ -17,7 +17,6 @@ from __future__ import annotations
 
 from collections import defaultdict
 from dataclasses import dataclass, field
-from functools import cached_property
 
 from typing_extensions import (
     TYPE_CHECKING,
@@ -30,9 +29,9 @@ from typing_extensions import (
     Tuple,
 )
 
-from krrood.entity_query_language.factories import not_
 from krrood.entity_query_language.operators.core_logical_operators import Not
 from krrood.entity_query_language.rdr.branch_semantics import SelectorBranchSemantics
+from krrood.entity_query_language.rdr.guard_condition import GuardCondition
 from krrood.entity_query_language.rules.conclusion import Add
 from krrood.entity_query_language.rules.conclusion_selector import ConclusionSelector
 
@@ -43,61 +42,6 @@ if TYPE_CHECKING:
 
 # %%
 # Data structures
-
-
-@dataclass(frozen=True)
-class GuardCondition:
-    """A condition that must be satisfied for a rule to be applied.
-
-    Each guard is one leaf-level predicate extracted from the rule tree's
-    conclusion selectors.  ``negated=True`` means the rule applies only when the
-    condition is False (i.e. the expression must evaluate to False).
-
-    ``expression`` is always a leaf-level EQL node (e.g. a ``Comparator``),
-    never a ``ConclusionSelector`` — ``_leaf_guards`` decomposes selectors
-    before they reach ``GuardCondition``.
-    """
-
-    original_expression: SymbolicExpression
-    """The leaf-level EQL predicate to evaluate (e.g. a ``Comparator``)."""
-    negated: bool = False
-    """When ``True`` the guard is satisfied only if :attr:`expression` is False.
-
-    Polarity is carried here rather than applied to :attr:`expression`, because
-    negating an expression reparents it and :attr:`expression` belongs to the
-    live rule tree.
-    """
-
-    def holds_for(
-            self,
-            shared_variable: Variable,
-            case: Any,
-    ) -> bool:
-        """Evaluate this guard against *case* bound to *shared_variable*.
-
-        Respects :attr:`negated`: a negated guard must evaluate to ``False`` for
-        the result to be ``True``.
-
-        :param shared_variable: The EQL variable the conditions range over.
-        :param case: The concrete case object to evaluate against.
-        :return: ``True`` if the guard is satisfied.
-        """
-        shared_variable._update_domain_([case])
-        # A leaf predicate yields its own bound boolean per case; a Not() has no
-        # id-keyed payload of its own, so it yields the full binding row when it holds
-        # and nothing when it does not. Both read correctly through bool().
-        truth = any(bool(result) for result in self.original_expression.evaluate())
-        return not truth if self.negated else truth
-
-    @cached_property
-    def as_expression(self) -> SymbolicExpression:
-        """
-        Produce the EQL expression where the negation is applied if it is a negated guard.
-
-        A negated guard is wrapped with ``not_`` so the produced condition expression is satisfied
-        when the guard's expression is False.
-        """
-        return not_(self.original_expression) if self.negated else self.original_expression
 
 
 @dataclass(frozen=True)
@@ -220,7 +164,7 @@ def _collect_rule_paths(
         return
 
     for branch in semantics.branches(node, _leaf_guards):
-        yield from _collect_rule_paths(branch.node, guard + list(branch.entry_guards))
+        yield from _collect_rule_paths(branch.child_expression, guard + list(branch.entry_guards))
 
 
 # %%

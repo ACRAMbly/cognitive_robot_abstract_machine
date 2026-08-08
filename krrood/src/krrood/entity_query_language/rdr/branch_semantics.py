@@ -13,12 +13,6 @@ class per selector answering both:
 Keeping both on one class per selector is what makes them impossible to change apart, and
 lets a new selector participate by defining a class here rather than by editing the
 traversal.
-
-The dispatch mirrors the grammar's
-:class:`~krrood.entity_query_language.verbalization.grammar.framework.specificity.SpecificityRule`
-families: alternatives self-register as concrete subclasses and are ranked by how specific
-their :attr:`SelectorBranchSemantics.selector` is, over the shared
-:mod:`krrood.patterns.specificity_ranking` primitives.
 """
 
 from __future__ import annotations
@@ -27,16 +21,18 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
 from typing_extensions import (
-    TYPE_CHECKING,
     Callable,
-    ClassVar,
+    Generic,
     List,
     Optional,
     Tuple,
     Type,
+    TypeVar,
 )
 
+from krrood.entity_query_language.core.base_expressions import SymbolicExpression
 from krrood.entity_query_language.rdr.exceptions import AmbiguousBranchSemanticsError
+from krrood.entity_query_language.rdr.guard_condition import GuardCondition
 from krrood.entity_query_language.rules.conclusion_selector import (
     Alternative,
     ConclusionSelector,
@@ -48,20 +44,16 @@ from krrood.patterns.specificity_ranking import (
     mro_depth,
     sole_maximum,
 )
+from krrood.patterns.subclass_safe_generic import SubClassSafeGeneric
 
-if TYPE_CHECKING:
-    from krrood.entity_query_language.core.base_expressions import SymbolicExpression
-    from krrood.entity_query_language.rdr.backward_inference import GuardCondition
-
-
-LeafGuardDecomposition = Callable[["SymbolicExpression", bool], List["GuardCondition"]]
+SelectorType = TypeVar("SelectorType", bound=ConclusionSelector)
 """
-The recursion continuation: decompose an expression into leaf guards at a given
-polarity.
+The conclusion-selector class a branch-semantics class handles.
+"""
 
-Threaded in as a parameter, the same way the grammar's ``RuleContext.recurse`` hands a
-rule its fold continuation, so a semantics class never recurses through the traversal
-module.
+LeafGuardDecomposition = Callable[[SymbolicExpression, bool], List[GuardCondition]]
+"""
+Decompose an expression into leaf guards at a given polarity.
 """
 
 # %% branch value object
@@ -73,69 +65,73 @@ class GuardedBranch:
     One child of a conclusion selector, paired with what entering it implies.
     """
 
-    node: SymbolicExpression
+    child_expression: SymbolicExpression
     """
     The child expression the traversal continues into.
     """
 
     entry_guards: Tuple[GuardCondition, ...]
     """
-    The guards that reaching *node* through this selector adds to the path.
+    The guards that reaching :attr:`child_expression` through this selector adds to the
+    path.
     """
 
 
 # %% the family
 
 
-@dataclass(frozen=True)
-class SelectorBranchSemantics(ABC):
+@dataclass
+class SelectorBranchSemantics(Generic[SelectorType], SubClassSafeGeneric, ABC):
     """
     One conclusion selector's branch-choice semantics, as seen by backward inference.
 
-    A concrete subclass declares the selector it handles via :attr:`selector` and
-    implements both halves; it is discovered automatically, so adding a selector needs
-    no edit to the traversal.
+    A concrete subclass binds :data:`SelectorType` to the selector it handles and
+    implements both halves; it is discovered automatically, so adding a selector needs no
+    edit to the traversal.
+
+    ..note:: Every method is a classmethod — the semantics carry no state, so the
+        traversal dispatches to the class itself and never constructs one.
     """
 
-    selector: ClassVar[Type[ConclusionSelector]]
-    """
-    The conclusion-selector class this semantics handles (the ``isinstance`` gate).
-    """
+    @classmethod
+    def selector_type(cls) -> Type[ConclusionSelector]:
+        """:return: The conclusion-selector class this semantics handles."""
+        return cls.get_generic_type_parameters()[0]
 
     @classmethod
     def most_specific_for(
         cls,
         expression: SymbolicExpression,
-    ) -> Optional[SelectorBranchSemantics]:
+    ) -> Optional[Type[SelectorBranchSemantics]]:
         """
         Find the semantics governing *expression*.
 
-        Ranks by the specificity of each candidate's :attr:`selector`, so a semantics
-        for a subclass of some selector outranks the one it refines.
+        Ranks by the specificity of each candidate's :meth:`selector_type`, so a
+        semantics for a subclass of some selector outranks the one it refines.
 
         :param expression: Any rule-tree node.
-        :return: The matching semantics, or ``None`` when *expression* is not a
+        :return: The matching semantics class, or ``None`` when *expression* is not a
             conclusion selector.
         :raises AmbiguousBranchSemanticsError: Two candidates are equally specific.
         """
         applicable = [
             candidate
             for candidate in concrete_subclasses(cls)
-            if isinstance(expression, candidate.selector)
+            if isinstance(expression, candidate.selector_type())
         ]
-        winner = sole_maximum(
+        return sole_maximum(
             applicable,
-            key=lambda candidate: mro_depth(candidate.selector),
+            key=lambda candidate: mro_depth(candidate.selector_type()),
             collision_error=lambda tied: AmbiguousBranchSemanticsError(
                 selector=expression, candidates=tied
             ),
         )
-        return winner() if winner is not None else None
 
+    @classmethod
     @abstractmethod
     def sibling_guards(
-        self,
-        selector: SymbolicExpression,
+        cls,
+        selector: ConclusionSelector,
         negated: bool,
         decompose: LeafGuardDecomposition,
     ) -> List[GuardCondition]:
@@ -155,10 +151,11 @@ class SelectorBranchSemantics(ABC):
         :return: The flat list of leaf guards.
         """
 
+    @classmethod
     @abstractmethod
     def branches(
-        self,
-        selector: SymbolicExpression,
+        cls,
+        selector: ConclusionSelector,
         decompose: LeafGuardDecomposition,
     ) -> List[GuardedBranch]:
         """
@@ -173,8 +170,8 @@ class SelectorBranchSemantics(ABC):
 # %% concrete selectors
 
 
-@dataclass(frozen=True)
-class RefinementBranchSemantics(SelectorBranchSemantics):
+@dataclass
+class RefinementBranchSemantics(SelectorBranchSemantics[Refinement]):
     """
     ``Refinement(left, right)`` — *right* refines *left*, overriding it when it applies.
 
@@ -182,18 +179,18 @@ class RefinementBranchSemantics(SelectorBranchSemantics):
     a separate rule subtree rather than a condition on *left* having been reached.
     """
 
-    selector: ClassVar[Type[ConclusionSelector]] = Refinement
-
+    @classmethod
     def sibling_guards(
-        self,
+        cls,
         selector: Refinement,
         negated: bool,
         decompose: LeafGuardDecomposition,
     ) -> List[GuardCondition]:
         return decompose(selector.left, negated)
 
+    @classmethod
     def branches(
-        self,
+        cls,
         selector: Refinement,
         decompose: LeafGuardDecomposition,
     ) -> List[GuardedBranch]:
@@ -203,8 +200,8 @@ class RefinementBranchSemantics(SelectorBranchSemantics):
         ]
 
 
-@dataclass(frozen=True)
-class AlternativeBranchSemantics(SelectorBranchSemantics):
+@dataclass
+class AlternativeBranchSemantics(SelectorBranchSemantics[Alternative]):
     """
     ``Alternative(left, right)`` — an "else if": *right* applies only when *left* did
     not.
@@ -219,18 +216,18 @@ class AlternativeBranchSemantics(SelectorBranchSemantics):
         refinement — so the two sides are returned unchanged rather than approximated.
     """
 
-    selector: ClassVar[Type[ConclusionSelector]] = Alternative
-
+    @classmethod
     def sibling_guards(
-        self,
+        cls,
         selector: Alternative,
         negated: bool,
         decompose: LeafGuardDecomposition,
     ) -> List[GuardCondition]:
         return decompose(selector.left, negated) + decompose(selector.right, negated)
 
+    @classmethod
     def branches(
-        self,
+        cls,
         selector: Alternative,
         decompose: LeafGuardDecomposition,
     ) -> List[GuardedBranch]:
@@ -240,16 +237,15 @@ class AlternativeBranchSemantics(SelectorBranchSemantics):
         ]
 
 
-@dataclass(frozen=True)
-class NextBranchSemantics(SelectorBranchSemantics):
+@dataclass
+class NextBranchSemantics(SelectorBranchSemantics[Next]):
     """
     ``Next(...)`` — independent rules at the same depth, evaluated without cross-guards.
     """
 
-    selector: ClassVar[Type[ConclusionSelector]] = Next
-
+    @classmethod
     def sibling_guards(
-        self,
+        cls,
         selector: Next,
         negated: bool,
         decompose: LeafGuardDecomposition,
@@ -259,8 +255,9 @@ class NextBranchSemantics(SelectorBranchSemantics):
             guards.extend(decompose(child, negated))
         return guards
 
+    @classmethod
     def branches(
-        self,
+        cls,
         selector: Next,
         decompose: LeafGuardDecomposition,
     ) -> List[GuardedBranch]:

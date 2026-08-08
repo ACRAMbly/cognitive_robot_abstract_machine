@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from enum import Enum
 
 import pytest
-from typing_extensions import ClassVar, List, Type
+from typing_extensions import Iterable, List, Tuple
 
 from krrood.entity_query_language.factories import add, variable
 from krrood.entity_query_language.rdr.branch_semantics import (
@@ -22,14 +22,13 @@ from krrood.entity_query_language.rdr.branch_semantics import (
     SelectorBranchSemantics,
 )
 from krrood.entity_query_language.rdr.backward_inference import (
-    GuardCondition,
     _collect_rule_paths,
     _leaf_guards,
 )
+from krrood.entity_query_language.rdr.guard_condition import GuardCondition
 from krrood.entity_query_language.rdr.exceptions import AmbiguousBranchSemanticsError
 from krrood.entity_query_language.rules.conclusion_selector import (
     Alternative,
-    ConclusionSelector,
     Next,
     Refinement,
 )
@@ -52,6 +51,23 @@ class Species(Enum):
     BIRD = "bird"
 
 
+def _identified_guards(
+    guards: Iterable[GuardCondition],
+) -> List[Tuple[str, bool]]:
+    """
+    Render guards as ``(expression id, polarity)`` pairs for comparison.
+
+    Symbolic expressions must be compared by :attr:`_id_`: ``==`` on them builds a
+    ``Comparator`` rather than reporting equality, and every such comparison is truthy,
+    so an assertion written against the expressions themselves holds for any two of
+    them.
+
+    :param guards: The guards to render.
+    :return: One ``(id, negated)`` pair per guard, in order.
+    """
+    return [(guard.original_expression._id_, guard.negated) for guard in guards]
+
+
 # %% test-only selectors, defined here so no production selector gains a rival semantics
 
 
@@ -72,48 +88,48 @@ class UnclaimedSelector(Alternative):
     """
 
 
-@dataclass(frozen=True)
-class PrioritySelectorBranchSemantics(SelectorBranchSemantics):
+@dataclass
+class PrioritySelectorBranchSemantics(SelectorBranchSemantics[PrioritySelector]):
     """
     Right-first branch order and a left-only sibling guard -- unlike ``Alternative``.
     """
 
-    selector: ClassVar[Type[ConclusionSelector]] = PrioritySelector
-
-    def sibling_guards(self, selector, negated, decompose) -> List[GuardCondition]:
+    @classmethod
+    def sibling_guards(cls, selector, negated, decompose) -> List[GuardCondition]:
         return decompose(selector.left, negated)
 
-    def branches(self, selector, decompose) -> List[GuardedBranch]:
+    @classmethod
+    def branches(cls, selector, decompose) -> List[GuardedBranch]:
         return [GuardedBranch(selector.right, ()), GuardedBranch(selector.left, ())]
 
 
-@dataclass(frozen=True)
-class FirstCollidingSemantics(SelectorBranchSemantics):
+@dataclass
+class FirstCollidingSemantics(SelectorBranchSemantics[UnclaimedSelector]):
     """
     One of two equally specific semantics for :class:`UnclaimedSelector`.
     """
 
-    selector: ClassVar[Type[ConclusionSelector]] = UnclaimedSelector
-
-    def sibling_guards(self, selector, negated, decompose) -> List[GuardCondition]:
+    @classmethod
+    def sibling_guards(cls, selector, negated, decompose) -> List[GuardCondition]:
         raise NotImplementedError
 
-    def branches(self, selector, decompose) -> List[GuardedBranch]:
+    @classmethod
+    def branches(cls, selector, decompose) -> List[GuardedBranch]:
         raise NotImplementedError
 
 
-@dataclass(frozen=True)
-class SecondCollidingSemantics(SelectorBranchSemantics):
+@dataclass
+class SecondCollidingSemantics(SelectorBranchSemantics[UnclaimedSelector]):
     """
     The other equally specific semantics for :class:`UnclaimedSelector`.
     """
 
-    selector: ClassVar[Type[ConclusionSelector]] = UnclaimedSelector
-
-    def sibling_guards(self, selector, negated, decompose) -> List[GuardCondition]:
+    @classmethod
+    def sibling_guards(cls, selector, negated, decompose) -> List[GuardCondition]:
         raise NotImplementedError
 
-    def branches(self, selector, decompose) -> List[GuardedBranch]:
+    @classmethod
+    def branches(cls, selector, decompose) -> List[GuardedBranch]:
         raise NotImplementedError
 
 
@@ -124,26 +140,20 @@ def test_each_production_selector_resolves_to_its_own_semantics():
     animal = variable(Animal, domain=[])
 
     assert (
-        type(
-            SelectorBranchSemantics.most_specific_for(
-                Refinement(animal.has_fur, animal.can_fly)
-            )
+        SelectorBranchSemantics.most_specific_for(
+            Refinement(animal.has_fur, animal.can_fly)
         )
         is RefinementBranchSemantics
     )
     assert (
-        type(
-            SelectorBranchSemantics.most_specific_for(
-                Alternative(animal.has_fur, animal.can_fly)
-            )
+        SelectorBranchSemantics.most_specific_for(
+            Alternative(animal.has_fur, animal.can_fly)
         )
         is AlternativeBranchSemantics
     )
     assert (
-        type(
-            SelectorBranchSemantics.most_specific_for(
-                Next((animal.has_fur, animal.can_fly))
-            )
+        SelectorBranchSemantics.most_specific_for(
+            Next((animal.has_fur, animal.can_fly))
         )
         is NextBranchSemantics
     )
@@ -169,7 +179,7 @@ def test_refinement_sibling_guard_is_its_base_condition_only():
     animal = variable(Animal, domain=[])
     selector = Refinement(animal.has_fur, animal.can_fly)
 
-    guards = RefinementBranchSemantics().sibling_guards(selector, False, _leaf_guards)
+    guards = RefinementBranchSemantics.sibling_guards(selector, False, _leaf_guards)
 
     assert len(guards) == 1
     assert guards[0].original_expression is animal.has_fur
@@ -180,17 +190,18 @@ def test_refinement_branches_exclude_each_other():
     animal = variable(Animal, domain=[])
     selector = Refinement(animal.has_fur, animal.can_fly)
 
-    branches = RefinementBranchSemantics().branches(selector, _leaf_guards)
+    branches = RefinementBranchSemantics.branches(selector, _leaf_guards)
 
-    assert [branch.node for branch in branches] == [animal.has_fur, animal.can_fly]
+    assert [branch.child_expression._id_ for branch in branches] == [
+        animal.has_fur._id_,
+        animal.can_fly._id_,
+    ]
     # The base applies only where the refinement does not override it.
-    assert [
-        (guard.original_expression, guard.negated) for guard in branches[0].entry_guards
-    ] == [(animal.can_fly, True)]
+    assert _identified_guards(branches[0].entry_guards) == [(animal.can_fly._id_, True)]
     # The refinement applies only where the base it refines applied.
-    assert [
-        (guard.original_expression, guard.negated) for guard in branches[1].entry_guards
-    ] == [(animal.has_fur, False)]
+    assert _identified_guards(branches[1].entry_guards) == [
+        (animal.has_fur._id_, False)
+    ]
 
 
 # %% alternative
@@ -200,11 +211,11 @@ def test_alternative_negated_sibling_guard_is_de_morgan_over_both_sides():
     animal = variable(Animal, domain=[])
     selector = Alternative(animal.has_fur, animal.lays_eggs)
 
-    guards = AlternativeBranchSemantics().sibling_guards(selector, True, _leaf_guards)
+    guards = AlternativeBranchSemantics.sibling_guards(selector, True, _leaf_guards)
 
-    assert [(guard.original_expression, guard.negated) for guard in guards] == [
-        (animal.has_fur, True),
-        (animal.lays_eggs, True),
+    assert _identified_guards(guards) == [
+        (animal.has_fur._id_, True),
+        (animal.lays_eggs._id_, True),
     ]
 
 
@@ -212,13 +223,14 @@ def test_alternative_branches_guard_the_second_against_the_first():
     animal = variable(Animal, domain=[])
     selector = Alternative(animal.has_fur, animal.lays_eggs)
 
-    branches = AlternativeBranchSemantics().branches(selector, _leaf_guards)
+    branches = AlternativeBranchSemantics.branches(selector, _leaf_guards)
 
-    assert [branch.node for branch in branches] == [animal.has_fur, animal.lays_eggs]
-    assert branches[0].entry_guards == ()
-    assert [
-        (guard.original_expression, guard.negated) for guard in branches[1].entry_guards
-    ] == [(animal.has_fur, True)]
+    assert [branch.child_expression._id_ for branch in branches] == [
+        animal.has_fur._id_,
+        animal.lays_eggs._id_,
+    ]
+    assert len(branches[0].entry_guards) == 0
+    assert _identified_guards(branches[1].entry_guards) == [(animal.has_fur._id_, True)]
 
 
 # %% next
@@ -228,25 +240,25 @@ def test_next_branches_are_independent_and_carry_no_cross_guards():
     animal = variable(Animal, domain=[])
     selector = Next((animal.has_fur, animal.can_fly, animal.lays_eggs))
 
-    branches = NextBranchSemantics().branches(selector, _leaf_guards)
+    branches = NextBranchSemantics.branches(selector, _leaf_guards)
 
-    assert [branch.node for branch in branches] == [
-        animal.has_fur,
-        animal.can_fly,
-        animal.lays_eggs,
+    assert [branch.child_expression._id_ for branch in branches] == [
+        animal.has_fur._id_,
+        animal.can_fly._id_,
+        animal.lays_eggs._id_,
     ]
-    assert all(branch.entry_guards == () for branch in branches)
+    assert all(len(branch.entry_guards) == 0 for branch in branches)
 
 
 def test_next_sibling_guard_covers_every_child_at_the_requested_polarity():
     animal = variable(Animal, domain=[])
     selector = Next((animal.has_fur, animal.can_fly))
 
-    guards = NextBranchSemantics().sibling_guards(selector, True, _leaf_guards)
+    guards = NextBranchSemantics.sibling_guards(selector, True, _leaf_guards)
 
-    assert [(guard.original_expression, guard.negated) for guard in guards] == [
-        (animal.has_fur, True),
-        (animal.can_fly, True),
+    assert _identified_guards(guards) == [
+        (animal.has_fur._id_, True),
+        (animal.can_fly._id_, True),
     ]
 
 
@@ -266,9 +278,7 @@ def test_a_new_selector_is_decomposed_without_editing_the_traversal():
 
     guards = _leaf_guards(selector, negated=False)
 
-    assert [(guard.original_expression, guard.negated) for guard in guards] == [
-        (animal.has_fur, False)
-    ]
+    assert _identified_guards(guards) == [(animal.has_fur._id_, False)]
 
 
 def test_a_new_selector_directs_the_path_walk_without_editing_the_traversal():
@@ -302,7 +312,7 @@ def test_a_more_specific_selector_outranks_the_semantics_it_refines():
         PrioritySelector(animal.has_fur, animal.lays_eggs)
     )
 
-    assert type(semantics) is PrioritySelectorBranchSemantics
+    assert semantics is PrioritySelectorBranchSemantics
 
 
 def test_equally_specific_semantics_collide_rather_than_picking_one_silently():
@@ -314,5 +324,5 @@ def test_equally_specific_semantics_collide_rather_than_picking_one_silently():
         )
 
     message = str(collision.value)
-    assert "FirstCollidingSemantics" in message
-    assert "SecondCollidingSemantics" in message
+    assert FirstCollidingSemantics.__name__ in message
+    assert SecondCollidingSemantics.__name__ in message
