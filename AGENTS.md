@@ -34,6 +34,8 @@
 - Always use dataclasses
 
 ### Naming
+- Names must be technically correct, simple and descriptive, in that order. Correct first: a name that describes the thing inaccurately is worse than a vague one, because a reader who trusts it stops reading. Then the simplest wording that stays correct
+- Minimize jargon. Prefer the plain word every reader already knows over the specialist, metaphorical or in-house one, and reserve a technical term for where it is genuinely the precise word - not as shorthand between the people who happen to have been in the discussion. Jargon is a lookup the reader has to perform, and it is only worth it when the plain wording would be wrong
 - Do not use abbreviations in variable names, methods, classes, or any other identifiers. `configuration`, not `config`
 - Use short but descriptive names: a name says *what* a thing is or does, never *how* it does it or *when* it runs. `CommitMoveChecks`, not `PreFlight`
 - Name the thing, not the layer or mechanism it is built on. `GraphQLClient`, not `GraphQLTransport`
