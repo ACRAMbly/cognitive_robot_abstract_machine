@@ -25,8 +25,6 @@
 
 ## Code Style
 - Divide a file into logical sections with `# %% <short description>` comment headers (e.g. `# %% same-noun disambiguation`), not decorative box-drawing dividers. Applies to source files as well as test files
-- Do not use abbreviations in variable names, methods, classes, or any other identifiers
-- Method and class names should be concise and descriptive: they should tell *what* they do, not *how* they do it
 - Create classes instead of using too many primitives. If a return type is always repeated, consider whether a dedicated class or type alias would convey more meaningful information
 - Minimize duplication of code. Avoid placing methods in catch-all files like `utils.py`: prefer moving them onto a sensible class that owns the behaviour
 - Comments must be meaningful and adhere to DRY; remove redundant or restating comments
@@ -34,7 +32,20 @@
 - Always access attributes via ".", never via getattr
 - Use existing packages whenever possible
 - Always use dataclasses
-- Use short but descriptive names
+
+### Naming
+- Do not use abbreviations in variable names, methods, classes, or any other identifiers. `configuration`, not `config`
+- Use short but descriptive names: a name says *what* a thing is or does, never *how* it does it or *when* it runs. `CommitMoveChecks`, not `PreFlight`
+- Name the thing, not the layer or mechanism it is built on. `GraphQLClient`, not `GraphQLTransport`
+- Avoid umbrella words that would fit anything - `payload`, `info`, `manager`, `handler`, `helper`, `processor`, `data holder`. Use the plain technical word for what the thing actually is: `RepositoryJSON`, not `RepositoryPayload`
+- A name whose meaning has to be looked up elsewhere is the wrong name. Do not adopt another system's vocabulary as an identifier of ours - GraphQL's "connection" and "node" say nothing to a reader of this codebase. Name it for what it holds (`JSONItemList` of `items`), and if the foreign shape still needs explaining, explain it in the docstring rather than encoding it in the name
+- Methods are verb phrases for what they do; classes and attributes are noun phrases for what they are. A method returning current state is `read_current_state`, not `snapshot`, and the field holding its result is named for its subject (`current_pull_request_reviews`), not for its shape
+- One operation, one name, throughout a module: if a parser is `from_json` anywhere it is `from_json` everywhere. A second name for the same operation reads as a second operation
+- Name an enum member for the situation it means, not for the function it dispatches to or the wording it renders - the implementation moves and the member should not have to
+- Do not restate the enclosing type's name in its members, and do not stutter: `SummaryMessage.NO_PLANS_TRACKED`, not `SummaryMessage.PLAN_NO_PLANS_TRACKED`; `SETUP_NEEDS_SETUP` says setup twice
+- Where the domain or file format already has a word for something, use that word: the left-hand side of a YAML mapping is a `key`, not a `name`
+- Never take an identifier the language or something already in scope binds. `Enum` reserves `name`; a parameter called `field` shadows `dataclasses.field`; a method called `data()` is shadowed by a field of the same name. These fail at runtime or silently, not at import
+- A rename is finished only when every reader of the old name reads the new one, docstrings and comments included, and the tests pass. A mechanical rename across a file is exactly where a method and a field converge on one name
 
 ## Imports
 - Imports should always be absolute
