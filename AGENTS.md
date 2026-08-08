@@ -36,17 +36,17 @@
 ### Naming
 - Names must be technically correct, simple and descriptive, in that order. Correct first: a name that describes the thing inaccurately is worse than a vague one, because a reader who trusts it stops reading. Then the simplest wording that stays correct
 - Minimize jargon. Prefer the plain word every reader already knows over the specialist, metaphorical or in-house one, and reserve a technical term for where it is genuinely the precise word - not as shorthand between the people who happen to have been in the discussion. Jargon is a lookup the reader has to perform, and it is only worth it when the plain wording would be wrong
-- Do not use abbreviations in variable names, methods, classes, or any other identifiers. `configuration`, not `config`
-- Use short but descriptive names: a name says *what* a thing is or does, never *how* it does it or *when* it runs. `CommitMoveChecks`, not `PreFlight`
-- Name the thing, not the layer or mechanism it is built on. `GraphQLClient`, not `GraphQLTransport`
-- Avoid umbrella words that would fit anything - `payload`, `info`, `manager`, `handler`, `helper`, `processor`, `data holder`. Use the plain technical word for what the thing actually is: `RepositoryJSON`, not `RepositoryPayload`
-- A name whose meaning has to be looked up elsewhere is the wrong name. Do not adopt another system's vocabulary as an identifier of ours - GraphQL's "connection" and "node" say nothing to a reader of this codebase. Name it for what it holds (`JSONItemList` of `items`), and if the foreign shape still needs explaining, explain it in the docstring rather than encoding it in the name
-- Methods are verb phrases for what they do; classes and attributes are noun phrases for what they are. A method returning current state is `read_current_state`, not `snapshot`, and the field holding its result is named for its subject (`current_pull_request_reviews`), not for its shape
-- One operation, one name, throughout a module: if a parser is `from_json` anywhere it is `from_json` everywhere. A second name for the same operation reads as a second operation
+- Do not use abbreviations in variable names, methods, classes, or any other identifiers
+- Use short but descriptive names: a name says *what* a thing is or does, never *how* it does it or *when* it runs
+- Name the thing, not the layer or mechanism it is built on
+- Avoid umbrella words that would fit anything - `payload`, `info`, `manager`, `handler`, `helper`, `processor`, `data holder`. Use the plain technical word for what the thing actually is
+- A name whose meaning has to be looked up elsewhere is the wrong name. Do not adopt another system's vocabulary as an identifier of ours; name the thing for what it is here, and if the foreign shape still needs explaining, explain it in the docstring rather than encoding it in the name
+- Methods are verb phrases for what they do; classes and attributes are noun phrases for what they are. A field is named for its subject, not for the shape of the value it happens to hold
+- One operation, one name, throughout a module: a second name for the same operation reads as a second operation. Where callers depend on that shared name, formalize it - a base class or a protocol declaring the method - rather than leaving it a convention every class is trusted to have followed; a convention breaks only once something happens to call the one class that spelled it differently
 - Name an enum member for the situation it means, not for the function it dispatches to or the wording it renders - the implementation moves and the member should not have to
-- Do not restate the enclosing type's name in its members, and do not stutter: `SummaryMessage.NO_PLANS_TRACKED`, not `SummaryMessage.PLAN_NO_PLANS_TRACKED`; `SETUP_NEEDS_SETUP` says setup twice
-- Where the domain or file format already has a word for something, use that word: the left-hand side of a YAML mapping is a `key`, not a `name`
-- Never take an identifier the language or something already in scope binds. `Enum` reserves `name`; a parameter called `field` shadows `dataclasses.field`; a method called `data()` is shadowed by a field of the same name. These fail at runtime or silently, not at import
+- Do not restate the enclosing type's name in its members, and do not stutter
+- Where the domain or file format already has a word for something, use that word
+- Never take an identifier the language or something already in scope binds - `Enum` reserves `name`, a parameter called `field` shadows `dataclasses.field`, and a method is shadowed by a field of the same name. These fail at runtime or silently, not at import
 - A rename is finished only when every reader of the old name reads the new one, docstrings and comments included, and the tests pass. A mechanical rename across a file is exactly where a method and a field converge on one name
 - When no honest specific name exists, suspect the code rather than your vocabulary. A thing that can only be described vaguely usually has no single subject - it is a container holding whatever its caller passed, or a function doing two jobs - and the fix is to remove it, not to keep hunting for a better word
 
