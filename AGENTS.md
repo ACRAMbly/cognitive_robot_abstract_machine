@@ -48,6 +48,7 @@
 - Where the domain or file format already has a word for something, use that word: the left-hand side of a YAML mapping is a `key`, not a `name`
 - Never take an identifier the language or something already in scope binds. `Enum` reserves `name`; a parameter called `field` shadows `dataclasses.field`; a method called `data()` is shadowed by a field of the same name. These fail at runtime or silently, not at import
 - A rename is finished only when every reader of the old name reads the new one, docstrings and comments included, and the tests pass. A mechanical rename across a file is exactly where a method and a field converge on one name
+- When no honest specific name exists, suspect the code rather than your vocabulary. A thing that can only be described vaguely usually has no single subject - it is a container holding whatever its caller passed, or a function doing two jobs - and the fix is to remove it, not to keep hunting for a better word
 
 ## Imports
 - Imports should always be absolute
