@@ -22,7 +22,7 @@ from krrood.entity_query_language.rdr.backward_inference import (
     BackwardInferenceIndex,
     GuardCondition,
     SufficientConditionSet,
-    what_do_we_know_about,
+    get_conclusion_sufficient_conditions_from_a_rule_tree,
     _leaf_guards,
 )
 from krrood.entity_query_language.rules.conclusion_selector import Refinement
@@ -96,8 +96,8 @@ def test_what_do_we_know_about_resolves_conditions_root_from_any_tree_node():
     # The refinement replaced base_condition as the tree's actual root.
     assert base_condition._conditions_root_ is not base_condition
 
-    via_node = what_do_we_know_about(base_condition, Species.BIRD)
-    via_resolved_root = what_do_we_know_about(
+    via_node = get_conclusion_sufficient_conditions_from_a_rule_tree(base_condition, Species.BIRD)
+    via_resolved_root = get_conclusion_sufficient_conditions_from_a_rule_tree(
         base_condition._conditions_root_, Species.BIRD
     )
 
@@ -107,14 +107,14 @@ def test_what_do_we_know_about_resolves_conditions_root_from_any_tree_node():
 
 def test_conclusion_knowledge_is_satisfiable_only_with_at_least_one_path():
     animal = variable(Animal, domain=[])
-    unsatisfiable = what_do_we_know_about(None, Species.MAMMAL)
+    unsatisfiable = get_conclusion_sufficient_conditions_from_a_rule_tree(None, Species.MAMMAL)
     assert unsatisfiable.is_satisfiable() is False
     assert unsatisfiable.sufficient_condition_sets == ()
 
     condition = animal.has_fur
     with condition:
         add(animal.species, Species.MAMMAL)
-    satisfiable = what_do_we_know_about(condition, Species.MAMMAL)
+    satisfiable = get_conclusion_sufficient_conditions_from_a_rule_tree(condition, Species.MAMMAL)
     assert satisfiable.is_satisfiable() is True
 
 
@@ -129,7 +129,7 @@ def test_bare_condition_rule_is_its_own_sufficient_guard():
     with condition:
         add(animal.species, Species.MAMMAL)
 
-    knowledge = what_do_we_know_about(condition, Species.MAMMAL)
+    knowledge = get_conclusion_sufficient_conditions_from_a_rule_tree(condition, Species.MAMMAL)
 
     assert len(knowledge.sufficient_condition_sets) == 1
     scs = knowledge.sufficient_condition_sets[0]
@@ -143,7 +143,7 @@ def test_conclusion_value_with_no_rule_path_is_unsatisfiable():
     with condition:
         add(animal.species, Species.MAMMAL)
 
-    knowledge = what_do_we_know_about(condition, Species.REPTILE)
+    knowledge = get_conclusion_sufficient_conditions_from_a_rule_tree(condition, Species.REPTILE)
 
     assert knowledge.is_satisfiable() is False
 
@@ -156,7 +156,7 @@ def test_refinement_child_guard_requires_both_parent_and_refinement_conditions()
         with refinement(animal.can_fly):
             add(animal.species, Species.BIRD)
 
-    knowledge = what_do_we_know_about(base_condition, Species.BIRD)
+    knowledge = get_conclusion_sufficient_conditions_from_a_rule_tree(base_condition, Species.BIRD)
 
     assert len(knowledge.sufficient_condition_sets) == 1
     scs = knowledge.sufficient_condition_sets[0]
@@ -173,7 +173,7 @@ def test_refinement_parent_guard_excludes_the_refined_case():
         with refinement(animal.can_fly):
             add(animal.species, Species.BIRD)
 
-    knowledge = what_do_we_know_about(base_condition, Species.MAMMAL)
+    knowledge = get_conclusion_sufficient_conditions_from_a_rule_tree(base_condition, Species.MAMMAL)
 
     assert len(knowledge.sufficient_condition_sets) == 1
     scs = knowledge.sufficient_condition_sets[0]
@@ -191,7 +191,7 @@ def test_alternative_first_branch_guard_is_unconditional_on_the_second():
         with alternative(animal.lays_eggs):
             add(animal.species, Species.REPTILE)
 
-    knowledge = what_do_we_know_about(base_condition, Species.MAMMAL)
+    knowledge = get_conclusion_sufficient_conditions_from_a_rule_tree(base_condition, Species.MAMMAL)
 
     assert len(knowledge.sufficient_condition_sets) == 1
     scs = knowledge.sufficient_condition_sets[0]
@@ -208,7 +208,7 @@ def test_alternative_second_branch_guard_requires_the_first_to_be_false():
         with alternative(animal.lays_eggs):
             add(animal.species, Species.REPTILE)
 
-    knowledge = what_do_we_know_about(base_condition, Species.REPTILE)
+    knowledge = get_conclusion_sufficient_conditions_from_a_rule_tree(base_condition, Species.REPTILE)
 
     assert len(knowledge.sufficient_condition_sets) == 1
     scs = knowledge.sufficient_condition_sets[0]
@@ -226,8 +226,8 @@ def test_next_branches_are_independent_disjuncts_with_no_cross_guards():
         with next_rule(animal.lays_eggs):
             add(animal.species, Species.REPTILE)
 
-    mammal_knowledge = what_do_we_know_about(base_condition, Species.MAMMAL)
-    reptile_knowledge = what_do_we_know_about(base_condition, Species.REPTILE)
+    mammal_knowledge = get_conclusion_sufficient_conditions_from_a_rule_tree(base_condition, Species.MAMMAL)
+    reptile_knowledge = get_conclusion_sufficient_conditions_from_a_rule_tree(base_condition, Species.REPTILE)
 
     assert len(mammal_knowledge.sufficient_condition_sets) == 1
     assert len(reptile_knowledge.sufficient_condition_sets) == 1
@@ -253,7 +253,7 @@ def test_ambiguous_value_produces_one_sufficient_condition_set_per_path():
         with next_rule(animal.lays_eggs):
             add(animal.species, Species.MAMMAL)
 
-    knowledge = what_do_we_know_about(base_condition, Species.MAMMAL)
+    knowledge = get_conclusion_sufficient_conditions_from_a_rule_tree(base_condition, Species.MAMMAL)
 
     assert len(knowledge.sufficient_condition_sets) == 2
 
@@ -270,7 +270,7 @@ def test_not_of_refinement_decomposes_to_the_negated_base_condition():
     guards = _leaf_guards(Not(refinement_condition), negated=False)
 
     assert len(guards) == 1
-    assert guards[0].expression is animal.has_fur
+    assert guards[0].original_expression is animal.has_fur
     assert guards[0].negated is True
 
 
