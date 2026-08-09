@@ -212,7 +212,7 @@ def test_vertices_sharing_a_position_keep_their_own_colors(tmp_path):
     """
     source = coplanar_triangles_with_shared_positions()
 
-    mesh = Mesh.from_trimesh(mesh=source, dirname=str(tmp_path), file_type="obj")
+    mesh = Mesh.from_trimesh(mesh=source, directory=tmp_path, file_type="obj")
 
     np.testing.assert_array_equal(
         np.asarray(mesh.mesh.visual.vertex_colors),
@@ -226,7 +226,7 @@ def test_per_vertex_colors_survive_serialization_unwelded(tmp_path):
     happens to remain after duplicate positions are merged.
     """
     source = coplanar_triangles_with_shared_positions()
-    mesh = Mesh.from_trimesh(mesh=source, dirname=str(tmp_path), file_type="obj")
+    mesh = Mesh.from_trimesh(mesh=source, directory=tmp_path, file_type="obj")
 
     restored = Mesh.from_json(mesh.to_json())
 
