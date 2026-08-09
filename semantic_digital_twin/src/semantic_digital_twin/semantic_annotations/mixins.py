@@ -116,14 +116,16 @@ class HasRootKinematicStructureEntity(
     """
     Base class for shared method for HasRootBody and HasRootRegion.
 
-    Building a specification takes two steps: :meth:`get_default_root_specification`
-    describes the root entity's geometry, and
-    :meth:`get_annotation_specification` wraps that root into the spawnable
-    annotation specification::
+    Building a specification takes two steps:
+    :meth:`get_default_root_entity_specification` describes the root entity's geometry,
+    and :meth:`get_annotation_specification` wraps that root into the spawnable
+    annotation specification.
+
+    .. code-block:: python
 
         Handle.get_annotation_specification(
             "handle",
-            Handle.get_default_root_specification(
+            Handle.get_default_root_entity_specification(
                 scale=Scale(0.1, 0.05, 0.05), thickness=0.01
             ),
         )
@@ -178,7 +180,7 @@ class HasRootKinematicStructureEntity(
 
     @classmethod
     @abstractmethod
-    def get_default_root_specification(
+    def get_default_root_entity_specification(
         cls,
         name: str | None = None,
         scale: Optional[Scale] = None,
@@ -218,7 +220,7 @@ class HasRootKinematicStructureEntity(
     ) -> SemanticAnnotationWithRootSpecification[Self]:
         """
         Wrap a root entity specification, typically from
-        :meth:`get_default_root_specification`, into the spawnable annotation
+        :meth:`get_default_root_entity_specification`, into the spawnable annotation
         specification.
 
         The root geometry is always supplied by the caller. That builder owns every
@@ -346,12 +348,12 @@ class HasRootBody(HasRootKinematicStructureEntity[TBody]):
         """
         return cls.get_annotation_specification(
             name,
-            cls.get_default_root_specification(scale=scale),
+            cls.get_default_root_entity_specification(scale=scale),
             parent_connection_specification=parent_connection_specification,
         ).spawn(world, parent_T_self=world_root_T_self)
 
     @classmethod
-    def get_default_root_specification(
+    def get_default_root_entity_specification(
         cls,
         name: str | None = None,
         scale: Optional[Scale] = None,
@@ -419,12 +421,12 @@ class HasRootRegion(HasRootKinematicStructureEntity[TRegion]):
         """
         return cls.get_annotation_specification(
             name,
-            cls.get_default_root_specification(scale=scale),
+            cls.get_default_root_entity_specification(scale=scale),
             parent_connection_specification=parent_connection_specification,
         ).spawn(world, parent_T_self=world_root_T_self)
 
     @classmethod
-    def get_default_root_specification(
+    def get_default_root_entity_specification(
         cls,
         name: str | None = None,
         scale: Optional[Scale] = None,
@@ -1068,7 +1070,7 @@ class HasCaseAsRootBody(HasSupportingSurface):
         return container_event
 
     @classmethod
-    def get_default_root_specification(
+    def get_default_root_entity_specification(
         cls,
         name: str | None = None,
         scale: Optional[Scale] = None,
