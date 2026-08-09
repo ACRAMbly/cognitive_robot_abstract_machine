@@ -469,7 +469,7 @@ class Door(HasHandle, HasMechanicalJoint):
         return Scale(0.03, 1, 2)
 
     @classmethod
-    def get_specification(
+    def get_annotation_specification(
         cls,
         name: str,
         root_specification: KinematicStructureEntitySpecification,
@@ -496,11 +496,11 @@ class Door(HasHandle, HasMechanicalJoint):
             relationship field name.
         :return: The annotation specification.
         """
-        entry_way_specification = EntryWay.get_specification(
+        entry_way_specification = EntryWay.get_annotation_specification(
             f"{name}_entry_way",
             EntryWay.get_default_root_specification(scale=root_specification.scale),
         )
-        return super().get_specification(
+        return super().get_annotation_specification(
             name,
             root_specification,
             parent_connection_specification=parent_connection_specification,
@@ -733,7 +733,7 @@ class Floor(HasSupportingSurface):
         :param name: The name of the floor body.
         :param floor_polytope: A list of 3D points defining the floor poly
         """
-        return cls.get_specification(
+        return cls.get_annotation_specification(
             name,
             BodySpecification.from_3d_points(name, floor_polytope),
         ).spawn(world, parent_T_self=world_root_T_self)

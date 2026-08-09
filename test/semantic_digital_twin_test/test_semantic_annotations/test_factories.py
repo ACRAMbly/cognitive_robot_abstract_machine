@@ -90,7 +90,7 @@ class TestFactories(unittest.TestCase):
     def test_handle_factory(self):
         world = World.create_with_root_body("root")
         with world.modify_world():
-            returned_handle = Handle.get_specification(
+            returned_handle = Handle.get_annotation_specification(
                 "handle",
                 Handle.get_default_root_specification(
                     scale=Scale(0.1, 0.2, 0.03), thickness=0.03
@@ -803,7 +803,7 @@ class TestFactories(unittest.TestCase):
     def test_handle_with_thickness(self):
         world = World.create_with_root_body("root")
         with world.modify_world():
-            handle = Handle.get_specification(
+            handle = Handle.get_annotation_specification(
                 "handle",
                 Handle.get_default_root_specification(thickness=0.005),
             ).spawn(world)
@@ -981,7 +981,7 @@ class TestFactories(unittest.TestCase):
     def test_characterize_handle_geometry(self):
         world = self._world_with_root()
         with world.modify_world():
-            handle = Handle.get_specification(
+            handle = Handle.get_annotation_specification(
                 "handle",
                 Handle.get_default_root_specification(
                     scale=Scale(0.1, 0.05, 0.05), thickness=0.01
