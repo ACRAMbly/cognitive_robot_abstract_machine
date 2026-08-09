@@ -121,6 +121,7 @@ import semantic_digital_twin.world_description.graph_of_convex_sets.boxes
 import semantic_digital_twin.world_description.graph_of_convex_sets.exceptions
 import semantic_digital_twin.world_description.graph_of_convex_sets.polygons
 import semantic_digital_twin.world_description.inertial_properties
+import semantic_digital_twin.world_description.mesh_file_storage
 import semantic_digital_twin.world_description.shape_collection
 import semantic_digital_twin.world_description.soft_connections
 import semantic_digital_twin.world_description.world_entity
@@ -12347,6 +12348,19 @@ class PrincipalMomentsDAO(
         "inherit_condition": database_id == NPVector3DAO.database_id,
         "polymorphic_load": "selectin",
     }
+
+
+class RunningProcessLivenessDAO(
+    Base,
+    DataAccessObject[
+        semantic_digital_twin.world_description.mesh_file_storage.RunningProcessLiveness
+    ],
+):
+    __tablename__ = "RunningProcessLivenessDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
 
 
 class ShapeCollectionDAO(
