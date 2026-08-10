@@ -222,6 +222,7 @@ import semantic_digital_twin.pipeline.mesh_decomposition.bullet_vhacd
 import semantic_digital_twin.pipeline.mesh_decomposition.coacd
 import semantic_digital_twin.pipeline.mesh_decomposition.vhacd
 import semantic_digital_twin.pipeline.pipeline
+import semantic_digital_twin.predetermined_maps.apartment_environment
 import semantic_digital_twin.reasoning.predicates
 import semantic_digital_twin.reasoning.reasoner
 import semantic_digital_twin.reasoning.world_reasoner
@@ -25015,6 +25016,19 @@ class CenterLocalGeometryAndPreserveWorldPoseDAO(
         "inherit_condition": database_id == StepDAO.database_id,
         "polymorphic_load": "selectin",
     }
+
+
+class ApartmentEnvironmentDAO(
+    Base,
+    DataAccessObject[
+        semantic_digital_twin.predetermined_maps.apartment_environment.ApartmentEnvironment
+    ],
+):
+    __tablename__ = "ApartmentEnvironmentDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
 
 
 class KinematicStructureEntitySpatialRelationDAO(
