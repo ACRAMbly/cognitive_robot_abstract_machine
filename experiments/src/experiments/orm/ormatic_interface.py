@@ -195,6 +195,7 @@ import semantic_digital_twin.adapters.sage_10k_dataset.loader
 import semantic_digital_twin.adapters.sage_10k_dataset.schema
 import semantic_digital_twin.adapters.urdf
 import semantic_digital_twin.adapters.world_entity_kwargs_tracker
+import semantic_digital_twin.adapters.world_model_parser
 import semantic_digital_twin.api
 import semantic_digital_twin.callbacks.callback
 import semantic_digital_twin.collision_checking.collision_detector
@@ -16879,23 +16880,6 @@ class FBXGlobalSettingsDAO(
     )
 
 
-class GazeboParserDAO(
-    Base, DataAccessObject[semantic_digital_twin.adapters.gazebo.GazeboParser]
-):
-    __tablename__ = "GazeboParserDAO"
-
-    database_id: Mapped[builtins.int] = mapped_column(
-        Integer, primary_key=True, use_existing_column=True
-    )
-
-    sdf: Mapped[builtins.str] = mapped_column(
-        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
-    )
-    prefix: Mapped[typing.Optional[builtins.str]] = mapped_column(
-        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
-    )
-
-
 class JointDescriptionDAO(
     Base, DataAccessObject[semantic_digital_twin.adapters.gazebo.JointDescription]
 ):
@@ -17147,23 +17131,6 @@ class XYZParserDAO(
         "inherit_condition": database_id == MeshParserDAO.database_id,
         "polymorphic_load": "selectin",
     }
-
-
-class MJCFParserDAO(
-    Base, DataAccessObject[semantic_digital_twin.adapters.mjcf.MJCFParser]
-):
-    __tablename__ = "MJCFParserDAO"
-
-    database_id: Mapped[builtins.int] = mapped_column(
-        Integer, primary_key=True, use_existing_column=True
-    )
-
-    file_path: Mapped[builtins.str] = mapped_column(
-        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
-    )
-    prefix: Mapped[typing.Optional[builtins.str]] = mapped_column(
-        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
-    )
 
 
 class MujocoVideoRecorderDAO(
@@ -20746,23 +20713,6 @@ class Sage10kWallDAO(
     }
 
 
-class URDFParserDAO(
-    Base, DataAccessObject[semantic_digital_twin.adapters.urdf.URDFParser]
-):
-    __tablename__ = "URDFParserDAO"
-
-    database_id: Mapped[builtins.int] = mapped_column(
-        Integer, primary_key=True, use_existing_column=True
-    )
-
-    urdf: Mapped[builtins.str] = mapped_column(
-        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
-    )
-    prefix: Mapped[typing.Optional[builtins.str]] = mapped_column(
-        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
-    )
-
-
 class WorldEntityWithIDKwargsTrackerDAO(
     Base,
     DataAccessObject[
@@ -20774,6 +20724,106 @@ class WorldEntityWithIDKwargsTrackerDAO(
     database_id: Mapped[builtins.int] = mapped_column(
         Integer, primary_key=True, use_existing_column=True
     )
+
+
+class WorldModelParserDAO(
+    Base,
+    DataAccessObject[
+        semantic_digital_twin.adapters.world_model_parser.WorldModelParser
+    ],
+):
+    __tablename__ = "WorldModelParserDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
+
+    polymorphic_type: Mapped[str] = mapped_column(
+        String(255), nullable=False, use_existing_column=True
+    )
+
+    __mapper_args__ = {
+        "polymorphic_on": "polymorphic_type",
+        "polymorphic_identity": "WorldModelParserDAO",
+    }
+
+
+class GazeboParserDAO(
+    WorldModelParserDAO,
+    DataAccessObject[semantic_digital_twin.adapters.gazebo.GazeboParser],
+):
+    __tablename__ = "GazeboParserDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(WorldModelParserDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
+    )
+
+    sdf: Mapped[builtins.str] = mapped_column(
+        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
+    )
+    prefix: Mapped[typing.Optional[builtins.str]] = mapped_column(
+        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
+    )
+
+    __mapper_args__ = {
+        "polymorphic_identity": "GazeboParserDAO",
+        "inherit_condition": database_id == WorldModelParserDAO.database_id,
+        "polymorphic_load": "selectin",
+    }
+
+
+class MJCFParserDAO(
+    WorldModelParserDAO,
+    DataAccessObject[semantic_digital_twin.adapters.mjcf.MJCFParser],
+):
+    __tablename__ = "MJCFParserDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(WorldModelParserDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
+    )
+
+    file_path: Mapped[builtins.str] = mapped_column(
+        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
+    )
+    prefix: Mapped[typing.Optional[builtins.str]] = mapped_column(
+        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
+    )
+
+    __mapper_args__ = {
+        "polymorphic_identity": "MJCFParserDAO",
+        "inherit_condition": database_id == WorldModelParserDAO.database_id,
+        "polymorphic_load": "selectin",
+    }
+
+
+class URDFParserDAO(
+    WorldModelParserDAO,
+    DataAccessObject[semantic_digital_twin.adapters.urdf.URDFParser],
+):
+    __tablename__ = "URDFParserDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(WorldModelParserDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
+    )
+
+    urdf: Mapped[builtins.str] = mapped_column(
+        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
+    )
+    prefix: Mapped[typing.Optional[builtins.str]] = mapped_column(
+        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
+    )
+
+    __mapper_args__ = {
+        "polymorphic_identity": "URDFParserDAO",
+        "inherit_condition": database_id == WorldModelParserDAO.database_id,
+        "polymorphic_load": "selectin",
+    }
 
 
 class NamedSpecificationDAO(
@@ -21174,14 +21224,17 @@ class WorldSpecificationDAO(
         Integer, primary_key=True, use_existing_column=True
     )
 
-    world_id: Mapped[int] = mapped_column(
-        ForeignKey("WorldMappingDAO.database_id", use_alter=True),
+    world_parser_id: Mapped[typing.Optional[builtins.int]] = mapped_column(
+        ForeignKey("WorldModelParserDAO.database_id", use_alter=True),
         nullable=True,
         use_existing_column=True,
     )
 
-    world: Mapped[WorldMappingDAO] = relationship(
-        "WorldMappingDAO", uselist=False, foreign_keys=[world_id], post_update=True
+    world_parser: Mapped[WorldModelParserDAO] = relationship(
+        "WorldModelParserDAO",
+        uselist=False,
+        foreign_keys=[world_parser_id],
+        post_update=True,
     )
     robots: Mapped[builtins.list[WorldSpecificationDAO_robots_association]] = (
         relationship(
