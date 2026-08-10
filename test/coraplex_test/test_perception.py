@@ -52,9 +52,11 @@ from coraplex.plans.plan_node import MotionNode
 from coraplex.robot_plans import MoveToolCenterPointMotion
 from coraplex.robot_plans.actions.core.pick_up import PickUpAction
 from coraplex.robot_plans.motions.misc import DetectingMotion, PerceptionTask
+from giskardpy.executor import Executor
 from giskardpy.motion_statechart.context import MotionStatechartContext
 from giskardpy.motion_statechart.graph_node import EndMotion
 from giskardpy.motion_statechart.motion_statechart import MotionStatechart
+from giskardpy.ros_executor import Ros2Executor
 from krrood.adapters.json_serializer import from_json, to_json
 from semantic_digital_twin.adapters.world_entity_kwargs_tracker import (
     WorldEntityWithIDKwargsTracker,
@@ -839,14 +841,19 @@ def test_detection_in_a_chart_corrects_a_reach_planned_before_it(
         goal_pose=Pose(reference_frame=milk_body),
         name="MoveTCP",
     )
-    build_context = build_perception_task(detection, world, rclpy_node)
-    reach.build(build_context)
 
-    run_perception_task(detection, build_context)
-    reach_position = next(
-        node for node in reach.nodes if isinstance(node, CartesianPosition)
-    )
-    reach_position.on_start(build_context)
+    motion_statechart = MotionStatechart()
+    motion_statechart.add_node(detection)
+    motion_statechart.add_node(reach)
+
+    executor = Ros2Executor(context=MotionStatechartContext(world=world),
+                            ros_node=rclpy_node)
+    executor.compile(motion_statechart)
+
+    executor.tick()
+    executor.tick()
+
+    reach_position = motion_statechart.get_nodes_by_type(CartesianPosition)[0]
 
     np.testing.assert_allclose(
         reach_position.root_T_goal_reference_frame.to_position().evaluate().flatten()[:3],
