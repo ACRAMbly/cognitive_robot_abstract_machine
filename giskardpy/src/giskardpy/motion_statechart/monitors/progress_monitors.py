@@ -53,6 +53,9 @@ class NotApproachingGoal(MotionStatechartNode):
     """
     Rate below which the task counts as not approaching its goal, as a fraction of the
     task's own threshold per second.
+    
+    0.05 means the error must be changing by at least 5% of that task's own success threshold every 
+    second, or the task counts as not approaching its goal
     """
 
     _sampled_error: Optional[ErrorSignal] = field(default=None, init=False, repr=False)
@@ -83,10 +86,7 @@ class NotApproachingGoal(MotionStatechartNode):
         velocities. One that cannot is differenced across control cycles in
         :meth:`on_tick` instead.
         """
-        self._control_dt = (
-            context.qp_controller_config.control_dt
-            or context.qp_controller_config.model_predictive_control_time_step
-        )
+        self._control_dt = context.qp_controller_config.control_dt
         error_signal = self.monitored_task.error_signal
         rate = error_signal.create_rate_expression()
         if rate is None:
