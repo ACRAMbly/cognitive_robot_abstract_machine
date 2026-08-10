@@ -6,9 +6,9 @@
 
 Setting up PyCharm with packages that rely on rospy is non trivial. Follow this guide to get correct syntax highlighting for the CoraPlex project.
 
-### Install PyCharm Professional
+### Install PyCharm
 
-First, [install PyCharm Professional](https://www.jetbrains.com/help/pycharm/installation-guide.html#standalone).
+First, [install PyCharm](https://www.jetbrains.com/help/pycharm/installation-guide.html#standalone).
 
 Create a JetBrains account and verify it for educational purpose. Normally, a school email address would suffice, otherwise you would have to upload your student/employee id card. The verification process typically takes 1~2-week time, so until then please use Trial version.
 Once your account is verified, you can unlock the PyCharm Professional features in PyCharm.
@@ -70,7 +70,7 @@ ros workspace including coraplex and source it as described in build-ws.
 Always start PyCharm from the terminal via
 
 ```shell
-pycharm-professional
+pycharm
 ```
 
 or

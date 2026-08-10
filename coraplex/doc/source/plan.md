@@ -36,12 +36,12 @@ The Plan is the backbone that holds CoraPlex together at run time:
 
 A Plan is usually a tree with a control‑flow ("language") node at the root and action/motion nodes beneath:
 
-```text
-Plan
-└─ LanguageNode (e.g., Sequential, Parallel, Try, Repeat, Monitor, Code)
-   ├─ Action/Motion Nodes (resolved or to be resolved from Designators)
-   ├─ Mounted Sub‑Plans
-   └─ More LanguageNodes (to structure the subtree)
+```mermaid
+flowchart TD
+    Plan --> Language["LanguageNode<br/>(e.g., Sequential, Parallel, Try, Repeat, Monitor, Code)"]
+    Language --> Action["Action/Motion Nodes<br/>(resolved or to be resolved from Designators)"]
+    Language --> SubPlan["Mounted Sub-Plans"]
+    Language --> More["More LanguageNodes<br/>(to structure the subtree)"]
 ```
 
 - LanguageNodes define the order and concurrency of execution.
