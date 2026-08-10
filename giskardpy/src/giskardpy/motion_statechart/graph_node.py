@@ -60,7 +60,10 @@ from giskardpy.motion_statechart.exceptions import (
     MissingErrorSignalError,
 )
 from giskardpy.motion_statechart.error_signals import ErrorSignal
-from giskardpy.motion_statechart.plotters.plot_specs import NodePlotSpec
+from giskardpy.motion_statechart.plotters.plot_specs import (
+    NodePlotSpec,
+    plot_specification_field,
+)
 from giskardpy.motion_statechart.constraint_builders import GeometricConstraintBuilder
 from giskardpy.qp.constraint_collection import ConstraintCollection
 from giskardpy.utils.utils import string_shortener
@@ -471,9 +474,10 @@ class MotionStatechartNode:
     Decides when this transitions to NOT_STARTED.
     """
 
-    plot_specs: NodePlotSpec = field(
-        default_factory=NodePlotSpec.create_monitor_style, kw_only=True, init=False
-    )
+    plot_specifications: NodePlotSpec = plot_specification_field(NodePlotSpec.create_monitor_style)
+    """
+    Describes how this node is plotted during a MotionStatechart.draw call or in the MotionStatechartInspector.
+    """
 
     def __post_init__(self):
         if self.name is None:
@@ -1006,9 +1010,7 @@ class Task(MotionStatechartNode):
     )
     """Task priority relative to other tasks."""
 
-    plot_specs: NodePlotSpec = field(
-        default_factory=NodePlotSpec.create_task_style, kw_only=True, init=False
-    )
+    plot_specs: NodePlotSpec = plot_specification_field(NodePlotSpec.create_task_style)
 
 
 @dataclass(eq=False, repr=False)
@@ -1072,9 +1074,7 @@ class ConvergingTask(ABC, Task):
 @dataclass(eq=False, repr=False)
 class Goal(MotionStatechartNode):
     nodes: List[MotionStatechartNode] = field(default_factory=list, init=False)
-    plot_specs: NodePlotSpec = field(
-        default_factory=NodePlotSpec.create_goal_style, kw_only=True, init=False
-    )
+    plot_specifications: NodePlotSpec = plot_specification_field(NodePlotSpec.create_goal_style)
 
     def expand(self, context: MotionStatechartContext) -> None:
         """
@@ -1191,9 +1191,7 @@ class TerminalNode(ABC, MotionStatechartNode):
 @dataclass(eq=False, repr=False)
 class EndMotion(TerminalNode):
 
-    plot_specs: NodePlotSpec = field(
-        default_factory=NodePlotSpec.create_end_style, kw_only=True, init=False
-    )
+    plot_specs: NodePlotSpec = plot_specification_field(NodePlotSpec.create_end_style)
 
     joint_convergence_threshold: float = field(default=0.01, kw_only=True)
     """
@@ -1277,9 +1275,7 @@ class CancelMotion(TerminalNode):
         default_factory=Scalar.const_true, init=False
     )
 
-    plot_specs: NodePlotSpec = field(
-        default_factory=NodePlotSpec.create_cancel_style, kw_only=True, init=False
-    )
+    plot_specs: NodePlotSpec = plot_specification_field(NodePlotSpec.create_cancel_style)
 
     def build_artifacts(self, context: MotionStatechartContext) -> NodeArtifacts:
         return NodeArtifacts(observation=Scalar.const_true())

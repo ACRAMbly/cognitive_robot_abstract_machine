@@ -560,9 +560,10 @@ class MotionStatechart(SubclassJSONSerializer):
                 )
                 child_node_copy.parent_node_index = node.index
                 goal_copy.nodes.append(child_node_copy)
-        # copy conditions
+        # copy conditions and plot specs
         for node in self.nodes:
             node_copy = motion_statechart_copy.get_node_by_index(node.index)
+            node_copy.plot_specifications = deepcopy(node.plot_specifications)
             node_copy.start_condition = node.start_condition
             node_copy.pause_condition = node.pause_condition
             node_copy.end_condition = node.end_condition
