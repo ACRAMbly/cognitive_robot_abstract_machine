@@ -30,7 +30,6 @@ import krrood.ormatic.type_dict
 import krrood.patterns.role
 import krrood.symbol_graph.symbol_graph
 import pathlib
-import random_events.interval
 import sqlalchemy.sql.sqltypes
 import test.krrood_test.dataset.alternative_mappings_construction_order
 import test.krrood_test.dataset.example_classes
@@ -38,6 +37,7 @@ import test.krrood_test.dataset.role_and_ontology.classes_for_testing_role_recur
 import test.krrood_test.dataset.role_and_ontology.role_takers_in_another_module
 import test.krrood_test.dataset.role_and_ontology.university_ontology_like_classes_without_descriptors
 import test.krrood_test.dataset.semantic_world_like_classes
+import types
 import typing
 import typing_extensions
 import uuid
@@ -60,6 +60,7 @@ class Base(DeclarativeBase):
         uuid.UUID: sqlalchemy.sql.sqltypes.UUID,
         pathlib.Path: krrood.ormatic.custom_types.PathType,
         krrood.adapters.json_serializer.JSONData: krrood.ormatic.custom_types.JSONDataType,
+        types.NoneType: krrood.ormatic.custom_types.TypeType,
     }
 
 
@@ -1141,6 +1142,26 @@ class ActionWithMissingAggregationsMixinDAO(
     )
 
 
+class AggregationStatisticDAO(
+    Base,
+    DataAccessObject[test.krrood_test.dataset.example_classes.AggregationStatistic],
+):
+    __tablename__ = "AggregationStatisticDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
+
+    polymorphic_type: Mapped[str] = mapped_column(
+        String(255), nullable=False, use_existing_column=True
+    )
+
+    __mapper_args__ = {
+        "polymorphic_on": "polymorphic_type",
+        "polymorphic_identity": "AggregationStatisticDAO",
+    }
+
+
 class AlternativeMappingAggregatorDAO(
     SymbolDAO,
     DataAccessObject[
@@ -1549,9 +1570,7 @@ class HolderOfSimpleIntervalDAO(
         Integer, primary_key=True, use_existing_column=True
     )
 
-    bounds: Mapped[random_events.interval.SimpleInterval] = mapped_column(
-        sqlalchemy.sql.sqltypes.JSON, nullable=False, use_existing_column=True
-    )
+    bounds: Mapped[types.NoneType] = mapped_column(use_existing_column=True)
 
 
 class InheritanceBaseWithoutSymbolButAlternativelyMappedMappingDAO(
@@ -2748,7 +2767,7 @@ class SceneObjectDAO(
 
 
 class SceneObjectAggregationBaseDAO(
-    Base,
+    AggregationStatisticDAO,
     DataAccessObject[
         test.krrood_test.dataset.example_classes.SceneObjectAggregationBase
     ],
@@ -2756,20 +2775,15 @@ class SceneObjectAggregationBaseDAO(
     __tablename__ = "SceneObjectAggregationBaseDAO"
 
     database_id: Mapped[builtins.int] = mapped_column(
-        Integer, primary_key=True, use_existing_column=True
-    )
-
-    field_name: Mapped[typing.Optional[builtins.str]] = mapped_column(
-        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
-    )
-
-    polymorphic_type: Mapped[str] = mapped_column(
-        String(255), nullable=False, use_existing_column=True
+        ForeignKey(AggregationStatisticDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
     )
 
     __mapper_args__ = {
-        "polymorphic_on": "polymorphic_type",
         "polymorphic_identity": "SceneObjectAggregationBaseDAO",
+        "inherit_condition": database_id == AggregationStatisticDAO.database_id,
+        "polymorphic_load": "selectin",
     }
 
 
@@ -2825,16 +2839,6 @@ class SceneRoomAggregationsDAO(
         ForeignKey(SceneObjectAggregationBaseDAO.database_id),
         primary_key=True,
         use_existing_column=True,
-    )
-
-    instance_id: Mapped[int] = mapped_column(
-        ForeignKey("SceneRoomDAO.database_id", use_alter=True),
-        nullable=True,
-        use_existing_column=True,
-    )
-
-    instance: Mapped[SceneRoomDAO] = relationship(
-        "SceneRoomDAO", uselist=False, foreign_keys=[instance_id], post_update=True
     )
 
     __mapper_args__ = {
@@ -2936,16 +2940,6 @@ class TestExPartsAggregationsDAO(
         ForeignKey(SceneObjectAggregationBaseDAO.database_id),
         primary_key=True,
         use_existing_column=True,
-    )
-
-    instance_id: Mapped[int] = mapped_column(
-        ForeignKey("TestExPartsDAO.database_id", use_alter=True),
-        nullable=True,
-        use_existing_column=True,
-    )
-
-    instance: Mapped[TestExPartsDAO] = relationship(
-        "TestExPartsDAO", uselist=False, foreign_keys=[instance_id], post_update=True
     )
 
     __mapper_args__ = {
