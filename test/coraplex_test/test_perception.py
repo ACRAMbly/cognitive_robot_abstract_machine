@@ -61,7 +61,7 @@ from semantic_digital_twin.adapters.world_entity_kwargs_tracker import (
 )
 from giskardpy.motion_statechart.data_types import ObservationStateValues
 from giskardpy.motion_statechart.ros_context import RosContextExtension
-from giskardpy.motion_statechart.tasks.cartesian_tasks import CartesianPose
+from giskardpy.motion_statechart.tasks.cartesian_tasks import CartesianPose, CartesianPosition
 from semantic_digital_twin.semantic_annotations.semantic_annotations import Bowl, Milk
 from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix
 from semantic_digital_twin.spatial_types.spatial_types import Pose
@@ -843,10 +843,13 @@ def test_detection_in_a_chart_corrects_a_reach_planned_before_it(
     reach.build(build_context)
 
     run_perception_task(detection, build_context)
-    reach.on_start(build_context)
+    reach_position = next(
+        node for node in reach.nodes if isinstance(node, CartesianPosition)
+    )
+    reach_position.on_start(build_context)
 
     np.testing.assert_allclose(
-        reach.root_T_goal_reference_frame.to_position().evaluate().flatten()[:3],
+        reach_position.root_T_goal_reference_frame.to_position().evaluate().flatten()[:3],
         PERCEIVED_MILK_POSITION,
         atol=1e-9,
     )
