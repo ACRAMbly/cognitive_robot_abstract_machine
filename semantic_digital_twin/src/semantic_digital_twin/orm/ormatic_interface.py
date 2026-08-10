@@ -16,8 +16,6 @@ from sqlalchemy import (
 from sqlalchemy.orm import relationship, Mapped, mapped_column, DeclarativeBase
 
 import builtins
-import coraplex.datastructures.enums
-import coraplex.orm.model
 import enum
 import krrood.adapters.json_serializer
 import krrood.ormatic.custom_types
@@ -2171,27 +2169,6 @@ class WorldModelModificationBlockDAO_modifications_association(
         "WorldModificationDAO",
         foreign_keys=[target_worldmodificationdao_id],
         lazy="selectin",
-    )
-
-
-class PlanMappingDAO(Base, DataAccessObject[coraplex.orm.model.PlanMapping]):
-    __tablename__ = "PlanMappingDAO"
-
-    database_id: Mapped[builtins.int] = mapped_column(
-        Integer, primary_key=True, use_existing_column=True
-    )
-
-    initial_world_id: Mapped[typing.Optional[builtins.int]] = mapped_column(
-        ForeignKey("WorldMappingDAO.database_id", use_alter=True),
-        nullable=True,
-        use_existing_column=True,
-    )
-
-    initial_world: Mapped[WorldMappingDAO] = relationship(
-        "WorldMappingDAO",
-        uselist=False,
-        foreign_keys=[initial_world_id],
-        post_update=True,
     )
 
 
@@ -11309,30 +11286,6 @@ class PoseMappingDAO(
     __mapper_args__ = {
         "polymorphic_identity": "PoseMappingDAO",
         "inherit_condition": database_id == SpatialTypeDAO.database_id,
-        "polymorphic_load": "selectin",
-    }
-
-
-class GrasPoseMappingDAO(
-    PoseMappingDAO, DataAccessObject[coraplex.orm.model.GrasPoseMapping]
-):
-    __tablename__ = "GrasPoseMappingDAO"
-
-    database_id: Mapped[builtins.int] = mapped_column(
-        ForeignKey(PoseMappingDAO.database_id),
-        primary_key=True,
-        use_existing_column=True,
-    )
-
-    arm: Mapped[typing.Optional[coraplex.datastructures.enums.Arms]] = mapped_column(
-        krrood.ormatic.custom_types.PolymorphicEnumType,
-        nullable=True,
-        use_existing_column=True,
-    )
-
-    __mapper_args__ = {
-        "polymorphic_identity": "GrasPoseMappingDAO",
-        "inherit_condition": database_id == PoseMappingDAO.database_id,
         "polymorphic_load": "selectin",
     }
 
