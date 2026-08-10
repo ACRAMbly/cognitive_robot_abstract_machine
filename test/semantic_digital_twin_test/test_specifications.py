@@ -1147,16 +1147,20 @@ def test_hinge_survives_mounting_its_whole_as_a_part(empty_world):
     A door hangs off its hinge, and mounting the door onto a cabinet must not bypass
     that hinge: a door attached rigidly to the cabinet can no longer be opened.
     """
-    hinge_part = Hinge.get_specification(
+    hinge_part = Hinge.get_annotation_specification(
         "hinge",
-        Hinge.get_default_root_specification(scale=Scale(0.05, 0.05, 0.05)),
+        Hinge.get_default_root_kinematic_structure_entity_specification(
+            scale=Scale(0.05, 0.05, 0.05)
+        ),
         parent_connection_specification=Hinge.parent_connection_specification(
             axis=Vector3.Z()
         ),
     )
-    door_part = Door.get_specification(
+    door_part = Door.get_annotation_specification(
         "door",
-        Door.get_default_root_specification(scale=Scale(0.03, 1, 2)),
+        Door.get_default_root_kinematic_structure_entity_specification(
+            scale=Scale(0.03, 1, 2)
+        ),
         part_specifications={"mechanical_joint": hinge_part},
     )
 
@@ -1177,16 +1181,20 @@ def test_slider_survives_mounting_its_whole_as_a_part(empty_world):
     bypass that slider: a drawer attached rigidly to the cabinet can no longer be
     pulled out.
     """
-    slider_part = Slider.get_specification(
+    slider_part = Slider.get_annotation_specification(
         "slider",
-        Slider.get_default_root_specification(scale=Scale(0.05, 0.05, 0.05)),
+        Slider.get_default_root_kinematic_structure_entity_specification(
+            scale=Scale(0.05, 0.05, 0.05)
+        ),
         parent_connection_specification=Slider.parent_connection_specification(
             axis=Vector3.X()
         ),
     )
-    drawer_part = Drawer.get_specification(
+    drawer_part = Drawer.get_annotation_specification(
         "drawer",
-        Drawer.get_default_root_specification(scale=Scale(0.4, 0.5, 0.6)),
+        Drawer.get_default_root_kinematic_structure_entity_specification(
+            scale=Scale(0.4, 0.5, 0.6)
+        ),
         part_specifications={"mechanical_joint": slider_part},
     )
 
