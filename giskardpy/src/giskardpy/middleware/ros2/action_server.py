@@ -105,7 +105,7 @@ class ActionServerHandler:
     Handover of results back to the rclpy executor thread.
     """
 
-    _result_msg: Any | None = field(init=False, default=None)
+    _result_message: Any | None = field(init=False, default=None)
     """
     Result of the currently accepted goal.
     """
@@ -206,15 +206,15 @@ class ActionServerHandler:
 
         :raises MissingActionResultError: If no result was set for the current goal.
         """
-        if self._result_msg is None:
+        if self._result_message is None:
             raise MissingActionResultError(
                 action_server_name=self.action_name, goal_id=self.goal_id
             )
-        return self._result_msg
+        return self._result_message
 
     @result_message.setter
     def result_message(self, value: Any | None) -> None:
-        self._result_msg = value
+        self._result_message = value
 
     def has_goal(self) -> bool:
         """
