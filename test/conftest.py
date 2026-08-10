@@ -143,21 +143,27 @@ def pytest_configure(config):
         os.environ["ROS_DOMAIN_ID"] = str(100 + worker_num)
 
 
-@pytest.fixture(autouse=True, scope="function")
-def cleanup_after_test():
-    # We need to pass the class diagram, since otherwise some names are not found anymore after clearing the symbol graph
-    # for the first time, since World is not a symbol
-    SymbolGraph.clear()
-    class_diagram = ClassDiagram(
+@pytest.fixture(scope="session")
+def _session_class_diagram() -> ClassDiagram:
+    # We need to pass the class diagram, since otherwise some names are not found anymore
+    # after clearing the symbol graph, since World is not a symbol. Built once per
+    # session: the set of Symbol subclasses is static after collection, and the
+    # SymbolGraph singleton reset below only needs to drop per-test instance state, not
+    # this class-level graph.
+    return ClassDiagram(
         recursive_subclasses(Symbol) + [World],
         introspector=DescriptorAwareIntrospector(),
     )
-    SymbolGraph(_class_diagram=class_diagram)
+
+
+@pytest.fixture(autouse=True, scope="function")
+def cleanup_after_test(_session_class_diagram):
+    SymbolGraph.clear_instance()
+    SymbolGraph(_class_diagram=_session_class_diagram)
     # runs BEFORE each test
     yield
     # runs AFTER each test (even if the test fails or errors)
-    SymbolGraph.clear()
-    class_diagram.clear()
+    SymbolGraph.clear_instance()
 
 
 @pytest.fixture(autouse=True, scope="module")
@@ -405,7 +411,6 @@ def cylinder_bot_diff_world():
 
 def world_with_urdf_factory(
     robot_semantic_annotation: Type[AbstractRobot],
-    drive_connection_type: Type[OmniDrive | DifferentialDrive],
     robot_starting_pose: HomogeneousTransformationMatrix | None = None,
     urdf_path_resolver: PathResolver | None = None,
     robot_localization_pose: HomogeneousTransformationMatrix | None = None,
@@ -414,6 +419,7 @@ def world_with_urdf_factory(
     Builds this tree:
     map -> odom_combined -> "urdf tree"
     """
+    drive_connection_type = robot_semantic_annotation.get_drive_connection_type()
     urdf_parser = URDFParser.from_file(
         file_path=robot_semantic_annotation.get_ros_file_path(),
         path_resolver=urdf_path_resolver,
@@ -450,7 +456,7 @@ def world_with_urdf_factory(
 
 @pytest.fixture(scope="session")
 def _pr2_world_setup():
-    return world_with_urdf_factory(PR2, OmniDrive)
+    return world_with_urdf_factory(PR2)
 
 
 @pytest.fixture(scope="function")
@@ -461,7 +467,7 @@ def pr2_world_copy(_pr2_world_setup):
 
 @pytest.fixture(scope="session")
 def _hsr_world_setup():
-    return world_with_urdf_factory(HSRB, OmniDrive)
+    return world_with_urdf_factory(HSRB)
 
 
 @pytest.fixture(scope="function")
@@ -475,9 +481,8 @@ def hsr_world_copy(_hsr_world_setup):
 def _garmi_world_setup():
     if Garmi is None:
         pytest.skip("GARMI semantic annotation not installed")
-    urdf_dir = "package://garmi_description/urdf/garmi.urdf"
     try:
-        return world_with_urdf_factory(urdf_dir, Garmi, OmniDrive)
+        return world_with_urdf_factory(Garmi)
     except ParsingError as error:
         pytest.skip(f"GARMI URDF not available: {error}")
 
@@ -505,12 +510,12 @@ def daisy_world():
 
 @pytest.fixture(scope="session")
 def _stretch_world_setup():
-    return world_with_urdf_factory(Stretch, DifferentialDrive)
+    return world_with_urdf_factory(Stretch)
 
 
 @pytest.fixture(scope="session")
 def _tiago_world_setup():
-    return world_with_urdf_factory(Tiago, DifferentialDrive)
+    return world_with_urdf_factory(Tiago)
 
 
 @pytest.fixture(scope="session")
@@ -949,7 +954,7 @@ def kitchen_environment_fixture():
         world.add_kinematic_structure_entity(root)
         fruit_table = Table.create_with_new_body_in_world(
             world=world,
-            name=PrefixedName("fruit_table"),
+            name="fruit_table",
             world_root_T_self=HomogeneousTransformationMatrix.from_xyz_rpy(
                 x=1, y=1, z=0
             ),
@@ -958,7 +963,7 @@ def kitchen_environment_fixture():
 
         vegetable_table = Table.create_with_new_body_in_world(
             world=world,
-            name=PrefixedName("vegetable_table"),
+            name="vegetable_table",
             world_root_T_self=HomogeneousTransformationMatrix.from_xyz_rpy(
                 x=1, y=1, z=2
             ),
@@ -967,7 +972,7 @@ def kitchen_environment_fixture():
 
         empty_table = Table.create_with_new_body_in_world(
             world=world,
-            name=PrefixedName("empty_table"),
+            name="empty_table",
             world_root_T_self=HomogeneousTransformationMatrix.from_xyz_rpy(
                 x=1, y=1, z=4
             ),
@@ -976,7 +981,7 @@ def kitchen_environment_fixture():
 
         empty_table2 = Table.create_with_new_body_in_world(
             world=world,
-            name=PrefixedName("empty_table2"),
+            name="empty_table2",
             world_root_T_self=HomogeneousTransformationMatrix.from_xyz_rpy(
                 x=1, y=1, z=6
             ),
@@ -985,7 +990,7 @@ def kitchen_environment_fixture():
 
         apple = Apple.create_with_new_body_in_world(
             world=world,
-            name=PrefixedName("apple"),
+            name="apple",
             world_root_T_self=HomogeneousTransformationMatrix.from_xyz_rpy(
                 x=1, y=1, z=0.55
             ),
@@ -996,7 +1001,7 @@ def kitchen_environment_fixture():
 
         orange = Orange.create_with_new_body_in_world(
             world=world,
-            name=PrefixedName("orange"),
+            name="orange",
             world_root_T_self=HomogeneousTransformationMatrix.from_xyz_rpy(
                 x=1, y=0.5, z=0.55
             ),
@@ -1007,7 +1012,7 @@ def kitchen_environment_fixture():
 
         banana1 = Banana.create_with_new_body_in_world(
             world=world,
-            name=PrefixedName("banana1"),
+            name="banana1",
             world_root_T_self=HomogeneousTransformationMatrix.from_xyz_rpy(
                 x=1, y=0.6, z=0.75
             ),
@@ -1018,7 +1023,7 @@ def kitchen_environment_fixture():
 
         carrot = Carrot.create_with_new_body_in_world(
             world=world,
-            name=PrefixedName("carrot"),
+            name="carrot",
             world_root_T_self=HomogeneousTransformationMatrix.from_xyz_rpy(
                 x=1, y=1, z=2.6
             ),
@@ -1029,7 +1034,7 @@ def kitchen_environment_fixture():
 
         lettuce = Lettuce.create_with_new_body_in_world(
             world=world,
-            name=PrefixedName("lettuce"),
+            name="lettuce",
             world_root_T_self=HomogeneousTransformationMatrix.from_xyz_rpy(
                 x=1, y=1.5, z=2.55
             ),
@@ -1040,7 +1045,7 @@ def kitchen_environment_fixture():
 
         banana = Banana.create_with_new_body_in_world(
             world=world,
-            name=PrefixedName("banana"),
+            name="banana",
             world_root_T_self=HomogeneousTransformationMatrix.from_xyz_rpy(
                 x=10, y=10, z=10
             ),
