@@ -66,6 +66,7 @@ class StretchVelocityInterface(RobotInterfaceConfig):
     Commands the arm, head and drive of Stretch through their velocity controllers.
     """
 
+    @staticmethod
     def velocity_controlled_joint_names(self) -> List[StretchJoint]:
         """
         The joints driven by the velocity group controller.
