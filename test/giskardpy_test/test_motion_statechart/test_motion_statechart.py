@@ -2285,7 +2285,8 @@ class TestMaxManipulability:
             tip_link=tip,
             goal_pose=goal_pose,
         )
-        msc.add_nodes([cart_goal, MaxManipulability(root_link=root, tip_link=tip)])
+        msc.add_nodes([cart_goal, manipulability := MaxManipulability(root_link=root, tip_link=tip)])
+        manipulability.end_condition = cart_goal.observation_variable
         msc.add_node(EndMotion.when_true(cart_goal))
 
         kin_sim = Executor(MotionStatechartContext(world=pr2_world_state_reset))
