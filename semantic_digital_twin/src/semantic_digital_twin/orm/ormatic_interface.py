@@ -83,6 +83,7 @@ import semantic_digital_twin.pipeline.mesh_decomposition.bullet_vhacd
 import semantic_digital_twin.pipeline.mesh_decomposition.coacd
 import semantic_digital_twin.pipeline.mesh_decomposition.vhacd
 import semantic_digital_twin.pipeline.pipeline
+import semantic_digital_twin.predetermined_maps.apartment_environment
 import semantic_digital_twin.reasoning.predicates
 import semantic_digital_twin.reasoning.reasoner
 import semantic_digital_twin.reasoning.world_reasoner
@@ -129,6 +130,7 @@ import semantic_digital_twin.world_description.world_state
 import semantic_digital_twin.world_description.world_state_trajectory_plotter
 import sqlalchemy.sql.sqltypes
 import trimesh.base
+import types
 import typing
 import typing_extensions
 import uuid
@@ -151,6 +153,7 @@ class Base(DeclarativeBase):
         uuid.UUID: sqlalchemy.sql.sqltypes.UUID,
         pathlib.Path: krrood.ormatic.custom_types.PathType,
         krrood.adapters.json_serializer.JSONData: krrood.ormatic.custom_types.JSONDataType,
+        types.NoneType: krrood.ormatic.custom_types.TypeType,
     }
 
 
@@ -1856,6 +1859,23 @@ class HasLegsDAO_legs_association(Base, AssociationDataAccessObject):
     )
 
 
+class HasShelfLayersDAO_shelf_layers_association(Base, AssociationDataAccessObject):
+    __tablename__ = "_54703373473658244154819138253524161660384356065723532229307845"
+
+    database_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+
+    source_hasshelflayersdao_id: Mapped[int] = mapped_column(
+        ForeignKey("HasShelfLayersDAO.database_id")
+    )
+    target_shelflayerdao_id: Mapped[int] = mapped_column(
+        ForeignKey("ShelfLayerDAO.database_id")
+    )
+
+    target: Mapped[ShelfLayerDAO] = relationship(
+        "ShelfLayerDAO", foreign_keys=[target_shelflayerdao_id], lazy="selectin"
+    )
+
+
 class DAiSyDAO_sensors_association(Base, AssociationDataAccessObject):
     __tablename__ = "_27928057164326422476865989051158206921138481563760955698757400"
 
@@ -2090,6 +2110,21 @@ class RoomWithWallsAndDoorsDAO_doors_association(Base, AssociationDataAccessObje
 
     target: Mapped[DoorDAO] = relationship(
         "DoorDAO", foreign_keys=[target_doordao_id], lazy="selectin"
+    )
+
+
+class ShelfDAO_shelf_layers_association(Base, AssociationDataAccessObject):
+    __tablename__ = "_78764951245036932274925644158670879451856819978182812236416879"
+
+    database_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+
+    source_shelfdao_id: Mapped[int] = mapped_column(ForeignKey("ShelfDAO.database_id"))
+    target_shelflayerdao_id: Mapped[int] = mapped_column(
+        ForeignKey("ShelfLayerDAO.database_id")
+    )
+
+    target: Mapped[ShelfLayerDAO] = relationship(
+        "ShelfLayerDAO", foreign_keys=[target_shelflayerdao_id], lazy="selectin"
     )
 
 
@@ -10431,6 +10466,19 @@ class CenterLocalGeometryAndPreserveWorldPoseDAO(
         "inherit_condition": database_id == StepDAO.database_id,
         "polymorphic_load": "selectin",
     }
+
+
+class ApartmentEnvironmentDAO(
+    Base,
+    DataAccessObject[
+        semantic_digital_twin.predetermined_maps.apartment_environment.ApartmentEnvironment
+    ],
+):
+    __tablename__ = "ApartmentEnvironmentDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
 
 
 class KinematicStructureEntitySpatialRelationDAO(
@@ -20566,6 +20614,35 @@ class HasMechanicalJointDAO(
     }
 
 
+class HasShelfLayersDAO(
+    PartWholeRelationshipDAO,
+    DataAccessObject[semantic_digital_twin.semantic_annotations.mixins.HasShelfLayers],
+):
+    __tablename__ = "HasShelfLayersDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(PartWholeRelationshipDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
+    )
+
+    shelf_layers: Mapped[builtins.list[HasShelfLayersDAO_shelf_layers_association]] = (
+        relationship(
+            "HasShelfLayersDAO_shelf_layers_association",
+            collection_class=builtins.list,
+            cascade="all, delete-orphan",
+            foreign_keys="[HasShelfLayersDAO_shelf_layers_association.source_hasshelflayersdao_id]",
+            lazy="selectin",
+        )
+    )
+
+    __mapper_args__ = {
+        "polymorphic_identity": "HasShelfLayersDAO",
+        "inherit_condition": database_id == PartWholeRelationshipDAO.database_id,
+        "polymorphic_load": "selectin",
+    }
+
+
 class HasSinkDAO(
     PartWholeRelationshipDAO,
     DataAccessObject[semantic_digital_twin.semantic_annotations.mixins.HasSink],
@@ -21789,6 +21866,10 @@ class CheezeItDAO(
 
     database_id: Mapped[builtins.int] = mapped_column(
         ForeignKey(FoodDAO.database_id), primary_key=True, use_existing_column=True
+    )
+
+    class_label: Mapped[typing.Optional[builtins.str]] = mapped_column(
+        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
     )
 
     __mapper_args__ = {
@@ -23158,6 +23239,35 @@ class SemanticEnvironmentAnnotationDAO(
     }
 
 
+class ShelfDAO(
+    CabinetDAO,
+    DataAccessObject[
+        semantic_digital_twin.semantic_annotations.semantic_annotations.Shelf
+    ],
+):
+    __tablename__ = "ShelfDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(CabinetDAO.database_id), primary_key=True, use_existing_column=True
+    )
+
+    shelf_layers: Mapped[builtins.list[ShelfDAO_shelf_layers_association]] = (
+        relationship(
+            "ShelfDAO_shelf_layers_association",
+            collection_class=builtins.list,
+            cascade="all, delete-orphan",
+            foreign_keys="[ShelfDAO_shelf_layers_association.source_shelfdao_id]",
+            lazy="selectin",
+        )
+    )
+
+    __mapper_args__ = {
+        "polymorphic_identity": "ShelfDAO",
+        "inherit_condition": database_id == CabinetDAO.database_id,
+        "polymorphic_load": "selectin",
+    }
+
+
 class ShelfLayerDAO(
     HasSupportingSurfaceDAO,
     DataAccessObject[
@@ -23175,25 +23285,6 @@ class ShelfLayerDAO(
     __mapper_args__ = {
         "polymorphic_identity": "ShelfLayerDAO",
         "inherit_condition": database_id == HasSupportingSurfaceDAO.database_id,
-        "polymorphic_load": "selectin",
-    }
-
-
-class ShelvingUnitDAO(
-    FurnitureDAO,
-    DataAccessObject[
-        semantic_digital_twin.semantic_annotations.semantic_annotations.ShelvingUnit
-    ],
-):
-    __tablename__ = "ShelvingUnitDAO"
-
-    database_id: Mapped[builtins.int] = mapped_column(
-        ForeignKey(FurnitureDAO.database_id), primary_key=True, use_existing_column=True
-    )
-
-    __mapper_args__ = {
-        "polymorphic_identity": "ShelvingUnitDAO",
-        "inherit_condition": database_id == FurnitureDAO.database_id,
         "polymorphic_load": "selectin",
     }
 
