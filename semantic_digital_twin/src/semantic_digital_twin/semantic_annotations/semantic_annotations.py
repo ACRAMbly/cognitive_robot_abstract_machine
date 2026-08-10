@@ -114,7 +114,7 @@ class Handle(HasRootBody):
         )
 
     @classmethod
-    def get_default_root_entity_specification(
+    def get_default_root_kinematic_structure_entity_specification(
         cls,
         name: Optional[str] = None,
         scale: Optional[Scale] = None,
@@ -226,7 +226,7 @@ class Aperture(HasRootRegion):
         parent.root.visual = new_bounding_box_collection
 
     @classmethod
-    def get_default_root_entity_specification(
+    def get_default_root_kinematic_structure_entity_specification(
         cls,
         name: Optional[str] = None,
         scale: Optional[Scale] = None,
@@ -416,7 +416,7 @@ class EntryWay(Aperture):
     """
 
     @classmethod
-    def get_default_root_entity_specification(
+    def get_default_root_kinematic_structure_entity_specification(
         cls,
         name: Optional[str] = None,
         scale: Optional[Scale] = None,
@@ -498,7 +498,7 @@ class Door(HasHandle, HasMechanicalJoint):
         """
         entry_way_specification = EntryWay.get_annotation_specification(
             f"{name}_entry_way",
-            EntryWay.get_default_root_entity_specification(
+            EntryWay.get_default_root_kinematic_structure_entity_specification(
                 scale=root_specification.scale
             ),
         )
@@ -514,7 +514,7 @@ class Door(HasHandle, HasMechanicalJoint):
         )
 
     @classmethod
-    def get_default_root_entity_specification(
+    def get_default_root_kinematic_structure_entity_specification(
         cls,
         name: Optional[str] = None,
         scale: Optional[Scale] = None,
@@ -536,7 +536,7 @@ class Door(HasHandle, HasMechanicalJoint):
         scale = scale or cls.default_scale
         if not (scale.x < scale.y and scale.x < scale.z):
             raise InvalidPlaneDimensions(scale, clazz=Door)
-        return super().get_default_root_entity_specification(
+        return super().get_default_root_kinematic_structure_entity_specification(
             name, scale, connection_specification
         )
 
@@ -741,7 +741,7 @@ class Floor(HasSupportingSurface):
         ).spawn(world, parent_T_self=world_root_T_self)
 
     @classmethod
-    def get_default_root_entity_specification(
+    def get_default_root_kinematic_structure_entity_specification(
         cls,
         name: Optional[str] = None,
         scale: Optional[Scale] = None,
@@ -872,7 +872,7 @@ class Wall(HasApertures):
         )
 
     @classmethod
-    def get_default_root_entity_specification(
+    def get_default_root_kinematic_structure_entity_specification(
         cls,
         name: Optional[str] = None,
         scale: Optional[Scale] = None,

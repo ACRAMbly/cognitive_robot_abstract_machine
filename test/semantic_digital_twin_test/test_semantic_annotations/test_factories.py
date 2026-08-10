@@ -92,7 +92,7 @@ class TestFactories(unittest.TestCase):
         with world.modify_world():
             returned_handle = Handle.get_annotation_specification(
                 "handle",
-                Handle.get_default_root_entity_specification(
+                Handle.get_default_root_kinematic_structure_entity_specification(
                     scale=Scale(0.1, 0.2, 0.03), thickness=0.03
                 ),
             ).spawn(world)
@@ -805,7 +805,9 @@ class TestFactories(unittest.TestCase):
         with world.modify_world():
             handle = Handle.get_annotation_specification(
                 "handle",
-                Handle.get_default_root_entity_specification(thickness=0.005),
+                Handle.get_default_root_kinematic_structure_entity_specification(
+                    thickness=0.005
+                ),
             ).spawn(world)
         self.assertTrue(len(handle.root.collision) > 1)
 
@@ -937,8 +939,8 @@ class TestFactories(unittest.TestCase):
     #################################################################
     # Characterization of the scale -> geometry generation.
     # These pin the geometry that create_with_new_body_in_world(scale=...)
-    # currently produces, so the get_default_root_entity_specification /
-    # get_default_root_entity_specification extraction (and the later factory
+    # currently produces, so the get_default_root_kinematic_structure_entity_specification /
+    # get_default_root_kinematic_structure_entity_specification extraction (and the later factory
     # rewire) provably preserves it.
     #################################################################
 
@@ -983,7 +985,7 @@ class TestFactories(unittest.TestCase):
         with world.modify_world():
             handle = Handle.get_annotation_specification(
                 "handle",
-                Handle.get_default_root_entity_specification(
+                Handle.get_default_root_kinematic_structure_entity_specification(
                     scale=Scale(0.1, 0.05, 0.05), thickness=0.01
                 ),
             ).spawn(world)

@@ -24,7 +24,7 @@ and semantic annotations manually.
 
 Each factory has a specification counterpart: `create_with_new_body_in_world` builds the annotation
 in a world right away, while `get_annotation_specification` (fed by
-`get_default_root_entity_specification`) returns the same geometry as a reusable specification you
+`get_default_root_kinematic_structure_entity_specification`) returns the same geometry as a reusable specification you
 can materialize later. See
 [](building-worlds-with-specifications) for when to prefer one over the other.
 
