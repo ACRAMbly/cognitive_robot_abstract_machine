@@ -69,6 +69,7 @@ def test_demonstration_runs_against_a_controller_in_another_process(
         atol=PLACEMENT_TOLERANCE,
     )
 
+
 def test_the_scene_counts_as_populated_once_the_cereal_is_spawned(apartment_meshes):
     """
     The demonstration decides whether to spawn its scene by the presence of the cereal.
