@@ -165,7 +165,7 @@ class PickUpAction(ActionDescription):
             children=[
                 MoveGripperMotion(motion=GripperState.OPEN, gripper=self.arm),
                 ReachAction(
-                    target_pose=self.object_designator.global_pose,
+                    target_pose=self.grasp_description.grasp_target_pose(self.object_designator),
                     object_designator=self.object_designator,
                     arm=self.arm,
                     grasp_description=self.grasp_description,

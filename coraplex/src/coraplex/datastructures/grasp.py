@@ -65,6 +65,8 @@ class GraspDescription:
     The offset between the center of the pose in the grasp sequence
     """
 
+    grasp_offset: Point3 = field(default_factory=lambda: Point3(0.0, 0.0, 0.0))
+
     def pose_sequence(
         self, target_T_grasp_pose: Pose, body: Body = None, reverse: bool = False
     ) -> List[Pose]:
@@ -151,7 +153,13 @@ class GraspDescription:
         :param body: The body of the grasp.
         :return: The pose sequence.
         """
-        return self.pose_sequence(Pose(reference_frame=body), body)
+        return self.pose_sequence(self.grasp_target_pose(body), body)
+
+    def grasp_target_pose(self, body: Body) -> Pose:
+        return Pose(
+            position=self.grasp_offset,
+            reference_frame=body
+        )
 
     def place_pose_sequence(self, pose: Pose) -> List[Pose]:
         """
@@ -260,9 +268,18 @@ class GraspDescription:
         """
         edge_offset = -self.edge_offset(body) if grasp_edge else 0
         orientation = self.grasp_orientation()
-        grasp_pose = Pose(Point3(edge_offset, 0, 0), orientation, reference_frame=body)
 
-        return grasp_pose
+        position = Point3(
+            self.grasp_offset.x + edge_offset,
+            self.grasp_offset.y,
+            self.grasp_offset.z
+        )
+
+        return Pose(
+            position,
+            orientation,
+            reference_frame=body
+        )
 
     @classmethod
     def calculate_grasp_descriptions(
