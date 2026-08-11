@@ -298,6 +298,14 @@ class GiskardExecutable(Executable):
         if len(self.motion_mappings) == 0:
             return
 
+        action_names = {
+            node.parent_action_node.action.__class__.__name__
+            for node in self.motion_mappings
+            if node.parent_action_node is not None
+        }
+        if action_names:
+            logger.info(f"Executing: {', '.join(sorted(action_names))}")
+
         match GiskardExecutable.execution_type:
             case ExecutionType.SIMULATED:
                 self._execute_simulation()

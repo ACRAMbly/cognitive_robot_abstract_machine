@@ -17,7 +17,7 @@ from semantic_digital_twin.world import World
 from coraplex.datastructures.dataclasses import Context
 from coraplex.plans.plan import Plan
 
-from sub_parts.available_plans import build_park_arms_plan
+from sub_parts.shared.available_plans import build_park_arms_plan
 
 
 def setup_and_build_plan(

@@ -7,9 +7,19 @@ from dataclasses import dataclass, field
 from enum import Enum
 from threading import Event
 
+"""Query RoboKudo repeatedly for stable colored-block positions."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from threading import Event
+
 import rclpy
 from rclpy.action import ActionClient
 from typing_extensions import TYPE_CHECKING
+
+from rclpy.node import Node
+from rclpy.task import Future
 
 from robokudo_msgs.action import Query
 

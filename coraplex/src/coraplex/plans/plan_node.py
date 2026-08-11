@@ -565,9 +565,6 @@ class ActionNode(DesignatorNode):
         return None
 
     def notify(self):
-
-        logger.info(f"Performing action {self.action.__class__.__name__}")
-
         self.create_execution_data_pre_perform()
 
         if not self.children:

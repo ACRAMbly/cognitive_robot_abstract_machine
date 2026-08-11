@@ -264,7 +264,7 @@ class TracyRightArm(Arm[TracyRightGripper]):
         connections = self.active_connections
         arm_park = JointState.from_mapping(
             name=PrefixedName("right_arm_park", prefix=self.name.name),
-            mapping=dict(zip(connections, [3.72, -2.07, -1.17, 4.0, 0.82, 0.75])),
+            mapping=dict(zip(connections, [3.72, -2.07, -1.17, 4.0, 0.82, 4.38])),
             state_type=StaticJointState.PARK,
         )
         return [arm_park]
