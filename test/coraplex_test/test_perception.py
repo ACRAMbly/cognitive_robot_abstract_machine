@@ -52,19 +52,16 @@ from coraplex.plans.plan_node import MotionNode
 from coraplex.robot_plans import MoveToolCenterPointMotion
 from coraplex.robot_plans.actions.core.pick_up import PickUpAction
 from coraplex.robot_plans.motions.misc import DetectingMotion, PerceptionTask
-from giskardpy.executor import Executor
 from giskardpy.motion_statechart.context import MotionStatechartContext
+from giskardpy.motion_statechart.data_types import ObservationStateValues
 from giskardpy.motion_statechart.graph_node import EndMotion
 from giskardpy.motion_statechart.motion_statechart import MotionStatechart
-from giskardpy.ros_executor import Ros2Executor
+from giskardpy.motion_statechart.ros_context import RosContextExtension
+from giskardpy.motion_statechart.tasks.cartesian_tasks import CartesianPosition
 from krrood.adapters.json_serializer import from_json, to_json
-from semantic_digital_twin.adapters.ros.visualization.viz_marker import VizMarkerPublisher
 from semantic_digital_twin.adapters.world_entity_kwargs_tracker import (
     WorldEntityWithIDKwargsTracker,
 )
-from giskardpy.motion_statechart.data_types import ObservationStateValues
-from giskardpy.motion_statechart.ros_context import RosContextExtension
-from giskardpy.motion_statechart.tasks.cartesian_tasks import CartesianPose, CartesianPosition
 from semantic_digital_twin.semantic_annotations.semantic_annotations import Bowl, Milk
 from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix, Point3
 from semantic_digital_twin.spatial_types.spatial_types import Pose
