@@ -58,6 +58,7 @@ from giskardpy.motion_statechart.graph_node import EndMotion
 from giskardpy.motion_statechart.motion_statechart import MotionStatechart
 from giskardpy.ros_executor import Ros2Executor
 from krrood.adapters.json_serializer import from_json, to_json
+from semantic_digital_twin.adapters.ros.visualization.viz_marker import VizMarkerPublisher
 from semantic_digital_twin.adapters.world_entity_kwargs_tracker import (
     WorldEntityWithIDKwargsTracker,
 )
@@ -65,7 +66,7 @@ from giskardpy.motion_statechart.data_types import ObservationStateValues
 from giskardpy.motion_statechart.ros_context import RosContextExtension
 from giskardpy.motion_statechart.tasks.cartesian_tasks import CartesianPose, CartesianPosition
 from semantic_digital_twin.semantic_annotations.semantic_annotations import Bowl, Milk
-from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix
+from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix, Point3
 from semantic_digital_twin.spatial_types.spatial_types import Pose
 from semantic_digital_twin.world import World
 from semantic_digital_twin.world_description.geometry import BoundingBox
@@ -835,28 +836,20 @@ def test_detection_in_a_chart_corrects_a_reach_planned_before_it(
     milk_body = world.get_body_by_name("milk.stl")
     query = PerceptionQuery(Milk, whole_scene_region, view, world)
     detection = PerceptionTask(query=query, execution_type=ExecutionType.REAL)
-    reach = CartesianPose(
+    reach = CartesianPosition(
         root_link=world.root,
         tip_link=view.right_arm.end_effector.tool_frame,
-        goal_pose=Pose(reference_frame=milk_body),
+        goal_point=Point3(reference_frame=milk_body),
         name="MoveTCP",
     )
+    build_context = build_perception_task(detection, world, rclpy_node)
+    reach.build(build_context)
 
-    motion_statechart = MotionStatechart()
-    motion_statechart.add_node(detection)
-    motion_statechart.add_node(reach)
-
-    executor = Ros2Executor(context=MotionStatechartContext(world=world),
-                            ros_node=rclpy_node)
-    executor.compile(motion_statechart)
-
-    executor.tick()
-    executor.tick()
-
-    reach_position = motion_statechart.get_nodes_by_type(CartesianPosition)[0]
+    run_perception_task(detection, build_context)
+    reach.on_start(build_context)
 
     np.testing.assert_allclose(
-        reach_position.root_T_goal_reference_frame.to_position().evaluate().flatten()[:3],
+        reach.root_T_goal_reference_frame.to_position().evaluate().flatten()[:3],
         PERCEIVED_MILK_POSITION,
         atol=1e-9,
     )
