@@ -24,6 +24,7 @@ import coraplex.datastructures.dataclasses
 import coraplex.datastructures.enums
 import coraplex.datastructures.execution_data
 import coraplex.datastructures.grasp
+import coraplex.datastructures.grasp_scoring
 import coraplex.datastructures.trajectory
 import coraplex.demonstrations
 import coraplex.exceptions
@@ -117,6 +118,7 @@ import giskardpy.motion_statechart.context
 import giskardpy.motion_statechart.data_types
 import giskardpy.motion_statechart.debug_expression_publisher
 import giskardpy.motion_statechart.debug_expression_trajectory
+import giskardpy.motion_statechart.error_signals
 import giskardpy.motion_statechart.exceptions
 import giskardpy.motion_statechart.goals.cartesian_goals
 import giskardpy.motion_statechart.goals.collision_avoidance
@@ -131,6 +133,7 @@ import giskardpy.motion_statechart.monitors.joint_monitors
 import giskardpy.motion_statechart.monitors.monitors
 import giskardpy.motion_statechart.monitors.overwrite_state_monitors
 import giskardpy.motion_statechart.monitors.payload_monitors
+import giskardpy.motion_statechart.monitors.progress_monitors
 import giskardpy.motion_statechart.motion_statechart
 import giskardpy.motion_statechart.nodes_for_testing.nodes_for_testing
 import giskardpy.motion_statechart.plotters.debug_expression_trajectory_plotter
@@ -823,6 +826,25 @@ class CollisionViolatedErrorDAO_violated_collisions_association(
     )
 
 
+class CyclicNodeDependencyErrorDAO_cycle_association(Base, AssociationDataAccessObject):
+    __tablename__ = "_11001275450371385990153743839328926138923429485940860278245047"
+
+    database_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+
+    source_cyclicnodedependencyerrordao_id: Mapped[int] = mapped_column(
+        ForeignKey("CyclicNodeDependencyErrorDAO.database_id")
+    )
+    target_motionstatechartnodedao_id: Mapped[int] = mapped_column(
+        ForeignKey("MotionStatechartNodeDAO.database_id")
+    )
+
+    target: Mapped[MotionStatechartNodeDAO] = relationship(
+        "MotionStatechartNodeDAO",
+        foreign_keys=[target_motionstatechartnodedao_id],
+        lazy="selectin",
+    )
+
+
 class SetInitialTemporaryCollisionRulesDAO_temporary_rules_association(
     Base, AssociationDataAccessObject
 ):
@@ -858,27 +880,6 @@ class UpdateTemporaryCollisionRulesDAO_temporary_rules_association(
 
     target: Mapped[CollisionRuleDAO] = relationship(
         "CollisionRuleDAO", foreign_keys=[target_collisionruledao_id], lazy="selectin"
-    )
-
-
-class _CancelBecauseCollisionViolatedDAO_tasks_association(
-    Base, AssociationDataAccessObject
-):
-    __tablename__ = "_65560379044950887437414016967911775174421418923510923372619919"
-
-    database_id: Mapped[int] = mapped_column(Integer, primary_key=True)
-
-    source__cancelbecausecollisionviolateddao_id: Mapped[int] = mapped_column(
-        ForeignKey("_CancelBecauseCollisionViolatedDAO.database_id")
-    )
-    target__collisionavoidancetaskdao_id: Mapped[int] = mapped_column(
-        ForeignKey("_CollisionAvoidanceTaskDAO.database_id")
-    )
-
-    target: Mapped[_CollisionAvoidanceTaskDAO] = relationship(
-        "_CollisionAvoidanceTaskDAO",
-        foreign_keys=[target__collisionavoidancetaskdao_id],
-        lazy="selectin",
     )
 
 
@@ -974,6 +975,46 @@ class NodeArtifactsDAO_debug_expressions_association(Base, AssociationDataAccess
         "DebugExpressionDAO",
         foreign_keys=[target_debugexpressiondao_id],
         lazy="selectin",
+    )
+
+
+class _CancelBecauseCollisionViolatedDAO_tasks_association(
+    Base, AssociationDataAccessObject
+):
+    __tablename__ = "_65560379044950887437414016967911775174421418923510923372619919"
+
+    database_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+
+    source__cancelbecausecollisionviolateddao_id: Mapped[int] = mapped_column(
+        ForeignKey("_CancelBecauseCollisionViolatedDAO.database_id")
+    )
+    target__collisionavoidancetaskdao_id: Mapped[int] = mapped_column(
+        ForeignKey("_CollisionAvoidanceTaskDAO.database_id")
+    )
+
+    target: Mapped[_CollisionAvoidanceTaskDAO] = relationship(
+        "_CollisionAvoidanceTaskDAO",
+        foreign_keys=[target__collisionavoidancetaskdao_id],
+        lazy="selectin",
+    )
+
+
+class AnyMonitoredTaskRunningDAO_monitored_tasks_association(
+    Base, AssociationDataAccessObject
+):
+    __tablename__ = "_26254039166840484911954189726148690859799133437151449937393928"
+
+    database_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+
+    source_anymonitoredtaskrunningdao_id: Mapped[int] = mapped_column(
+        ForeignKey("AnyMonitoredTaskRunningDAO.database_id")
+    )
+    target_convergingtaskdao_id: Mapped[int] = mapped_column(
+        ForeignKey("ConvergingTaskDAO.database_id")
+    )
+
+    target: Mapped[ConvergingTaskDAO] = relationship(
+        "ConvergingTaskDAO", foreign_keys=[target_convergingtaskdao_id], lazy="selectin"
     )
 
 
@@ -3337,6 +3378,55 @@ class PreferredGraspAlignmentDAO(
         krrood.ormatic.custom_types.PolymorphicEnumType,
         nullable=True,
         use_existing_column=True,
+    )
+
+
+class GraspScorerDAO(
+    Base, DataAccessObject[coraplex.datastructures.grasp_scoring.GraspScorer]
+):
+    __tablename__ = "GraspScorerDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
+
+    weight_normal: Mapped[builtins.float] = mapped_column(use_existing_column=True)
+    weight_distance: Mapped[builtins.float] = mapped_column(use_existing_column=True)
+    weight_clearance: Mapped[builtins.float] = mapped_column(use_existing_column=True)
+    penalty_collision: Mapped[builtins.float] = mapped_column(use_existing_column=True)
+    collision_tolerance: Mapped[builtins.float] = mapped_column(
+        use_existing_column=True
+    )
+    penalty_clearance: Mapped[builtins.float] = mapped_column(use_existing_column=True)
+    penalty_unstable: Mapped[builtins.float] = mapped_column(use_existing_column=True)
+    score_partial_contact: Mapped[builtins.float] = mapped_column(
+        use_existing_column=True
+    )
+    ground_plane_z: Mapped[builtins.float] = mapped_column(use_existing_column=True)
+
+
+class ScoredGraspDAO(
+    Base, DataAccessObject[coraplex.datastructures.grasp_scoring.ScoredGrasp]
+):
+    __tablename__ = "ScoredGraspDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
+
+    score: Mapped[builtins.float] = mapped_column(use_existing_column=True)
+    id: Mapped[builtins.str] = mapped_column(
+        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
+    )
+
+    pose_id: Mapped[int] = mapped_column(
+        ForeignKey("PoseMappingDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
+    )
+
+    pose: Mapped[PoseMappingDAO] = relationship(
+        "PoseMappingDAO", uselist=False, foreign_keys=[pose_id], post_update=True
     )
 
 
@@ -12915,6 +13005,63 @@ class RecordedDebugExpressionDAO(
     )
 
 
+class ErrorSignalDAO(
+    Base, DataAccessObject[giskardpy.motion_statechart.error_signals.ErrorSignal]
+):
+    __tablename__ = "ErrorSignalDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
+
+    polymorphic_type: Mapped[str] = mapped_column(
+        String(255), nullable=False, use_existing_column=True
+    )
+
+    __mapper_args__ = {
+        "polymorphic_on": "polymorphic_type",
+        "polymorphic_identity": "ErrorSignalDAO",
+    }
+
+
+class SampledErrorSignalDAO(
+    ErrorSignalDAO,
+    DataAccessObject[giskardpy.motion_statechart.error_signals.SampledErrorSignal],
+):
+    __tablename__ = "SampledErrorSignalDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(ErrorSignalDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
+    )
+
+    __mapper_args__ = {
+        "polymorphic_identity": "SampledErrorSignalDAO",
+        "inherit_condition": database_id == ErrorSignalDAO.database_id,
+        "polymorphic_load": "selectin",
+    }
+
+
+class SymbolicErrorSignalDAO(
+    ErrorSignalDAO,
+    DataAccessObject[giskardpy.motion_statechart.error_signals.SymbolicErrorSignal],
+):
+    __tablename__ = "SymbolicErrorSignalDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(ErrorSignalDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
+    )
+
+    __mapper_args__ = {
+        "polymorphic_identity": "SymbolicErrorSignalDAO",
+        "inherit_condition": database_id == ErrorSignalDAO.database_id,
+        "polymorphic_load": "selectin",
+    }
+
+
 class CollisionViolatedErrorDAO(
     Base,
     DataAccessObject[giskardpy.motion_statechart.exceptions.CollisionViolatedError],
@@ -13189,6 +13336,38 @@ class MissingContextExtensionErrorDAO(
     }
 
 
+class NoProgressErrorDAO(
+    MotionStatechartErrorDAO,
+    DataAccessObject[giskardpy.motion_statechart.exceptions.NoProgressError],
+):
+    __tablename__ = "NoProgressErrorDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(MotionStatechartErrorDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
+    )
+
+    progress_monitor_id: Mapped[int] = mapped_column(
+        ForeignKey("ProgressStalledDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
+    )
+
+    progress_monitor: Mapped[ProgressStalledDAO] = relationship(
+        "ProgressStalledDAO",
+        uselist=False,
+        foreign_keys=[progress_monitor_id],
+        post_update=True,
+    )
+
+    __mapper_args__ = {
+        "polymorphic_identity": "NoProgressErrorDAO",
+        "inherit_condition": database_id == MotionStatechartErrorDAO.database_id,
+        "polymorphic_load": "selectin",
+    }
+
+
 class NodeInitializationErrorDAO(
     MotionStatechartErrorDAO,
     DataAccessObject[giskardpy.motion_statechart.exceptions.NodeInitializationError],
@@ -13217,6 +13396,35 @@ class NodeInitializationErrorDAO(
     __mapper_args__ = {
         "polymorphic_identity": "NodeInitializationErrorDAO",
         "inherit_condition": database_id == MotionStatechartErrorDAO.database_id,
+        "polymorphic_load": "selectin",
+    }
+
+
+class CyclicNodeDependencyErrorDAO(
+    NodeInitializationErrorDAO,
+    DataAccessObject[giskardpy.motion_statechart.exceptions.CyclicNodeDependencyError],
+):
+    __tablename__ = "CyclicNodeDependencyErrorDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(NodeInitializationErrorDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
+    )
+
+    cycle: Mapped[builtins.list[CyclicNodeDependencyErrorDAO_cycle_association]] = (
+        relationship(
+            "CyclicNodeDependencyErrorDAO_cycle_association",
+            collection_class=builtins.list,
+            cascade="all, delete-orphan",
+            foreign_keys="[CyclicNodeDependencyErrorDAO_cycle_association.source_cyclicnodedependencyerrordao_id]",
+            lazy="selectin",
+        )
+    )
+
+    __mapper_args__ = {
+        "polymorphic_identity": "CyclicNodeDependencyErrorDAO",
+        "inherit_condition": database_id == NodeInitializationErrorDAO.database_id,
         "polymorphic_load": "selectin",
     }
 
@@ -13323,6 +13531,57 @@ class GoalPointsReferenceFrameMismatchErrorDAO(
     }
 
 
+class MissingErrorSignalErrorDAO(
+    NodeInitializationErrorDAO,
+    DataAccessObject[giskardpy.motion_statechart.exceptions.MissingErrorSignalError],
+):
+    __tablename__ = "MissingErrorSignalErrorDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(NodeInitializationErrorDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
+    )
+
+    __mapper_args__ = {
+        "polymorphic_identity": "MissingErrorSignalErrorDAO",
+        "inherit_condition": database_id == NodeInitializationErrorDAO.database_id,
+        "polymorphic_load": "selectin",
+    }
+
+
+class NoConvergingTaskErrorDAO(
+    NodeInitializationErrorDAO,
+    DataAccessObject[giskardpy.motion_statechart.exceptions.NoConvergingTaskError],
+):
+    __tablename__ = "NoConvergingTaskErrorDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(NodeInitializationErrorDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
+    )
+
+    monitored_node_id: Mapped[int] = mapped_column(
+        ForeignKey("MotionStatechartNodeDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
+    )
+
+    monitored_node: Mapped[MotionStatechartNodeDAO] = relationship(
+        "MotionStatechartNodeDAO",
+        uselist=False,
+        foreign_keys=[monitored_node_id],
+        post_update=True,
+    )
+
+    __mapper_args__ = {
+        "polymorphic_identity": "NoConvergingTaskErrorDAO",
+        "inherit_condition": database_id == NodeInitializationErrorDAO.database_id,
+        "polymorphic_load": "selectin",
+    }
+
+
 class NodeAlreadyBelongsToDifferentNodeErrorDAO(
     NodeInitializationErrorDAO,
     DataAccessObject[
@@ -13352,6 +13611,25 @@ class NodeAlreadyBelongsToDifferentNodeErrorDAO(
 
     __mapper_args__ = {
         "polymorphic_identity": "NodeAlreadyBelongsToDifferentNodeErrorDAO",
+        "inherit_condition": database_id == NodeInitializationErrorDAO.database_id,
+        "polymorphic_load": "selectin",
+    }
+
+
+class NodeNotBuiltErrorDAO(
+    NodeInitializationErrorDAO,
+    DataAccessObject[giskardpy.motion_statechart.exceptions.NodeNotBuiltError],
+):
+    __tablename__ = "NodeNotBuiltErrorDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(NodeInitializationErrorDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
+    )
+
+    __mapper_args__ = {
+        "polymorphic_identity": "NodeNotBuiltErrorDAO",
         "inherit_condition": database_id == NodeInitializationErrorDAO.database_id,
         "polymorphic_load": "selectin",
     }
@@ -13461,6 +13739,40 @@ class SelfInStartConditionErrorDAO(
 
     __mapper_args__ = {
         "polymorphic_identity": "SelfInStartConditionErrorDAO",
+        "inherit_condition": database_id == InvalidConditionErrorDAO.database_id,
+        "polymorphic_load": "selectin",
+    }
+
+
+class TerminalNodeInConditionErrorDAO(
+    InvalidConditionErrorDAO,
+    DataAccessObject[
+        giskardpy.motion_statechart.exceptions.TerminalNodeInConditionError
+    ],
+):
+    __tablename__ = "TerminalNodeInConditionErrorDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(InvalidConditionErrorDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
+    )
+
+    terminal_node_id: Mapped[int] = mapped_column(
+        ForeignKey("MotionStatechartNodeDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
+    )
+
+    terminal_node: Mapped[MotionStatechartNodeDAO] = relationship(
+        "MotionStatechartNodeDAO",
+        uselist=False,
+        foreign_keys=[terminal_node_id],
+        post_update=True,
+    )
+
+    __mapper_args__ = {
+        "polymorphic_identity": "TerminalNodeInConditionErrorDAO",
         "inherit_condition": database_id == InvalidConditionErrorDAO.database_id,
         "polymorphic_load": "selectin",
     }
@@ -13735,145 +14047,6 @@ class UpdateTemporaryCollisionRulesDAO(
 
     __mapper_args__ = {
         "polymorphic_identity": "UpdateTemporaryCollisionRulesDAO",
-        "inherit_condition": database_id == MotionStatechartNodeDAO.database_id,
-        "polymorphic_load": "selectin",
-    }
-
-
-class CancelMotionDAO(
-    MotionStatechartNodeDAO,
-    DataAccessObject[giskardpy.motion_statechart.graph_node.CancelMotion],
-):
-    __tablename__ = "CancelMotionDAO"
-
-    database_id: Mapped[builtins.int] = mapped_column(
-        ForeignKey(MotionStatechartNodeDAO.database_id),
-        primary_key=True,
-        use_existing_column=True,
-    )
-
-    plot_specs_id: Mapped[int] = mapped_column(
-        ForeignKey("NodePlotSpecDAO.database_id", use_alter=True),
-        nullable=True,
-        use_existing_column=True,
-    )
-
-    plot_specs: Mapped[NodePlotSpecDAO] = relationship(
-        "NodePlotSpecDAO", uselist=False, foreign_keys=[plot_specs_id], post_update=True
-    )
-
-    __mapper_args__ = {
-        "polymorphic_identity": "CancelMotionDAO",
-        "inherit_condition": database_id == MotionStatechartNodeDAO.database_id,
-        "polymorphic_load": "selectin",
-    }
-
-
-class _CancelBecauseCollisionViolatedDAO(
-    CancelMotionDAO,
-    DataAccessObject[
-        giskardpy.motion_statechart.goals.collision_avoidance._CancelBecauseCollisionViolated
-    ],
-):
-    __tablename__ = "_CancelBecauseCollisionViolatedDAO"
-
-    database_id: Mapped[builtins.int] = mapped_column(
-        ForeignKey(CancelMotionDAO.database_id),
-        primary_key=True,
-        use_existing_column=True,
-    )
-
-    tasks: Mapped[
-        builtins.list[_CancelBecauseCollisionViolatedDAO_tasks_association]
-    ] = relationship(
-        "_CancelBecauseCollisionViolatedDAO_tasks_association",
-        collection_class=builtins.list,
-        cascade="all, delete-orphan",
-        foreign_keys="[_CancelBecauseCollisionViolatedDAO_tasks_association.source__cancelbecausecollisionviolateddao_id]",
-        lazy="selectin",
-    )
-
-    __mapper_args__ = {
-        "polymorphic_identity": "_CancelBecauseCollisionViolatedDAO",
-        "inherit_condition": database_id == CancelMotionDAO.database_id,
-        "polymorphic_load": "selectin",
-    }
-
-
-class _CancelBecauseExternalCollisionViolatedDAO(
-    _CancelBecauseCollisionViolatedDAO,
-    DataAccessObject[
-        giskardpy.motion_statechart.goals.collision_avoidance._CancelBecauseExternalCollisionViolated
-    ],
-):
-    __tablename__ = "_CancelBecauseExternalCollisionViolatedDAO"
-
-    database_id: Mapped[builtins.int] = mapped_column(
-        ForeignKey(_CancelBecauseCollisionViolatedDAO.database_id),
-        primary_key=True,
-        use_existing_column=True,
-    )
-
-    __mapper_args__ = {
-        "polymorphic_identity": "_CancelBecauseExternalCollisionViolatedDAO",
-        "inherit_condition": database_id
-        == _CancelBecauseCollisionViolatedDAO.database_id,
-        "polymorphic_load": "selectin",
-    }
-
-
-class _CancelBecauseSelfCollisionViolatedDAO(
-    _CancelBecauseCollisionViolatedDAO,
-    DataAccessObject[
-        giskardpy.motion_statechart.goals.collision_avoidance._CancelBecauseSelfCollisionViolated
-    ],
-):
-    __tablename__ = "_CancelBecauseSelfCollisionViolatedDAO"
-
-    database_id: Mapped[builtins.int] = mapped_column(
-        ForeignKey(_CancelBecauseCollisionViolatedDAO.database_id),
-        primary_key=True,
-        use_existing_column=True,
-    )
-
-    __mapper_args__ = {
-        "polymorphic_identity": "_CancelBecauseSelfCollisionViolatedDAO",
-        "inherit_condition": database_id
-        == _CancelBecauseCollisionViolatedDAO.database_id,
-        "polymorphic_load": "selectin",
-    }
-
-
-class EndMotionDAO(
-    MotionStatechartNodeDAO,
-    DataAccessObject[giskardpy.motion_statechart.graph_node.EndMotion],
-):
-    __tablename__ = "EndMotionDAO"
-
-    database_id: Mapped[builtins.int] = mapped_column(
-        ForeignKey(MotionStatechartNodeDAO.database_id),
-        primary_key=True,
-        use_existing_column=True,
-    )
-
-    joint_convergence_threshold: Mapped[builtins.float] = mapped_column(
-        use_existing_column=True
-    )
-    minimum_threshold: Mapped[builtins.float] = mapped_column(use_existing_column=True)
-    maximum_threshold: Mapped[builtins.float] = mapped_column(use_existing_column=True)
-
-    plot_specs_id: Mapped[int] = mapped_column(
-        ForeignKey("NodePlotSpecDAO.database_id", use_alter=True),
-        nullable=True,
-        use_existing_column=True,
-    )
-
-    plot_specs: Mapped[NodePlotSpecDAO] = relationship(
-        "NodePlotSpecDAO", uselist=False, foreign_keys=[plot_specs_id], post_update=True
-    )
-
-    __mapper_args__ = {
-        "polymorphic_identity": "EndMotionDAO",
         "inherit_condition": database_id == MotionStatechartNodeDAO.database_id,
         "polymorphic_load": "selectin",
     }
@@ -14362,12 +14535,20 @@ class NodeArtifactsDAO(
         nullable=True,
         use_existing_column=True,
     )
+    error_id: Mapped[typing.Optional[builtins.int]] = mapped_column(
+        ForeignKey("ErrorSignalDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
+    )
 
     constraints: Mapped[ConstraintCollectionDAO] = relationship(
         "ConstraintCollectionDAO",
         uselist=False,
         foreign_keys=[constraints_id],
         post_update=True,
+    )
+    error: Mapped[ErrorSignalDAO] = relationship(
+        "ErrorSignalDAO", uselist=False, foreign_keys=[error_id], post_update=True
     )
     debug_expressions: Mapped[
         builtins.list[NodeArtifactsDAO_debug_expressions_association]
@@ -14681,6 +14862,181 @@ class _SelfCollisionHasDataDAO(
     __mapper_args__ = {
         "polymorphic_identity": "_SelfCollisionHasDataDAO",
         "inherit_condition": database_id == _SelfCollisionAvoidanceNodeDAO.database_id,
+        "polymorphic_load": "selectin",
+    }
+
+
+class ConvergingTaskDAO(
+    TaskDAO, DataAccessObject[giskardpy.motion_statechart.graph_node.ConvergingTask]
+):
+    __tablename__ = "ConvergingTaskDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(TaskDAO.database_id), primary_key=True, use_existing_column=True
+    )
+
+    threshold: Mapped[builtins.float] = mapped_column(use_existing_column=True)
+
+    __mapper_args__ = {
+        "polymorphic_identity": "ConvergingTaskDAO",
+        "inherit_condition": database_id == TaskDAO.database_id,
+        "polymorphic_load": "selectin",
+    }
+
+
+class TerminalNodeDAO(
+    MotionStatechartNodeDAO,
+    DataAccessObject[giskardpy.motion_statechart.graph_node.TerminalNode],
+):
+    __tablename__ = "TerminalNodeDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(MotionStatechartNodeDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
+    )
+
+    __mapper_args__ = {
+        "polymorphic_identity": "TerminalNodeDAO",
+        "inherit_condition": database_id == MotionStatechartNodeDAO.database_id,
+        "polymorphic_load": "selectin",
+    }
+
+
+class CancelMotionDAO(
+    TerminalNodeDAO,
+    DataAccessObject[giskardpy.motion_statechart.graph_node.CancelMotion],
+):
+    __tablename__ = "CancelMotionDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(TerminalNodeDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
+    )
+
+    plot_specs_id: Mapped[int] = mapped_column(
+        ForeignKey("NodePlotSpecDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
+    )
+
+    plot_specs: Mapped[NodePlotSpecDAO] = relationship(
+        "NodePlotSpecDAO", uselist=False, foreign_keys=[plot_specs_id], post_update=True
+    )
+
+    __mapper_args__ = {
+        "polymorphic_identity": "CancelMotionDAO",
+        "inherit_condition": database_id == TerminalNodeDAO.database_id,
+        "polymorphic_load": "selectin",
+    }
+
+
+class _CancelBecauseCollisionViolatedDAO(
+    CancelMotionDAO,
+    DataAccessObject[
+        giskardpy.motion_statechart.goals.collision_avoidance._CancelBecauseCollisionViolated
+    ],
+):
+    __tablename__ = "_CancelBecauseCollisionViolatedDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(CancelMotionDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
+    )
+
+    tasks: Mapped[
+        builtins.list[_CancelBecauseCollisionViolatedDAO_tasks_association]
+    ] = relationship(
+        "_CancelBecauseCollisionViolatedDAO_tasks_association",
+        collection_class=builtins.list,
+        cascade="all, delete-orphan",
+        foreign_keys="[_CancelBecauseCollisionViolatedDAO_tasks_association.source__cancelbecausecollisionviolateddao_id]",
+        lazy="selectin",
+    )
+
+    __mapper_args__ = {
+        "polymorphic_identity": "_CancelBecauseCollisionViolatedDAO",
+        "inherit_condition": database_id == CancelMotionDAO.database_id,
+        "polymorphic_load": "selectin",
+    }
+
+
+class _CancelBecauseExternalCollisionViolatedDAO(
+    _CancelBecauseCollisionViolatedDAO,
+    DataAccessObject[
+        giskardpy.motion_statechart.goals.collision_avoidance._CancelBecauseExternalCollisionViolated
+    ],
+):
+    __tablename__ = "_CancelBecauseExternalCollisionViolatedDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(_CancelBecauseCollisionViolatedDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
+    )
+
+    __mapper_args__ = {
+        "polymorphic_identity": "_CancelBecauseExternalCollisionViolatedDAO",
+        "inherit_condition": database_id
+        == _CancelBecauseCollisionViolatedDAO.database_id,
+        "polymorphic_load": "selectin",
+    }
+
+
+class _CancelBecauseSelfCollisionViolatedDAO(
+    _CancelBecauseCollisionViolatedDAO,
+    DataAccessObject[
+        giskardpy.motion_statechart.goals.collision_avoidance._CancelBecauseSelfCollisionViolated
+    ],
+):
+    __tablename__ = "_CancelBecauseSelfCollisionViolatedDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(_CancelBecauseCollisionViolatedDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
+    )
+
+    __mapper_args__ = {
+        "polymorphic_identity": "_CancelBecauseSelfCollisionViolatedDAO",
+        "inherit_condition": database_id
+        == _CancelBecauseCollisionViolatedDAO.database_id,
+        "polymorphic_load": "selectin",
+    }
+
+
+class EndMotionDAO(
+    TerminalNodeDAO, DataAccessObject[giskardpy.motion_statechart.graph_node.EndMotion]
+):
+    __tablename__ = "EndMotionDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(TerminalNodeDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
+    )
+
+    joint_convergence_threshold: Mapped[builtins.float] = mapped_column(
+        use_existing_column=True
+    )
+    minimum_threshold: Mapped[builtins.float] = mapped_column(use_existing_column=True)
+    maximum_threshold: Mapped[builtins.float] = mapped_column(use_existing_column=True)
+
+    plot_specs_id: Mapped[int] = mapped_column(
+        ForeignKey("NodePlotSpecDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
+    )
+
+    plot_specs: Mapped[NodePlotSpecDAO] = relationship(
+        "NodePlotSpecDAO", uselist=False, foreign_keys=[plot_specs_id], post_update=True
+    )
+
+    __mapper_args__ = {
+        "polymorphic_identity": "EndMotionDAO",
+        "inherit_condition": database_id == TerminalNodeDAO.database_id,
         "polymorphic_load": "selectin",
     }
 
@@ -15668,6 +16024,146 @@ class CountSimulationTimeSecondsDAO(
     }
 
 
+class AnyMonitoredTaskRunningDAO(
+    MotionStatechartNodeDAO,
+    DataAccessObject[
+        giskardpy.motion_statechart.monitors.progress_monitors.AnyMonitoredTaskRunning
+    ],
+):
+    __tablename__ = "AnyMonitoredTaskRunningDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(MotionStatechartNodeDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
+    )
+
+    monitored_tasks: Mapped[
+        builtins.list[AnyMonitoredTaskRunningDAO_monitored_tasks_association]
+    ] = relationship(
+        "AnyMonitoredTaskRunningDAO_monitored_tasks_association",
+        collection_class=builtins.list,
+        cascade="all, delete-orphan",
+        foreign_keys="[AnyMonitoredTaskRunningDAO_monitored_tasks_association.source_anymonitoredtaskrunningdao_id]",
+        lazy="selectin",
+    )
+
+    __mapper_args__ = {
+        "polymorphic_identity": "AnyMonitoredTaskRunningDAO",
+        "inherit_condition": database_id == MotionStatechartNodeDAO.database_id,
+        "polymorphic_load": "selectin",
+    }
+
+
+class NotApproachingGoalDAO(
+    MotionStatechartNodeDAO,
+    DataAccessObject[
+        giskardpy.motion_statechart.monitors.progress_monitors.NotApproachingGoal
+    ],
+):
+    __tablename__ = "NotApproachingGoalDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(MotionStatechartNodeDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
+    )
+
+    minimum_convergence_rate: Mapped[builtins.float] = mapped_column(
+        use_existing_column=True
+    )
+
+    monitored_task_id: Mapped[int] = mapped_column(
+        ForeignKey("ConvergingTaskDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
+    )
+
+    monitored_task: Mapped[ConvergingTaskDAO] = relationship(
+        "ConvergingTaskDAO",
+        uselist=False,
+        foreign_keys=[monitored_task_id],
+        post_update=True,
+    )
+
+    __mapper_args__ = {
+        "polymorphic_identity": "NotApproachingGoalDAO",
+        "inherit_condition": database_id == MotionStatechartNodeDAO.database_id,
+        "polymorphic_load": "selectin",
+    }
+
+
+class ProgressStalledDAO(
+    GoalDAO,
+    DataAccessObject[
+        giskardpy.motion_statechart.monitors.progress_monitors.ProgressStalled
+    ],
+):
+    __tablename__ = "ProgressStalledDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(GoalDAO.database_id), primary_key=True, use_existing_column=True
+    )
+
+    timeout: Mapped[builtins.float] = mapped_column(use_existing_column=True)
+    minimum_convergence_rate: Mapped[builtins.float] = mapped_column(
+        use_existing_column=True
+    )
+
+    monitored_node_id: Mapped[int] = mapped_column(
+        ForeignKey("MotionStatechartNodeDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
+    )
+
+    monitored_node: Mapped[MotionStatechartNodeDAO] = relationship(
+        "MotionStatechartNodeDAO",
+        uselist=False,
+        foreign_keys=[monitored_node_id],
+        post_update=True,
+    )
+
+    __mapper_args__ = {
+        "polymorphic_identity": "ProgressStalledDAO",
+        "inherit_condition": database_id == GoalDAO.database_id,
+        "polymorphic_load": "selectin",
+    }
+
+
+class _CancelBecauseNoProgressDAO(
+    CancelMotionDAO,
+    DataAccessObject[
+        giskardpy.motion_statechart.monitors.progress_monitors._CancelBecauseNoProgress
+    ],
+):
+    __tablename__ = "_CancelBecauseNoProgressDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(CancelMotionDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
+    )
+
+    progress_monitor_id: Mapped[int] = mapped_column(
+        ForeignKey("ProgressStalledDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
+    )
+
+    progress_monitor: Mapped[ProgressStalledDAO] = relationship(
+        "ProgressStalledDAO",
+        uselist=False,
+        foreign_keys=[progress_monitor_id],
+        post_update=True,
+    )
+
+    __mapper_args__ = {
+        "polymorphic_identity": "_CancelBecauseNoProgressDAO",
+        "inherit_condition": database_id == CancelMotionDAO.database_id,
+        "polymorphic_load": "selectin",
+    }
+
+
 class MotionStatechartDAO(
     Base,
     DataAccessObject[giskardpy.motion_statechart.motion_statechart.MotionStatechart],
@@ -16044,6 +16540,9 @@ class HistoryGanttChartPlotterDAO(
     final_state_band_height_in_cm: Mapped[builtins.float] = mapped_column(
         use_existing_column=True
     )
+    gap_between_axes_in_inches: Mapped[builtins.float] = mapped_column(
+        use_existing_column=True
+    )
 
     motion_statechart_id: Mapped[int] = mapped_column(
         ForeignKey("MotionStatechartDAO.database_id", use_alter=True),
@@ -16382,16 +16881,17 @@ class RosContextExtensionDAO(
 
 
 class AlignPlanesDAO(
-    TaskDAO,
+    ConvergingTaskDAO,
     DataAccessObject[giskardpy.motion_statechart.tasks.align_planes.AlignPlanes],
 ):
     __tablename__ = "AlignPlanesDAO"
 
     database_id: Mapped[builtins.int] = mapped_column(
-        ForeignKey(TaskDAO.database_id), primary_key=True, use_existing_column=True
+        ForeignKey(ConvergingTaskDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
     )
 
-    threshold: Mapped[builtins.float] = mapped_column(use_existing_column=True)
     reference_velocity: Mapped[builtins.float] = mapped_column(use_existing_column=True)
 
     root_link_id: Mapped[int] = mapped_column(
@@ -16442,7 +16942,78 @@ class AlignPlanesDAO(
 
     __mapper_args__ = {
         "polymorphic_identity": "AlignPlanesDAO",
-        "inherit_condition": database_id == TaskDAO.database_id,
+        "inherit_condition": database_id == ConvergingTaskDAO.database_id,
+        "polymorphic_load": "selectin",
+    }
+
+
+class CartesianPoseDAO(
+    ParallelDAO,
+    DataAccessObject[giskardpy.motion_statechart.tasks.cartesian_tasks.CartesianPose],
+):
+    __tablename__ = "CartesianPoseDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(ParallelDAO.database_id), primary_key=True, use_existing_column=True
+    )
+
+    reference_linear_velocity: Mapped[builtins.float] = mapped_column(
+        use_existing_column=True
+    )
+    reference_angular_velocity: Mapped[builtins.float] = mapped_column(
+        use_existing_column=True
+    )
+    translation_threshold: Mapped[builtins.float] = mapped_column(
+        use_existing_column=True
+    )
+    orientation_threshold: Mapped[builtins.float] = mapped_column(
+        use_existing_column=True
+    )
+    weight: Mapped[builtins.float] = mapped_column(use_existing_column=True)
+
+    binding_policy: Mapped[
+        giskardpy.motion_statechart.binding_policy.GoalBindingPolicy
+    ] = mapped_column(
+        krrood.ormatic.custom_types.PolymorphicEnumType,
+        nullable=False,
+        use_existing_column=True,
+    )
+
+    root_link_id: Mapped[typing.Optional[builtins.int]] = mapped_column(
+        ForeignKey("KinematicStructureEntityDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
+    )
+    tip_link_id: Mapped[int] = mapped_column(
+        ForeignKey("KinematicStructureEntityDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
+    )
+    goal_pose_id: Mapped[int] = mapped_column(
+        ForeignKey("PoseMappingDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
+    )
+
+    root_link: Mapped[KinematicStructureEntityDAO] = relationship(
+        "KinematicStructureEntityDAO",
+        uselist=False,
+        foreign_keys=[root_link_id],
+        post_update=True,
+    )
+    tip_link: Mapped[KinematicStructureEntityDAO] = relationship(
+        "KinematicStructureEntityDAO",
+        uselist=False,
+        foreign_keys=[tip_link_id],
+        post_update=True,
+    )
+    goal_pose: Mapped[PoseMappingDAO] = relationship(
+        "PoseMappingDAO", uselist=False, foreign_keys=[goal_pose_id], post_update=True
+    )
+
+    __mapper_args__ = {
+        "polymorphic_identity": "CartesianPoseDAO",
+        "inherit_condition": database_id == ParallelDAO.database_id,
         "polymorphic_load": "selectin",
     }
 
@@ -16542,13 +17113,15 @@ class CartesianRotationVelocityLimitDAO(
 
 
 class CartesianTaskDAO(
-    TaskDAO,
+    ConvergingTaskDAO,
     DataAccessObject[giskardpy.motion_statechart.tasks.cartesian_tasks.CartesianTask],
 ):
     __tablename__ = "CartesianTaskDAO"
 
     database_id: Mapped[builtins.int] = mapped_column(
-        ForeignKey(TaskDAO.database_id), primary_key=True, use_existing_column=True
+        ForeignKey(ConvergingTaskDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
     )
 
     binding_policy: Mapped[
@@ -16585,7 +17158,7 @@ class CartesianTaskDAO(
 
     __mapper_args__ = {
         "polymorphic_identity": "CartesianTaskDAO",
-        "inherit_condition": database_id == TaskDAO.database_id,
+        "inherit_condition": database_id == ConvergingTaskDAO.database_id,
         "polymorphic_load": "selectin",
     }
 
@@ -16604,7 +17177,6 @@ class CartesianOrientationDAO(
         use_existing_column=True,
     )
 
-    threshold: Mapped[builtins.float] = mapped_column(use_existing_column=True)
     reference_velocity: Mapped[builtins.float] = mapped_column(use_existing_column=True)
 
     goal_orientation_id: Mapped[int] = mapped_column(
@@ -16627,48 +17199,6 @@ class CartesianOrientationDAO(
     }
 
 
-class CartesianPoseDAO(
-    CartesianTaskDAO,
-    DataAccessObject[giskardpy.motion_statechart.tasks.cartesian_tasks.CartesianPose],
-):
-    __tablename__ = "CartesianPoseDAO"
-
-    database_id: Mapped[builtins.int] = mapped_column(
-        ForeignKey(CartesianTaskDAO.database_id),
-        primary_key=True,
-        use_existing_column=True,
-    )
-
-    reference_linear_velocity: Mapped[builtins.float] = mapped_column(
-        use_existing_column=True
-    )
-    reference_angular_velocity: Mapped[builtins.float] = mapped_column(
-        use_existing_column=True
-    )
-    translation_threshold: Mapped[builtins.float] = mapped_column(
-        use_existing_column=True
-    )
-    orientation_threshold: Mapped[builtins.float] = mapped_column(
-        use_existing_column=True
-    )
-
-    goal_pose_id: Mapped[int] = mapped_column(
-        ForeignKey("PoseMappingDAO.database_id", use_alter=True),
-        nullable=True,
-        use_existing_column=True,
-    )
-
-    goal_pose: Mapped[PoseMappingDAO] = relationship(
-        "PoseMappingDAO", uselist=False, foreign_keys=[goal_pose_id], post_update=True
-    )
-
-    __mapper_args__ = {
-        "polymorphic_identity": "CartesianPoseDAO",
-        "inherit_condition": database_id == CartesianTaskDAO.database_id,
-        "polymorphic_load": "selectin",
-    }
-
-
 class CartesianPositionDAO(
     CartesianTaskDAO,
     DataAccessObject[
@@ -16683,7 +17213,6 @@ class CartesianPositionDAO(
         use_existing_column=True,
     )
 
-    threshold: Mapped[builtins.float] = mapped_column(use_existing_column=True)
     reference_velocity: Mapped[builtins.float] = mapped_column(use_existing_column=True)
 
     goal_point_id: Mapped[int] = mapped_column(
@@ -16721,7 +17250,6 @@ class CartesianPositionStraightDAO(
     )
 
     reference_velocity: Mapped[builtins.float] = mapped_column(use_existing_column=True)
-    threshold: Mapped[builtins.float] = mapped_column(use_existing_column=True)
 
     goal_point_id: Mapped[int] = mapped_column(
         ForeignKey("Point3MappingDAO.database_id", use_alter=True),
@@ -16760,7 +17288,6 @@ class CartesianPositionTrajectoryDAO(
     maximum_skip_ahead: Mapped[typing.Optional[builtins.int]] = mapped_column(
         use_existing_column=True
     )
-    threshold: Mapped[builtins.float] = mapped_column(use_existing_column=True)
     look_ahead_distance: Mapped[builtins.float] = mapped_column(
         use_existing_column=True
     )
@@ -16838,7 +17365,7 @@ class CartesianVelocityLimitDAO(
 
 
 class FeatureFunctionGoalDAO(
-    TaskDAO,
+    ConvergingTaskDAO,
     DataAccessObject[
         giskardpy.motion_statechart.tasks.feature_functions.FeatureFunctionGoal
     ],
@@ -16846,7 +17373,9 @@ class FeatureFunctionGoalDAO(
     __tablename__ = "FeatureFunctionGoalDAO"
 
     database_id: Mapped[builtins.int] = mapped_column(
-        ForeignKey(TaskDAO.database_id), primary_key=True, use_existing_column=True
+        ForeignKey(ConvergingTaskDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
     )
 
     tip_link_id: Mapped[int] = mapped_column(
@@ -16875,7 +17404,7 @@ class FeatureFunctionGoalDAO(
 
     __mapper_args__ = {
         "polymorphic_identity": "FeatureFunctionGoalDAO",
-        "inherit_condition": database_id == TaskDAO.database_id,
+        "inherit_condition": database_id == ConvergingTaskDAO.database_id,
         "polymorphic_load": "selectin",
     }
 
@@ -16895,7 +17424,6 @@ class AlignPerpendicularDAO(
     )
 
     maximum_velocity: Mapped[builtins.float] = mapped_column(use_existing_column=True)
-    threshold: Mapped[builtins.float] = mapped_column(use_existing_column=True)
 
     tip_normal_id: Mapped[int] = mapped_column(
         ForeignKey("Vector3MappingDAO.database_id", use_alter=True),
@@ -17064,16 +17592,18 @@ class HeightGoalDAO(
 
 
 class GraspBarDAO(
-    TaskDAO, DataAccessObject[giskardpy.motion_statechart.tasks.grasp_bar.GraspBar]
+    ConvergingTaskDAO,
+    DataAccessObject[giskardpy.motion_statechart.tasks.grasp_bar.GraspBar],
 ):
     __tablename__ = "GraspBarDAO"
 
     database_id: Mapped[builtins.int] = mapped_column(
-        ForeignKey(TaskDAO.database_id), primary_key=True, use_existing_column=True
+        ForeignKey(ConvergingTaskDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
     )
 
     bar_length: Mapped[builtins.float] = mapped_column(use_existing_column=True)
-    threshold: Mapped[builtins.float] = mapped_column(use_existing_column=True)
     reference_linear_velocity: Mapped[builtins.float] = mapped_column(
         use_existing_column=True
     )
@@ -17131,22 +17661,23 @@ class GraspBarDAO(
 
     __mapper_args__ = {
         "polymorphic_identity": "GraspBarDAO",
-        "inherit_condition": database_id == TaskDAO.database_id,
+        "inherit_condition": database_id == ConvergingTaskDAO.database_id,
         "polymorphic_load": "selectin",
     }
 
 
 class JointPositionListDAO(
-    TaskDAO,
+    ConvergingTaskDAO,
     DataAccessObject[giskardpy.motion_statechart.tasks.joint_tasks.JointPositionList],
 ):
     __tablename__ = "JointPositionListDAO"
 
     database_id: Mapped[builtins.int] = mapped_column(
-        ForeignKey(TaskDAO.database_id), primary_key=True, use_existing_column=True
+        ForeignKey(ConvergingTaskDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
     )
 
-    threshold: Mapped[builtins.float] = mapped_column(use_existing_column=True)
     max_velocity: Mapped[builtins.float] = mapped_column(use_existing_column=True)
 
     goal_state_id: Mapped[int] = mapped_column(
@@ -17161,7 +17692,7 @@ class JointPositionListDAO(
 
     __mapper_args__ = {
         "polymorphic_identity": "JointPositionListDAO",
-        "inherit_condition": database_id == TaskDAO.database_id,
+        "inherit_condition": database_id == ConvergingTaskDAO.database_id,
         "polymorphic_load": "selectin",
     }
 
@@ -17208,7 +17739,6 @@ class PointingDAO(
     )
 
     max_velocity: Mapped[builtins.float] = mapped_column(use_existing_column=True)
-    threshold: Mapped[builtins.float] = mapped_column(use_existing_column=True)
 
     goal_point_id: Mapped[int] = mapped_column(
         ForeignKey("Point3MappingDAO.database_id", use_alter=True),
@@ -17255,7 +17785,6 @@ class PointingConeDAO(
 
     cone_theta: Mapped[builtins.float] = mapped_column(use_existing_column=True)
     max_velocity: Mapped[builtins.float] = mapped_column(use_existing_column=True)
-    threshold: Mapped[builtins.float] = mapped_column(use_existing_column=True)
 
     goal_point_id: Mapped[int] = mapped_column(
         ForeignKey("Point3MappingDAO.database_id", use_alter=True),
@@ -17289,7 +17818,7 @@ class PointingConeDAO(
 
 
 class MaxManipulabilityDAO(
-    TaskDAO,
+    ConvergingTaskDAO,
     DataAccessObject[
         giskardpy.motion_statechart.tasks.weight_scaling_goals.MaxManipulability
     ],
@@ -17297,7 +17826,9 @@ class MaxManipulabilityDAO(
     __tablename__ = "MaxManipulabilityDAO"
 
     database_id: Mapped[builtins.int] = mapped_column(
-        ForeignKey(TaskDAO.database_id), primary_key=True, use_existing_column=True
+        ForeignKey(ConvergingTaskDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
     )
 
     manipulability_threshold: Mapped[builtins.float] = mapped_column(
@@ -17324,25 +17855,26 @@ class MaxManipulabilityDAO(
 
     __mapper_args__ = {
         "polymorphic_identity": "MaxManipulabilityDAO",
-        "inherit_condition": database_id == TaskDAO.database_id,
+        "inherit_condition": database_id == ConvergingTaskDAO.database_id,
         "polymorphic_load": "selectin",
     }
 
 
 class WiggleInsertDAO(
-    TaskDAO,
+    ConvergingTaskDAO,
     DataAccessObject[giskardpy.motion_statechart.tasks.wiggle_insert.WiggleInsert],
 ):
     __tablename__ = "WiggleInsertDAO"
 
     database_id: Mapped[builtins.int] = mapped_column(
-        ForeignKey(TaskDAO.database_id), primary_key=True, use_existing_column=True
+        ForeignKey(ConvergingTaskDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
     )
 
     noise_translation: Mapped[builtins.float] = mapped_column(use_existing_column=True)
     noise_angle: Mapped[builtins.float] = mapped_column(use_existing_column=True)
     down_velocity: Mapped[builtins.float] = mapped_column(use_existing_column=True)
-    threshold: Mapped[builtins.float] = mapped_column(use_existing_column=True)
     random_walk: Mapped[builtins.bool] = mapped_column(use_existing_column=True)
     vector_momentum_factor: Mapped[builtins.float] = mapped_column(
         use_existing_column=True
@@ -17399,7 +17931,7 @@ class WiggleInsertDAO(
 
     __mapper_args__ = {
         "polymorphic_identity": "WiggleInsertDAO",
-        "inherit_condition": database_id == TaskDAO.database_id,
+        "inherit_condition": database_id == ConvergingTaskDAO.database_id,
         "polymorphic_load": "selectin",
     }
 
