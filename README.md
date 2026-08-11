@@ -173,6 +173,10 @@ pre-commit install
 them as empty placeholders; the pre-commit hooks above keep any commit of them empty
 automatically. Run `python scripts/regenerate_all_orm.py` whenever you need a real one
 locally (for example for database work) — CI regenerates them the same way for tests.
+That script also marks the files it regenerates with git's skip-worktree bit, so git
+ignores your local, real content and never proposes to stage or commit it — even with
+`git add -A`. Run `python scripts/protect_generated_orm_interfaces.py` on its own if you
+want that protection without regenerating (for example right after cloning).
 
 ### Code of Conduct
 
