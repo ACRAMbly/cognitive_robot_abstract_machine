@@ -9,12 +9,24 @@ circular dependency chain it carries.
 from __future__ import annotations
 
 import uuid
+import weakref
 from abc import ABC
 from contextvars import ContextVar
 from dataclasses import dataclass, field
 
 from ordered_set import OrderedSet
-from typing_extensions import Iterator, List, Optional, Tuple, TYPE_CHECKING
+from typing_extensions import (
+    Any,
+    Callable,
+    Dict,
+    Iterator,
+    List,
+    Optional,
+    Set,
+    Tuple,
+    Type,
+    TYPE_CHECKING,
+)
 
 if TYPE_CHECKING:
     from krrood.entity_query_language.core.base_expressions import (
@@ -48,48 +60,75 @@ def set_evaluation_context(
 
 
 class EvaluationObserver(ABC):
-    """Observer for evaluation events in the EQL evaluation pipeline."""
+    """
+    Observer for evaluation events in the EQL evaluation pipeline.
+    """
 
     def on_evaluate_enter(
         self, expression: SymbolicExpression, sources: Optional[OperationResult] = None
     ) -> None:
-        """Called when entering an expression's _evaluate_ method."""
+        """
+        Called when entering an expression's _evaluate_ method.
+        """
 
     def on_evaluate_exit(self, expression: SymbolicExpression) -> None:
-        """Called when exiting an expression's _evaluate_ method."""
+        """
+        Called when exiting an expression's _evaluate_ method.
+        """
 
     def on_result_yielded(
         self, expression: SymbolicExpression, result: OperationResult
     ) -> None:
-        """Called for each OperationResult yielded from _evaluate_."""
+        """
+        Called for each OperationResult yielded from _evaluate_.
+        """
 
     def on_conclusions_processed(
         self, expression: SymbolicExpression, result: OperationResult
     ) -> None:
-        """Called after _evaluate_conclusions_and_update_bindings_ completes."""
+        """
+        Called after _evaluate_conclusions_and_update_bindings_ completes.
+        """
 
 
 @dataclass
 class ActiveConditionsRoot:
-    """Tracks which node is the active conditions root for the current evaluation pass.
+    """
+    Tracks which node is the active conditions root for the current evaluation pass.
 
-    A node reused as the condition of more than one ``Filter`` has no single correct "root" —
-    the right answer depends on which evaluation is currently running, not on the node's
-    construction history. The first node to claim this during a pass wins; nested evaluations
-    within the same pass never reassign it.
+    A node reused as the condition of more than one ``Filter`` has no single correct
+    "root" — the right answer depends on which evaluation is currently running, not on
+    the node's construction history. The first node to set this during a pass wins;
+    nested evaluations within the same pass never reassign it.
     """
 
     _root_id: Optional[uuid.UUID] = field(default=None, init=False)
-    """Identifier of the claimed root, or ``None`` before any node has claimed one this pass."""
+    """
+    Identifier of the active root, or ``None`` before one has been set this pass.
+    """
 
-    def claim(self, root: SymbolicExpression) -> None:
-        """Claim *root* as the active conditions root for this pass, if none is claimed yet.
+    has_condition: bool = field(default=False, init=False)
+    """
+    Whether the active root came from a genuine ``Filter``, rather than the Filter-less
+    fallback to the evaluation's own starting expression.
+    """
 
-        :param root: The node to claim, normally ``self._conditions_root_`` of whichever
-            expression is starting a fresh (context-less) evaluation.
+    def set_active_root_if_not_set(
+        self, root: SymbolicExpression, has_condition: bool
+    ) -> None:
+        """
+        Set *root* as the active conditions root for this pass, unless one is already
+        set.
+
+        :param root: The node to set, normally
+            ``originating_expression._conditions_root_``.
+        :param has_condition: Whether *root* came from a genuine ``Filter``, recorded so
+            that it need not be recomputed later in the pass from a node that may itself
+            be shared and structurally ambiguous.
         """
         if self._root_id is None:
             self._root_id = root._id_
+            self.has_condition = has_condition
 
     def is_active_root(self, node: SymbolicExpression) -> bool:
         """:return: ``True`` if *node* is the active conditions root for this pass."""
@@ -97,27 +136,71 @@ class ActiveConditionsRoot:
 
 
 @dataclass
-class EvaluatedExpressionIds:
-    """Tracks every expression id evaluated so far during the current evaluation pass.
+class TruthValueOperatorChildren:
+    """
+    Tracks which nodes were evaluated as a direct child of a
+    :class:`~krrood.entity_query_language.core.base_expressions.TruthValueOperator` during
+    the current evaluation pass.
 
-    Used to distinguish evaluated-from-skipped logical operators (for example, short-circuited
-    OR/AND branches) when building inference explanations.
+    Whether a node counts as a condition participant depends on which parent evaluated it
+    in this pass, not on the node's construction history: a node reused elsewhere in the
+    :class:`~krrood.entity_query_language.core.base_expressions.SymbolicExpression`'s own
+    directed acyclic graph of parents keeps a structural parent per position, but only
+    the first-ever attachment is its primary ``_parent_``, which may belong to an
+    unrelated position. Recording the dynamic, per-pass parent here instead of reading
+    the node's primary ``_parent_`` avoids that ambiguity.
+    """
+
+    _ids: Set[uuid.UUID] = field(default_factory=set, init=False)
+    """
+    Identifiers of the nodes evaluated as a direct child of a ``TruthValueOperator`` so
+    far this pass.
+    """
+
+    def record(self, expression_id: uuid.UUID) -> None:
+        """
+        Record *expression_id* as evaluated as a direct child of a
+        ``TruthValueOperator`` during the current pass.
+        """
+        self._ids.add(expression_id)
+
+    def __contains__(self, expression_id: uuid.UUID) -> bool:
+        return expression_id in self._ids
+
+
+@dataclass
+class EvaluatedExpressionIds:
+    """
+    Tracks every expression id evaluated so far during the current evaluation pass.
+
+    Used to distinguish evaluated-from-skipped logical operators (for example, short-
+    circuited OR/AND branches) when building inference explanations.
     """
 
     _ids: OrderedSet = field(default_factory=OrderedSet, init=False)
-    """The expression ids recorded as evaluated so far this pass."""
+    """
+    The expression ids recorded as evaluated so far this pass.
+    """
+
     _snapshot: Optional[Tuple[int, OrderedSet]] = field(default=None, init=False)
-    """Cached ``(length, snapshot)`` pair. The id set is append-only, so its length is a valid
-    version key: a snapshot taken while the set has a given length is reused instead of copying
-    the whole set again."""
+    """
+    Cached ``(length, snapshot)`` pair.
+
+    The id set is append-only, so its length is a valid version key: a snapshot taken
+    while the set has a given length is reused instead of copying the whole set again.
+    """
 
     def record(self, expression_id: uuid.UUID) -> None:
-        """Record *expression_id* as evaluated during the current pass."""
+        """
+        Record *expression_id* as evaluated during the current pass.
+        """
         self._ids.add(expression_id)
 
     def merge(self, other: OrderedSet) -> None:
-        """Merge *other* into the recorded ids (for example, ids evaluated by an earlier stage
-        of the same result chain)."""
+        """
+        Merge *other* into the recorded ids (for example, ids evaluated by an earlier
+        stage of the same result chain).
+        """
         self._ids.update(other)
 
     def __iter__(self) -> Iterator[uuid.UUID]:
@@ -133,23 +216,150 @@ class EvaluatedExpressionIds:
 
 
 @dataclass
+class OutermostQueryClaim:
+    """
+    Tracks which compiled query node is the outermost query for the current evaluation
+    pass.
+
+    A query node is the scope that isolates a nested subquery from its surrounding
+    bindings. The first compiled query node to evaluate during a pass is the outermost
+    one; any other compiled query node that evaluates during the same pass is nested
+    inside it.
+    """
+
+    _query_id: Optional[uuid.UUID] = field(default=None, init=False)
+    """
+    Identifier of the query node that claimed the outermost role, or ``None`` before any
+    node has.
+    """
+
+    def is_nested(self, query_id: uuid.UUID) -> bool:
+        """
+        Claim *query_id* as the outermost query if none is claimed yet, then report
+        whether *query_id* is nested inside some other, already-claimed outermost query.
+
+        :param query_id: The compiled query node's identifier.
+        :return: Whether *query_id* is a nested subquery (``True``) or the outermost
+            query (``False``).
+        """
+        if self._query_id is None:
+            self._query_id = query_id
+        return self._query_id != query_id
+
+
+@dataclass
+class SubqueryResultCache:
+    """
+    Caches an uncorrelated subquery's result stream per query node for one evaluation
+    pass.
+
+    So a subquery reached from many outer rows is computed once and its cached stream is
+    replayed to each of them, instead of recomputing it on every outer row.
+    """
+
+    _streams: Dict[uuid.UUID, Any] = field(default_factory=dict, init=False)
+    """
+    Cached result stream keyed by the compiled query node's identifier.
+    """
+
+    def get_or_create(self, query_id: uuid.UUID, factory: Callable[[], Any]) -> Any:
+        """
+        Return the cached stream for *query_id*, creating it via *factory* if not
+        already cached.
+
+        :param query_id: The compiled query node's identifier.
+        :param factory: Called at most once to build the stream if it isn't already
+            cached.
+        :return: The cached stream for *query_id*.
+        """
+        if query_id not in self._streams:
+            self._streams[query_id] = factory()
+        return self._streams[query_id]
+
+
+@dataclass
 class EvaluationContext:
-    """Carries observer state through the evaluation pipeline."""
+    """
+    Carries observer state through the evaluation pipeline.
+    """
 
     observers: List[EvaluationObserver] = field(default_factory=list)
     """
     List of observers to notify of evaluation events.
     """
+
+    subtree_containment_cache: Dict[
+        Tuple[uuid.UUID, Type[SymbolicExpression]], bool
+    ] = field(default_factory=dict)
+    """
+    Memoizes, per ``(node id, expression type)``, whether a node's subtree contains a
+    descendant of that type — a structural fact constant for the duration of an
+    evaluation, so the hot path answers it once instead of re-walking the subtree on
+    every step.
+    """
+
+    expression_index_cache: Dict[
+        uuid.UUID, weakref.WeakValueDictionary[uuid.UUID, SymbolicExpression]
+    ] = field(default_factory=dict)
+    """
+    Memoizes, per tree-root id, an ``id -> node`` index built once per evaluation and
+    reused for every lookup instead of re-scanning the tree.
+
+    ..warning:: The index holds nodes only through weak references. A context can be captured past
+        its evaluation (for example by an inference explanation); strong references here would pin
+        the whole query tree and its variables' domains.
+    """
+
     active_conditions_root: ActiveConditionsRoot = field(
         default_factory=ActiveConditionsRoot
     )
-    """Tracks which node is the active conditions root for the current evaluation pass."""
+    """
+    Tracks which node is the active conditions root for the current evaluation pass.
+    """
+
+    truth_value_operator_children: TruthValueOperatorChildren = field(
+        default_factory=TruthValueOperatorChildren
+    )
+    """
+    Tracks which nodes were evaluated as a direct child of a ``TruthValueOperator``
+    during the current evaluation pass.
+    """
+
     evaluated_expression_ids: EvaluatedExpressionIds = field(
         default_factory=EvaluatedExpressionIds
     )
-    """Tracks every expression id evaluated so far during the current evaluation pass."""
+    """
+    Tracks every expression id evaluated so far during the current evaluation pass.
+    """
+
     satisfied_condition_ids: Optional[OrderedSet] = field(default=None)
-    """The satisfied condition-expression ids for the current evaluation iteration, or ``None`` if unset."""
+    """
+    The satisfied condition-expression ids for the current evaluation iteration, or
+    ``None`` if unset.
+    """
+
+    outermost_query_claim: OutermostQueryClaim = field(
+        default_factory=OutermostQueryClaim
+    )
+    """
+    Tracks which compiled query node is the outermost query for the current evaluation
+    pass.
+    """
+
+    subquery_result_cache: SubqueryResultCache = field(
+        default_factory=SubqueryResultCache
+    )
+    """
+    Caches each nested subquery's result stream for the current evaluation pass.
+    """
+
+    def is_child_of_truth_value_operator(self, expression: SymbolicExpression) -> bool:
+        """
+        :param expression: The symbolic expression to test.
+        :return: ``True`` if *expression* was evaluated as a direct child of a
+            ``TruthValueOperator`` during the current evaluation pass.
+        """
+        return expression._id_ in self.truth_value_operator_children
 
     def on_evaluate_enter(
         self,
@@ -161,7 +371,8 @@ class EvaluationContext:
         Notify all observers that evaluation of *expression* is about to begin.
 
         :param expression: The expression being entered.
-        :param sources: The incoming :class:`OperationResult` carrying bindings, or ``None``.
+        :param sources: The incoming :class:`OperationResult` carrying bindings, or
+            ``None``.
         """
         for observer in self.observers:
             observer.on_evaluate_enter(expression, sources)

@@ -38,7 +38,10 @@ from semantic_digital_twin.robots.robot_parts import (
     Torso,
 )
 from semantic_digital_twin.spatial_types import Quaternion, Vector3
-from semantic_digital_twin.world_description.connections import FixedConnection
+from semantic_digital_twin.world_description.connections import (
+    FixedConnection,
+    OmniDrive,
+)
 from semantic_digital_twin.world_description.world_entity import (
     KinematicStructureEntity,
 )
@@ -526,7 +529,7 @@ class GarmiTorso(
 
 
 @dataclass(eq=False)
-class GarmiMobileBase(MobileBase, HasTorso[GarmiTorso]):
+class GarmiMobileBase(MobileBase[OmniDrive], HasTorso[GarmiTorso]):
     """
     The mecanum mobile base of the GARMI robot.
     """
@@ -567,8 +570,8 @@ class GarmiMobileBase(MobileBase, HasTorso[GarmiTorso]):
 @dataclass(eq=False)
 class Garmi(AbstractRobot, HasMobileBase[GarmiMobileBase]):
     """
-    Semantic annotation for GARMI, a mobile service robot with a mecanum base,
-    lift, two Franka FR3 arms, parallel grippers, and a pan/tilt head.
+    Semantic annotation for GARMI, a mobile service robot with a mecanum base, lift, two
+    Franka FR3 arms, parallel grippers, and a pan/tilt head.
     """
 
     @classmethod
@@ -603,7 +606,8 @@ class Garmi(AbstractRobot, HasMobileBase[GarmiMobileBase]):
 
     def _setup_collision_rules(self):
         """
-        Sets up collision avoidance rules for the robot, including SRDF-based self-collision ignore rules.
+        Sets up collision avoidance rules for the robot, including SRDF-based self-
+        collision ignore rules.
         """
         srdf_path = os.path.join(
             Path(files("semantic_digital_twin")).parent.parent,

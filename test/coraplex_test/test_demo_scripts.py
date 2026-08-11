@@ -9,6 +9,7 @@ DEMOS_ROOT = Path(__file__).resolve().parents[2] / "coraplex" / "demos"
 WRAPPER_PATHS = [
     DEMOS_ROOT / "coraplex_bullet_world_demo" / "test_demo.py",
     DEMOS_ROOT / "coraplex_real_tracy" / "test_demo.py",
+    DEMOS_ROOT / "coraplex_unitree_g1_warehouse_demo" / "test_demo.py",
 ]
 
 
@@ -17,9 +18,9 @@ WRAPPER_PATHS = [
 )
 def test_wrapper_reports_the_real_import_failure(tmp_path, wrapper_path):
     """
-    A demo's ``test_demo.py`` wrapper must surface the real exception from a
-    failing ``import demo`` (as a traceback on stderr) instead of silently
-    exiting, so CI failures are diagnosable.
+    A demo's ``test_demo.py`` wrapper must surface the real exception from a failing
+    ``import demo`` (as a traceback on stderr) instead of silently exiting, so CI
+    failures are diagnosable.
     """
     (tmp_path / "demo.py").write_text("raise RuntimeError('boom from demo fixture')\n")
     (tmp_path / "test_demo.py").write_text(wrapper_path.read_text())

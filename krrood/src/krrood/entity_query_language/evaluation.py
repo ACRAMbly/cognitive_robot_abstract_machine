@@ -1,18 +1,19 @@
 """
 Evaluation context and observer system for the Entity Query Language.
 
-This module provides an aspect-oriented mechanism for hooking into the
-evaluation pipeline without polluting the core evaluation methods.
+This module provides an aspect-oriented mechanism for hooking into the evaluation
+pipeline without polluting the core evaluation methods.
 """
 
 from __future__ import annotations
 
 from ordered_set import OrderedSet
-from typing_extensions import Any, Dict, Optional
+from typing_extensions import Any, Optional
 
 from krrood.entity_query_language._monitoring import monitored
 from krrood.entity_query_language.core.base_expressions import (
     OperationResult,
+    SymbolicExpression,
     TruthValueOperator,
 )
 from krrood.entity_query_language.core.variable import InstantiatedVariable
@@ -32,34 +33,47 @@ from krrood.entity_query_language.predicate import Predicate
 from krrood.entity_query_language.query.query import Query
 
 
-def is_condition_participant(expr: OperationResult) -> bool:
+def is_condition_participant(
+    expression: SymbolicExpression,
+    parent: Optional[SymbolicExpression] = None,
+) -> bool:
     """
     Check whether the expression participates in condition evaluation.
 
-    :param expr: The symbolic expression to test.
-    :return: ``True`` if *expr* is a :class:`~krrood.entity_query_language.operators.comparator.Comparator`,
+    :param expression: The symbolic expression to test.
+    :param parent: The parent relevant to the caller's own traversal, when the caller
+        already knows it (for example a graph walk that reached *expression* through one
+        of its own children edges). Takes precedence over both of the fallbacks below.
+    :return: ``True`` if *expression* is a :class:`~krrood.entity_query_language.operators.comparator.Comparator`,
         :class:`~krrood.entity_query_language.predicate.Predicate`, or
         :class:`~krrood.entity_query_language.operators.core_logical_operators.LogicalOperator`,
-        or if its direct parent is a
+        or if it was evaluated (or, per *parent*, reached) as a direct child of a
         :class:`~krrood.entity_query_language.core.base_expressions.TruthValueOperator`.
     """
-    if isinstance(expr, (Comparator, Predicate, LogicalOperator)):
+    if isinstance(expression, (Comparator, Predicate, LogicalOperator)):
         return True
-    parent = expr._parent_
-    if parent is not None and isinstance(parent, TruthValueOperator):
-        return True
-    return False
+    if parent is not None:
+        return isinstance(parent, TruthValueOperator)
+    evaluation_context = get_evaluation_context()
+    if evaluation_context is not None:
+        return evaluation_context.is_child_of_truth_value_operator(expression)
+    structural_parent = expression._parent_
+    return structural_parent is not None and isinstance(
+        structural_parent, TruthValueOperator
+    )
 
 
 class EvaluationTracker(EvaluationObserver):
-    """Observer that tracks which expressions were evaluated and stamps the cumulative set on each OperationResult.
+    """
+    Observer that tracks which expressions were evaluated and stamps the cumulative set
+    on each OperationResult.
 
-    Maintains a cumulative set of expression IDs in the evaluation context, adding each expression's ID
-    on :meth:`on_evaluate_enter`. On :meth:`on_result_yielded`, snapshots the current set onto the result
-    as ``evaluated_expression_ids``.
+    Maintains a cumulative set of expression IDs in the evaluation context, adding each
+    expression's ID on :meth:`on_evaluate_enter`. On :meth:`on_result_yielded`,
+    snapshots the current set onto the result as ``evaluated_expression_ids``.
 
-    This tracking is the foundation for distinguishing evaluated-from-skipped logical operators (for example,
-    short-circuited OR/AND branches) in inference explanations.
+    This tracking is the foundation for distinguishing evaluated-from-skipped logical
+    operators (for example, short-circuited OR/AND branches) in inference explanations.
     """
 
     def on_evaluate_enter(self, expression, sources):
@@ -84,10 +98,13 @@ class EvaluationTracker(EvaluationObserver):
 
 
 class SatisfiedConditionTracker(EvaluationObserver):
-    """Observer that tracks which condition expressions were satisfied during a single evaluation pass.
+    """
+    Observer that tracks which condition expressions were satisfied during a single
+    evaluation pass.
 
     Records truth values on :meth:`on_result_yielded` and populates
-    ``result.satisfied_condition_ids`` at the conditions root after all conditions have been evaluated.
+    ``result.satisfied_condition_ids`` at the conditions root after all conditions have
+    been evaluated.
     """
 
     def on_evaluate_enter(self, expression, sources):
@@ -110,51 +127,45 @@ class SatisfiedConditionTracker(EvaluationObserver):
             result.satisfied_condition_ids = satisfied
 
     def on_conclusions_processed(self, expression, result):
-        # The caller (_evaluate_conclusions_and_update_bindings_) already established that
-        # `expression` is the active conditions root for this evaluation pass before invoking
-        # this hook, so no re-check is needed here.
+        """
+        Record on *result* which of this pass's conditions were satisfied.
+
+        :param expression: The pass's active conditions root.
+        :param result: The result whose conclusions were just processed.
+        """
+        # The structural check comes first because reading a result's truth can be expensive
+        # (a bound predicate evaluates itself), and an evaluation with no conditions to track
+        # is dismissed without needing the truth at all.
+        evaluation_context = get_evaluation_context()
+        if not evaluation_context.active_conditions_root.has_condition:
+            return
         if result.is_false:
             return
-        if expression._conditions_root_ is expression._root_:
-            return
 
-        evaluation_context = get_evaluation_context()
         evaluated = evaluation_context.evaluated_expression_ids
 
-        # Build a truth map from the OperationResult chain: operand_id -> is_false.
-        # This reflects the actual truth values from this specific evaluation path,
-        # with no risk of stale state from previous passes.
-        chain_truth_map: Dict = {}
-        node = result
-        seen: set = set()
-        while node is not None and id(node) not in seen:
-            seen.add(id(node))
-            if node.operand is not None:
-                chain_truth_map[node.operand._id_] = node.is_false
-            node = node.previous_operation_result
-
+        # Every truth-bearing expression records its truth in the bindings of the result
+        # it yields, so one uniform lookup covers operators and value-bearing expressions
+        # alike. An expression short-circuited by an operator recorded nothing, and is
+        # therefore not satisfied.
         satisfied = OrderedSet()
-        for expr_id in evaluated:
+        for evaluated_id in evaluated:
             try:
-                expr = expression._get_expression_by_id_(expr_id)
+                evaluated_expression = expression._get_expression_by_id_(evaluated_id)
             except NoExpressionFoundForGivenID:
                 continue
-            if not is_condition_participant(expr):
+            if not is_condition_participant(evaluated_expression):
                 continue
-            if isinstance(expr, LogicalOperator):
-                # An operator not present in the chain was short-circuited: not satisfied.
-                if not chain_truth_map.get(expr_id, True):
-                    satisfied.add(expr_id)
-            elif expr_id in result.bindings:
-                if result.bindings[expr_id]:
-                    satisfied.add(expr_id)
+            if result.bindings.get(evaluated_id):
+                satisfied.add(evaluated_id)
 
         result.satisfied_condition_ids = satisfied
         evaluation_context.satisfied_condition_ids = satisfied
 
 
 class InferenceRecorder(EvaluationObserver):
-    """Observer that records inferred instances for later explanation.
+    """
+    Observer that records inferred instances for later explanation.
 
     Attaches an :class:`~krrood.entity_query_language.explanation.explanation.InferenceExplanation`
     to each newly inferred :class:`~krrood.symbol_graph.symbol_graph.Symbol` instance so that
@@ -189,12 +200,13 @@ def create_default_evaluation_context() -> EvaluationContext:
     """
     Create an :class:`EvaluationContext` populated with the standard set of observers.
 
-    This is the authoritative factory for evaluation contexts used during normal
-    query evaluation.  Callers that need custom observer configurations should
-    construct an :class:`EvaluationContext` directly rather than calling this function.
+    This is the authoritative factory for evaluation contexts used during normal query
+    evaluation.  Callers that need custom observer configurations should construct an
+    :class:`EvaluationContext` directly rather than calling this function.
 
     :return: A new :class:`EvaluationContext` with :class:`EvaluationTracker`,
-        :class:`SatisfiedConditionTracker`, and :class:`InferenceRecorder` observers attached.
+        :class:`SatisfiedConditionTracker`, and :class:`InferenceRecorder` observers
+        attached.
     """
     return EvaluationContext(
         observers=[

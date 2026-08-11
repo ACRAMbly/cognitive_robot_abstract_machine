@@ -53,7 +53,7 @@ class ActionServerTask(
 
     message_type: Type[Action]
     """
-    Fully specified goal message that can be send out. 
+    Fully specified goal message that can be send out.
     """
 
     # Class-level cache: (node_id, topic) → ActionClient
@@ -94,18 +94,9 @@ class ActionServerTask(
         Creates (or reuses a cached) action client.
         """
         ros_context_extension = context.require_extension(RosContextExtension)
-        node = ros_context_extension.ros_node
-        cache_key = (id(node), self.action_topic)
-
-        if cache_key not in ActionServerTask._shared_client_cache:
-            ActionServerTask._shared_client_cache[cache_key] = ActionClient(
-                node, self.message_type, self.action_topic
-            )
-            logger.info(f"[ActionServerTask] Created action client for '{self.action_topic}'")
-        else:
-            logger.debug(f"[ActionServerTask] Reusing cached action client for '{self.action_topic}'")
-
-        self._action_client = ActionServerTask._shared_client_cache[cache_key]
+        self._action_client = ros_context_extension.get_or_create_action_client(
+            self.message_type, self.action_topic
+        )
         self.build_msg(context)
         logger.info(f"Waiting for action server {self.action_topic}")
         self._action_client.wait_for_server()
@@ -122,8 +113,8 @@ class ActionServerTask(
         """
         Handles the server's response to the goal submission.
 
-        On rejection a failure sentinel is stored so that :meth:`on_tick` can
-        return :attr:`~ObservationStateValues.FALSE` immediately.
+        On rejection a failure sentinel is stored so that :meth:`on_tick` can return
+        :attr:`~ObservationStateValues.FALSE` immediately.
         """
         goal_handle = future.result()
         if not goal_handle.accepted:
@@ -160,7 +151,7 @@ class NavigateActionServerTask(
 
     base_link: Body
     """
-    Base link of the robot, used for estimating the distance to the goal
+    Base link of the robot, used for estimating the distance to the goal.
     """
 
     def build_msg(self, context: MotionStatechartContext):
@@ -185,7 +176,9 @@ class NavigateActionServerTask(
 
     def build(self, context: MotionStatechartContext) -> NodeArtifacts:
         """
-        Builds the motion state node this includes creating the action client and setting the observation expression.
+        Builds the motion state node this includes creating the action client and
+        setting the observation expression.
+
         The observation is true if the robot is within 1cm of the target pose.
         """
         super().build(context)

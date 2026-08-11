@@ -73,13 +73,15 @@ from test.giskardpy_test.test_motion_statechart.debug_expression_helpers import 
     GOAL_COLOR,
     debug_expression_by_name,
 )
+from semantic_digital_twin.robots.pr2 import PR2Joint
 
 
 class TestCartesianPositionTrajectory:
 
     def _points_to_np(self, positions: list[Point3] | np.ndarray) -> np.ndarray:
         """
-        Convert a sequence of `Point3` or an `ndarray` of shape (N, 3) into an `ndarray` of shape (N, 3).
+        Convert a sequence of `Point3` or an `ndarray` of shape (N, 3) into an `ndarray`
+        of shape (N, 3).
         """
         if isinstance(positions, np.ndarray):
             if positions.ndim != 2 or positions.shape[1] != 3:
@@ -105,16 +107,19 @@ class TestCartesianPositionTrajectory:
         """
         Compare an executed Cartesian path against a reference list of positions.
 
-        The executed path is reconstructed from the `world_state_trajectory` by computing
-        forward kinematics for `tip_link` in the `root_link` frame at each recorded state.
-        For each executed point, the minimum Euclidean distance to the reference path is
-        computed and asserted to be within `tolerance`.
+        The executed path is reconstructed from the `world_state_trajectory` by
+        computing forward kinematics for `tip_link` in the `root_link` frame at each
+        recorded state. For each executed point, the minimum Euclidean distance to the
+        reference path is computed and asserted to be within `tolerance`.
 
-        :param positions: Reference path as `Point3` iterable or an array of shape (N, 3). All points are with respect to root_link
-        :param world_state_trajectory: Recorded joint-space trajectory with access to the world.
+        :param positions: Reference path as `Point3` iterable or an array of shape (N,
+            3). All points are with respect to root_link
+        :param world_state_trajectory: Recorded joint-space trajectory with access to
+            the world.
         :param root_link: Root kinematic frame for forward kinematics.
         :param tip_link: Tip kinematic frame for forward kinematics.
-        :param tolerance: Maximum allowed distance to the reference path for all samples.
+        :param tolerance: Maximum allowed distance to the reference path for all
+            samples.
         """
         ref_np = self._points_to_np(positions)
 
@@ -283,7 +288,9 @@ class TestCartesianPositionTrajectory:
 
 
 class TestCartesianTasks:
-    """Test suite for all Cartesian motion tasks."""
+    """
+    Test suite for all Cartesian motion tasks.
+    """
 
     def test_simple_cartesian_pose(self, cylinder_bot_world: World):
         tip = cylinder_bot_world.get_kinematic_structure_entity_by_name("bot")
@@ -309,7 +316,110 @@ class TestCartesianTasks:
         assert np.allclose(
             cylinder_bot_world.compute_forward_kinematics(cylinder_bot_world.root, tip),
             goal.goal_pose,
-            atol=goal.threshold,
+            atol=goal.translation_threshold,
+        )
+
+    def test_orientation_threshold_decouples_rotation_tolerance(
+        self, cylinder_bot_world: World
+    ):
+        """
+        A residual orientation error above ``threshold`` but below
+        ``orientation_threshold`` must count as goal reached -- a physically tracked arm
+        settles with a small orientation error that a shared position/rotation threshold
+        (meant as a position tolerance in meters) wrongly rejects, leaving the task
+        running forever.
+
+        The goal pose here only differs from the start pose by a 0.05 rad yaw, so on the
+        very first tick the position error is exactly zero while the rotation error is
+        0.05 rad -- isolating the rotation half of the observation.
+        """
+        tip = cylinder_bot_world.get_kinematic_structure_entity_by_name("bot")
+        goal_pose = Pose.from_xyz_rpy(yaw=0.05, reference_frame=cylinder_bot_world.root)
+
+        motion_statechart = MotionStatechart()
+        motion_statechart.add_nodes(
+            [
+                strict := CartesianPose(
+                    root_link=cylinder_bot_world.root,
+                    tip_link=tip,
+                    goal_pose=goal_pose,
+                    translation_threshold=0.01,
+                    name="strict",
+                ),
+                loose := CartesianPose(
+                    root_link=cylinder_bot_world.root,
+                    tip_link=tip,
+                    goal_pose=goal_pose,
+                    translation_threshold=0.01,
+                    orientation_threshold=0.1,
+                    name="loose",
+                ),
+            ]
+        )
+        motion_statechart.add_node(EndMotion.when_true(loose))
+
+        executor = Executor(MotionStatechartContext(world=cylinder_bot_world))
+        executor.compile(motion_statechart=motion_statechart)
+        executor.tick()
+
+        assert strict.observation_state == ObservationStateValues.FALSE
+        assert loose.observation_state == ObservationStateValues.TRUE
+
+    def test_end_motion_waits_for_convergence(self, cylinder_bot_world: World):
+        """
+        EndMotion.when_true(goal) must not end the motion the instant the task's own
+        goal-error threshold is crossed; it must wait until the robot's DOF velocities
+        have actually settled.
+
+        A loose ``threshold`` makes the task report "reached" long before the base has
+        slowed down, so the base is still moving fast when that happens.
+        """
+        tip = cylinder_bot_world.get_kinematic_structure_entity_by_name("bot")
+
+        motion_statechart = MotionStatechart()
+        motion_statechart.add_nodes(
+            [
+                goal := CartesianPose(
+                    root_link=cylinder_bot_world.root,
+                    tip_link=tip,
+                    goal_pose=Pose.from_xyz_rpy(
+                        x=1, reference_frame=cylinder_bot_world.root
+                    ),
+                    translation_threshold=0.5,
+                ),
+            ]
+        )
+        motion_statechart.add_node(EndMotion.when_true(goal))
+
+        executor = Executor(MotionStatechartContext(world=cylinder_bot_world))
+        executor.compile(motion_statechart=motion_statechart)
+
+        goal_reached_tick = None
+        for i in range(1000):
+            executor.tick()
+            if (
+                goal_reached_tick is None
+                and motion_statechart.observation_state[goal]
+                == ObservationStateValues.TRUE
+            ):
+                goal_reached_tick = i
+            if motion_statechart.is_end_motion():
+                break
+        else:
+            raise TimeoutError("motion never ended")
+
+        assert goal_reached_tick is not None
+        assert i > goal_reached_tick, (
+            "EndMotion ended on the same tick the task's own threshold was crossed, "
+            "before the controller had a chance to decelerate"
+        )
+        max_velocity = max(
+            abs(dof.variables.velocity.resolve())
+            for dof in cylinder_bot_world.active_degrees_of_freedom
+        )
+        assert max_velocity < 0.06, (
+            f"EndMotion ended while a DOF was still moving at {max_velocity} m/s or "
+            f"rad/s"
         )
 
     def test_long_goal(self, pr2_world_state_reset: World):
@@ -328,23 +438,23 @@ class TestCartesianTasks:
                 JointPositionList(
                     goal_state=JointState.from_str_dict(
                         {
-                            "torso_lift_joint": 0.2999225173357618,
-                            "head_pan_joint": 0.042,
-                            "head_tilt_joint": -0.37,
-                            "r_upper_arm_roll_joint": -0.9487714747527726,
-                            "r_shoulder_pan_joint": -1.0047307505973626,
-                            "r_shoulder_lift_joint": 0.48736790658811985,
-                            "r_forearm_roll_joint": -14.895833882874182,
-                            "r_elbow_flex_joint": -1.392377908925028,
-                            "r_wrist_flex_joint": -0.4548695149411013,
-                            "r_wrist_roll_joint": 0.11426798984097819,
-                            "l_upper_arm_roll_joint": 1.7383062350263658,
-                            "l_shoulder_pan_joint": 1.8799810286792007,
-                            "l_shoulder_lift_joint": 0.011627231224188975,
-                            "l_forearm_roll_joint": 312.67276414458695,
-                            "l_elbow_flex_joint": -2.0300928925694675,
-                            "l_wrist_flex_joint": -0.1,
-                            "l_wrist_roll_joint": -6.062015047706399,
+                            PR2Joint.TORSO_LIFT: 0.2999225173357618,
+                            PR2Joint.HEAD_PAN: 0.042,
+                            PR2Joint.HEAD_TILT: -0.37,
+                            PR2Joint.RIGHT_UPPER_ARM_ROLL: -0.9487714747527726,
+                            PR2Joint.RIGHT_SHOULDER_PAN: -1.0047307505973626,
+                            PR2Joint.RIGHT_SHOULDER_LIFT: 0.48736790658811985,
+                            PR2Joint.RIGHT_FOREARM_ROLL: -14.895833882874182,
+                            PR2Joint.RIGHT_ELBOW_FLEX: -1.392377908925028,
+                            PR2Joint.RIGHT_WRIST_FLEX: -0.4548695149411013,
+                            PR2Joint.RIGHT_WRIST_ROLL: 0.11426798984097819,
+                            PR2Joint.LEFT_UPPER_ARM_ROLL: 1.7383062350263658,
+                            PR2Joint.LEFT_SHOULDER_PAN: 1.8799810286792007,
+                            PR2Joint.LEFT_SHOULDER_LIFT: 0.011627231224188975,
+                            PR2Joint.LEFT_FOREARM_ROLL: 312.67276414458695,
+                            PR2Joint.LEFT_ELBOW_FLEX: -2.0300928925694675,
+                            PR2Joint.LEFT_WRIST_FLEX: -0.1,
+                            PR2Joint.LEFT_WRIST_ROLL: -6.062015047706399,
                         },
                         world=pr2_world_state_reset,
                     )
@@ -374,15 +484,17 @@ class TestCartesianTasks:
         expected = pr2_world_state_reset.transform(tip_goal, root)
 
         motion_statechart = MotionStatechart()
-        cart_goal = CartesianPose(
-            root_link=root,
-            tip_link=tip,
-            goal_pose=tip_goal,
+
+        motion_statechart.add_nodes(
+            [
+                cart_goal := CartesianPose(
+                    root_link=root,
+                    tip_link=tip,
+                    goal_pose=tip_goal,
+                ),
+                EndMotion.when_true(cart_goal),
+            ]
         )
-        motion_statechart.add_node(cart_goal)
-        end = EndMotion()
-        motion_statechart.add_node(end)
-        end.start_condition = cart_goal.observation_variable
 
         executor = Executor(
             MotionStatechartContext(
@@ -395,11 +507,13 @@ class TestCartesianTasks:
         assert np.allclose(
             executor.context.world.compute_forward_kinematics(root, tip),
             expected,
-            atol=cart_goal.threshold,
+            atol=cart_goal.translation_threshold,
         )
 
     def test_front_facing_orientation(self, _hsr_world_setup: World):
-        """Test combined position and orientation control in parallel."""
+        """
+        Test combined position and orientation control in parallel.
+        """
         with _hsr_world_setup.modify_world():
             box = Body(
                 name=PrefixedName("muh"),
@@ -499,7 +613,7 @@ class TestCartesianTasks:
             root, tip
         )
         assert np.allclose(
-            forward_kinematics, tip_goal2.to_np(), atol=cart_goal2.threshold
+            forward_kinematics, tip_goal2.to_np(), atol=cart_goal2.translation_threshold
         )
 
     def test_cart_goal_sequence_on_start(self, pr2_world_state_reset: World):
@@ -552,10 +666,14 @@ class TestCartesianTasks:
             root, tip
         )
         expected = np.eye(4)
-        assert np.allclose(forward_kinematics, expected, atol=cart_goal2.threshold)
+        assert np.allclose(
+            forward_kinematics, expected, atol=cart_goal2.translation_threshold
+        )
 
     def test_CartesianOrientation(self, pr2_world_state_reset: World):
-        """Test basic CartesianOrientation goal."""
+        """
+        Test basic CartesianOrientation goal.
+        """
         tip = pr2_world_state_reset.get_kinematic_structure_entity_by_name(
             "base_footprint"
         )
@@ -895,7 +1013,9 @@ class TestCartesianTasks:
         assert cart_straight.observation_state == ObservationStateValues.TRUE
 
     def test_cartesian_pose_straight(self, pr2_world_state_reset: World):
-        """Test CartesianPositionStraight basic functionality."""
+        """
+        Test CartesianPositionStraight basic functionality.
+        """
         tip = pr2_world_state_reset.get_kinematic_structure_entity_by_name(
             "base_footprint"
         )
@@ -925,6 +1045,48 @@ class TestCartesianTasks:
         assert np.allclose(
             cart_straight.goal_pose.to_np(), goal_pose.to_np(), atol=0.015
         )
+
+    def test_soft_trunk_cartesian_position(self):
+        """
+        Verifies that Giskardpy can solve and execute a CartesianPosition task for the
+        procedurally built Piecewise Constant Curvature SoftTrunk robot.
+        """
+        from semantic_digital_twin.datastructures.soft_trunk import (
+            SoftTrunk,
+            SoftTrunkSection,
+        )
+
+        world = World()
+        # Define 3 identical sections of 0.3m, 0.02m radius, and 10 resolution
+        sections = [SoftTrunkSection(length=0.3, radius=0.02, resolution=10)] * 3
+        trunk = SoftTrunk.build_piecewise_constant_curvature(world, sections)
+
+        # Define a reachable Cartesian target point relative to the base root
+        goal_point = Point3(0.3, 0.0, 0.6, reference_frame=world.root)
+
+        msc = MotionStatechart()
+        goal = CartesianPosition(
+            root_link=world.root,
+            tip_link=trunk.arms[0].tip,
+            goal_point=goal_point,
+        )
+        msc.add_node(goal)
+        msc.add_node(EndMotion.when_true(goal))
+
+        kin_sim = Executor(MotionStatechartContext(world=world))
+        kin_sim.compile(motion_statechart=msc)
+        kin_sim.tick_until_end()
+
+        # Retrieve the final tip pose
+        tip_body = trunk.arms[0].tip
+        fk = world.compute_forward_kinematics_np(world.root, tip_body)
+
+        # Verify that the tip reached the target point within the goal threshold
+        actual_position = fk[:3, 3]
+        target_position = goal_point.to_np()[:3]
+        distance_error = np.linalg.norm(actual_position - target_position)
+
+        assert distance_error <= goal.threshold
 
 
 class TestDiffDriveBaseGoal:
@@ -977,6 +1139,32 @@ class TestDiffDriveBaseGoal:
             atol=1e-2,
         )
 
+    def test_custom_threshold_applies_to_both_translation_and_orientation(
+        self, cylinder_bot_diff_world
+    ):
+        """
+        DifferentialDriveBaseGoal exposes a single ``threshold`` field for its callers,
+        so it must feed both of CartesianPose's translation_threshold and
+        orientation_threshold -- otherwise a caller raising ``threshold`` only relaxes
+        the position tolerance while the rotation tolerance silently stays at
+        CartesianPose's own hardcoded default.
+        """
+        goal_pose = Pose.from_xyz_rpy(
+            x=1, y=1, yaw=np.pi / 4, reference_frame=cylinder_bot_diff_world.root
+        )
+        motion_statechart = MotionStatechart()
+        motion_statechart.add_node(
+            goal := DifferentialDriveBaseGoal(goal_pose=goal_pose, threshold=0.3)
+        )
+        motion_statechart.add_node(EndMotion.when_true(goal))
+
+        executor = Executor(MotionStatechartContext(world=cylinder_bot_diff_world))
+        executor.compile(motion_statechart=motion_statechart)
+
+        for step in goal.nodes[1:]:
+            assert step.translation_threshold == 0.3
+            assert step.orientation_threshold == 0.3
+
 
 class TestVelocityTasks:
     def _build_msc(self, goal_node, limit_node) -> MotionStatechart:
@@ -992,8 +1180,8 @@ class TestVelocityTasks:
 
     def _compile_msc_and_run_until_end(self, world: World, goal_node, limit_node):
         """
-        Build the MSC (no extra nodes), compile into an Executor,
-        run until end and return (control_cycles, executor)
+        Build the MSC (no extra nodes), compile into an Executor, run until end and
+        return (control_cycles, executor)
         """
         motion_statechart = self._build_msc(goal_node=goal_node, limit_node=limit_node)
         executor = Executor(MotionStatechartContext(world=world))
@@ -1015,8 +1203,8 @@ class TestVelocityTasks:
         self, pr2_world_state_reset: World, goal_type: str, limit_cls: type
     ):
         """
-        Tests that velocity limit's observation variable can trigger a CancelMotion
-        when the optimizer chooses to violate the limit.
+        Tests that velocity limit's observation variable can trigger a CancelMotion when
+        the optimizer chooses to violate the limit.
         """
         tip = pr2_world_state_reset.get_kinematic_structure_entity_by_name(
             "base_footprint"
@@ -1030,7 +1218,7 @@ class TestVelocityTasks:
                 root_link=root,
                 tip_link=tip,
                 goal_point=Point3(1, 0, 0, reference_frame=tip),
-                weight=DefaultWeights.WEIGHT_ABOVE_CA,
+                weight=DefaultWeights.WEIGHT_ABOVE_COLLISION_AVOIDANCE,
             )
         else:
             goal = CartesianOrientation(
@@ -1039,11 +1227,13 @@ class TestVelocityTasks:
                 goal_orientation=RotationMatrix.from_rpy(
                     yaw=np.pi / 2, reference_frame=tip
                 ),
-                weight=DefaultWeights.WEIGHT_ABOVE_CA,
+                weight=DefaultWeights.WEIGHT_ABOVE_COLLISION_AVOIDANCE,
             )
 
         low_weight_limit = limit_cls(
-            root_link=root, tip_link=tip, weight=DefaultWeights.WEIGHT_BELOW_CA
+            root_link=root,
+            tip_link=tip,
+            weight=DefaultWeights.WEIGHT_BELOW_COLLISION_AVOIDANCE,
         )
         motion_statechart = self._build_msc(goal_node=goal, limit_node=low_weight_limit)
         cancel_motion = CancelMotion(exception=Exception("test"))
@@ -1147,8 +1337,8 @@ class TestVelocityTasks:
 
 class TestDebugExpressions:
     """
-    Cartesian tasks register a goal and a current debug expression, named with the
-    task name and colored green (goal) and red (current).
+    Cartesian tasks register a goal and a current debug expression, named with the task
+    name and colored green (goal) and red (current).
     """
 
     def test_cartesian_position(self, cylinder_bot_world: World):
