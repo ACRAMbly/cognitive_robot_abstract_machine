@@ -190,8 +190,8 @@ class TracyLeftGripper(
                 zip(
                     left_gripper_joints,
                     [
-                        0.8,
-                        -0.8,
+                        0.35,
+                        -0.35,
                     ],
                 )
             ),
@@ -237,7 +237,7 @@ class TracyRightGripper(
 
         gripper_close = JointState.from_mapping(
             name=PrefixedName("right_gripper_close", prefix=self.name.name),
-            mapping=dict(zip(right_gripper_joints, [0.8, -0.8])),
+            mapping=dict(zip(right_gripper_joints, [0.35, -0.35])),
             state_type=GripperState.CLOSE,
         )
 
