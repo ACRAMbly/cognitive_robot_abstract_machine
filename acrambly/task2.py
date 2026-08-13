@@ -30,20 +30,9 @@ from coraplex.datastructures.enums import Arms, ApproachDirection, VerticalAlign
 from coraplex.datastructures.grasp import GraspDescription
 from semantic_digital_twin.adapters.ros.visualization.viz_marker import VizMarkerPublisher
 from krrood.entity_query_language.factories import entity, variable
+from sub_parts.shared.utils import spawn_body
 
 rclpy.init()
-
-def spawn_body(world, obj, x, y, z):
-    with obj.modify_world():
-        obj.bodies[0].name.prefix = "objects"
-    with world.modify_world():
-        connection = Connection6DoF.create_with_dofs(
-            parent=world.root, child=obj.root, world=world
-        )
-        world.merge_world(obj, connection)
-        connection.origin = HomogeneousTransformationMatrix.from_xyz_rpy(
-            x=x, y=y, z=z,reference_frame=obj
-        )
 
 sim = True
 assets_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets")
@@ -78,9 +67,9 @@ else:
         evaluate_conditions=False,
     )
 
-spawn_body(world, STLParser(os.path.join(assets_dir, "child_cube_0_scaled.stl")).parse(), 0.5, -0.5, 0.93)
-spawn_body(world, STLParser(os.path.join(assets_dir, "child_cube_1_scaled.stl")).parse(), 0.8, -0.6, 0.93)
-spawn_body(world, STLParser(os.path.join(assets_dir, "child_cube_2_scaled.stl")).parse(), 1.0, -0.3, 0.93)
+spawn_body(world, (0.5, -0.5, 0.93), (0.5, 0, 0), "mesh", mesh_filename="child_cube_0_scaled.stl")
+spawn_body(world, (0.8, -0.6, 0.93), (0.5, 0, 0), "mesh", mesh_filename="child_cube_1_scaled.stl")
+spawn_body(world, (1.0, -0.3, 0.93), (0.5, 0, 0), "mesh", mesh_filename="child_cube_2_scaled.stl")
 
 objects = world.bodies
 
