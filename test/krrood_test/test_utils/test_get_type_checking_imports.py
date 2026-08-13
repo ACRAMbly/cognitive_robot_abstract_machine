@@ -4,7 +4,10 @@ from pathlib import Path
 from collections import defaultdict
 import sys
 import krrood.utils as krrood_utils
-from krrood.utils import get_scope_from_imports, _warn_about_unresolvable_type_checking_import_once
+from krrood.utils import (
+    get_scope_from_imports,
+    _warn_about_unresolvable_type_checking_import_once,
+)
 
 
 def test_get_type_checking_imports(tmp_path):
@@ -63,23 +66,27 @@ if TYPE_CHECKING:
     assert scope["json"] == json
 
 
-def test_repeated_unresolvable_type_checking_import_warns_only_once(tmp_path, monkeypatch):
-    """A ``TYPE_CHECKING`` import that keeps failing because its module is still partially
-    initialized (an active circular import) must not flood the log: the same
-    ``(module, name, file)`` failure repeats identically on every attempt, so only the first one
+def test_repeated_unresolvable_type_checking_import_logs_only_once(
+    tmp_path, monkeypatch
+):
+    """
+    A ``TYPE_CHECKING`` import that keeps failing because its module is still partially
+    initialized (an active circular import) must not flood the log: the same ``(module,
+    name, file)`` failure repeats identically on every attempt, so only the first one
     should be logged.
 
-    This reproduces what happens when many dataclasses across a codebase each need to resolve the
-    same ``TYPE_CHECKING``-only name from a module still mid-import: every one of those attempts
-    raises an identical, already self-diagnosing ``AttributeError`` and previously logged its own
-    warning, flooding the log with thousands of duplicate lines for a single, known-transient cause.
+    This reproduces what happens when many dataclasses across a codebase each need to
+    resolve the same ``TYPE_CHECKING``-only name from a module still mid-import: every
+    one of those attempts raises an identical, already self-diagnosing
+    ``AttributeError`` and previously logged its own line, flooding the log with
+    thousands of duplicates for a single, known-transient cause.
     """
     _warn_about_unresolvable_type_checking_import_once.cache_clear()
     provider_module = "test.krrood_test.dataset.latebound_annotation_type"
 
-    warning_calls = []
+    log_calls = []
     monkeypatch.setattr(
-        krrood_utils.logger, "warning", lambda message: warning_calls.append(message)
+        krrood_utils.logger, "debug", lambda message: log_calls.append(message)
     )
 
     source = f"""
@@ -102,4 +109,4 @@ if TYPE_CHECKING:
         else:
             sys.modules.pop(provider_module, None)
 
-    assert len(warning_calls) == 1
+    assert len(log_calls) == 1

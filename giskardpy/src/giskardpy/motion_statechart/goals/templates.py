@@ -7,13 +7,20 @@ from typing_extensions import Optional
 
 from krrood.symbolic_math.symbolic_math import sum
 from giskardpy.motion_statechart.context import MotionStatechartContext
-from giskardpy.motion_statechart.graph_node import Goal, MotionStatechartNode, NodeArtifacts
+from giskardpy.motion_statechart.graph_node import (
+    Goal,
+    MotionStatechartNode,
+    NodeArtifacts,
+    TerminalNode,
+)
 
 
 @dataclass(repr=False, eq=False)
 class Sequence(Goal):
     """
-    Takes a list of nodes and wires their start/end conditions such that they are executed in order.
+    Takes a list of nodes and wires their start/end conditions such that they are
+    executed in order.
+
     Its observation is the observation of the last node in the sequence.
     """
 
@@ -31,10 +38,12 @@ class Sequence(Goal):
 
             if last_node is not None:
                 node.start_condition = last_node.observation_variable
-            node.end_condition = node.observation_variable
+            # A node that ends the motion has nothing left to transition to.
+            if not isinstance(node, TerminalNode):
+                node.end_condition = node.observation_variable
             last_node = node
 
-    def build(self, context: MotionStatechartContext) -> NodeArtifacts:
+    def build_artifacts(self, context: MotionStatechartContext) -> NodeArtifacts:
         return NodeArtifacts(observation=self.nodes[-1].observation_variable)
 
 
@@ -42,13 +51,16 @@ class Sequence(Goal):
 class Parallel(Goal):
     """
     Takes a list of nodes and executes them in parallel.
-    This nodes' observation state turns True when up to `minimum_success` nodes are True.
+
+    This nodes' observation state turns True when up to `minimum_success` nodes are
+    True.
     """
 
     nodes: List[MotionStatechartNode] = field(default_factory=list, init=True)
     minimum_success: Optional[int] = field(default=None, kw_only=True)
     """
     Defines the minimum number of nodes that must be True for the goal to be achieved.
+
     Defaults to None, which means that all nodes must be True.
     """
 
@@ -56,7 +68,7 @@ class Parallel(Goal):
         for node in self.nodes:
             self.add_node(node)
 
-    def build(self, context: MotionStatechartContext) -> NodeArtifacts:
+    def build_artifacts(self, context: MotionStatechartContext) -> NodeArtifacts:
         true_observation_variables = [
             x.observation_variable == True for x in self.nodes
         ]

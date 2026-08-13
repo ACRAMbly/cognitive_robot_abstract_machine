@@ -36,7 +36,8 @@ from semantic_digital_twin.semantic_annotations.semantic_annotations import (
 @dataclass
 class DetectAction(ActionDescription):
     """
-    Detects an object that fits the object description and returns an object designator_description describing the object.
+    Detects an object that fits the object description and returns an object
+    designator_description describing the object.
 
     If no object is found, an PerceptionObjectNotFound error is raised.
     """
@@ -47,18 +48,30 @@ class DetectAction(ActionDescription):
     """
     state: Optional[DetectionState] = None
     """
-    The state of the detection, e.g Start Stop for continues perception
+    The state of the detection, e.g Start Stop for continues perception.
     """
+
     object_sem_annotation: Type[SemanticAnnotation] = None
     """
-    The type of the object that should be detected, only considered if technique is equal to Type.
+    The type of the object that should be detected, only considered if technique is
+    equal to Type.
 
     .. note:: Defaults to ``None``; kept as ``Type[...]`` (not ``Optional``) because
         ormatic cannot map ``Optional[Type]`` and would otherwise drop this column.
     """
+
     region: Optional[Region] = None
     """
-    The region in which the object should be detected
+    The region in which the object should be detected.
+    """
+
+    trust_detected_orientation: bool = True
+    """
+    Whether to trust the perception source's detected orientation.
+
+    When False, only the detected position corrects the object's pose in the world; its
+    existing orientation is kept. See
+    :attr:`~coraplex.perception.PerceptionQuery.trust_detected_orientation`.
     """
 
     @property
@@ -93,7 +106,13 @@ class DetectAction(ActionDescription):
         object_sem_annotation = (
             self.object_sem_annotation or SemanticEnvironmentAnnotation
         )
-        return PerceptionQuery(object_sem_annotation, region_bb, self.robot, self.world)
+        return PerceptionQuery(
+            object_sem_annotation,
+            region_bb,
+            self.robot,
+            self.world,
+            trust_detected_orientation=self.trust_detected_orientation,
+        )
 
 
 @dataclass
@@ -104,7 +123,9 @@ class MoveToReach(ActionDescription):
 
     target_pose_offset_robot: Pose2D
     """
-    The pose where the robot should stand with regard to the end_effector target pose. 2D since z-axis is not relevant.
+    The pose where the robot should stand with regard to the end_effector target pose.
+
+    2D since z-axis is not relevant.
     """
 
     hip_rotation: float

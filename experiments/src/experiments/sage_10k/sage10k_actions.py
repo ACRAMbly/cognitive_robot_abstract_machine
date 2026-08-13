@@ -2,7 +2,7 @@ from dataclasses import dataclass
 
 import rustworkx
 
-from krrood.entity_query_language.factories import underspecified, variable
+from krrood.entity_query_language.factories import a, an, variable
 from coraplex.datastructures.enums import Arms, ApproachDirection, VerticalAlignment
 from coraplex.datastructures.grasp import GraspDescription
 from coraplex.plans.factories import sequential
@@ -13,9 +13,11 @@ from coraplex.robot_plans.actions.core.misc import MoveToReach
 from semantic_digital_twin.robots.robot_parts import EndEffector
 from semantic_digital_twin.semantic_annotations.semantic_annotations import Door
 from semantic_digital_twin.spatial_types import Pose2D, Pose
-from semantic_digital_twin.world_description.graph_of_convex_sets import (
-    navigation_map_at_target,
+from semantic_digital_twin.world_description.graph_of_convex_sets.base import (
     translate_free_space_to_where_condition,
+)
+from semantic_digital_twin.world_description.graph_of_convex_sets.boxes import (
+    navigation_map_at_target,
 )
 from semantic_digital_twin.exceptions import PointOccupiedError
 
@@ -26,7 +28,8 @@ class Sage10kOpenDoor(ActionDescription):
     Open a door.
 
     This action creates a Graph of Convex Sets (GCS) navigation map at the door handle.
-    Using this GCS, an underspecified move to reach plan is sequenced with an opening action.
+    Using this GCS, an underspecified move to reach plan is sequenced with an opening
+    action.
     """
 
     door: Door
@@ -69,13 +72,13 @@ class Sage10kOpenDoor(ActionDescription):
             )
         )
 
-        reach_query = underspecified(MoveToReach)(
-            target_pose_offset_robot=underspecified(Pose2D)(
+        reach_query = a(MoveToReach)(
+            target_pose_offset_robot=a(Pose2D)(
                 x=..., y=..., yaw=..., reference_frame=None
             ),
             hip_rotation=0.0,
             target_pose_end_effector=pre_grasp_pose,
-            grasp_description=underspecified(GraspDescription)(
+            grasp_description=a(GraspDescription)(
                 approach_direction=ApproachDirection.FRONT,
                 vertical_alignment=VerticalAlignment.NoAlignment,
                 end_effector=variable(EndEffector, self.world.semantic_annotations),

@@ -4,31 +4,44 @@ from dataclasses import dataclass, field
 
 import krrood.symbolic_math.symbolic_math as sm
 from giskardpy.motion_statechart.context import MotionStatechartContext
-from giskardpy.motion_statechart.graph_node import Task, NodeArtifacts
+from giskardpy.motion_statechart.error_signals import SymbolicErrorSignal
+from giskardpy.motion_statechart.graph_node import ConvergingTask, NodeArtifacts
 from semantic_digital_twin.world_description.world_entity import Body
 
 
 @dataclass
-class MaxManipulability(Task):
+class MaxManipulability(ConvergingTask):
     """
-    This goal maximizes the manipulability of the kinematic chain between root_link and tip_link.
-    This chain should only include rotational joint and no linear joints i.e. torso lift joints or odometry joints.
+    This goal maximizes the manipulability of the kinematic chain between root_link and
+    tip_link.
+
+    This chain should only include rotational joint and no linear joints i.e. torso lift
+    joints or odometry joints.
     """
 
     root_link: Body = field(kw_only=True)
     """
     The root of the kinematic chain whose manipulability is maximized.
     """
+
     tip_link: Body = field(kw_only=True)
     """
     The tip of the kinematic chain whose manipulability is maximized.
     """
+
     manipulability_threshold: float = field(default=0.5, kw_only=True)
     """
-    Manipulability value the goal drives the measure towards; also defines the observation threshold.
+    Manipulability value the goal drives the measure towards.
     """
 
-    def build(self, context: MotionStatechartContext) -> NodeArtifacts:
+    def build_artifacts(self, context: MotionStatechartContext) -> NodeArtifacts:
+        """
+        Build a constraint that drives the manipulability measure towards
+        :attr:`manipulability_threshold`.
+
+        :param context: Provides access to world model and kinematic expressions.
+        :return: The artifacts of this task, whose error is how far the manipulability measure is from its target value.
+        """
         artifacts = NodeArtifacts()
         root_P_tip = context.world.compose_forward_kinematics_expression(
             self.root_link, self.tip_link
@@ -48,7 +61,7 @@ class MaxManipulability(Task):
             name=self.name,
         )
 
-        artifacts.observation = (
-            sm.abs(self.manipulability_threshold - manipulability) <= 0.01
+        artifacts.error = SymbolicErrorSignal(
+            sm.abs(self.manipulability_threshold - manipulability)
         )
         return artifacts

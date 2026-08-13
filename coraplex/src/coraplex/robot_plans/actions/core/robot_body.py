@@ -20,6 +20,7 @@ from coraplex.datastructures.enums import AxisIdentifier, Arms
 from coraplex.datastructures.trajectory import PoseTrajectory
 from coraplex.plans.factories import execute_single, sequential
 from coraplex.robot_plans.actions.base import ActionDescription, DescriptionType
+from coraplex.robot_plans.mixins import HasMaxJointVelocity
 from coraplex.robot_plans.motions.gripper import (
     MoveGripperMotion,
     MoveTCPWaypointsMotion,
@@ -60,7 +61,7 @@ class MoveTorsoAction(ActionDescription):
         variables: Dict[str, Variable], context: Context, kwargs: Dict[str, Any]
     ) -> SymbolicExpression | bool:
         """
-        The target joint state for the torso needs to be achieved
+        The target joint state for the torso needs to be achieved.
         """
         joint_state = context.robot.get_torso().get_joint_state_by_type(
             kwargs["torso_state"]
@@ -76,11 +77,12 @@ class SetGripperAction(ActionDescription):
 
     gripper: Arms
     """
-    The gripper that should be set 
+    The gripper that should be set.
     """
+
     motion: GripperState
     """
-    The motion that should be set on the gripper
+    The motion that should be set on the gripper.
     """
 
     @property
@@ -92,7 +94,7 @@ class SetGripperAction(ActionDescription):
 
 
 @dataclass
-class ParkArmsAction(ActionDescription):
+class ParkArmsAction(ActionDescription, HasMaxJointVelocity):
     """
     Park the arms of the robot.
     """
@@ -107,7 +109,11 @@ class ParkArmsAction(ActionDescription):
         joint_names, joint_poses = self.get_joint_poses()
 
         return execute_single(
-            MoveJointsMotion(names=joint_names, positions=joint_poses)
+            MoveJointsMotion(
+                names=joint_names,
+                positions=joint_poses,
+                max_joint_velocity=self.max_joint_velocity,
+            )
         )
 
     def get_joint_poses(self) -> Tuple[List[str], List[float]]:
@@ -127,7 +133,9 @@ class ParkArmsAction(ActionDescription):
 @dataclass
 class CarryAction(ActionDescription):
     """
-    Parks the robot's arms. And align the arm with the given Axis of a frame.
+    Parks the robot's arms.
+
+    And align the arm with the given Axis of a frame.
     """
 
     arm: Arms
@@ -211,8 +219,8 @@ class CarryAction(ActionDescription):
 @dataclass
 class FollowToolCenterPointPathAction(ActionDescription):
     """
-    Represents an action to move a robotic arm's TCP (Tool Center Point) along a
-    path of poses.
+    Represents an action to move a robotic arm's TCP (Tool Center Point) along a path of
+    poses.
     """
 
     target_locations: PoseTrajectory
