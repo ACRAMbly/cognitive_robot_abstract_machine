@@ -11,7 +11,10 @@ Contents
 - ``build_park_arms_plan()`` – move both arms to park position
 """
 
+from math import pi
+
 from semantic_digital_twin.robots.tracy import Tracy
+from semantic_digital_twin.spatial_types import Point3
 from semantic_digital_twin.spatial_types.spatial_types import Pose
 from semantic_digital_twin.world import World
 from semantic_digital_twin.world_description.world_entity import Body
@@ -215,3 +218,162 @@ def build_handover_object_plan(
         ],
         context=context,
     ).plan
+
+
+def build_hand_over2_plan(
+    world: World,
+    tracy: Tracy,
+    context: Context,
+    cube0: Body,
+    cube1: Body,
+    cube2: Body,
+) -> Plan | None:
+    """Build a right-to-left handover plan for three cubes.
+
+    For each cube the right arm picks it up from the top (``red_pick_grasp``),
+    then reaches the handover pose ending sideways (``red_handover_grasp``,
+    ``VerticalAlignment.NoAlignment``) to present the cube. The left arm takes
+    over from the top (``blue_grasp``) and finally places the cube from the top
+    (``blue_place_grasp``).
+    """
+    end_effectors = Tracy.get_end_effectors(tracy)
+
+    grasp_descriptions = {
+        "cube0": {
+            "red_pick_grasp": GraspDescription(
+                approach_direction=ApproachDirection.LEFT,
+                vertical_alignment=VerticalAlignment.TOP,
+                end_effector=end_effectors[1],
+                grasp_offset=Point3(0.0, -0.08, 0.0),
+            ),
+            "red_handover_grasp": GraspDescription(
+                approach_direction=ApproachDirection.RIGHT,
+                vertical_alignment=VerticalAlignment.NoAlignment,
+                rotate_gripper=True,
+                end_effector=end_effectors[1],
+                grasp_offset=Point3(0.0, -0.08, 0.0),
+            ),
+            "blue_grasp": GraspDescription(
+                approach_direction=ApproachDirection.LEFT,
+                vertical_alignment=VerticalAlignment.BOTTOM,
+                end_effector=end_effectors[0],
+                grasp_offset=Point3(0.0, 0.08, 0.0),
+            ),
+            "blue_place_grasp": GraspDescription(
+                approach_direction=ApproachDirection.LEFT,
+                vertical_alignment=VerticalAlignment.TOP,
+                end_effector=end_effectors[0],
+                grasp_offset=Point3(0.0, 0.08, 0.0),
+            ),
+        },
+        "cube1": {
+            "red_pick_grasp": GraspDescription(
+                approach_direction=ApproachDirection.FRONT,
+                vertical_alignment=VerticalAlignment.TOP,
+                end_effector=end_effectors[1],
+                grasp_offset=Point3(0.06, -0.017, -0.01),
+            ),
+            "red_handover_grasp": GraspDescription(
+                approach_direction=ApproachDirection.BACK,
+                vertical_alignment=VerticalAlignment.NoAlignment,
+                rotate_gripper=True,
+                end_effector=end_effectors[1],
+                grasp_offset=Point3(0.06, -0.017, -0.01),
+            ),
+            "blue_grasp": GraspDescription(
+                approach_direction=ApproachDirection.FRONT,
+                vertical_alignment=VerticalAlignment.BOTTOM,
+                end_effector=end_effectors[0],
+                grasp_offset=Point3(-0.06, 0.033, -0.01),
+            ),
+            "blue_place_grasp": GraspDescription(
+                approach_direction=ApproachDirection.FRONT,
+                vertical_alignment=VerticalAlignment.TOP,
+                end_effector=end_effectors[0],
+                grasp_offset=Point3(-0.06, 0.033, -0.01),
+            ),
+        },
+        "cube2": {
+            "red_pick_grasp": GraspDescription(
+                approach_direction=ApproachDirection.FRONT,
+                vertical_alignment=VerticalAlignment.TOP,
+                end_effector=end_effectors[1],
+                grasp_offset=Point3(0.016, -0.015, 0.03),
+            ),
+            "red_handover_grasp": GraspDescription(
+                approach_direction=ApproachDirection.BACK,
+                vertical_alignment=VerticalAlignment.NoAlignment,
+                rotate_gripper=True,
+                end_effector=end_effectors[1],
+                grasp_offset=Point3(0.016, -0.015, 0.03),
+            ),
+            "blue_grasp": GraspDescription(
+                approach_direction=ApproachDirection.FRONT,
+                vertical_alignment=VerticalAlignment.BOTTOM,
+                end_effector=end_effectors[0],
+                grasp_offset=Point3(-0.09, -0.015, -0.01),
+            ),
+            "blue_place_grasp": GraspDescription(
+                approach_direction=ApproachDirection.FRONT,
+                vertical_alignment=VerticalAlignment.TOP,
+                end_effector=end_effectors[0],
+                grasp_offset=Point3(-0.09, -0.015, -0.01),
+            ),
+        },
+    }
+
+    handover_pose = {
+        "cube0": Pose.from_xyz_rpy(0.8, -0.08, 1.1, reference_frame=world.root),
+        "cube1": Pose.from_xyz_rpy(
+            0.8, -0.08, 1.1, yaw=-pi / 2, reference_frame=world.root
+        ),
+        "cube2": Pose.from_xyz_rpy(
+            0.8, -0.08, 1.1, yaw=-pi / 2, reference_frame=world.root
+        ),
+    }
+
+    place_pose = {
+        "cube0": Pose.from_xyz_rpy(0.5, 0.4, 0.95, reference_frame=world.root),
+        "cube1": Pose.from_xyz_rpy(0.6, 0.4, 0.95, reference_frame=world.root),
+        "cube2": Pose.from_xyz_rpy(1.0, 0.4, 0.95, reference_frame=world.root),
+    }
+
+    actions: list = []
+    for cube, name in ((cube0, "cube0"), (cube1, "cube1"), (cube2, "cube2")):
+        actions.extend(
+            [
+                ParkArmsAction(Arms.BOTH),
+                PickUpAction(
+                    cube,
+                    Arms.RIGHT,
+                    grasp_descriptions[name]["red_pick_grasp"],
+                ),
+                ReachAction(
+                    target_pose=handover_pose[name],
+                    object_designator=cube,
+                    arm=Arms.RIGHT,
+                    grasp_description=grasp_descriptions[name]["red_handover_grasp"],
+                ),
+                ReachAction(
+                    target_pose=grasp_descriptions[name][
+                        "blue_grasp"
+                    ].grasp_target_pose(cube),
+                    object_designator=cube,
+                    arm=Arms.LEFT,
+                    grasp_description=grasp_descriptions[name]["blue_grasp"],
+                ),
+                MoveGripperMotion(motion=GripperState.CLOSE, gripper=Arms.LEFT),
+                AttachNode(body=cube, new_parent=end_effectors[0].tool_frame),
+                MoveGripperMotion(motion=GripperState.OPEN, gripper=Arms.RIGHT),
+                ParkArmsAction(Arms.BOTH),
+                PlaceAction(
+                    object_designator=cube,
+                    target_location=place_pose[name],
+                    arm=Arms.LEFT,
+                    grasp_description=grasp_descriptions[name]["blue_place_grasp"],
+                ),
+                ParkArmsAction(Arms.BOTH),
+            ]
+        )
+
+    return sequential(actions, context=context).plan

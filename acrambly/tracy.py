@@ -22,6 +22,8 @@ Usage
     python tracy.py --env real --task cubes       # Real robot through Giskard
     python tracy.py --env real --task park_arms
     python tracy.py --env sim --task hand_over
+    python tracy.py --env sim --task hand_over2     # right-to-left handover
+    python tracy.py --env real --task hand_over2
 """
 
 import logging
@@ -57,6 +59,8 @@ from sub_parts.shared.task_park_arms import setup_and_build_plan as park_arms_ta
 from sub_parts.sim.task_cubes import setup_and_build_plan as cubes_sim_task
 from sub_parts.sim.task_handover import setup_and_build_plan as hand_over_task
 from sub_parts.sim.task_tetris import setup_and_build_plan as task_tetris_task
+from sub_parts.real.task_hand_over2 import setup_and_build_plan as hand_over2_real_task
+from sub_parts.sim.task_hand_over2 import setup_and_build_plan as hand_over2_sim_task
 
 # Enable runtime action logging (fires only during actual robot execution)
 logging.getLogger("coraplex.plans.executables").setLevel(logging.INFO)
@@ -75,6 +79,8 @@ TASKS: dict[tuple[str, str], TaskFactory] = {
     ("hand_over", "real"): hand_over_task,
     ("task_tetris", "sim"): task_tetris_task,
     ("task_tetris", "real"): task_tetris_task,
+    ("hand_over2", "sim"): hand_over2_sim_task,
+    ("hand_over2", "real"): hand_over2_real_task,
 }
 
 
@@ -125,7 +131,7 @@ def setup_sim(node: Node) -> tuple[World, object, Context]:
 # ---------------------------------------------------------------------------
 def main(
     env: Annotated[Literal["real", "sim"], typer.Option("--env", "-e")],
-    task: Annotated[Literal["park_arms", "cubes", "hand_over", "task_tetris"], typer.Option("--task", "-t")],
+    task: Annotated[Literal["park_arms", "cubes", "hand_over", "hand_over2", "task_tetris"], typer.Option("--task", "-t")],
 ):
     rclpy.init()
 
