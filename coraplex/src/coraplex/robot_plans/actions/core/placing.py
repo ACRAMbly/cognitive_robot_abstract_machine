@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from typing_extensions import Any, Dict
+from typing_extensions import Any, Dict, Optional
 
 from coraplex.plans.attachment_nodes import DetachNode
 from coraplex.plans.plan_node import PlanNode
@@ -68,6 +68,13 @@ class PlaceAction(ActionDescription, PlaceTuningParameters, HasGraspDetectionThr
     :func:`~semantic_digital_twin.reasoning.robot_predicates.is_body_gripped`).
     """
 
+    grasp_description: Optional[GraspDescription] = field(default=None, kw_only=True)
+    """
+    The grasp description of the arm currently holding the object, used to compute the
+    place sequence. When omitted, the grasp description of the previous
+    :class:`PickUpAction` is used instead.
+    """
+
     def _retract_plan(self, retract_pose: Pose) -> PlanNode:
         """
         :return: The plan that re-parents the placed object back to the world and
@@ -87,20 +94,21 @@ class PlaceAction(ActionDescription, PlaceTuningParameters, HasGraspDetectionThr
     @property
     def _action_plan(self) -> PlanNode:
         end_effector = ViewManager.get_arm_view(self.arm, self.robot).end_effector
-        previous_pick = self.plan_node.get_previous_node_by_designator_type(
-            PickUpAction
-        )
-        previous_grasp_description = (
-            previous_pick.designator.grasp_description
-            if previous_pick
-            else GraspDescription(
-                ApproachDirection.FRONT, VerticalAlignment.NoAlignment, end_effector
+        if self.grasp_description is not None:
+            grasp_description = self.grasp_description
+        else:
+            previous_pick = self.plan_node.get_previous_node_by_designator_type(
+                PickUpAction
             )
-        )
-        transport_pose, placing_pose, retract_pose = (
-            previous_grasp_description.pose_sequence(
-                self.target_location, self.object_designator, reverse=True
+            grasp_description = (
+                previous_pick.designator.grasp_description
+                if previous_pick
+                else GraspDescription(
+                    ApproachDirection.FRONT, VerticalAlignment.NoAlignment, end_effector
+                )
             )
+        transport_pose, placing_pose, retract_pose = grasp_description.pose_sequence(
+            self.target_location, self.object_designator, reverse=True
         )
 
         return sequential(
