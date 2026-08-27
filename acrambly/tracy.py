@@ -57,7 +57,6 @@ from semantic_digital_twin.world import World
 from sub_parts.real.task_cubes import setup_and_build_plan as cubes_real_task
 from sub_parts.shared.task_park_arms import setup_and_build_plan as park_arms_task
 from sub_parts.sim.task_cubes import setup_and_build_plan as cubes_sim_task
-from sub_parts.sim.task_handover import setup_and_build_plan as hand_over_task
 from sub_parts.sim.task_tetris import setup_and_build_plan as task_tetris_task
 from sub_parts.real.task_hand_over2 import setup_and_build_plan as hand_over2_real_task
 from sub_parts.sim.task_hand_over2 import setup_and_build_plan as hand_over2_sim_task
@@ -75,8 +74,6 @@ TASKS: dict[tuple[str, str], TaskFactory] = {
     ("cubes", "sim"): cubes_sim_task,
     ("park_arms", "real"): park_arms_task,
     ("park_arms", "sim"): park_arms_task,
-    ("hand_over", "sim"): hand_over_task,
-    ("hand_over", "real"): hand_over_task,
     ("task_tetris", "sim"): task_tetris_task,
     ("task_tetris", "real"): task_tetris_task,
     ("hand_over2", "sim"): hand_over2_sim_task,
@@ -92,7 +89,7 @@ def setup_real(node: Node) -> tuple[World, object, Context]:
     print("Getting live world from Giskard...")
     world = fetch_world_from_service(node, timeout_seconds=300)
     print(f"World received with {len(list(world.bodies))} bodies.")
-    WorldSynchronizer(_world=world, node=node, synchronous=True)
+    WorldSynchronizer(_world=world, node=node)
     print("Synchronized.")
 
     print("Building Tracy semantic robot from giskard world...")
@@ -131,7 +128,7 @@ def setup_sim(node: Node) -> tuple[World, object, Context]:
 # ---------------------------------------------------------------------------
 def main(
     env: Annotated[Literal["real", "sim"], typer.Option("--env", "-e")],
-    task: Annotated[Literal["park_arms", "cubes", "hand_over", "hand_over2", "task_tetris"], typer.Option("--task", "-t")],
+    task: Annotated[Literal["park_arms", "cubes", "hand_over2", "task_tetris"], typer.Option("--task", "-t")],
 ):
     rclpy.init()
 

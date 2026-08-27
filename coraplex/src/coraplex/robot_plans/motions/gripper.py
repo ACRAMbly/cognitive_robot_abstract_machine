@@ -132,6 +132,7 @@ class MoveGripperMotion(BaseMotion, GripperStallToleranceParameters):
     """
     If the gripper is allowed to collide with something
     """
+    target_position: Optional[list] = None
 
     def perform(self):
         """
@@ -155,6 +156,8 @@ class MoveGripperMotion(BaseMotion, GripperStallToleranceParameters):
 
         name = "OpenGripper" if self.motion == GripperState.OPEN else "CloseGripper"
         goal_state = arm.get_joint_state_by_type(self.motion)
+        if self.target_position is not None:
+            goal_state.target_values = self.target_position
         joint_task = JointPositionList(goal_state=goal_state, name=name)
 
         done_node = joint_task

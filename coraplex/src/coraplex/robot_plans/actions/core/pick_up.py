@@ -216,6 +216,7 @@ class PickUpAction(
                     finger_velocity=self.grasp_closing_velocity,
                     stall_minimum_time=self.grasp_stall_minimum_time,
                     tolerate_stall=self.tolerate_grasp_stall,
+                    target_position=self.grasp_description.gripper_position
                 ),
                 AttachNode(
                     body=self.object_designator,

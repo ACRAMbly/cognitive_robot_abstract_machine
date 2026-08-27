@@ -67,6 +67,14 @@ class GraspDescription:
     """
 
     grasp_offset: Point3 = field(default_factory=lambda: Point3(0.0, 0.0, 0.0))
+    """
+    The offset of the grasp pose from the center of the body.
+    """
+
+    gripper_position: Optional[list] = None
+    """
+    The position of the gripper's fingers.
+    """
 
     def pose_sequence(
         self, target_T_grasp_pose: Pose, body: Body = None, reverse: bool = False
