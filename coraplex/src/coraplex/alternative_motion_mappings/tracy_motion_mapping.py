@@ -5,6 +5,7 @@ from typing import ClassVar
 
 from control_msgs.action import ParallelGripperCommand
 
+from coraplex.view_manager import ViewManager
 from semantic_digital_twin.datastructures.definitions import GripperState
 from semantic_digital_twin.robots.tracy import Tracy
 
@@ -19,14 +20,13 @@ from krrood.symbolic_math.symbolic_math import Scalar
 LEFT_GRIPPER_ACTION_TOPIC = "/left_gripper/robotiq_gripper_controller/gripper_cmd"
 RIGHT_GRIPPER_ACTION_TOPIC = "/right_gripper/robotiq_gripper_controller/gripper_cmd"
 
-GRIPPER_OPEN_POSITION = 0.0
-GRIPPER_CLOSE_TO_CUBE_POSITION = 0.35
 GRIPPER_EFFORT = 10.0
 
 @dataclass(eq=False, repr=False)
 class ParallelGripperCommandActionServerTask(ActionServerTask):
-    position: float
-    effort: float = GRIPPER_EFFORT
+    position: float= 0.35
+    effort: float = 10.0
+
 
     def __eq__(self, other: object) -> bool:
         return self is other
@@ -39,7 +39,6 @@ class ParallelGripperCommandActionServerTask(ActionServerTask):
         return NodeArtifacts(observation=Scalar.const_true())
 
     def build_msg(self, context):
-
         goal = ParallelGripperCommand.Goal()
         goal.command.position = [float(self.position)]
         goal.command.effort = [float(self.effort)]
@@ -61,16 +60,11 @@ class TracyRealMoveGripperMotion(MoveGripperMotion, AlternativeMotion[Tracy]):
     """
     Real Tracy gripper mapping.
 
-    In current execution path, Coraplex is calling motion_chart/_motion_chart,
+    In the current execution path, Coraplex is calling motion_chart/_motion_chart,
     so the real gripper command must be represented as a Giskard ActionServerTask.
     """
 
     execution_type: ClassVar[ExecutionType] = ExecutionType.REAL
-
-    _POSITION_MAP = {
-        GripperState.OPEN: GRIPPER_OPEN_POSITION,
-        GripperState.CLOSE: GRIPPER_CLOSE_TO_CUBE_POSITION,
-    }
 
     def perform(self) -> None:
         pass
@@ -86,7 +80,14 @@ class TracyRealMoveGripperMotion(MoveGripperMotion, AlternativeMotion[Tracy]):
             else LEFT_GRIPPER_ACTION_TOPIC
         )
 
-        position = self._POSITION_MAP[self.motion]
+        arm = ViewManager().get_end_effector_view(self.gripper, self.robot)
+
+        goal_state = arm.get_joint_state_by_type(self.motion)
+        if self.target_position is not None:
+            position = self.target_position[0]
+        else:
+            position = goal_state.target_values[0]
+
 
         return ParallelGripperCommandActionServerTask(
             action_topic=topic,
