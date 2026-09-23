@@ -158,13 +158,13 @@ def build_hand_over2_plan(
                 approach_direction=ApproachDirection.LEFT,
                 vertical_alignment=VerticalAlignment.BOTTOM,
                 end_effector=end_effectors[0],
-                grasp_offset=Point3(0.0, 0.08, 0.0),
+                grasp_offset=Point3(0.0, 0.08, -0.03),
             ),
             "blue_place_grasp": GraspDescription(
                 approach_direction=ApproachDirection.RIGHT,
                 vertical_alignment=VerticalAlignment.TOP,
                 end_effector=end_effectors[0],
-                grasp_offset=Point3(0.0, 0.08, 0.0),
+                grasp_offset=Point3(0.0, 0.08, -0.03),
             ),
         },
         "cube1": {
@@ -186,13 +186,13 @@ def build_hand_over2_plan(
                 approach_direction=ApproachDirection.FRONT,
                 vertical_alignment=VerticalAlignment.BOTTOM,
                 end_effector=end_effectors[0],
-                grasp_offset=Point3(-0.06, 0.033, -0.01),
+                grasp_offset=Point3(-0.06, 0.033, -0.04),
             ),
             "blue_place_grasp": GraspDescription(
                 approach_direction=ApproachDirection.BACK,
                 vertical_alignment=VerticalAlignment.TOP,
                 end_effector=end_effectors[0],
-                grasp_offset=Point3(-0.06, 0.033, -0.01),
+                grasp_offset=Point3(-0.06, 0.033, -0.04),
             ),
         },
         "cube2": {
@@ -214,13 +214,13 @@ def build_hand_over2_plan(
                 approach_direction=ApproachDirection.FRONT,
                 vertical_alignment=VerticalAlignment.BOTTOM,
                 end_effector=end_effectors[0],
-                grasp_offset=Point3(-0.09, -0.015, -0.01),
+                grasp_offset=Point3(-0.09, -0.015, -0.04),
             ),
             "blue_place_grasp": GraspDescription(
                 approach_direction=ApproachDirection.BACK,
                 vertical_alignment=VerticalAlignment.TOP,
                 end_effector=end_effectors[0],
-                grasp_offset=Point3(-0.09, -0.015, -0.01),
+                grasp_offset=Point3(-0.09, -0.015, -0.04),
             ),
         },
     }
