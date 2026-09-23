@@ -23,7 +23,7 @@ from semantic_digital_twin.world_description.geometry import Color
 from coraplex.datastructures.dataclasses import Context
 from coraplex.plans.plan import Plan
 
-from sub_parts.real.cube_perception import query_colored_block_poses_from_robokudo
+#from sub_parts.real.cube_perception import query_colored_block_poses_from_robokudo
 from sub_parts.shared.available_plans import build_plan_cubes
 from sub_parts.shared.utils import spawn_body
 

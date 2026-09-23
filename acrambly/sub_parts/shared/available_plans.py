@@ -126,9 +126,7 @@ def build_hand_over2_plan(
     world: World,
     tracy: Tracy,
     context: Context,
-    cube0: Body,
-    cube1: Body,
-    cube2: Body,
+    bodies: dict[str, Body]
 ) -> Plan | None:
     """Build a right-to-left handover plan for three cubes.
 
@@ -240,7 +238,8 @@ def build_hand_over2_plan(
     }
 
     actions: list = []
-    for cube, name in ((cube0, "cube0"), (cube1, "cube1"), (cube2, "cube2")):
+    for name, cube in bodies.items():
+        print(name)
         actions.extend(
             [
                 ParkArmsAction(Arms.BOTH),
@@ -269,6 +268,12 @@ def build_hand_over2_plan(
                     object_designator=cube,
                     arm=Arms.RIGHT,
                     grasp_description=grasp_descriptions[name]["red_handover_grasp"],
+                ),
+                ReachAction(
+                    target_pose=Pose.from_xyz_rpy(0.8, 0.3, 1.3, yaw=0 if name=="cube0" else -pi/2,reference_frame=world.root),
+                    object_designator=cube,
+                    arm=Arms.LEFT,
+                    grasp_description=grasp_descriptions[name]["blue_place_grasp"],
                 ),
                 PlaceAction(
                     object_designator=cube,
