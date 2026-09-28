@@ -49,11 +49,12 @@ bodies, connections, degrees of freedom, regions and custom semantic annotations
 Collection presets come from the world's public list fields and properties; their
 labels use native EQL verbalization. Queries reflect subsequent world changes, and
 `world.` completion lists the available members. A demo can register existing
-providers with `register_query_source` to supply its own scopes, evaluation and
-queries. Each provider returns a list: `knowledge()` returns `QueryableKnowledge`
-objects, while `presets()` and optional `unlisted_presets()` return `Preset` objects.
-These callbacks run for each request, so bound methods can expose newly detected
-events and current preset definitions.
+knowledge with `register_query_source` to supply its own scopes, evaluation and
+queries. Pass lists of `QueryableKnowledge` and `Preset` objects directly;
+`QueryableKnowledge.of_world(world)` exposes a native world. Query domains retain
+their original iterable collections, so later records remain queryable. Registered
+preset lists also retain later additions. Register again when replacing the source's
+knowledge or preset lists.
 
 The EQL editor executes trusted local Python statements against the loaded world.
 The Python server listens only on loopback and rejects requests from remote

@@ -163,11 +163,12 @@ class TestDetectedEventsKnowledge:
 
     def test_a_detection_made_after_the_last_question_is_answered_too(self, detections):
         events = DetectedEvents(logger=detections)
-        before = len(events.knowledge()[0].domains[0].objects)
+        domain = events.knowledge()[0].domains[0]
+        before = len(list(domain.objects))
 
         detections.timeline.append(PickUpEvent(tracked_object=collidable_body("cup")))
 
-        assert len(events.knowledge()[0].domains[0].objects) == before + 1
+        assert len(list(domain.objects)) == before + 1
 
 
 class TestAskingForOneKindOfEvent:
@@ -233,10 +234,10 @@ class TestAskingTheBridge:
         bridge = Bridge()
         source = DetectedEvents(detections)
         bridge.register_query_source(
-            source.knowledge,
+            source.knowledge(),
             "detecting demo",
-            source.presets,
-            source.unlisted_presets,
+            source.presets(),
+            source.unlisted_presets(),
         )
         return bridge
 
@@ -263,6 +264,25 @@ class TestAskingTheBridge:
         after = bridge.run_query(preset.code, preset.scope)
 
         assert after.count == before.count + 1
+
+    def test_replaced_event_timeline_is_read_after_registration(
+        self, bridge: Bridge, detections: EventLogger
+    ) -> None:
+        """
+        A registered event domain follows the logger's replacement timeline.
+
+        :param bridge: The bridge retaining the iterable detection domain.
+        :param detections: The logger whose timeline is replaced.
+        """
+        preset = bridge.query_presets()[0]
+        before = bridge.run_query(preset.code, preset.scope)
+        assert before.count == len(detections.timeline)
+        with detections.timeline_lock:
+            detections.timeline = []
+
+        after = bridge.run_query(preset.code, preset.scope)
+
+        assert after.count == 0
 
     def test_a_query_of_that_scope_is_answered_from_the_detections(self, bridge):
         answered = bridge.run_query(

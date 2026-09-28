@@ -58,7 +58,7 @@ def test_legacy_highlight_identifiers_remain_unchanged() -> None:
         SceneEntityPrefix.URDF_LINK + str(bridge.robot.root.name),
     ]
     source = GrowingRecordSource(records=[make_record(name) for name in identifiers])
-    bridge.register_query_source(source.knowledge, source.title(), source.presets)
+    bridge.register_query_source(source.knowledge(), source.title(), source.presets())
 
     answer = bridge.run_query(source.presets()[0].code)
 

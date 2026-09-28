@@ -8,6 +8,7 @@ segmind's package -- and without the ROS overlay it needs.
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from dataclasses import dataclass
 
 from segmind.datastructures.events import DetectionEvent, EventWithTrackedObjects
@@ -109,9 +110,9 @@ class DetectedEvents:
         """
         The query scopes supplied by the current detections.
 
-        Read fresh on every call, so an answer names every moment detected up to now.
+        The event domain reads the logger again whenever it is queried.
 
-        :return: The detected-events scope with its current record collection.
+        :return: The detected-events scope retaining the live record domain.
         """
         return [
             QueryableKnowledge(
@@ -120,18 +121,19 @@ class DetectedEvents:
                     QueryDomain(
                         EVENT_VARIABLE,
                         DetectedEventRecord,
-                        self.records(),
+                        self,
                     )
                 ],
             )
         ]
 
-    def records(self) -> List[DetectedEventRecord]:
+    def __iter__(self) -> Iterator[DetectedEventRecord]:
         """
-        Everything detected so far, oldest first.
+        Iterate over the logger's current events as an ordered record snapshot.
+
+        :return: Records captured while holding the logger's timeline lock.
         """
-        with self.logger.timeline_lock:
-            return records_of(list(self.logger.timeline))
+        return iter(records_of(self.logger.get_events()))
 
     def presets(self) -> List[Preset]:
         """

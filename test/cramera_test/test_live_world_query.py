@@ -5,8 +5,8 @@ Live world queries preserve source selection, locking and attachment ownership.
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import ExitStack
 from enum import StrEnum
-from functools import partial
 from pathlib import Path
 from threading import Event
 
@@ -150,12 +150,12 @@ class TestAutomaticWorldQueries:
         bridge = Bridge()
         if register_first:
             bridge.register_query_source(
-                source.knowledge, source.title(), source.presets
+                source.knowledge(), source.title(), source.presets()
             )
         bridge.attach(world)
         if not register_first:
             bridge.register_query_source(
-                source.knowledge, source.title(), source.presets
+                source.knowledge(), source.title(), source.presets()
             )
 
         bridge.attach(World())
@@ -164,7 +164,7 @@ class TestAutomaticWorldQueries:
         assert bridge.query_scopes() == [
             knowledge.scope for knowledge in source.knowledge()
         ]
-        assert bridge.query_knowledge() == source.knowledge()
+        assert bridge.query_knowledge == source.knowledge()
 
     def test_an_operation_keeps_its_knowledge_when_registration_changes(
         self, monkeypatch: pytest.MonkeyPatch
@@ -176,7 +176,9 @@ class TestAutomaticWorldQueries:
         """
         source = GrowingRecordSource()
         bridge = Bridge()
-        bridge.register_query_source(source.knowledge, source.title(), source.presets)
+        bridge.register_query_source(
+            source.knowledge(), source.title(), source.presets()
+        )
         expected = bridge.query_presets()
         original_worded = Preset.worded
         replacement = CurrentStateOnlySource()
@@ -190,7 +192,7 @@ class TestAutomaticWorldQueries:
             :return: The original preset worded by its original scope.
             """
             bridge.register_query_source(
-                replacement.knowledge, replacement.title(), replacement.presets
+                replacement.knowledge(), replacement.title(), replacement.presets()
             )
             return original_worded(preset, runner)
 
@@ -206,31 +208,19 @@ class TestAutomaticWorldQueries:
         :param world: The world retained by the explicitly registered knowledge.
         """
         name = World.__name__.lower()
-        knowledge = [
-            QueryableKnowledge(
-                QueryScope.CURRENT_STATE, domains=[], extra_names={name: world}
-            )
-        ]
-
-        def current_knowledge() -> list[QueryableKnowledge]:
-            """
-            Return the explicitly registered scopes without copying their objects.
-
-            :return: The original native query scopes.
-            """
-            return knowledge
+        knowledge = [QueryableKnowledge.of_world(world)]
 
         bridge = Bridge()
         bridge.register_query_source(
-            current_knowledge,
+            knowledge,
             type(world).__name__,
-            partial(Preset.of_world, world, name),
+            Preset.of_world(world, name),
         )
 
         bridge.attach(World())
 
         assert bridge.query_vocabulary().extra_names[name] is world
-        assert bridge.query_knowledge() is knowledge
+        assert bridge.query_knowledge is knowledge
 
     def test_queries_read_current_poses_without_changing_world_versions(
         self, world: World
@@ -267,33 +257,39 @@ class TestWorldQueryLocking:
     """
 
     def test_registration_can_change_while_waiting_for_a_world_lock(
-        self, world: World
+        self, world: World, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """
         Waiting queries use one complete replacement configuration without deadlocking.
 
         :param world: The explicitly registered world held by the competing thread.
+        :param monkeypatch: Signals the query's attempt to acquire the world lock.
         """
         name = World.__name__.lower()
         selected = Event()
-        knowledge = [
-            QueryableKnowledge(
-                QueryScope.CURRENT_STATE, domains=[], extra_names={name: world}
-            )
-        ]
+        knowledge = [QueryableKnowledge.of_world(world)]
 
-        def current_knowledge() -> list[QueryableKnowledge]:
+        enter_context = ExitStack.enter_context
+
+        def enter_world_lock(stack: ExitStack, context: Any) -> Any:
             """
-            Signal that the operation selected the original world's knowledge.
+            Signal the selected world before waiting for its lock.
+
+            :param stack: The query operation's resource stack.
+            :param context: The lock the query is about to acquire.
+            :return: The entered context's value.
             """
-            selected.set()
-            return knowledge
+            if context is world.state.world_lock:
+                selected.set()
+            return enter_context(stack, context)
+
+        monkeypatch.setattr(ExitStack, "enter_context", enter_world_lock)
 
         bridge = Bridge()
         bridge.register_query_source(
-            current_knowledge,
+            knowledge,
             type(world).__name__,
-            partial(Preset.of_world, world, name),
+            Preset.of_world(world, name),
         )
         replacement = CurrentStateOnlySource()
         with ThreadPoolExecutor(max_workers=2) as executor:
@@ -302,9 +298,9 @@ class TestWorldQueryLocking:
                 assert selected.wait(timeout=10)
                 registration = executor.submit(
                     bridge.register_query_source,
-                    replacement.knowledge,
+                    replacement.knowledge(),
                     replacement.title(),
-                    replacement.presets,
+                    replacement.presets(),
                 )
                 registration.result(timeout=10)
             presets = answer.result(timeout=10)
@@ -330,23 +326,13 @@ class TestWorldQueryLocking:
         :param native_expression: Whether the query is supplied as a native expression.
         """
         name = World.__name__.lower()
-        knowledge = [
-            QueryableKnowledge(
-                QueryScope.CURRENT_STATE, domains=[], extra_names={name: world}
-            )
-        ]
-
-        def current_knowledge() -> list[QueryableKnowledge]:
-            """
-            Return the explicit native world knowledge for this operation.
-            """
-            return knowledge
+        knowledge = [QueryableKnowledge.of_world(world)]
 
         bridge = Bridge()
         bridge.register_query_source(
-            current_knowledge,
+            knowledge,
             type(world).__name__,
-            partial(Preset.of_world, world, name),
+            Preset.of_world(world, name),
         )
         if attach_another_world:
             bridge.attach(World())
@@ -513,7 +499,7 @@ class TestWorldQueryLifetime:
         """
         source = CurrentStateOnlySource()
         visualization.bridge.register_query_source(
-            source.knowledge, source.title(), source.presets
+            source.knowledge(), source.title(), source.presets()
         )
         visualization.start()
         visualization.stop()

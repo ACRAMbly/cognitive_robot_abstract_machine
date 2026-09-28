@@ -5,6 +5,7 @@ Tests for querying a running demo through the live bridge.
 from __future__ import annotations
 
 import threading
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 
 import pytest
@@ -64,6 +65,14 @@ class GrowingRecordSource:
         """
         return "record demo"
 
+    def __iter__(self) -> Iterator[NamedRecord]:
+        """
+        Read the currently selected record collection.
+
+        :return: The source's current records in insertion order.
+        """
+        return iter(self.records)
+
     def knowledge(self) -> List[QueryableKnowledge]:
         """
         The two bodies of knowledge this source offers.
@@ -71,7 +80,7 @@ class GrowingRecordSource:
         return [
             QueryableKnowledge(
                 scope=QueryScope.CURRENT_STATE,
-                domains=[QueryDomain("record", NamedRecord, self.records)],
+                domains=[QueryDomain("record", NamedRecord, self)],
             ),
             QueryableKnowledge(
                 scope=QueryScope.EPISODIC_MEMORY,
@@ -159,7 +168,7 @@ def bridge(source) -> Bridge:
     """
     live_bridge = Bridge()
     live_bridge.register_query_source(
-        source.knowledge, source.title(), source.presets, source.unlisted_presets
+        source.knowledge(), source.title(), source.presets(), source.unlisted_presets()
     )
     return live_bridge
 
@@ -187,9 +196,9 @@ class TestQueryingARegisteredSource:
         self, bridge: Bridge, source: GrowingRecordSource
     ) -> None:
         """
-        A provider exposes a replacement collection on the next query.
+        The registered domain iterates the current collection on each query.
 
-        :param bridge: The bridge holding the source's knowledge provider.
+        :param bridge: The bridge holding the source's registered knowledge.
         :param source: The source replacing its current records.
         """
         [preset, _] = source.presets()
@@ -200,11 +209,11 @@ class TestQueryingARegisteredSource:
 
         assert [row["__entity__"] for row in answer.rows] == [source.records[0].name]
 
-    def test_preset_providers_refresh_visible_and_unlisted_queries(
+    def test_registered_presets_retain_visible_and_unlisted_collections(
         self, source: GrowingRecordSource
     ) -> None:
         """
-        Mutable preset collections remain current through their list providers.
+        Registered preset lists expose subsequent additions to both collections.
 
         :param source: The source supplying query scopes and valid query definitions.
         """
@@ -212,7 +221,7 @@ class TestQueryingARegisteredSource:
         unlisted: list[Preset] = []
         bridge = Bridge()
         bridge.register_query_source(
-            source.knowledge, source.title(), listed.copy, unlisted.copy
+            source.knowledge(), source.title(), listed, unlisted
         )
         assert bridge.query_presets() == []
         listed.extend(source.presets())
@@ -310,7 +319,7 @@ class TestAskedQuestions:
         live_bridge = Bridge()
         source = CurrentStateOnlySource()
         live_bridge.register_query_source(
-            source.knowledge, source.title(), source.presets
+            source.knowledge(), source.title(), source.presets()
         )
 
         assert not live_bridge.match_question("give me all beta samples").matched
@@ -358,7 +367,7 @@ class TestQueryingByScope:
         live_bridge = Bridge()
         source = CurrentStateOnlySource()
         live_bridge.register_query_source(
-            source.knowledge, source.title(), source.presets
+            source.knowledge(), source.title(), source.presets()
         )
 
         with pytest.raises(UnknownQueryScope):

@@ -6,7 +6,6 @@ import hashlib
 import threading
 import time
 import urllib.parse
-from collections.abc import Callable
 from contextlib import contextmanager, ExitStack
 from dataclasses import asdict, dataclass, field
 from enum import StrEnum
@@ -438,9 +437,9 @@ class Bridge:
     The newest transform-graph snapshot (see :mod:`cramera.live.transforms`).
     """
 
-    query_knowledge: Callable[[], list[QueryableKnowledge]] | None = None
+    query_knowledge: list[QueryableKnowledge] | None = None
     """
-    Provider of current query scopes overriding the attached world's default knowledge.
+    Registered query scopes overriding the attached world's default knowledge.
     """
 
     _query_title: str = field(default="", init=False)
@@ -448,16 +447,14 @@ class Bridge:
     Display title of explicitly registered query knowledge.
     """
 
-    _query_presets: Callable[[], list[Preset]] = field(default=list, init=False)
+    _query_presets: list[Preset] = field(default_factory=list, init=False)
     """
-    Provider of visible presets for explicitly registered query knowledge.
+    Visible presets for explicitly registered query knowledge.
     """
 
-    _unlisted_query_presets: Callable[[], list[Preset]] = field(
-        default=list, init=False
-    )
+    _unlisted_query_presets: list[Preset] = field(default_factory=list, init=False)
     """
-    Provider of additional registered presets recognized through spoken questions.
+    Additional registered presets recognized through spoken questions.
     """
 
     _query_attachment: int | None = field(default=None, init=False, repr=False)
@@ -942,24 +939,26 @@ class Bridge:
     # %% viewer -> questions about the running demo
     def register_query_source(
         self,
-        knowledge: Callable[[], list[QueryableKnowledge]],
+        knowledge: list[QueryableKnowledge],
         title: str,
-        presets: Callable[[], list[Preset]],
-        unlisted_presets: Callable[[], list[Preset]] = list,
+        presets: list[Preset],
+        unlisted_presets: list[Preset] | None = None,
     ) -> None:
         """
         Offer the running demo's state to the viewer's queries.
 
-        :param knowledge: Provider returning the current native query scopes as a list.
+        :param knowledge: Native query scopes retaining their live domains and objects.
         :param title: The name shown for this query source.
-        :param presets: Provider returning the current visible query definitions.
-        :param unlisted_presets: Provider returning additional queries for matching.
+        :param presets: Visible query definitions.
+        :param unlisted_presets: Additional queries recognized without being listed.
         """
         with self._query_lock:
             self.query_knowledge = knowledge
             self._query_title = title
             self._query_presets = presets
-            self._unlisted_query_presets = unlisted_presets
+            self._unlisted_query_presets = (
+                unlisted_presets if unlisted_presets is not None else []
+            )
             self._query_revision += 1
         logger.info("live queries answered by '%s'", title)
 
@@ -981,15 +980,9 @@ class Bridge:
                 attachment = self._query_attachment
                 world = self.world if attachment is not None else None
             if source is not None:
-                knowledge = source()
+                knowledge = list(source)
             elif world is not None:
-                knowledge = [
-                    QueryableKnowledge(
-                        scope=QueryScope.CURRENT_STATE,
-                        domains=[],
-                        extra_names={World.__name__.lower(): world},
-                    )
-                ]
+                knowledge = [QueryableKnowledge.of_world(world)]
             else:
                 raise NoQuerySourceRegistered()
             worlds = [
@@ -1052,7 +1045,7 @@ class Bridge:
         :raises UnknownQueryScope: When a preset requests unavailable knowledge.
         """
         if self.query_knowledge is not None:
-            presets = self._query_presets()
+            presets = list(self._query_presets)
         else:
             name = World.__name__.lower()
             presets = Preset.of_world(knowledge[0].extra_names[name], name)
@@ -1074,7 +1067,7 @@ class Bridge:
         :raises UnknownQueryScope: When a preset requests unavailable knowledge.
         """
         with self._query_scope() as knowledge:
-            unlisted = self._unlisted_query_presets()
+            unlisted = list(self._unlisted_query_presets)
             presets = self._worded_presets(knowledge) + unlisted
             return QuestionMatcher(presets).match(text)
 
