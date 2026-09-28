@@ -163,7 +163,10 @@ def test_a_body_a_gripper_has_hold_of_is_grasped(pr2_world_copy):
     gripper = _left_gripper(pr2_world_copy)
     box = _box_in_the_hand_of(pr2_world_copy, gripper)
 
-    executor = _executor_for(pr2_world_copy, [GraspDetector(tracked_object=box)])
+    executor = _executor_for(
+        pr2_world_copy,
+        [ContactDetector(tracked_object=box), GraspDetector(tracked_object=box)],
+    )
     executor.tick()
 
     [grasp] = _events_of(executor, GraspEvent, box)
@@ -172,10 +175,12 @@ def test_a_body_a_gripper_has_hold_of_is_grasped(pr2_world_copy):
 
 def test_a_body_only_one_side_of_a_hand_touches_is_not_grasped(pr2_world_copy):
     """
-    A hand holds what is between its fingers. Brushing something with one of them, as a
-    gripper does on its way past whatever stands near what it is reaching for, is not
-    taking hold of it. The contact detector is asked to read the robot too, so that the
-    touch against the hand can be seen at all.
+    A hand holds what is between its fingers.
+
+    Brushing something with one of them, as a gripper does on its way past whatever
+    stands near what it is reaching for, is not taking hold of it. The contact detector
+    is asked to read the robot too, so that the touch against the hand can be seen at
+    all.
     """
     gripper = _left_gripper(pr2_world_copy)
     thumb_x, thumb_y, thumb_z = gripper.thumb.tip.global_pose.to_position().to_np()[:3]
@@ -199,12 +204,52 @@ def test_a_body_only_one_side_of_a_hand_touches_is_not_grasped(pr2_world_copy):
     assert _events_of(executor, GraspEvent, box) == []
 
 
+def test_a_grasp_is_read_from_the_contacts_found_with_the_hand(pr2_world_copy):
+    """
+    The grasp detector looks at no geometry of its own: a hand holds what every side of
+    it was found touching.
+
+    The box stands far from every hand, and only the contacts say it is held.
+    """
+    gripper = _left_gripper(pr2_world_copy)
+    box = _box_at(pr2_world_copy, (CARRIED_AWAY, CARRIED_AWAY, CARRIED_AWAY))
+    executor = _executor_for(pr2_world_copy, [GraspDetector(tracked_object=box)])
+    executor.context.require_extension(SegmindContext).latest_contact_bodies[box] = {
+        gripper.thumb.tip,
+        gripper.finger.tip,
+    }
+
+    executor.tick()
+
+    [grasp] = _events_of(executor, GraspEvent, box)
+    assert grasp.with_object is gripper.tool_frame
+
+
+def test_a_hand_touching_a_body_is_recorded_as_touching_it(pr2_world_copy):
+    """
+    The robot is left out of the contacts a run reports, but what its hands touch is
+    still found, since that is what a grasp is read from.
+    """
+    gripper = _left_gripper(pr2_world_copy)
+    box = _box_in_the_hand_of(pr2_world_copy, gripper)
+    executor = _executor_for(pr2_world_copy, [ContactDetector(tracked_object=box)])
+
+    executor.tick()
+
+    touching = executor.context.require_extension(SegmindContext).latest_contact_bodies[
+        box
+    ]
+    assert touching & set(gripper.thumb.bodies) and touching & set(
+        gripper.finger.bodies
+    )
+
+
 def test_a_body_the_gripper_no_longer_holds_is_let_go_of(pr2_world_copy):
     gripper = _left_gripper(pr2_world_copy)
     box = _box_in_the_hand_of(pr2_world_copy, gripper)
     executor = _executor_for(
         pr2_world_copy,
-        [GraspDetector(tracked_object=box)],
+        [ContactDetector(tracked_object=box), GraspDetector(tracked_object=box)],
     )
     executor.tick()
 
@@ -293,6 +338,7 @@ def test_an_object_is_picked_up_when_an_agent_lifts_it_off_what_it_rested_on(
     executor = _executor_for(
         pr2_world_copy,
         [
+            ContactDetector(tracked_object=box),
             GraspDetector(tracked_object=box),
             SupportDetector(tracked_object=box),
             PickUpDetector(),
@@ -310,9 +356,10 @@ def test_an_object_is_picked_up_when_an_agent_lifts_it_off_what_it_rested_on(
 
 def test_an_object_is_placed_where_the_agent_let_go_of_it(pr2_world_copy):
     """
-    A placing is where the object was released, so a surface it has not been let go
-    onto is not somewhere it was put down. The box is moved out of the hand and onto
-    the surface beside it.
+    A placing is where the object was released, so a surface it has not been let go onto
+    is not somewhere it was put down.
+
+    The box is moved out of the hand and onto the surface beside it.
     """
     gripper = _left_gripper(pr2_world_copy)
     box = _box_in_the_hand_of(pr2_world_copy, gripper)
@@ -320,6 +367,7 @@ def test_an_object_is_placed_where_the_agent_let_go_of_it(pr2_world_copy):
     executor = _executor_for(
         pr2_world_copy,
         [
+            ContactDetector(tracked_object=box),
             GraspDetector(tracked_object=box),
             SupportDetector(tracked_object=box),
             PlacingDetector(),
@@ -349,7 +397,11 @@ def test_a_held_object_does_not_come_to_rest_on_what_it_brushes(pr2_world_copy):
     _surface_under(pr2_world_copy, box)
     executor = _executor_for(
         pr2_world_copy,
-        [GraspDetector(tracked_object=box), SupportDetector(tracked_object=box)],
+        [
+            ContactDetector(tracked_object=box),
+            GraspDetector(tracked_object=box),
+            SupportDetector(tracked_object=box),
+        ],
     )
 
     executor.tick()
@@ -360,8 +412,10 @@ def test_a_held_object_does_not_come_to_rest_on_what_it_brushes(pr2_world_copy):
 def test_taking_hold_again_mid_carry_is_not_a_second_pick_up(pr2_world_copy):
     """
     One loss of what held an object up is one pick-up: a hand that loses its grip and
-    takes hold again while carrying has not picked the object up a second time. The box
-    goes into the air and back into the hand, with nothing holding it up in between.
+    takes hold again while carrying has not picked the object up a second time.
+
+    The box goes into the air and back into the hand, with nothing holding it up in
+    between.
     """
     gripper = _left_gripper(pr2_world_copy)
     box = _box_at(pr2_world_copy, RESTING_PLACE)
@@ -369,6 +423,7 @@ def test_taking_hold_again_mid_carry_is_not_a_second_pick_up(pr2_world_copy):
     executor = _executor_for(
         pr2_world_copy,
         [
+            ContactDetector(tracked_object=box),
             GraspDetector(tracked_object=box),
             SupportDetector(tracked_object=box),
             PickUpDetector(),

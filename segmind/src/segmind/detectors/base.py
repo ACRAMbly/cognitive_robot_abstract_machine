@@ -127,8 +127,7 @@ class AbstractDetector(MotionStatechartNode, ABC):
     against.
 
     A run reads what happens in the scene, and a robot carrying an object touches it
-    throughout; what the robot does with it is read from the grasp instead, which asks
-    about the hand directly and so is unaffected by this.
+    throughout; what the robot does with it is read from the grasp instead.
     """
 
     def on_tick(
@@ -239,23 +238,37 @@ class AbstractDetector(MotionStatechartNode, ABC):
         return lost
 
     @staticmethod
-    def bodies_outside_end_effectors(world: World) -> List[Body]:
+    def end_effector_bodies(world: World) -> Set[Body]:
+        """
+        The bodies of every end effector in ``world``.
+        """
+        return {
+            body
+            for end_effector in world.get_semantic_annotations_by_type(EndEffector)
+            for body in end_effector.bodies
+        }
+
+    @classmethod
+    def bodies_outside_end_effectors(cls, world: World) -> List[Body]:
         """
         The collidable bodies of ``world`` that are part of no end effector.
 
         An end effector holds what it grasps; it is not what objects rest on or are
         contained in.
         """
-        end_effector_bodies = {
-            body
-            for end_effector in world.get_semantic_annotations_by_type(EndEffector)
-            for body in end_effector.bodies
-        }
+        end_effector_bodies = cls.end_effector_bodies(world)
         return [
             body
             for body in world.bodies_with_collision
             if body not in end_effector_bodies
         ]
+
+    def bodies_left_out(self, world: World) -> Set[Body]:
+        """
+        The bodies of ``world`` a tracked object is never checked against: every body of
+        every robot, unless :attr:`exclude_robot` says otherwise.
+        """
+        return set(world.robot_bodies_with_collision) if self.exclude_robot else set()
 
     def get_relation(
         self,
@@ -271,17 +284,16 @@ class AbstractDetector(MotionStatechartNode, ABC):
         :param tracked_objects: List of bodies to check for contact changes.
         :param predicate: Function that returns true if the objects are related.
         :param candidates: The bodies a tracked object may be related to; every
-            collidable body of the world when not given. The robot is left out of them
-            unless :attr:`exclude_robot` says otherwise.
+            collidable body of the world when not given. The bodies
+            :meth:`bodies_left_out` names are left out of them.
         :return: Dictionary mapping bodies to sets of related bodies.
         """
 
         related_bodies: Dict[Body, Set[Body]] = {}
         if candidates is None:
             candidates = context.world.bodies_with_collision
-        if self.exclude_robot:
-            robot_bodies = set(context.world.robot_bodies_with_collision)
-            candidates = [body for body in candidates if body not in robot_bodies]
+        left_out = self.bodies_left_out(context.world)
+        candidates = [body for body in candidates if body not in left_out]
         for tracked_object in tracked_objects:
             for body in candidates:
                 if body is tracked_object:

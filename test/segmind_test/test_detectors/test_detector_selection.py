@@ -66,8 +66,15 @@ def test_grasping_is_brought_along_only_when_asked_for():
     selection = DetectorSelection.of(PickUpDetector, GraspDetector)
 
     assert set(selection.detector_types) == PICK_UP_AND_WHAT_IT_IS_READ_FROM | {
-        GraspDetector
+        ContactDetector,
+        GraspDetector,
     }
+
+
+def test_asking_for_grasps_brings_the_contacts_they_are_read_from():
+    selection = DetectorSelection.of(GraspDetector)
+
+    assert selection.detector_types == (ContactDetector, GraspDetector)
 
 
 def test_insertions_bring_contact_and_containment():

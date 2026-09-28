@@ -19,6 +19,7 @@ from segmind.datastructures.events import (
 from segmind.detectors.base import SegmindContext, AbstractDetector
 from semantic_digital_twin.reasoning.predicates import contact
 from semantic_digital_twin.spatial_types.spatial_types import Pose
+from semantic_digital_twin.world import World
 from semantic_digital_twin.world_description.world_entity import Body
 
 
@@ -29,7 +30,18 @@ class ContactDetector(AbstractDetector):
 
     The detector reports a :class:`ContactEvent` when a body touches something new and a
     :class:`LossOfContactEvent` when it stops touching something it touched.
+
+    With the robot left out, what its end effectors touch is still found and kept with
+    every other contact, since that is what a grasp is read from, but it is not
+    reported: the robot's touches are read as grasps and nothing else.
     """
+
+    def bodies_left_out(self, world: World) -> Set[Body]:
+        """
+        Every body of every robot apart from its end effectors, unless
+        :attr:`exclude_robot` says otherwise.
+        """
+        return super().bodies_left_out(world) - self.end_effector_bodies(world)
 
     def update_context_and_events(
         self,
@@ -45,7 +57,8 @@ class ContactDetector(AbstractDetector):
         :param segmind_context: The shared SegmindContext containing the information
             required to track events.
         :param tracked_objects: List of bodies to check for contacts.
-        :return: The contacts formed, then the contacts lost.
+        :return: The contacts formed, then the contacts lost, apart from those of the
+            robot's end effectors while the robot is left out.
         """
         contacts_now = self.get_relation(context, tracked_objects, contact)
         latest_contacts = segmind_context.latest_contact_bodies
@@ -53,14 +66,19 @@ class ContactDetector(AbstractDetector):
         lost_contacts = self.forget_lost_relations(
             latest_contacts, contacts_now, tracked_objects
         )
+        unreported = (
+            self.end_effector_bodies(context.world) if self.exclude_robot else set()
+        )
         return [
             ContactEvent(tracked_object=body, with_object=other)
             for body, others in new_contacts.items()
             for other in others
+            if other not in unreported
         ] + [
             LossOfContactEvent(tracked_object=body, with_object=other)
             for body, others in lost_contacts.items()
             for other in others
+            if other not in unreported
         ]
 
 
