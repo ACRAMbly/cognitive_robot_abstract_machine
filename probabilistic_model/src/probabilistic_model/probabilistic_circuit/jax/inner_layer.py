@@ -70,7 +70,8 @@ class Layer(eqx.Module, SubclassJSONSerializer, ABC):
         """
         Calculate the log-likelihood of the distribution.
 
-        :param x: The input vector.
+        :param x: The whole event, one value per variable of the circuit, which the
+            layer indexes by the indices of its variables.
         :return: The log-likelihood of every node in the layer for x.
         """
 
@@ -301,6 +302,18 @@ class InputLayer(Layer, ABC):
     @property
     def variable(self):
         return self._variables[0].item()
+
+    def log_likelihood_of_nodes_single(self, x: Array) -> Array:
+        return self.log_likelihood_of_nodes_of_value(x[self._variables])
+
+    @abstractmethod
+    def log_likelihood_of_nodes_of_value(self, value: Array) -> Array:
+        """
+        Calculate the log-likelihood of every node for a value of the variable.
+
+        :param value: The value of the variable of this layer, with shape (1,).
+        :return: The log-likelihood of every node in the layer.
+        """
 
 
 class SumLayer(InnerLayer, ABC):
@@ -725,10 +738,8 @@ class ProductLayer(InnerLayer):
         result = jnp.zeros(self.number_of_nodes, dtype=jnp.float32)
 
         for edges, layer in zip(self.edges, self.child_layers):
-            # calculate the log likelihood over the columns of the child layer
-            ll = layer.log_likelihood_of_nodes_single(
-                x[layer.variables]
-            )  # shape: #child_nodes
+            # every layer reads the variables of its scope from the whole event
+            ll = layer.log_likelihood_of_nodes_single(x)  # shape: #child_nodes
 
             # gather the ll at the indices of the nodes that are required for the edges
             ll = ll[edges.data]  # shape: #len(edges.values())

@@ -51,8 +51,8 @@ class UniformLayer(ContinuousLayerWithFiniteSupport):
         """
         return -jnp.log(self.upper - self.lower)
 
-    def log_likelihood_of_nodes_single(self, x: Array) -> Array:
-        return jnp.where(self.included_condition(x), self.log_pdf_value(), -jnp.inf)
+    def log_likelihood_of_nodes_of_value(self, value: Array) -> Array:
+        return jnp.where(self.included_condition(value), self.log_pdf_value(), -jnp.inf)
 
     def log_likelihood_of_nodes(self, x: Array) -> Array:
         return jax.vmap(self.log_likelihood_of_nodes_single)(x)

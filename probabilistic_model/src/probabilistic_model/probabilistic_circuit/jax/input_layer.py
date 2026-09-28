@@ -132,8 +132,8 @@ class DiracDeltaLayer(ContinuousLayer):
     def log_likelihood_of_nodes(self, x: jax.Array) -> jax.Array:
         return jax.vmap(self.log_likelihood_of_nodes_single)(x)
 
-    def log_likelihood_of_nodes_single(self, x: jax.Array) -> jax.Array:
-        return jnp.where(x == self.location, jnp.log(self.density_cap), -jnp.inf)
+    def log_likelihood_of_nodes_of_value(self, value: jax.Array) -> jax.Array:
+        return jnp.where(value == self.location, jnp.log(self.density_cap), -jnp.inf)
 
     @classmethod
     def rustworkx_classes(cls) -> Tuple[Type, ...]:

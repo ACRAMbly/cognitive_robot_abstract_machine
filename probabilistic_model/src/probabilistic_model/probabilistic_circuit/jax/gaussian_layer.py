@@ -86,8 +86,8 @@ class GaussianLayer(ContinuousLayer):
     def scale(self) -> jax.Array:
         return jnp.exp(self.log_scale) + self.min_scale
 
-    def log_likelihood_of_nodes_single(self, x: jax.Array) -> jax.Array:
-        return jax.scipy.stats.norm.logpdf(x, loc=self.location, scale=self.scale)
+    def log_likelihood_of_nodes_of_value(self, value: jax.Array) -> jax.Array:
+        return jax.scipy.stats.norm.logpdf(value, loc=self.location, scale=self.scale)
 
     def log_likelihood_of_nodes(self, x: jax.Array) -> jax.Array:
         return jax.vmap(self.log_likelihood_of_nodes_single)(x)

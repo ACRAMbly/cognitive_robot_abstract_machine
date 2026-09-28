@@ -61,8 +61,8 @@ class DiscreteLayer(InputLayer):
     def number_of_nodes(self) -> int:
         return self.log_probabilities.shape[0]
 
-    def log_likelihood_of_nodes_single(self, x: Array) -> Array:
-        return self.normalized_log_probabilities[:, x.astype(int)][:, 0]
+    def log_likelihood_of_nodes_of_value(self, value: Array) -> Array:
+        return self.normalized_log_probabilities[:, value.astype(int)][:, 0]
 
     @classmethod
     def create_layer_from_nodes_with_same_type_and_scope(
