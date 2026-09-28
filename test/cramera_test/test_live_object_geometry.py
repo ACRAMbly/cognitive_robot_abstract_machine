@@ -26,6 +26,7 @@ from semantic_digital_twin.world_description.world_entity import Body
 
 from cramera.live.bridge import Bridge, ObjectCatalogEntry
 from cramera.live.recording_bundle import _object_entry
+from cramera.recording_fields import SceneField
 
 from .dataset.mesh_geometry import resolved_textured_mesh
 
@@ -167,7 +168,7 @@ def test_white_geometry_keeps_its_native_color(color: Color) -> None:
     [entry] = bridge.object_catalog()
     [shape] = entry["shapes"]
 
-    assert bridge.object_metadata[0].color is color
+    assert bridge.object_metadata[0].shapes[0].color is color
     assert entry["color"] == color.to_hex()
     assert shape["color"] == color.to_hex()
     assert shape["opacity"] == color.A
@@ -239,6 +240,32 @@ def test_shapeless_catalog_preserves_its_empty_native_geometry() -> None:
     assert bridge.object_catalog()[0]["shapes"] == []
     assert bridge.object_body(str(body.name)) is body
     assert bridge.object_keys() == [str(body.name)]
+
+
+def test_shapeless_catalog_does_not_invent_a_color() -> None:
+    """
+    Publish no appearance when the native body has no geometry.
+    """
+    body = Body(name=PrefixedName("empty"))
+    bridge = Bridge()
+    bridge.publish_bodies({str(body.name): body})
+
+    assert SceneField.COLOR not in bridge.object_catalog()[0]
+
+
+def test_shapeless_recording_does_not_invent_a_color(tmp_path: Path) -> None:
+    """
+    Record no appearance when the native body has no geometry.
+
+    :param tmp_path: Directory receiving the object's recording assets.
+    """
+    body = Body(name=PrefixedName("empty"))
+    bridge = Bridge()
+    bridge.publish_bodies({str(body.name): body})
+
+    payload = _object_entry(bridge.object_metadata[0], [1, 2, 3, 0, 0, 0, 1], tmp_path)
+
+    assert SceneField.COLOR not in payload
 
 
 def test_recording_keeps_a_shapeless_body_without_exporting_a_solid(

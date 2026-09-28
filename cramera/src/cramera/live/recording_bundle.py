@@ -179,7 +179,7 @@ def _object_entry(
     An inline box must be centered and aligned with its body. Other local transforms are
     retained in exported mesh geometry.
 
-    :param entry: The object's publication identity, colour and native geometry.
+    :param entry: The object's publication identity and native geometry.
     :param spawn: The object's pose in the recording's first frame.
     :param output_directory: Directory a mesh file is written into.
     """
@@ -187,13 +187,13 @@ def _object_entry(
         "id": entry.id,
         "key": entry.key,
         "spawn": spawn,
-        "color": entry.color.to_hex(),
     }
     shapes = entry.shapes
     if not shapes:
         payload[SceneField.SHAPES] = []
         payload["height"] = 0.0
         return payload
+    payload[SceneField.COLOR] = shapes[0].color.to_hex()
     payload["height"] = round(float(shapes.combined_mesh.extents[2]), POSE_PRECISION)
     if (
         len(shapes) == 1

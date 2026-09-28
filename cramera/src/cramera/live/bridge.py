@@ -39,7 +39,7 @@ from cramera.body_geometry import NumericPose, POSE_PRECISION, rounded_pose
 from semantic_digital_twin.world_description.connections import (
     ActiveConnection1DOF,
 )
-from semantic_digital_twin.world_description.geometry import Color, Mesh
+from semantic_digital_twin.world_description.geometry import Mesh
 from semantic_digital_twin.world_description.shape_collection import ShapeCollection
 from semantic_digital_twin.world_description.world_entity import WorldEntity
 from cramera.knowledge.enums import PlanNodeGroup, SceneEntityPrefix
@@ -103,11 +103,6 @@ class ObjectCatalogEntry:
         """Return the display identifier derived from the published key."""
         return Path(self.key).stem
 
-    @property
-    def color(self) -> Color:
-        """Return the first shape's native color, or native white without geometry."""
-        return self.shapes[0].color if self.shapes else Color()
-
     def to_payload(self) -> dict[str, Any]:
         """Describe native shapes with the browser's primitive and asset fields.
 
@@ -121,12 +116,14 @@ class ObjectCatalogEntry:
                 else None
             )
             entries.append(asdict(shape_entry(shape, mesh_url)))
-        return {
+        payload = {
             SceneField.KEY: self.key,
             SceneField.ID: self.id,
-            SceneField.COLOR: self.color.to_hex(),
             SceneField.SHAPES: entries,
         }
+        if self.shapes:
+            payload[SceneField.COLOR] = self.shapes[0].color.to_hex()
+        return payload
 
 
 @dataclass
