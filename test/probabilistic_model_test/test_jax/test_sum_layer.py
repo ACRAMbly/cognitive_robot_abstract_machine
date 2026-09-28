@@ -24,6 +24,8 @@ from probabilistic_model.probabilistic_circuit.rx.probabilistic_circuit import (
     ProbabilisticCircuit as NXProbabilisticCircuit,
 )
 
+from .circuit_conversion import jax_circuit_of, rustworkx_circuit_of
+
 
 class DiracSumUnitTestCase(unittest.TestCase):
     x: Continuous = Continuous("x")
@@ -218,7 +220,7 @@ class NygaDistributionTestCase(unittest.TestCase):
         cls.data = jax.random.normal(jax.random.PRNGKey(69), (1000, 1))
         model = NygaInduction(Continuous("x"), min_samples_per_quantile=10)
         cls.nx_model = model.fit(cls.data)
-        cls.jax_model = ProbabilisticCircuit.from_rustworkx(cls.nx_model)
+        cls.jax_model = jax_circuit_of(cls.nx_model)
         cls.jax_model.root.validate()
 
     def test_log_likelihood(self):
@@ -226,5 +228,5 @@ class NygaDistributionTestCase(unittest.TestCase):
         self.assertTrue(jnp.all(ll > -jnp.inf))
 
     def test_to_nx(self):
-        nx_model = self.jax_model.to_rustworkx()
+        nx_model = rustworkx_circuit_of(self.jax_model)
         self.assertAlmostEqual(logsumexp(nx_model.root.log_weights), 0.0)

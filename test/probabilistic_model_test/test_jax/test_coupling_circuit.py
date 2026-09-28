@@ -31,6 +31,8 @@ from probabilistic_model.probabilistic_circuit.rx.probabilistic_circuit import (
     ProbabilisticCircuit as NXProbabilisticCircuit,
 )
 
+from .circuit_conversion import jax_circuit_of
+
 
 class TrivialConditioner(Conditioner):
 
@@ -139,7 +141,7 @@ class CouplingCircuit4DTestCase(unittest.TestCase):
         cls.jpt = cls.non_marginalized_jpt.marginal(
             jpt.variables[cls.number_of_variables // 2 :]
         )
-        circuit = ProbabilisticCircuit.from_rustworkx(cls.jpt, False)
+        circuit = jax_circuit_of(cls.jpt)
         conditioner = LinearConditioner(
             cls.number_of_variables // 2, circuit.root.number_of_trainable_parameters
         )

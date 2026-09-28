@@ -31,6 +31,8 @@ from probabilistic_model.probabilistic_circuit.rx.probabilistic_circuit import (
     ProbabilisticCircuit as NXProbabilisticCircuit,
 )
 
+from .circuit_conversion import jax_circuit_of, rustworkx_circuit_of
+
 np.random.seed(69)
 
 
@@ -88,7 +90,7 @@ class SmallCircuitIntegrationTestCase(unittest.TestCase):
         sum5.add_subcircuit(d_y2, np.log(0.9))
 
         cls.nx_model = nx_model
-        cls.jax_model = ProbabilisticCircuit.from_rustworkx(cls.nx_model)
+        cls.jax_model = jax_circuit_of(cls.nx_model)
 
     def test_creation(self):
         self.assertEqual(self.jax_model.variables, self.nx_model.variables)
@@ -141,14 +143,14 @@ class JPTIntegrationTestCase(unittest.TestCase):
         cls.jpt = jpt.fit(df)
 
     def test_from_jpt(self):
-        model = ProbabilisticCircuit.from_rustworkx(self.jpt, False)
+        model = jax_circuit_of(self.jpt)
         samples = jnp.array(self.jpt.sample(1000))
         jax_ll = model.log_likelihood(samples)
         self.assertTrue((jax_ll > -jnp.inf).all())
 
     def test_to_nx_pc(self):
-        model = ProbabilisticCircuit.from_rustworkx(self.jpt, False)
-        model_nx = model.to_rustworkx(True)
+        model = jax_circuit_of(self.jpt)
+        model_nx = rustworkx_circuit_of(model)
         # import matplotlib.pyplot as plt
         # model_nx.root.plot_structure()
         # plt.show()
@@ -213,7 +215,7 @@ class NanGradientTestCase(unittest.TestCase):
         ).as_composite_set()
         cls.event = event1 | event2
         cls.nx_model = uniform_measure_of_event(cls.event)
-        cls.jax_model = ProbabilisticCircuit.from_rustworkx(cls.nx_model)
+        cls.jax_model = jax_circuit_of(cls.nx_model)
 
     def test_nan_gradient(self):
         """

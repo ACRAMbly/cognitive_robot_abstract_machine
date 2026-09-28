@@ -3,18 +3,15 @@ import unittest
 import jax.numpy as jnp
 from random_events.variable import Continuous
 
-from probabilistic_model.probabilistic_circuit.jax.gaussian_layer import (
-    GaussianLayer,
-    GaussianDistribution,
-)
-from probabilistic_model.probabilistic_circuit.jax.probabilistic_circuit import (
-    ProbabilisticCircuit,
-)
+from probabilistic_model.distributions.gaussian import GaussianDistribution
+from probabilistic_model.probabilistic_circuit.jax.gaussian_layer import GaussianLayer
 from probabilistic_model.probabilistic_circuit.rx.probabilistic_circuit import (
     SumUnit,
     UnivariateContinuousLeaf,
     ProbabilisticCircuit as NXProbabilisticCircuit,
 )
+
+from .circuit_conversion import jax_circuit_of
 
 
 class GaussianLayerTestCase(unittest.TestCase):
@@ -50,13 +47,28 @@ class GaussianLayerTestCase(unittest.TestCase):
         s.add_subcircuit(g2, 0.5)
         s.add_subcircuit(g1, 0.5)
 
-        jax_pc = ProbabilisticCircuit.from_rustworkx(nx_pc)
+        jax_pc = jax_circuit_of(nx_pc)
         gaussian_layer = jax_pc.root.child_layers[0]
         self.assertIsInstance(gaussian_layer, GaussianLayer)
         gaussian_layer.validate()
         self.assertEqual(gaussian_layer.variable, 0)
-        self.assertTrue(jnp.allclose(gaussian_layer.location, jnp.array([0.0, 1.0])))
-        self.assertTrue(jnp.allclose(gaussian_layer.scale, jnp.array([1.0, 1.01])))
+        distributions = sorted(
+            [g1.distribution, g2.distribution],
+            key=lambda distribution: distribution.location,
+        )
+        order = jnp.argsort(gaussian_layer.location)
+        self.assertTrue(
+            jnp.allclose(
+                gaussian_layer.location[order],
+                jnp.array([distribution.location for distribution in distributions]),
+            )
+        )
+        self.assertTrue(
+            jnp.allclose(
+                gaussian_layer.scale[order],
+                jnp.array([distribution.scale for distribution in distributions]),
+            )
+        )
 
 
 if __name__ == "__main__":

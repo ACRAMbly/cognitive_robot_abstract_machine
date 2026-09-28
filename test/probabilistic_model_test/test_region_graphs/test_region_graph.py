@@ -26,6 +26,8 @@ from probabilistic_model.probabilistic_circuit.rx.probabilistic_circuit import (
 )
 from random_events.variable import Continuous, Symbolic
 
+from ..test_jax.circuit_conversion import rustworkx_circuit_of
+
 np.random.seed(420)
 random.seed(420)
 
@@ -46,7 +48,7 @@ class RandomRegionGraphTestCase(unittest.TestCase):
 
     def test_as_jpc(self):
         model = self.region_graph.as_probabilistic_circuit(input_units=10, sum_units=5)
-        nx_model = model.to_rustworkx()
+        nx_model = rustworkx_circuit_of(model)
         # fig = go.Figure(nx_model.plot_structure(), nx_model.plotly_layout_structure())
         # fig.show()
 
@@ -69,7 +71,7 @@ class RandomRegionGraphLearningTestCase(unittest.TestCase):
         data = jnp.array(data)
         model = self.region_graph.as_probabilistic_circuit(input_units=5, sum_units=5)
         model.fit(data, epochs=10, optimizer=optax.adamw(0.01))
-        nx_model = model.to_rustworkx()
+        nx_model = rustworkx_circuit_of(model)
         for node in nx_model.nodes():
             if isinstance(node, SumUnit):
                 self.assertAlmostEqual(logsumexp(node.log_weights), 0.0)
@@ -100,7 +102,7 @@ class ClassificationTestCase(unittest.TestCase):
         pc = model.as_probabilistic_circuit(self.target)
         self.assertIsInstance(pc, JPC)
         self.assertEqual(pc.variables, self.features | SortedSet([self.target]))
-        nx_pc = pc.to_rustworkx()
+        nx_pc = rustworkx_circuit_of(pc)
         self.assertTrue(nx_pc.is_decomposable())
 
         p_target = nx_pc.marginal(SortedSet([self.target]))

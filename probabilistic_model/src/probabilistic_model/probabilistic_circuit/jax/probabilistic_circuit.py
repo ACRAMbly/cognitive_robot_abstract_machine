@@ -1,16 +1,14 @@
 from __future__ import annotations
 
-import collections
 from dataclasses import dataclass
 from typing import Dict, Any
 
-import numpy as np
 import optax
 from jax.experimental.sparse import BCOO
 from krrood.adapters.json_serializer import SubclassJSONSerializer, to_json, from_json
-from random_events.variable import Variable, Symbolic
+from random_events.variable import Symbolic
 from sortedcontainers import SortedSet
-from typing_extensions import Tuple, Self, List, Optional
+from typing_extensions import Self, Optional
 
 from probabilistic_model.probabilistic_circuit.jax.inner_layer import (
     ProductLayer,
@@ -18,12 +16,8 @@ from probabilistic_model.probabilistic_circuit.jax.inner_layer import (
     InputLayer,
     InnerLayer,
     Layer,
-    RustworkxLayerConverter,
 )
 from probabilistic_model.probabilistic_circuit.jax.discrete_layer import DiscreteLayer
-from probabilistic_model.probabilistic_circuit.rx.probabilistic_circuit import (
-    ProbabilisticCircuit as NXProbabilisticCircuit,
-)
 import jax
 import tqdm
 import jax.numpy as jnp
@@ -33,7 +27,12 @@ import equinox as eqx
 @dataclass
 class ProbabilisticCircuit(SubclassJSONSerializer):
     """
-    A probabilistic circuit as wrapper for a layered probabilistic model.
+    A probabilistic circuit as wrapper for a layered probabilistic model, for learning
+    its parameters by gradient descent.
+
+    Only the log-likelihood, the loss of training, is computed here. Every other query
+    is answered by the layered circuits of the ``tensorized`` package, which the
+    ``jax_tensorized`` adapters convert this circuit into and back.
     """
 
     variables: SortedSet
@@ -48,54 +47,6 @@ class ProbabilisticCircuit(SubclassJSONSerializer):
 
     def log_likelihood(self, x: jax.Array) -> jax.Array:
         return self.root.log_likelihood_of_nodes(x)[:, 0]
-
-    @classmethod
-    def from_rustworkx(
-        cls, pc: NXProbabilisticCircuit, progress_bar: bool = False
-    ) -> ProbabilisticCircuit:
-        """
-        Convert a probabilistic circuit to a layered circuit.
-
-        The result expresses the same distribution as `pc`.
-
-        :param pc: The probabilistic circuit.
-        :param progress_bar: Whether to show a progress bar.
-        :return: The layered circuit.
-        """
-        # group nodes by depth
-        layer_to_nodes_map = {index: layer for index, layer in enumerate(pc.layers)}
-        reversed_layers_to_nodes_map = dict(reversed(layer_to_nodes_map.items()))
-
-        # create layers from nodes
-        child_layers: List[RustworkxLayerConverter] = []
-        for layer_index, nodes in (
-            tqdm.tqdm(reversed_layers_to_nodes_map.items(), desc="Creating Layers")
-            if progress_bar
-            else reversed_layers_to_nodes_map.items()
-        ):
-
-            child_layers = Layer.create_layers_from_nodes(
-                nodes, child_layers, progress_bar
-            )
-        root = child_layers[0].layer
-
-        return cls(pc.variables, root)
-
-    def to_rustworkx(self, progress_bar: bool = True) -> NXProbabilisticCircuit:
-        """
-        Convert the probabilistic circuit to a rustworkx graph.
-
-        :param progress_bar: Whether to show a progress bar.
-        :return: The rustworkx graph.
-        """
-        if progress_bar:
-            number_of_edges = self.root.number_of_components
-            progress_bar = tqdm.tqdm(total=number_of_edges, desc="Converting to rx")
-        else:
-            progress_bar = None
-        result = NXProbabilisticCircuit()
-        self.root.to_rustworkx(self.variables, result, progress_bar)
-        return result
 
     def to_json(self) -> Dict[str, Any]:
         result = super().to_json()
@@ -226,12 +177,6 @@ class ClassificationCircuit(ProbabilisticCircuit):
             layer.variables  # trigger the setter
 
         return ProbabilisticCircuit(new_variables, root)
-
-    def to_rustworkx(self, progress_bar: bool = True) -> NXProbabilisticCircuit:
-        raise NotImplementedError(
-            "ClassificationCircuit does not support to_rustworkx. "
-            "Call 'to_probabilistic_circuit' first."
-        )
 
     def fit(
         self,

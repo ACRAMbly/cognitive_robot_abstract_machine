@@ -1,12 +1,15 @@
 import json
 from probabilistic_model.learning.jpt.jpt import JointProbabilityTree
 from probabilistic_model.learning.jpt.variables import infer_variables_from_dataframe
+from probabilistic_model.adapters.jax_tensorized.tensorized_to_jax import (
+    LayeredCircuitToJaxCircuitConverter,
+)
+from probabilistic_model.adapters.rustworkx_tensorized.rustworkx_to_tensorized import (
+    RustworkxCircuitToLayeredCircuitConverter,
+)
 from probabilistic_model.probabilistic_circuit.jax.probabilistic_circuit import (
     ProbabilisticCircuit,
 )
-
-# importing the layer module makes the conversion know the layer for uniform leaves
-import probabilistic_model.probabilistic_circuit.jax.uniform_layer
 from probabilistic_model.probabilistic_circuit.rx.probabilistic_circuit import (
     ProbabilisticCircuit as RXProbabilisticCircuit,
 )
@@ -63,7 +66,9 @@ if not load_from_disc:
         variables, min_samples_per_leaf=min_samples_leaf
     )
     rustworkx_model = rustworkx_model.fit(df)
-    jax_model = ProbabilisticCircuit.from_rustworkx(rustworkx_model, True)
+    jax_model = LayeredCircuitToJaxCircuitConverter.convert(
+        RustworkxCircuitToLayeredCircuitConverter.convert(rustworkx_model)
+    )
     if save_to_disc:
         with open(rustworkx_model_path, "w") as f:
             f.write(json.dumps(rustworkx_model.to_json()))

@@ -11,6 +11,18 @@ from random_events.variable import Continuous
 
 from probabilistic_model.distributions.gaussian import GaussianDistribution
 from probabilistic_model.distributions.uniform import UniformDistribution
+from probabilistic_model.adapters.jax_tensorized.tensorized_to_jax import (
+    LayeredCircuitToJaxCircuitConverter,
+)
+from probabilistic_model.adapters.rustworkx_tensorized.rustworkx_to_tensorized import (
+    RustworkxCircuitToLayeredCircuitConverter,
+)
+from probabilistic_model.adapters.jax_tensorized.jax_to_tensorized import (
+    JaxCircuitToLayeredCircuitConverter,
+)
+from probabilistic_model.adapters.rustworkx_tensorized.tensorized_to_rustworkx import (
+    LayeredCircuitToRustworkxCircuitConverter,
+)
 from probabilistic_model.probabilistic_circuit.jax.probabilistic_circuit import (
     ProbabilisticCircuit,
 )
@@ -89,7 +101,9 @@ if not load_from_disc:
     result.normalize()
 
     rustworkx_model = result.probabilistic_circuit
-    jax_model = ProbabilisticCircuit.from_rustworkx(rustworkx_model, True)
+    jax_model = LayeredCircuitToJaxCircuitConverter.convert(
+        RustworkxCircuitToLayeredCircuitConverter.convert(rustworkx_model)
+    )
 
     if save_to_disc:
         with open(rustworkx_model_path, "w") as f:
@@ -151,7 +165,9 @@ figure = px.line(
 figure.show()
 
 jax_model.root = root
-rustworkx_model = jax_model.to_rustworkx(True)
+rustworkx_model = LayeredCircuitToRustworkxCircuitConverter.convert(
+    JaxCircuitToLayeredCircuitConverter.convert(jax_model)
+)
 figure = go.Figure(rustworkx_model.plot(), rustworkx_model.plotly_layout())
 figure.update_layout(title="Fitted model guess")
 figure.show()

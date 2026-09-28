@@ -1,49 +1,19 @@
 from __future__ import annotations
 
-import inspect
 import math
 from abc import abstractmethod, ABC
-from dataclasses import dataclass
 import equinox as eqx
 import jax
-import tqdm
 from jax import numpy as jnp
 from jax.experimental.sparse import BCOO, bcoo_concatenate
 from jax.scipy.special import logsumexp
 from jax.tree_util import tree_flatten
 from jaxtyping import Int, Array
-from krrood.adapters.json_serializer import recursive_subclasses, SubclassJSONSerializer
+from krrood.adapters.json_serializer import SubclassJSONSerializer
 from probabilistic_model.exceptions import ShapeMismatchError
-from random_events.variable import Variable
-from sortedcontainers import SortedSet
-from typing_extensions import (
-    List,
-    Iterator,
-    Tuple,
-    Union,
-    Type,
-    Dict,
-    Any,
-    Self,
-    Optional,
-)
+from typing_extensions import List, Iterator, Tuple, Union, Dict, Any, Self, Optional
 
 from probabilistic_model.probabilistic_circuit.jax.utils import copy_bcoo
-from probabilistic_model.probabilistic_circuit.rx.probabilistic_circuit import (
-    SumUnit,
-    ProductUnit,
-    Unit,
-    ProbabilisticCircuit as RustworkxProbabilisticCircuit,
-)
-
-
-def inverse_class_of(clazz: Type[Unit]) -> Type[Layer]:
-    for subclass in recursive_subclasses(Layer):
-        if not inspect.isabstract(subclass):
-            if issubclass(clazz, subclass.rustworkx_classes()):
-                return subclass
-
-    raise TypeError(f"Could not find class for {clazz}")
 
 
 class Layer(eqx.Module, SubclassJSONSerializer, ABC):
@@ -112,92 +82,6 @@ class Layer(eqx.Module, SubclassJSONSerializer, ABC):
 
         :param memo: A dictionary that is used to keep track of objects that have
             already been copied.
-        """
-        raise NotImplementedError
-
-    @classmethod
-    def rustworkx_classes(cls) -> Tuple[Type, ...]:
-        """
-        :return: The tuple of matching classes of the layer in the probabilistic_model.probabilistic_circuit.rx package.
-        """
-        return tuple()
-
-    def to_rustworkx(
-        self,
-        variables: SortedSet[Variable],
-        result: RustworkxProbabilisticCircuit,
-        progress_bar: Optional[tqdm.tqdm] = None,
-    ) -> List[Unit]:
-        """
-        Convert the layer to a networkx circuit.
-
-        For every node in this circuit, a corresponding node in the networkx circuit is
-        created. The nodes all belong to the same circuit.
-
-        :param variables: The variables of the circuit.
-        :param result: The resulting circuit to write into
-        :param progress_bar: A progress bar to show the progress.
-        :return: The nodes of the networkx circuit.
-        """
-        raise NotImplementedError
-
-    @staticmethod
-    def create_layers_from_nodes(
-        nodes: List[Unit],
-        child_layers: List[RustworkxLayerConverter],
-        progress_bar: bool = True,
-    ) -> List[RustworkxLayerConverter]:
-        """
-        Create a layer from a list of nodes.
-        """
-        result = []
-
-        unique_types = set(
-            type(node) if not node.is_leaf else type(node.distribution)
-            for node in nodes
-        )
-        for unique_type in unique_types:
-            nodes_of_current_type = [
-                node
-                for node in nodes
-                if (
-                    isinstance(node, unique_type)
-                    if not node.is_leaf
-                    else isinstance(node.distribution, unique_type)
-                )
-            ]
-
-            if nodes[0].is_leaf:
-                unique_type = type(nodes_of_current_type[0].distribution)
-
-            layer_type = inverse_class_of(unique_type)
-
-            scopes = [tuple(node.variables) for node in nodes_of_current_type]
-            unique_scopes = set(scopes)
-            for scope in unique_scopes:
-                nodes_of_current_type_and_scope = [
-                    node
-                    for node in nodes_of_current_type
-                    if tuple(node.variables) == scope
-                ]
-
-                layer = layer_type.create_layer_from_nodes_with_same_type_and_scope(
-                    nodes_of_current_type_and_scope, child_layers, progress_bar
-                )
-                result.append(layer)
-
-        return result
-
-    @classmethod
-    @abstractmethod
-    def create_layer_from_nodes_with_same_type_and_scope(
-        cls,
-        nodes: List[Unit],
-        child_layers: List[RustworkxLayerConverter],
-        progress_bar: bool = True,
-    ) -> RustworkxLayerConverter:
-        """
-        Create a layer from a list of nodes with the same type and scope.
         """
         raise NotImplementedError
 
@@ -359,10 +243,6 @@ class SumLayer(InnerLayer, ABC):
 class SparseSumLayer(SumLayer):
     log_weights: List[BCOO]
 
-    @classmethod
-    def rustworkx_classes(cls) -> Tuple[Type, ...]:
-        return (SumUnit,)
-
     @property
     def number_of_components(self) -> int:
         return sum([cl.number_of_components for cl in self.child_layers]) + sum(
@@ -454,120 +334,16 @@ class SparseSumLayer(SumLayer):
         ]
         return cls(child_layer, log_weights)
 
-    @classmethod
-    def create_layer_from_nodes_with_same_type_and_scope(
-        cls,
-        nodes: List[SumUnit],
-        child_layers: List[RustworkxLayerConverter],
-        progress_bar: bool = True,
-    ) -> RustworkxLayerConverter:
-
-        result_hash_remap = {hash(node): index for index, node in enumerate(nodes)}
-        variables = jnp.array(
-            [
-                nodes[0].probabilistic_circuit.variables.index(variable)
-                for variable in nodes[0].variables
-            ]
-        )
-
-        number_of_nodes = len(nodes)
-
-        # filter the child layers to only contain layers with the same scope as this one
-        filtered_child_layers = [
-            child_layer
-            for child_layer in child_layers
-            if (child_layer.layer.variables == variables).all()
-        ]
-        log_weights = []
-
-        # for every possible child layer
-        for child_layer in filtered_child_layers:
-
-            # initialize indices and values for sparse weight matrix
-            indices = []
-            values = []
-
-            # gather indices and log log_weights
-            for index, node in enumerate(
-                tqdm.tqdm(nodes, desc="Calculating log_weights for sum node")
-                if progress_bar
-                else nodes
-            ):
-                for weight, subcircuit in node.log_weighted_subcircuits:
-                    if hash(subcircuit) in child_layer.hash_remap:
-                        indices.append(
-                            (index, child_layer.hash_remap[hash(subcircuit)])
-                        )
-                        values.append((weight))
-
-            # assemble sparse log weight matrix
-            log_weights.append(
-                BCOO(
-                    (jnp.array(values), jnp.array(indices)),
-                    shape=(number_of_nodes, child_layer.layer.number_of_nodes),
-                )
-            )
-
-        sum_layer = cls([cl.layer for cl in filtered_child_layers], log_weights)
-        return RustworkxLayerConverter(sum_layer, nodes, result_hash_remap)
-
-    def to_rustworkx(
-        self,
-        variables: SortedSet[Variable],
-        result: RustworkxProbabilisticCircuit,
-        progress_bar: Optional[tqdm.tqdm] = None,
-    ) -> List[Unit]:
-
-        variables_ = [variables[i] for i in self.variables]
-
-        if progress_bar:
-            progress_bar.set_postfix_str(
-                f"Parsing Sum Layer for variables {variables_}"
-            )
-
-        units = [
-            SumUnit(probabilistic_circuit=result) for _ in range(self.number_of_nodes)
-        ]
-
-        child_layer_rustworkx = [
-            cl.to_rustworkx(variables, result, progress_bar) for cl in self.child_layers
-        ]
-
-        for log_weights, child_layer in zip(self.log_weights, child_layer_rustworkx):
-
-            # extract the log_weights for the child layer
-            for (row, col), log_weight in zip(log_weights.indices, log_weights.data):
-                units[row].add_subcircuit(child_layer[col], log_weight.item())
-                if progress_bar:
-                    progress_bar.update()
-
-        [unit.normalize() for unit in units]
-
-        return units
-
 
 class DenseSumLayer(SumLayer):
     log_weights: List[jnp.array]
     child_layers: Union[List[[ProductLayer]], List[InputLayer]]
-
-    @classmethod
-    def create_layer_from_nodes_with_same_type_and_scope(
-        cls,
-        nodes: List[Unit],
-        child_layers: List[RustworkxLayerConverter],
-        progress_bar: bool = True,
-    ) -> RustworkxLayerConverter:
-        raise NotImplementedError
 
     @property
     def number_of_components(self) -> float:
         return sum([cl.number_of_components for cl in self.child_layers]) + sum(
             [math.prod(lw.shape) for lw in self.log_weights]
         )
-
-    @classmethod
-    def rustworkx_classes(cls) -> Tuple[Type, ...]:
-        return tuple()
 
     @property
     def concatenated_log_weights(self) -> Array:
@@ -631,43 +407,6 @@ class DenseSumLayer(SumLayer):
         log_weights = [jnp.asarray(lw) for lw in data["log_weights"]]
         return cls(child_layer, log_weights)
 
-    def to_rustworkx(
-        self,
-        variables: SortedSet[Variable],
-        result: RustworkxProbabilisticCircuit,
-        progress_bar: Optional[tqdm.tqdm] = None,
-    ) -> List[Unit]:
-
-        variables_ = [variables[i] for i in self.variables]
-
-        if progress_bar:
-            progress_bar.set_postfix_str(
-                f"Parsing Dense Sum Layer for variables {variables_}"
-            )
-
-        units = [
-            SumUnit(probabilistic_circuit=result) for _ in range(self.number_of_nodes)
-        ]
-
-        child_layer_rustworkx = [
-            cl.to_rustworkx(variables, result, progress_bar) for cl in self.child_layers
-        ]
-
-        for log_weights, child_layer in zip(self.log_weights, child_layer_rustworkx):
-            # extract the log_weights for the child layer
-            for row in range(log_weights.shape[0]):
-                for col in range(log_weights.shape[1]):
-                    units[row].add_subcircuit(
-                        child_layer[col], jnp.exp(log_weights[row, col]).item()
-                    )
-
-                    if progress_bar:
-                        progress_bar.update()
-
-        [unit.normalize() for unit in units]
-
-        return units
-
 
 class ProductLayer(InnerLayer):
     """
@@ -713,10 +452,6 @@ class ProductLayer(InnerLayer):
     @property
     def number_of_nodes(self) -> int:
         return self.edges.shape[1]
-
-    @classmethod
-    def rustworkx_classes(cls) -> Tuple[Type, ...]:
-        return (ProductUnit,)
 
     @property
     def number_of_components(self) -> int:
@@ -784,98 +519,3 @@ class ProductLayer(InnerLayer):
             unique_indices=True,
         )
         return cls(child_layer, edges)
-
-    @classmethod
-    def create_layer_from_nodes_with_same_type_and_scope(
-        cls,
-        nodes: List[Unit],
-        child_layers: List[RustworkxLayerConverter],
-        progress_bar: bool = True,
-    ) -> RustworkxLayerConverter:
-
-        hash_remap = {hash(node): index for index, node in enumerate(nodes)}
-        number_of_nodes = len(nodes)
-
-        edge_indices = []
-        edge_values = []
-        if progress_bar:
-            progress_bar = tqdm.tqdm(
-                total=number_of_nodes, desc="Assembling Product Layer"
-            )
-        # for every node in the nodes for this layer
-        for node_index, node in enumerate(nodes):
-
-            # for every child layer
-            for child_layer_index, child_layer in enumerate(child_layers):
-                cl_variables = SortedSet(
-                    [
-                        node.probabilistic_circuit.variables[index]
-                        for index in child_layer.layer.variables
-                    ]
-                )
-
-                # for every subcircuit
-                for subcircuit_index, subcircuit in enumerate(node.subcircuits):
-                    # if the scopes are compatible
-                    if cl_variables == subcircuit.variables:
-                        # add the edge
-                        edge_indices.append([child_layer_index, node_index])
-                        edge_values.append(child_layer.hash_remap[hash(subcircuit)])
-            if progress_bar:
-                progress_bar.update(1)
-
-        # assemble sparse edge tensor
-        edges = (
-            BCOO(
-                (jnp.array(edge_values), jnp.array(edge_indices)),
-                shape=(len(child_layers), number_of_nodes),
-            )
-            .sort_indices()
-            .sum_duplicates(remove_zeros=False)
-        )
-        layer = cls([cl.layer for cl in child_layers], edges)
-        return RustworkxLayerConverter(layer, nodes, hash_remap)
-
-    def to_rustworkx(
-        self,
-        variables: SortedSet[Variable],
-        result: RustworkxProbabilisticCircuit,
-        progress_bar: Optional[tqdm.tqdm] = None,
-    ) -> List[Unit]:
-
-        if result is None:
-            result = RustworkxProbabilisticCircuit()
-
-        variables_ = [variables[i] for i in self.variables]
-        if progress_bar:
-            progress_bar.set_postfix_str(
-                f"Parsing Product Layer of variables {variables_}"
-            )
-
-        units = [
-            ProductUnit(probabilistic_circuit=result)
-            for _ in range(self.number_of_nodes)
-        ]
-
-        child_layer_rustworkx = [
-            cl.to_rustworkx(variables, result, progress_bar) for cl in self.child_layers
-        ]
-        for (row, col), data in zip(self.edges.indices, self.edges.data):
-            units[col].add_subcircuit(child_layer_rustworkx[row][data])
-
-            if progress_bar:
-                progress_bar.update()
-
-        return units
-
-
-@dataclass
-class RustworkxLayerConverter:
-    """
-    Class used for conversion from a probabilistic circuit in rustworkx to a layered
-    circuit in jax.
-    """
-
-    layer: Layer
-    nodes: List[Unit]
-    hash_remap: Dict[int, int]

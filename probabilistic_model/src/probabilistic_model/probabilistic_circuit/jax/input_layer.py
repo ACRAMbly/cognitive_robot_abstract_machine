@@ -1,28 +1,16 @@
 from __future__ import annotations
 
 from abc import ABC
-from typing import List, Dict, Any
+from typing import Dict, Any
 
 import equinox as eqx
 import jax
-import tqdm
 from jax import numpy as jnp
 
 from probabilistic_model.exceptions import ShapeMismatchError
-from random_events.variable import Variable
-from sortedcontainers import SortedSet
-from typing_extensions import Tuple, Type, Self, Optional
+from typing_extensions import Self
 
-from probabilistic_model.probabilistic_circuit.jax.inner_layer import (
-    InputLayer,
-    RustworkxLayerConverter,
-)
-from probabilistic_model.probabilistic_circuit.rx.probabilistic_circuit import (
-    Unit,
-    ProbabilisticCircuit as NXProbabilisticCircuit,
-    UnivariateContinuousLeaf,
-)
-from probabilistic_model.distributions.distributions import DiracDeltaDistribution
+from probabilistic_model.probabilistic_circuit.jax.inner_layer import InputLayer
 
 
 class ContinuousLayer(InputLayer, ABC):
@@ -135,35 +123,6 @@ class DiracDeltaLayer(ContinuousLayer):
     def log_likelihood_of_nodes_of_value(self, value: jax.Array) -> jax.Array:
         return jnp.where(value == self.location, jnp.log(self.density_cap), -jnp.inf)
 
-    @classmethod
-    def rustworkx_classes(cls) -> Tuple[Type, ...]:
-        return (DiracDeltaDistribution,)
-
-    @classmethod
-    def create_layer_from_nodes_with_same_type_and_scope(
-        cls,
-        nodes: List[UnivariateContinuousLeaf],
-        child_layers: List[RustworkxLayerConverter],
-        progress_bar: bool = True,
-    ) -> RustworkxLayerConverter:
-        """
-        Create a DiracDeltaLayer from a list of UnivariateContinuousLeaf nodes that all
-        represent Dirac delta distributions over the same variable.
-        """
-        hash_remap = {hash(node): index for index, node in enumerate(nodes)}
-        locations = jnp.array(
-            [node.distribution.location for node in nodes], dtype=jnp.float32
-        )
-        density_caps = jnp.array(
-            [node.distribution.density_cap for node in nodes], dtype=jnp.float32
-        )
-        result = cls(
-            nodes[0].probabilistic_circuit.variables.index(nodes[0].variable),
-            locations,
-            density_caps,
-        )
-        return RustworkxLayerConverter(result, nodes, hash_remap)
-
     def to_json(self) -> Dict[str, Any]:
         result = super().to_json()
         result["location"] = self.location.tolist()
@@ -177,26 +136,3 @@ class DiracDeltaLayer(ContinuousLayer):
             jnp.array(data["location"]),
             jnp.array(data["density_cap"]),
         )
-
-    def to_rustworkx(
-        self,
-        variables: SortedSet[Variable],
-        result: NXProbabilisticCircuit,
-        progress_bar: Optional[tqdm.tqdm] = None,
-    ) -> List[Unit]:
-        variable = variables[self.variable]
-
-        if progress_bar:
-            progress_bar.set_postfix_str(
-                f"Creating Dirac Delta distributions for variable {variable.name}"
-            )
-
-        nodes = [
-            UnivariateContinuousLeaf(
-                DiracDeltaDistribution(variable, location.item(), density_cap.item()),
-                result,
-            )
-            for location, density_cap in zip(self.location, self.density_cap)
-        ]
-        progress_bar.update(self.number_of_nodes)
-        return nodes

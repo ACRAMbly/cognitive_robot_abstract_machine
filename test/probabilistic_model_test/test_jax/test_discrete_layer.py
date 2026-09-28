@@ -2,6 +2,7 @@ import unittest
 from enum import IntEnum
 
 import jax.numpy as jnp
+from jax.experimental.sparse import BCOO
 import numpy as np
 from random_events.set import Set
 from random_events.variable import Symbolic
@@ -9,6 +10,7 @@ from sortedcontainers import SortedSet
 
 from probabilistic_model.distributions.distributions import SymbolicDistribution
 from probabilistic_model.probabilistic_circuit.jax.discrete_layer import DiscreteLayer
+from probabilistic_model.probabilistic_circuit.jax.inner_layer import SparseSumLayer
 from probabilistic_model.probabilistic_circuit.jax.probabilistic_circuit import (
     ProbabilisticCircuit,
 )
@@ -19,6 +21,8 @@ from probabilistic_model.probabilistic_circuit.rx.probabilistic_circuit import (
     leaf,
 )
 from probabilistic_model.utils import MissingDict
+
+from .circuit_conversion import jax_circuit_of, rustworkx_circuit_of
 
 
 class Animal(IntEnum):
@@ -74,7 +78,7 @@ class DiscreteLayerTestCase(unittest.TestCase):
 
         nx_pc = s.probabilistic_circuit
 
-        jax_pc = ProbabilisticCircuit.from_rustworkx(nx_pc)
+        jax_pc = jax_circuit_of(nx_pc)
         discrete_layer = jax_pc.root.child_layers[0]
 
         self.assertIsInstance(discrete_layer, DiscreteLayer)
@@ -86,13 +90,20 @@ class DiscreteLayerTestCase(unittest.TestCase):
         )
 
     def test_to_rx(self):
-        rx_circuit = self.model.to_rustworkx(
-            SortedSet([self.x]), NXProbabilisticCircuit()
-        )[0].probabilistic_circuit
-        self.assertEqual(len(rx_circuit.nodes()), 2)
-        self.assertEqual(len(rx_circuit.edges()), 0)
-        for node in rx_circuit.nodes():
-            self.assertIsInstance(node, UnivariateDiscreteLeaf)
+        mixture = SparseSumLayer(
+            [self.model],
+            [BCOO((jnp.zeros(2), jnp.array([[0, 0], [0, 1]])), shape=(1, 2))],
+        )
+        rx_circuit = rustworkx_circuit_of(
+            ProbabilisticCircuit(SortedSet([self.x]), mixture)
+        )
+        leaves = [
+            node
+            for node in rx_circuit.nodes()
+            if isinstance(node, UnivariateDiscreteLeaf)
+        ]
+        self.assertEqual(len(leaves), self.model.number_of_nodes)
+        for node in leaves:
             self.assertEqual(node.variable, self.x)
             distribution: SymbolicDistribution = node.distribution
             self.assertAlmostEqual(
