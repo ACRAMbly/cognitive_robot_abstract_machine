@@ -17,7 +17,7 @@ from rclpy.time import Time
 from tf2_py import InvalidArgumentException
 from tf2_ros import Buffer, TransformListener
 
-from semantic_digital_twin.adapters.ros.ros2_node import Ros2Node
+from semantic_digital_twin.adapters.ros.ros2_node import HasROS2Node
 
 if TYPE_CHECKING:
     from networkx import MultiDiGraph
@@ -30,7 +30,7 @@ TransformableMsg = TypeVar(
 
 
 @dataclass
-class TFWrapper(Ros2Node):
+class TFWrapper(HasROS2Node):
     """
     A wrapper for ROS2's very beautiful tf library.
     """

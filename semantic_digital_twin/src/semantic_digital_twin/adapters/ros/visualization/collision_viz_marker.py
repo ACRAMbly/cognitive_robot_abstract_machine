@@ -12,7 +12,7 @@ from rclpy.qos import QoSProfile, DurabilityPolicy
 from std_msgs.msg import ColorRGBA
 from visualization_msgs.msg import Marker, MarkerArray
 
-from semantic_digital_twin.adapters.ros.ros2_node import Ros2Node
+from semantic_digital_twin.adapters.ros.ros2_node import HasROS2Node
 from semantic_digital_twin.collision_checking.collision_detector import (
     CollisionCheckingResult,
     ClosestPoints,
@@ -100,7 +100,7 @@ class ClassifiedContact:
 
 
 @dataclass
-class CollisionVisualizationMarkerPublisher(CollisionConsumer, Ros2Node):
+class CollisionVisualizationMarkerPublisher(CollisionConsumer, HasROS2Node):
     """
     Publishes the closest-points results of collision checks as an RViz marker.
 

@@ -12,7 +12,7 @@ from semantic_digital_twin.adapters.ros.latest_message_subscriber import (
     MessageType,
 )
 from semantic_digital_twin.adapters.ros.tfwrapper import TFWrapper
-from semantic_digital_twin.adapters.ros.ros2_node import Ros2Node
+from semantic_digital_twin.adapters.ros.ros2_node import HasROS2Node
 from semantic_digital_twin.exceptions import (
     AlreadyTrackedByTfFrameError,
     ConnectionCannotBeTrackedByTfFrameError,
@@ -210,7 +210,7 @@ class SubscribedBasePoseSource(BasePoseSource, OdometrySynchronizer):
 
 
 @dataclass
-class TfFrameSynchronizer(InputSynchronizer, Ros2Node):
+class TfFrameSynchronizer(InputSynchronizer, HasROS2Node):
     """
     Writes tf transforms into 6 degree of freedom connections.
     """

@@ -18,7 +18,7 @@ from krrood.symbolic_math.symbolic_math import (
     CompiledFunction,
 )
 from semantic_digital_twin.adapters.ros.tfwrapper import TFWrapper
-from semantic_digital_twin.adapters.ros.ros2_node import Ros2Node
+from semantic_digital_twin.adapters.ros.ros2_node import HasROS2Node
 from semantic_digital_twin.callbacks.callback import (
     StateChangeCallback,
     ModelChangeCallback,
@@ -84,7 +84,7 @@ class TfFrameNames:
 
 
 @dataclass(eq=False)
-class TfPublisherModelCallback(ModelChangeCallback, Ros2Node):
+class TfPublisherModelCallback(ModelChangeCallback, HasROS2Node):
     """
     Publishes the TF tree of the world.
     """
@@ -189,7 +189,7 @@ class TfPublisherModelCallback(ModelChangeCallback, Ros2Node):
 
 
 @dataclass(eq=False)
-class TFPublisher(StateChangeCallback, Ros2Node):
+class TFPublisher(StateChangeCallback, HasROS2Node):
     """
     On state change, publishes the TF tree of the world.
 

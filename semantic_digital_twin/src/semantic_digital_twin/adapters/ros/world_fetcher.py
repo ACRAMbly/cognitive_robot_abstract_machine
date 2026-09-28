@@ -12,11 +12,11 @@ from semantic_digital_twin.adapters.world_entity_kwargs_tracker import (
 )
 from semantic_digital_twin.world import World
 from semantic_digital_twin.adapters.ros.messages import WorldModelSnapshot
-from semantic_digital_twin.adapters.ros.ros2_node import Ros2Node
+from semantic_digital_twin.adapters.ros.ros2_node import HasROS2Node
 
 
 @dataclass
-class FetchWorldServer(Ros2Node):
+class FetchWorldServer(HasROS2Node):
     """
     A ros service that allows other processes to fetch the entire world modification
     list from this world.

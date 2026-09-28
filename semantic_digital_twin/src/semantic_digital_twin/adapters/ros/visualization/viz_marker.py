@@ -12,7 +12,7 @@ from typing_extensions import List
 from visualization_msgs.msg import MarkerArray
 
 from semantic_digital_twin.adapters.ros.msg_converter import SemDTToRos2Converter
-from semantic_digital_twin.adapters.ros.ros2_node import Ros2Node
+from semantic_digital_twin.adapters.ros.ros2_node import HasROS2Node
 from semantic_digital_twin.adapters.ros.tf_publisher import TFPublisher, TfFrameNames
 from semantic_digital_twin.adapters.ros.visualization.collision_viz_marker import (
     CollisionVisualizationMarkerPublisher,
@@ -46,7 +46,7 @@ class ShapeSource(Enum):
 
 
 @dataclass(eq=False)
-class VizMarkerPublisher(ModelChangeCallback, Ros2Node):
+class VizMarkerPublisher(ModelChangeCallback, HasROS2Node):
     """
     Publishes the world model as a visualization marker.
 

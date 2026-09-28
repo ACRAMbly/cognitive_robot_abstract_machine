@@ -8,7 +8,7 @@ from rclpy.node import Node
 
 
 @dataclass(eq=False)
-class Ros2Node:
+class HasROS2Node:
     """
     Base class for everything that communicates over a ROS2 node.
     """

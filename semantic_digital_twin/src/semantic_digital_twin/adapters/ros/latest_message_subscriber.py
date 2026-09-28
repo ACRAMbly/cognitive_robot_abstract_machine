@@ -7,14 +7,14 @@ from rclpy.subscription import Subscription
 from typing_extensions import Generic, Type, TypeVar
 
 from krrood.patterns.subclass_safe_generic import SubClassSafeGeneric
-from semantic_digital_twin.adapters.ros.ros2_node import Ros2Node
+from semantic_digital_twin.adapters.ros.ros2_node import HasROS2Node
 from semantic_digital_twin.exceptions import UnboundMessageTypeError
 
 MessageType = TypeVar("MessageType")
 
 
 @dataclass
-class LatestMessageSubscriber(Generic[MessageType], SubClassSafeGeneric, Ros2Node, ABC):
+class LatestMessageSubscriber(Generic[MessageType], SubClassSafeGeneric, HasROS2Node, ABC):
     """
     Subscribes to a topic and keeps the most recently received message.
 

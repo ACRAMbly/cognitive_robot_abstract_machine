@@ -9,7 +9,7 @@ from semantic_digital_twin.adapters.ros.input_synchronization import (
 from semantic_digital_twin.adapters.ros.latest_message_subscriber import (
     LatestMessageSubscriber,
 )
-from semantic_digital_twin.adapters.ros.ros2_node import Ros2Node
+from semantic_digital_twin.adapters.ros.ros2_node import HasROS2Node
 from semantic_digital_twin.adapters.ros.tf_publisher import (
     TFPublisher,
     TfPublisherModelCallback,
@@ -43,13 +43,13 @@ node_users = [
 
 @pytest.mark.parametrize("node_user", node_users)
 def test_classes_communicating_over_a_node_are_ros2_nodes(node_user):
-    assert issubclass(node_user, Ros2Node)
+    assert issubclass(node_user, HasROS2Node)
 
 
 @pytest.mark.parametrize("node_user", node_users)
 def test_node_field_is_declared_only_on_ros2_node(node_user):
     assert (
-        node_user.__dataclass_fields__["node"] is Ros2Node.__dataclass_fields__["node"]
+            node_user.__dataclass_fields__["node"] is HasROS2Node.__dataclass_fields__["node"]
     )
 
 

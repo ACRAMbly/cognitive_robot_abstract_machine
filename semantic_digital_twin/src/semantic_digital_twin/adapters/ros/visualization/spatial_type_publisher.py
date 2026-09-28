@@ -8,7 +8,7 @@ from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, QoSProfile
 from visualization_msgs.msg import Marker, MarkerArray
 
-from semantic_digital_twin.adapters.ros.ros2_node import Ros2Node
+from semantic_digital_twin.adapters.ros.ros2_node import HasROS2Node
 from semantic_digital_twin.adapters.ros.visualization.exceptions import (
     WorldNotResolvableError,
 )
@@ -44,7 +44,7 @@ class MarkerIdentity:
 
 
 @dataclass(eq=False)
-class SpatialTypePublisher(StateChangeCallback, Ros2Node):
+class SpatialTypePublisher(StateChangeCallback, HasROS2Node):
     """
     Publishes spatial types as RViz markers and keeps them updated as the robot moves.
 
