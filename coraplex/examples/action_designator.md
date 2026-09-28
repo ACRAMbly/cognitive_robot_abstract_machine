@@ -62,7 +62,7 @@ from coraplex.testing import setup_world
 world = setup_world()
 pr2 = PR2.from_world(world)
 
-# A location draws its candidates from a costmap, so a seed is what makes this
+# A location samples its candidates from a costmap, so a seed is what makes this
 # example run the same way twice.
 context = Context(world=world, robot=pr2, sampling_seed=0)
 
@@ -190,7 +190,7 @@ with simulated_robot:
              Pose.from_xyz_rpy(1.5, 2.4, 0.0, reference_frame=world.root)
          ),
          PickUpAction(
-             grasp=(milk := world.get_semantic_annotations_by_type(Milk)[0]).grasp_poses()[0],
+             grasp=(milk := world.get_semantic_annotations_by_type(Milk)[0]).grasp_candidates()[0],
              arm=arm,
          ),
          PlaceAction(
@@ -257,7 +257,7 @@ from semantic_digital_twin.datastructures.definitions import TorsoState
 from semantic_digital_twin.semantic_annotations.semantic_annotations import Milk
 
 description = TransportAction.from_grasp(
-    world.get_semantic_annotations_by_type(Milk)[0].grasp_poses()[0],
+    world.get_semantic_annotations_by_type(Milk)[0].grasp_candidates()[0],
     Pose.from_xyz_quaternion(3.0, 2.2, 1.04, 0.0, 0.0, 1.0, 0.0, reference_frame=world.root),
     pr2.left_arm,
     context,

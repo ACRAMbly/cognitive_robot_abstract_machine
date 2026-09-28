@@ -34,7 +34,10 @@ from semantic_digital_twin.reasoning.predicates import allclose
 from semantic_digital_twin.reasoning.robot_predicates import is_body_gripped
 from semantic_digital_twin.robots.robot_parts import Arm
 from semantic_digital_twin.spatial_types.spatial_types import Pose
-from semantic_digital_twin.semantic_annotations.mixins import GraspPose, HasGraspPoses
+from semantic_digital_twin.semantic_annotations.mixins import (
+    GraspCandidate,
+    HasGraspCandidates,
+)
 
 
 @dataclass
@@ -49,7 +52,7 @@ class PlaceAction(
     Places an object at a position with the arm that holds it.
     """
 
-    object_designator: HasGraspPoses
+    object_designator: HasGraspCandidates
     """
     The annotation of the object that should be placed.
     """
@@ -114,7 +117,6 @@ class PlaceAction(
             self.context,
         )
 
-
     def _holding_arm(self) -> Arm:
         """
         The arm that holds :attr:`object_designator`.
@@ -135,7 +137,6 @@ class PlaceAction(
             raise ObjectIsNotHeld(self.object_designator)
         return previous_pick.arm
 
-
     def _previous_pick_up_of_the_object(self) -> Optional[PickUpAction]:
         """
         :return: The pick-up right before this place, if it picks up
@@ -153,7 +154,7 @@ class PlaceAction(
             return None
         return previous_pick.designator
 
-    def _grasp_on_the_held_object(self) -> GraspPose:
+    def _grasp_on_the_held_object(self) -> GraspCandidate:
         """
         The grasp the object is held by.
 
@@ -169,7 +170,7 @@ class PlaceAction(
         for arm in self.robot.get_arms():
             held = arm.end_effector.grasp_on(self.object_designator.root)
             if held is not None:
-                return GraspPose(self.object_designator, held)
+                return GraspCandidate(self.object_designator, held)
         previous_pick = self._previous_pick_up_of_the_object()
         if previous_pick is None:
             raise ObjectIsNotHeld(self.object_designator)

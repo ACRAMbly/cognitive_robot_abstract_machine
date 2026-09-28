@@ -6,7 +6,7 @@ from typing_extensions import List, Optional
 from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix
 from semantic_digital_twin.spatial_types.spatial_types import Pose
 from semantic_digital_twin.robots.robot_parts import EndEffector
-from semantic_digital_twin.semantic_annotations.mixins import GraspPose
+from semantic_digital_twin.semantic_annotations.mixins import GraspCandidate
 
 
 @dataclass
@@ -265,7 +265,7 @@ class HasApproachesGraspPoses:
     Turns a grasp frame into the tool center point goals that reach it and withdraw again.
 
     A grasp pose is a grasp frame as
-    :meth:`~semantic_digital_twin.semantic_annotations.mixins.HasGraspPoses.grasp_poses`
+    :meth:`~semantic_digital_twin.semantic_annotations.mixins.HasGraspCandidates.grasp_candidates`
     defines it: its x-axis points the way the gripper travels toward the object. What
     that frame means for a concrete gripper is the end effector's own business (see
     :meth:`~semantic_digital_twin.robots.robot_parts.EndEffector.tool_frame_goal`); what
@@ -287,7 +287,7 @@ class HasApproachesGraspPoses:
         self,
         reference_T_grasp: Pose,
         end_effector: EndEffector,
-        grasp: Optional[GraspPose] = None,
+        grasp: Optional[GraspCandidate] = None,
         reverse: bool = False,
     ) -> List[Pose]:
         """
@@ -324,7 +324,7 @@ class HasApproachesGraspPoses:
             sequence.reverse()
         return sequence
 
-    def _approach_distance(self, grasp: Optional[GraspPose]) -> float:
+    def _approach_distance(self, grasp: Optional[GraspCandidate]) -> float:
         """
         How far ahead of the grasp the gripper waits before its final approach.
 
@@ -342,7 +342,7 @@ class HasApproachesGraspPoses:
         return self._distance_to_boundary(grasp) + self.approach_clearance
 
     @staticmethod
-    def _distance_to_boundary(grasp: GraspPose) -> float:
+    def _distance_to_boundary(grasp: GraspCandidate) -> float:
         """
         The distance the gripper has to retrace before it leaves the body's bounding
         box.

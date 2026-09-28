@@ -178,13 +178,13 @@ The structure of fixtures in this conftest:
 """
 
 
-# %% repeatable location draws
+# %% repeatable location samples
 
 SAMPLING_SEED = 0
 """
-The seed every plan context a test builds fixes its location draws with.
+The seed every plan context a test builds fixes its location samples with.
 
-Locations draw their candidates from a costmap rather than ranking it, so an unseeded
+Locations sample their candidates from a costmap rather than ranking it, so an unseeded
 run explores differently every time and a test that grounds one passes or fails by
 chance.
 """

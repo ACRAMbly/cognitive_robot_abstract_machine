@@ -1,5 +1,5 @@
 """
-How a rated set of pose candidates is drawn from.
+How pose candidates are sampled from a rated set.
 """
 
 from __future__ import annotations
@@ -10,14 +10,14 @@ from typing_extensions import Optional
 
 
 @dataclass
-class CandidateDraw:
+class Sampling:
     """
-    The terms a backend is asked to draw pose candidates on.
+    How a location samples its pose candidates: how many, and from which seed.
     """
 
     number_of_samples: int = 2000
     """
-    How many candidates to draw.
+    How many candidates to sample.
 
     Far more than a caller judges properly, since a standing pose inside the furniture
     costs nothing to refuse.
@@ -25,8 +25,8 @@ class CandidateDraw:
 
     seed: Optional[int] = None
     """
-    Fixes the draw, so a run can be repeated exactly.
+    Fixes the sampling, so a run can be repeated exactly.
 
-    ``None`` draws afresh every time, which is what drawing from a map buys over reading
-    it off in the order the map rates it.
+    ``None`` samples afresh every time, which is what sampling from a map buys over
+    reading it off in the order the map rates it.
     """

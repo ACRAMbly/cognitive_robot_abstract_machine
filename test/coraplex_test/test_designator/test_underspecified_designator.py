@@ -256,7 +256,7 @@ def test_underspecified_language(apartment_world_pr2_copy_with_context):
             ),
             a(PickUpAction)(
                 arm=variable(Arm, domain=context.robot.get_arms()),
-                grasp=milk.grasp_poses()[0],
+                grasp=milk.grasp_candidates()[0],
             ),
         ],
         context=context,

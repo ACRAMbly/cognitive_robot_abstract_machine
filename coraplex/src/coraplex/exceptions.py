@@ -17,7 +17,7 @@ if TYPE_CHECKING:
     from coraplex.plans.designator import Designator
     from coraplex.robot_plans.actions.base import ActionDescription
     from semantic_digital_twin.robots.robot_parts import AbstractRobot, Arm
-    from semantic_digital_twin.semantic_annotations.mixins import HasGraspPoses
+    from semantic_digital_twin.semantic_annotations.mixins import HasGraspCandidates
     from semantic_digital_twin.world_description.world_entity import (
         SemanticAnnotation,
     )
@@ -186,7 +186,7 @@ class ObjectIsNotHeld(DataclassException):
     it is going to take.
     """
 
-    object_designator: HasGraspPoses
+    object_designator: HasGraspCandidates
     """
     The object that was to be placed.
     """
@@ -380,7 +380,7 @@ class NotOnASingleLevelException(DataclassException):
 @dataclass
 class NonPositiveNumberOfSamples(DataclassException):
     """
-    Raised when a costmap is asked for fewer than one candidate, which no draw can
+    Raised when a costmap is asked for fewer than one candidate, which no sampling can
     satisfy.
     """
 

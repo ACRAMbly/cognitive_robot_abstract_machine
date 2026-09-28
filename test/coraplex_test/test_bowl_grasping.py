@@ -64,14 +64,14 @@ def distances_to_surface(
 def test_bowl_grasps_close_on_the_bowls_wall(bowl):
     """
     The fingers must meet material. Grasping the bowl at its own origin -- which is
-    what an object without grasp poses of its own offers -- closes them in mid air
+    what an object without grasp candidates of its own offers -- closes them in mid air
     inside the bowl.
     """
     positions = np.array(
-        [grasp.root_T_grasp.to_np()[:3, 3] for grasp in bowl.grasp_poses()]
+        [grasp.root_T_grasp.to_np()[:3, 3] for grasp in bowl.grasp_candidates()]
     )
 
-    assert len(positions) == bowl.grasp_pose_count
+    assert len(positions) == bowl.grasp_candidate_count
     assert np.all(distances_to_surface(bowl, positions) < GRIPPABLE_DISTANCE)
 
 
@@ -120,7 +120,7 @@ def test_transporting_a_bowl_grasps_it_at_its_rim(pr2_and_bowl):
     context = Context(world, robot, sampling_seed=SAMPLING_SEED)
     context.evaluate_conditions = False
     transport = TransportAction.from_grasp(
-        bowl.grasp_poses()[0],
+        bowl.grasp_candidates()[0],
         Pose.from_xyz_rpy(5.0, 3.3, 0.75, reference_frame=world.root),
         context.robot.left_arm,
         context,

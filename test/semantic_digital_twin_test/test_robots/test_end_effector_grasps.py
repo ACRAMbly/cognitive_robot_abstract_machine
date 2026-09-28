@@ -15,7 +15,7 @@ from semantic_digital_twin.exceptions import (
 from semantic_digital_twin.robots.pr2 import PR2
 from semantic_digital_twin.robots.robot_parts import Camera, EndEffector
 from semantic_digital_twin.robots.tracy import Tracy
-from semantic_digital_twin.semantic_annotations.mixins import HasGraspPoses
+from semantic_digital_twin.semantic_annotations.mixins import HasGraspCandidates
 from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix
 from semantic_digital_twin.spatial_types.spatial_types import Vector3
 from semantic_digital_twin.world_description.connections import FixedConnection
@@ -48,7 +48,7 @@ def pr2_gripper(pr2_world_copy) -> EndEffector:
 
 
 @pytest.fixture
-def graspable_box(pr2_world_copy) -> HasGraspPoses:
+def graspable_box(pr2_world_copy) -> HasGraspCandidates:
     """
     A box within the PR2's reach that offers the default ring of grasps.
     """
@@ -56,7 +56,7 @@ def graspable_box(pr2_world_copy) -> HasGraspPoses:
         name=PrefixedName("graspable_box"),
         collision=ShapeCollection([Box(scale=Scale(0.1, 0.1, 0.2))]),
     )
-    annotation = HasGraspPoses(root=body)
+    annotation = HasGraspCandidates(root=body)
     with pr2_world_copy.modify_world():
         pr2_world_copy.add_connection(
             FixedConnection(
@@ -188,7 +188,7 @@ def test_every_robot_states_its_axes_in_the_frame_they_belong_to(
 
 
 def test_tool_frame_goal_keeps_the_grasp_position(pr2_gripper, graspable_box):
-    grasp = graspable_box.grasp_poses()[0].root_T_grasp
+    grasp = graspable_box.grasp_candidates()[0].root_T_grasp
 
     goal = pr2_gripper.tool_frame_goal(grasp)
 
@@ -202,7 +202,7 @@ def test_tool_frame_goal_applies_the_end_effectors_own_orientation(
     Two grippers pointing different ways must be sent different orientations for one
     and the same grasp.
     """
-    grasp = graspable_box.grasp_poses()[0].root_T_grasp
+    grasp = graspable_box.grasp_candidates()[0].root_T_grasp
 
     goal = pr2_gripper.tool_frame_goal(grasp)
 

@@ -37,7 +37,10 @@ from semantic_digital_twin.spatial_types.spatial_types import Pose
 from semantic_digital_twin.world_description.connections import Connection6DoF
 from semantic_digital_twin.world_description.geometry import Box, Scale
 from semantic_digital_twin.world_description.shape_collection import ShapeCollection
-from semantic_digital_twin.semantic_annotations.mixins import GraspPose, HasGraspPoses
+from semantic_digital_twin.semantic_annotations.mixins import (
+    GraspCandidate,
+    HasGraspCandidates,
+)
 from semantic_digital_twin.world import World
 from semantic_digital_twin.world_description.world_entity import Body
 
@@ -106,12 +109,12 @@ def robot_setup(request):
         # The boxes stand in for any graspable object; the plans only need an annotation
         # to name them by, not a particular kind of object.
         world.add_semantic_annotations(
-            [HasGraspPoses(root=box1), HasGraspPoses(root=box2)]
+            [HasGraspCandidates(root=box1), HasGraspCandidates(root=box2)]
         )
     return world, request.param[1]
 
 
-def graspable_annotation(world: World, body: Body) -> HasGraspPoses:
+def graspable_annotation(world: World, body: Body) -> HasGraspCandidates:
     """
     The annotation naming ``body`` for the actions that take one rather than a body.
 
@@ -122,7 +125,7 @@ def graspable_annotation(world: World, body: Body) -> HasGraspPoses:
     return an(
         entity(
             semantic_annotation := variable(
-                HasGraspPoses, domain=world.semantic_annotations
+                HasGraspCandidates, domain=world.semantic_annotations
             )
         ).where(semantic_annotation.root == body)
     ).first()
@@ -187,7 +190,7 @@ def test_reach_action_multi(immutable_stationary_block_world):
         [
             ParkArmsAction(context.robot.get_arms()),
             ReachAction(
-                grasp=GraspPose(box, grasp_pose),
+                grasp=GraspCandidate(box, grasp_pose),
                 arm=left_or_only_arm(context.robot),
             ),
         ],
@@ -251,7 +254,7 @@ def test_grasping(immutable_stationary_block_world):
 
     box_body = world.get_body_by_name("box1")
     description = GraspingAction(
-        GraspPose(
+        GraspCandidate(
             graspable_annotation(world, box_body),
             Pose.from_xyz_rpy(pitch=np.pi / 2, reference_frame=box_body),
         ),
@@ -281,7 +284,7 @@ def test_pick_up_multi(mutable_stationary_block_world):
         [
             ParkArmsAction(context.robot.get_arms()),
             PickUpAction(
-                graspable_annotation(world, box_body).grasp_poses()[0],
+                graspable_annotation(world, box_body).grasp_candidates()[0],
                 left_or_only_arm(context.robot),
             ),
         ],
@@ -323,7 +326,7 @@ def test_place_multi(mutable_stationary_block_world, place_position):
         [
             ParkArmsAction(context.robot.get_arms()),
             PickUpAction(
-                graspable_annotation(world, box_body).grasp_poses()[0],
+                graspable_annotation(world, box_body).grasp_candidates()[0],
                 left_or_only_arm(context.robot),
             ),
             PlaceAction(

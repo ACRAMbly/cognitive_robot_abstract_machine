@@ -14,7 +14,7 @@ from coraplex.locations.costmaps import (
     RingCostmap,
     VisibilityCostmap,
 )
-from coraplex.locations.sampling import CandidateDraw
+from coraplex.locations.sampling import Sampling
 from semantic_digital_twin.robots.robot_parts import Arm
 from semantic_digital_twin.spatial_types.spatial_types import Pose
 
@@ -22,8 +22,8 @@ from semantic_digital_twin.spatial_types.spatial_types import Pose
 @dataclass
 class CostmapLocation(Location, ABC):
     """
-    A location whose candidates are drawn from a costmap of the world as it is when they
-    are drawn.
+    A location whose candidates are sampled from a costmap of the world as it is when
+    they are sampled.
     """
 
     context: Context = field(kw_only=True)
@@ -33,25 +33,25 @@ class CostmapLocation(Location, ABC):
 
     def __post_init__(self) -> None:
         """
-        Fix this location's draw to the plan it belongs to.
+        Fix this location's sampling to the plan it belongs to.
 
         A plan that pins its seed is asking every location inside it to repeat, so a
-        draw that names no seed of its own takes the plan's. A draw handed one already
-        keeps it.
+        location whose sampling names no seed of its own takes the plan's. One whose
+        sampling names a seed already keeps it.
         """
-        if self.draw.seed is not None:
+        if self.sampling.seed is not None:
             return
-        self.draw = replace(self.draw, seed=self.context.sampling_seed)
+        self.sampling = replace(self.sampling, seed=self.context.sampling_seed)
 
     @abstractmethod
     def costmap(self) -> Costmap:
         """
-        :return: The costmap the candidates are drawn from, built from the world as it
+        :return: The costmap the candidates are sampled from, built from the world as it
             is now.
         """
 
-    def candidates(self, draw: CandidateDraw) -> Iterator[Pose]:
-        return self.costmap().candidates(draw)
+    def candidates(self, sampling: Sampling) -> Iterator[Pose]:
+        return self.costmap().candidates(sampling)
 
     def _in_world(self, pose: Pose) -> Pose:
         """
@@ -72,7 +72,7 @@ class ReachabilityLocation(CostmapLocation):
     """
     The pose the arm is to reach.
 
-    Given relative to a body, it is where that body is when the candidates are drawn.
+    Given relative to a body, it is where that body is when the candidates are sampled.
     """
 
     arm: Arm
@@ -113,7 +113,7 @@ class VisibilityLocation(CostmapLocation):
     """
     The pose that should be visible.
 
-    Given relative to a body, it is where that body is when the candidates are drawn.
+    Given relative to a body, it is where that body is when the candidates are sampled.
     """
 
     def costmap(self) -> Costmap:

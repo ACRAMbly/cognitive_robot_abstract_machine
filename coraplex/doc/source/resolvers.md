@@ -15,10 +15,10 @@ adapt to objects that moved, a torso that was already raised, or an object alrea
 ## Location designators
 
 Location designators are resolved into 6D poses by the locations in {mod}`coraplex.locations`. A
-{class}`~coraplex.locations.base.Location` is drawn from a costmap (see {doc}`costmap`) for criteria such as reach
+{class}`~coraplex.locations.base.Location` is sampled from a costmap (see {doc}`costmap`) for criteria such as reach
 distance, visibility and occupancy. The locations in {mod}`coraplex.locations.locations`, such as
 {class}`~coraplex.locations.locations.ReachabilityLocation`, build that costmap from the world as it is when they are
-drawn from, and a target given relative to a body follows that body. Iterating a location draws candidate poses from
+sampled from, and a target given relative to a body follows that body. Iterating a location samples candidate poses from
 it; whether the robot can do its task from one of them is found out by trying the action that uses it.
 
 ## Customising resolution

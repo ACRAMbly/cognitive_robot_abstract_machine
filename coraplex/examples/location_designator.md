@@ -45,7 +45,7 @@ from semantic_digital_twin.robots.pr2 import PR2
 
 world = setup_world()
 pr2_view = PR2.from_world(world)
-# A location draws its candidates from a costmap, so a seed is what makes this
+# A location samples its candidates from a costmap, so a seed is what makes this
 # example run the same way twice.
 context = Context(world, pr2_view, sampling_seed=0)
 
@@ -118,7 +118,7 @@ pr2_view.root.parent_connection.origin = origin_pose.to_homogeneous_matrix()
 
 As you can see we get a pose near the countertop where the robot can be placed without colliding with it, at the
 distance from which the arm can reach the given object. The target is given relative to the milk, so the location
-follows the milk wherever it is when the location is drawn from.
+follows the milk wherever it is when the location is sampled from.
 
 ## Visible
 

@@ -9,7 +9,7 @@ from typing_extensions import Iterator, List
 from coraplex.datastructures.dataclasses import Context
 from coraplex.locations.base import Location
 from coraplex.locations.costmaps import RingCostmap
-from coraplex.locations.sampling import CandidateDraw
+from coraplex.locations.sampling import Sampling
 from coraplex.locations.locations import ReachabilityLocation, VisibilityLocation
 from semantic_digital_twin.api import RobotSpecification, WorldSpecification
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
@@ -28,9 +28,9 @@ from semantic_digital_twin.world_description.world_entity import Body
 
 
 @dataclass
-class RecordsHowItWasDrawn(Location):
+class RecordsHowItWasSampled(Location):
     """
-    Yields one candidate and records the terms the draw was asked for on.
+    Yields one candidate and records the sampling it was asked for.
     """
 
     pose: Pose
@@ -38,13 +38,13 @@ class RecordsHowItWasDrawn(Location):
     The single candidate to yield.
     """
 
-    asked_for: List[CandidateDraw] = field(default_factory=list)
+    asked_for: List[Sampling] = field(default_factory=list)
     """
-    One entry per draw: the terms it was asked on.
+    One entry per call: the sampling it was asked for.
     """
 
-    def candidates(self, draw: CandidateDraw) -> Iterator[Pose]:
-        self.asked_for.append(draw)
+    def candidates(self, sampling: Sampling) -> Iterator[Pose]:
+        self.asked_for.append(sampling)
         return iter([self.pose])
 
 
@@ -90,45 +90,45 @@ def _candidate(world: World) -> Pose:
     return Pose.from_xyz_rpy(1.3, 2.0, 0.0, yaw=0.25, reference_frame=world.root)
 
 
-# %% a location draws its candidates on its own terms
+# %% a location samples its candidates on its own terms
 
 
-def test_a_location_draws_on_the_terms_it_was_given(single_robot_world):
+def test_a_location_samples_on_the_terms_it_was_given(single_robot_world):
     world, robot, context = single_robot_world
-    draw = CandidateDraw(number_of_samples=17, seed=3)
-    location = RecordsHowItWasDrawn(pose=_candidate(world), draw=draw)
+    sampling = Sampling(number_of_samples=17, seed=3)
+    location = RecordsHowItWasSampled(pose=_candidate(world), sampling=sampling)
 
     list(islice(iter(location), 1))
 
-    assert location.asked_for == [draw]
+    assert location.asked_for == [sampling]
 
 
-def test_a_location_draws_nothing_before_it_is_consumed(single_robot_world):
+def test_a_location_samples_nothing_before_it_is_consumed(single_robot_world):
     """
-    A location handed to a plan as a domain is only drawn from once the plan asks for a
-    pose, so it reflects the world at that moment.
+    A location handed to a plan as a domain is only sampled from once the plan asks for
+    a pose, so it reflects the world at that moment.
     """
     world, robot, context = single_robot_world
-    location = RecordsHowItWasDrawn(pose=_candidate(world))
+    location = RecordsHowItWasSampled(pose=_candidate(world))
 
     candidates = iter(location)
     assert location.asked_for == []
 
     next(candidates)
-    assert location.asked_for == [location.draw]
+    assert location.asked_for == [location.sampling]
 
 
 def test_a_location_grounds_to_its_first_candidate(single_robot_world):
     world, robot, context = single_robot_world
-    location = RecordsHowItWasDrawn(pose=_candidate(world))
+    location = RecordsHowItWasSampled(pose=_candidate(world))
 
     assert location.ground() is location.pose
 
 
-def test_a_location_that_does_not_say_how_it_draws_cannot_be_built():
+def test_a_location_that_does_not_say_how_it_samples_cannot_be_built():
     """
-    A location inherits no draw of its own, so one that leaves the terms unanswered is
-    refused where it is defined rather than silently offering nothing at runtime.
+    A location inherits no sampling of its own, so one that leaves the terms unanswered
+    is refused where it is defined rather than silently offering nothing at runtime.
     """
 
     @dataclass
@@ -203,15 +203,13 @@ def _box_in(world: World) -> Milk:
     return graspable
 
 
-def test_a_reachability_location_is_drawn_around_its_target(single_robot_world):
+def test_a_reachability_location_is_sampled_around_its_target(single_robot_world):
     world, robot, context = single_robot_world
     target = Pose.from_xyz_rpy(
         *REACHABILITY_TARGET_POSITION, reference_frame=world.root
     )
 
-    location = ReachabilityLocation(
-        target, context.robot.right_arm, context=context
-    )
+    location = ReachabilityLocation(target, context.robot.right_arm, context=context)
 
     np.testing.assert_allclose(
         location.costmap().origin.to_position().to_np()[:2],
@@ -222,7 +220,7 @@ def test_a_reachability_location_is_drawn_around_its_target(single_robot_world):
 def test_a_reachability_location_takes_its_seed_from_the_context(single_robot_world):
     """
     A demonstration is only worth running as a regression test if it runs the same way
-    twice, so a plan can fix the draws made anywhere inside it.
+    twice, so a plan can fix the samples made anywhere inside it.
     """
     world, robot, context = single_robot_world
     context.sampling_seed = 5
@@ -233,13 +231,13 @@ def test_a_reachability_location_takes_its_seed_from_the_context(single_robot_wo
         context=context,
     )
 
-    assert location.draw.seed == context.sampling_seed
+    assert location.sampling.seed == context.sampling_seed
 
 
-def test_a_reachability_location_draws_afresh_without_one(single_robot_world):
+def test_a_reachability_location_samples_afresh_without_one(single_robot_world):
     """
     Left unseeded a plan explores the region differently each run, which is what makes
-    drawing from the map worth more than ranking it.
+    sampling from the map worth more than ranking it.
     """
     world, robot, context = single_robot_world
 
@@ -249,13 +247,13 @@ def test_a_reachability_location_draws_afresh_without_one(single_robot_world):
         context=context,
     )
 
-    assert location.draw.seed is None
+    assert location.sampling.seed is None
 
 
-# %% a location reflects the world when it is drawn from
+# %% a location reflects the world when it is sampled from
 
 
-def test_a_costmap_location_builds_its_costmap_only_when_drawn_from(
+def test_a_costmap_location_builds_its_costmap_only_when_sampled_from(
     single_robot_world, monkeypatch
 ):
     """
@@ -285,7 +283,7 @@ def test_a_costmap_location_builds_its_costmap_only_when_drawn_from(
 
 def test_a_target_given_in_a_body_frame_follows_the_body(single_robot_world):
     """
-    A target named relative to a body is where that body is when the location is drawn
+    A target named relative to a body is where that body is when the location is sampled
     from, not where it was when the location was made.
     """
     world, robot, context = single_robot_world
@@ -318,4 +316,4 @@ def test_a_visibility_location_takes_its_seed_from_the_context(single_robot_worl
         context=context,
     )
 
-    assert location.draw.seed == context.sampling_seed
+    assert location.sampling.seed == context.sampling_seed

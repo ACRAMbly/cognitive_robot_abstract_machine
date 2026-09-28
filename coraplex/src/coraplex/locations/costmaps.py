@@ -20,7 +20,7 @@ from typing_extensions import (
 )
 
 from coraplex.locations.base import Location
-from coraplex.locations.sampling import CandidateDraw
+from coraplex.locations.sampling import Sampling
 from semantic_digital_twin.datastructures.camera_resolution import CameraResolution
 from semantic_digital_twin.robots.robot_parts import AbstractRobot, Arm
 from semantic_digital_twin.semantic_annotations.semantic_annotations import Floor
@@ -191,8 +191,8 @@ class Costmap(Location):
         If any of these constrains is not fulfilled a ValueError will be raised.
 
         :param other: The other locations with which this locations should be merged.
-        :return: A new locations that contains the merged values, drawn on this
-            location's :attr:`draw`.
+        :return: A new locations that contains the merged values, sampled as this
+            location's :attr:`sampling` says.
         """
         if self.width != other.width or self.height != other.height:
             raise ValueError("You can only merge locations of the same size.")
@@ -229,7 +229,7 @@ class Costmap(Location):
             origin=self.origin,
             map=new_map,
             world=self.world,
-            draw=self.draw,
+            sampling=self.sampling,
         )
 
     def __add__(self, other: Costmap) -> Costmap:
@@ -294,29 +294,30 @@ class Costmap(Location):
 
         return rectangles
 
-    def candidates(self, draw: CandidateDraw) -> Iterator[Pose]:
+    def candidates(self, sampling: Sampling) -> Iterator[Pose]:
         """
-        Draw pose candidates from this map.
+        Sample pose candidates from this map.
 
         The sample count is capped at the number of entries this map holds, and every
         candidate faces this map's origin.
 
-        :param draw: The terms to draw the candidates on.
+        :param sampling: How to sample the candidates.
         :return: The candidate poses, in the order they should be tried.
         :raises NonPositiveNumberOfSamples: If asked for fewer than one candidate.
         """
-        if draw.number_of_samples < 1:
-            raise NonPositiveNumberOfSamples(draw.number_of_samples)
+        if sampling.number_of_samples < 1:
+            raise NonPositiveNumberOfSamples(sampling.number_of_samples)
 
-        # An entry is only ever offered once, so the whole map is all there is to draw.
-        return self._draw(
-            min(draw.number_of_samples, self.map.size),
-            np.random.default_rng(draw.seed),
+        # An entry is only ever offered once, so the whole map is all there is to
+        # sample.
+        return self._sample(
+            min(sampling.number_of_samples, self.map.size),
+            np.random.default_rng(sampling.seed),
         )
 
     def _orientation_facing_origin(self, position: Point3) -> Quaternion:
         """
-        The orientation a candidate drawn at the given position is offered with.
+        The orientation a candidate sampled at the given position is offered with.
 
         A candidate faces this map's origin, so that whatever the map was built around
         is in front of the robot standing there.
@@ -338,8 +339,8 @@ class Costmap(Location):
         """
         How many of the given entries can be offered at all.
 
-        An entry rated zero stands no chance of being drawn, so only the rated ones
-        count -- unless nothing is rated, which is drawn from evenly.
+        An entry rated zero stands no chance of being sampled, so only the rated ones
+        count -- unless nothing is rated, which is sampled from evenly.
 
         :param ratings: The flattened map, one rating per entry.
         :return: How many entries are offerable.
@@ -350,16 +351,17 @@ class Costmap(Location):
         self, segments: List[np.ndarray], number_of_samples: int
     ) -> List[int]:
         """
-        Split a budget over this map's segments, each drawn from as much as it is rated.
+        Split a budget over this map's segments, each sampled from as much as it is
+        rated.
 
-        A segment the map barely rates is barely drawn from, which is what makes the
-        draw follow the whole map rather than only the shape of each segment. What a
+        A segment the map barely rates is barely sampled from, which is what makes the
+        sampling follow the whole map rather than only the shape of each segment. What a
         segment has no entries left for goes to the next best rated one instead, so a
         budget is spent even when the best rated segment is a single entry.
 
         :param segments: This map's segments, the best rated first.
         :param number_of_samples: How many candidates the whole map was asked for.
-        :return: How many to draw from each segment, in the order they were given.
+        :return: How many to sample from each segment, in the order they were given.
         """
         capacities = [
             self._offerable_entries(segment.flatten()) for segment in segments
@@ -390,17 +392,17 @@ class Costmap(Location):
     ) -> NDArray[np.intp]:
         """
         Pick which of the given entries to offer, an entry's rating being its chance of
-        being drawn.
+        being sampled.
 
         Read that way the map is the distribution its shape describes, so what it rates
         highest is merely likeliest and the rest of the region still comes up. An entry
         rated zero stands no chance, so only the rated ones can be offered -- unless the
-        map rates nothing at all, which is drawn from evenly. Fewer than asked for are
+        map rates nothing at all, which is sampled from evenly. Fewer than asked for are
         offered when that leaves too few, since an entry is only ever offered once.
 
         :param ratings: The flattened map, one rating per entry.
         :param count: How many entries to pick at most.
-        :param random_generator: The source of randomness to draw from.
+        :param random_generator: The source of randomness to sample from.
         :return: The indices to offer, in the order they should be offered.
         """
         offerable = min(count, self._offerable_entries(ratings))
@@ -412,17 +414,17 @@ class Costmap(Location):
             ratings.size, offerable, replace=False, p=ratings / ratings.sum()
         )
 
-    def _draw(
+    def _sample(
         self,
         number_of_samples: int,
         random_generator: np.random.Generator,
     ) -> Iterator[Pose]:
         """
-        Draw candidates, the given number of them spread over this map's segments.
+        Sample candidates, the given number of them spread over this map's segments.
 
-        :param number_of_samples: How many candidates to draw, no more than this map
+        :param number_of_samples: How many candidates to sample, no more than this map
             holds.
-        :param random_generator: The source of randomness the draw is made with.
+        :param random_generator: The source of randomness to sample with.
         :Yield: A candidate pose.
         """
         segmented_maps = self.segment_map()

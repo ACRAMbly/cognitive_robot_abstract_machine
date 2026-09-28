@@ -419,11 +419,11 @@ class HasRootBody(HasRootKinematicStructureEntity[Body]):
         )
 
 
-# %% grasp poses
+# %% grasp candidates
 
 
 @dataclass(eq=False)
-class GraspPose:
+class GraspCandidate:
     """
     A grasp an object offers, together with the object offering it.
 
@@ -435,7 +435,7 @@ class GraspPose:
     how a grasp stays independent of the robot performing it.
     """
 
-    graspable: HasGraspPoses
+    graspable: HasGraspCandidates
     """
     The annotation of the object offering this grasp.
     """
@@ -457,7 +457,7 @@ class GraspPose:
             )
 
     @classmethod
-    def from_body_origin(cls, graspable: HasGraspPoses) -> GraspPose:
+    def from_body_origin(cls, graspable: HasGraspCandidates) -> GraspCandidate:
         """
         The grasp that takes an object at the origin of its own body.
 
@@ -468,7 +468,7 @@ class GraspPose:
 
     def moved_to(self, reference_T_object: Pose) -> Pose:
         """
-        Transform this grasp pose to where it would be, once the object is placed.
+        Transform this grasp candidate to where it would be, once the object is placed.
 
         :param reference_T_object: The pose the object is going to have.
         :return: ``reference_T_grasp``, the grasp in the same frame that pose is in.
@@ -477,7 +477,7 @@ class GraspPose:
 
 
 @dataclass(eq=False)
-class HasGraspPoses(HasRootBody):
+class HasGraspCandidates(HasRootBody):
     """
     A mixin class for semantic annotations that can say where they may be grasped.
 
@@ -485,12 +485,12 @@ class HasGraspPoses(HasRootBody):
     no collision geometry for fingers to close on.
     """
 
-    grasp_pose_count: int = field(default=12, kw_only=True)
+    grasp_candidate_count: int = field(default=12, kw_only=True)
     """
-    How many grasp poses :meth:`grasp_poses` generates.
+    How many grasp candidates :meth:`grasp_candidates` generates.
     """
 
-    def grasp_poses(self) -> List[GraspPose]:
+    def grasp_candidates(self) -> List[GraspCandidate]:
         """
         The grasps this annotation offers, in no particular order.
 
@@ -498,14 +498,16 @@ class HasGraspPoses(HasRootBody):
         around its z-axis. Annotations whose geometry admits a better grip override this.
         """
         return [
-            GraspPose(
+            GraspCandidate(
                 self,
                 Pose(
                     orientation=RotationMatrix.from_rpy(yaw=yaw).to_quaternion(),
                     reference_frame=self.root,
                 ),
             )
-            for yaw in np.linspace(0, 2 * np.pi, self.grasp_pose_count, endpoint=False)
+            for yaw in np.linspace(
+                0, 2 * np.pi, self.grasp_candidate_count, endpoint=False
+            )
         ]
 
 

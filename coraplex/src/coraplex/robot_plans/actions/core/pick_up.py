@@ -40,7 +40,10 @@ from semantic_digital_twin.reasoning.predicates import allclose
 from semantic_digital_twin.reasoning.robot_predicates import is_body_gripped
 from semantic_digital_twin.robots.robot_part_mixins import HasMobileBase
 from semantic_digital_twin.robots.robot_parts import Arm
-from semantic_digital_twin.semantic_annotations.mixins import GraspPose, HasGraspPoses
+from semantic_digital_twin.semantic_annotations.mixins import (
+    GraspCandidate,
+    HasGraspCandidates,
+)
 from semantic_digital_twin.spatial_types.spatial_types import Pose
 from semantic_digital_twin.world_description.world_entity import Body
 
@@ -58,12 +61,12 @@ class HasGraspChoice:
     on, so that is not asked for separately.
     """
 
-    grasp: GraspPose
+    grasp: GraspCandidate
     """
     The grasp to take hold by.
 
     One of the object's own
-    :meth:`~semantic_digital_twin.semantic_annotations.mixins.HasGraspPoses.grasp_poses`.
+    :meth:`~semantic_digital_twin.semantic_annotations.mixins.HasGraspCandidates.grasp_candidates`.
     """
 
     arm: Arm
@@ -103,7 +106,7 @@ class ReachAction(
     The arm that should be used for pick up.
     """
 
-    grasp: GraspPose
+    grasp: GraspCandidate
     """
     The grasp the tool frame should reach, which also names the object it is on.
     """
@@ -232,7 +235,7 @@ class PickUpAction(
     :attr:`ReachAction.perceive_before_grasp`.
     """
 
-    def _grasp_attempt_plan(self, grasp: GraspPose) -> PlanNode:
+    def _grasp_attempt_plan(self, grasp: GraspCandidate) -> PlanNode:
         """
         :param grasp: The grasp to attempt, so the attempt and the lift that
             follows it are built around the same one.

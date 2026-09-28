@@ -132,7 +132,7 @@ plan = sequential(
         MoveTorsoAction(TorsoState.HIGH),
         NavigateAction(Pose.from_xyz_rpy(2.0, 2.0, 0.0, reference_frame=world.root)),
         PickUpAction(
-            grasp=milk.grasp_poses()[0],
+            grasp=milk.grasp_candidates()[0],
             arm=pr2.right_arm,
         ),
         NavigateAction(Pose.from_xyz_rpy(4.0, 4.0, 0.0, reference_frame=world.root)),

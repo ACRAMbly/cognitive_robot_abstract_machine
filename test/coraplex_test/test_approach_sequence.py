@@ -3,7 +3,7 @@ import pytest
 
 from coraplex.robot_plans.mixins import HasApproachesGraspPoses
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
-from semantic_digital_twin.semantic_annotations.mixins import GraspPose
+from semantic_digital_twin.semantic_annotations.mixins import GraspCandidate
 from semantic_digital_twin.semantic_annotations.semantic_annotations import Milk
 from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix
 from semantic_digital_twin.spatial_types.spatial_types import (
@@ -45,12 +45,12 @@ def boxed_pr2_world(mutable_simple_pr2_world):
     return world, robot, graspable
 
 
-def grasp_at_origin(graspable) -> GraspPose:
+def grasp_at_origin(graspable) -> GraspCandidate:
     """
     :param graspable: The annotation of the object to grasp.
     :return: A grasp at the object's origin, approaching along the body's x-axis.
     """
-    return GraspPose.from_body_origin(graspable)
+    return GraspCandidate.from_body_origin(graspable)
 
 
 # %% approach sequences
@@ -84,7 +84,7 @@ def test_pre_grasp_pose_of_a_surface_grasp_only_adds_the_clearance(boxed_pr2_wor
     """
     _, robot, graspable = boxed_pr2_world
     action = HasApproachesGraspPoses()
-    surface_grasp = GraspPose(
+    surface_grasp = GraspCandidate(
         graspable,
         Pose(
             position=Vector3(0, 0, BOX_SCALE.z / 2).to_point3(),

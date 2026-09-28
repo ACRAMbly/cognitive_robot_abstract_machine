@@ -38,7 +38,7 @@ from giskardpy.motion_statechart.tasks.cartesian_tasks import CartesianPose
 from semantic_digital_twin.datastructures.definitions import TorsoState
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 from semantic_digital_twin.robots.tiago import Tiago
-from semantic_digital_twin.semantic_annotations.mixins import GraspPose
+from semantic_digital_twin.semantic_annotations.mixins import GraspCandidate
 from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix
 from semantic_digital_twin.spatial_types.spatial_types import Pose
 from semantic_digital_twin.world_description.connections import FixedConnection
@@ -73,7 +73,7 @@ def reach_action_executable(immutable_model_world):
     )
     plan = execute_single(
         ReachAction(
-            grasp=GraspPose.from_body_origin(
+            grasp=GraspCandidate.from_body_origin(
                 world.get_semantic_annotations_by_type(Milk)[0]
             ),
             arm=context.robot.right_arm,
@@ -329,7 +329,7 @@ def test_a_motion_that_stops_approaching_its_goal_is_given_up_on(
     )
     plan = execute_single(
         ReachAction(
-            grasp=GraspPose.from_body_origin(milk),
+            grasp=GraspCandidate.from_body_origin(milk),
             arm=context.robot.right_arm,
         ),
         context=context,

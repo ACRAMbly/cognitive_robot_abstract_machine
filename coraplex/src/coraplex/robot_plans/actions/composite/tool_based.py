@@ -12,7 +12,7 @@ from typing_extensions import Any, List, Optional, Tuple, Union
 from semantic_digital_twin.datastructures.alignment import AlignmentPair
 from semantic_digital_twin.robots.robot_part_mixins import HasMobileBase
 from semantic_digital_twin.robots.robot_parts import Arm
-from semantic_digital_twin.semantic_annotations.mixins import HasGraspPoses
+from semantic_digital_twin.semantic_annotations.mixins import HasGraspCandidates
 from semantic_digital_twin.semantic_annotations.semantic_annotations import Tool
 from semantic_digital_twin.spatial_types import (
     HomogeneousTransformationMatrix,
@@ -193,7 +193,7 @@ class MixingAction(ToolMotionAction):
     Mix the contents of a container with a tool.
     """
 
-    container: HasGraspPoses
+    container: HasGraspCandidates
     """
     The container (e.g., a bowl) whose contents are mixed.
     """
@@ -228,7 +228,7 @@ class CuttingAction(ToolMotionAction):
     Cut a food object with a tool.
     """
 
-    object_to_cut: HasGraspPoses
+    object_to_cut: HasGraspCandidates
     """
     The object to cut.
     """
@@ -281,7 +281,7 @@ class WipingAction(ToolMotionAction):
     Wipe a surface or a patch around a target pose with a tool.
     """
 
-    surface: Optional[HasGraspPoses] = None
+    surface: Optional[HasGraspCandidates] = None
     """
     The surface to wipe.
 
@@ -399,7 +399,7 @@ class PouringAction(FullBodyControlledAction, HasTcpGoalThresholds):
     to the target's rim.
     """
 
-    target_container: HasGraspPoses
+    target_container: HasGraspCandidates
     """
     The container that is poured into.
     """

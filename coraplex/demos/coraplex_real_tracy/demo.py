@@ -150,7 +150,7 @@ plan = sequential(
         # Stack Box 2
         ParkArmsAction(tracy.get_arms()),
         PickUpAction(
-            box2_annotation.grasp_poses()[0],
+            box2_annotation.grasp_candidates()[0],
             tracy.left_arm,
         ),
         PlaceAction(
@@ -160,7 +160,7 @@ plan = sequential(
         # Stack Box 3
         ParkArmsAction(tracy.get_arms()),
         PickUpAction(
-            box3_annotation.grasp_poses()[0],
+            box3_annotation.grasp_candidates()[0],
             tracy.right_arm,
         ),
         PlaceAction(

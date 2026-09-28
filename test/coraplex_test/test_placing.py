@@ -92,7 +92,7 @@ def test_place_uses_the_grasp_its_pick_up_will_take(mutable_model_world):
     milk = world.get_semantic_annotations_by_type(Milk)[0]
     target = Pose.from_xyz_rpy(1.2, 0.4, 0.9, reference_frame=world.root)
 
-    pick_up = PickUpAction(milk.grasp_poses()[0], context.robot.left_arm)
+    pick_up = PickUpAction(milk.grasp_candidates()[0], context.robot.left_arm)
     place = PlaceAction(milk, target)
     sequential([pick_up, place], context=context)
 
@@ -151,7 +151,7 @@ def test_place_takes_the_arm_its_pick_up_will_use(mutable_model_world):
     world, robot, context = mutable_model_world
     milk = world.get_semantic_annotations_by_type(Milk)[0]
     target = Pose.from_xyz_rpy(1.2, 0.4, 0.9, reference_frame=world.root)
-    pick_up = PickUpAction(milk.grasp_poses()[0], robot.right_arm)
+    pick_up = PickUpAction(milk.grasp_candidates()[0], robot.right_arm)
     place = PlaceAction(milk, target)
     sequential([pick_up, place], context=context)
 

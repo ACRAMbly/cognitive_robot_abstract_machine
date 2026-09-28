@@ -48,7 +48,7 @@ from giskardpy.motion_statechart.tasks.joint_tasks import (
 )
 from giskardpy.motion_statechart.tasks.pointing import Pointing
 from semantic_digital_twin.datastructures.definitions import GripperState, TorsoState
-from semantic_digital_twin.semantic_annotations.mixins import GraspPose
+from semantic_digital_twin.semantic_annotations.mixins import GraspCandidate
 from semantic_digital_twin.semantic_annotations.semantic_annotations import Milk
 from semantic_digital_twin.spatial_types import Point3, Quaternion
 from semantic_digital_twin.spatial_types.spatial_types import Pose
@@ -81,7 +81,7 @@ def test_pick_up_motion(immutable_model_world):
     test_world = deepcopy(world)
     milk = test_world.get_semantic_annotations_by_type(Milk)[0]
     test_context = Context.from_world(test_world)
-    pick_up = PickUpAction(milk.grasp_poses()[0], test_context.robot.left_arm)
+    pick_up = PickUpAction(milk.grasp_candidates()[0], test_context.robot.left_arm)
 
     root = sequential(
         children=[
@@ -453,7 +453,7 @@ def test_pick_up_action_close_motion_stall_tolerance_defaults_to_false(
     """
     world, view, context = immutable_model_world
     milk = world.get_semantic_annotations_by_type(Milk)[0]
-    pick_up = PickUpAction(milk.grasp_poses()[0], left_or_only_arm(context.robot))
+    pick_up = PickUpAction(milk.grasp_candidates()[0], left_or_only_arm(context.robot))
     sequential([pick_up], context=context)
 
     assert _close_motion_of(pick_up).tolerate_stall is False
@@ -470,7 +470,7 @@ def test_pick_up_action_close_motion_tolerates_stall_when_enabled(
     world, view, context = immutable_model_world
     milk = world.get_semantic_annotations_by_type(Milk)[0]
     pick_up = PickUpAction(
-        milk.grasp_poses()[0],
+        milk.grasp_candidates()[0],
         left_or_only_arm(context.robot),
         tolerate_grasp_stall=True,
     )
@@ -488,7 +488,7 @@ def test_pick_up_action_velocity_fields_default_to_none(immutable_model_world):
     """
     world, view, context = immutable_model_world
     milk = world.get_semantic_annotations_by_type(Milk)[0]
-    pick_up = PickUpAction(milk.grasp_poses()[0], left_or_only_arm(context.robot))
+    pick_up = PickUpAction(milk.grasp_candidates()[0], left_or_only_arm(context.robot))
 
     assert pick_up.pre_approach_linear_velocity is None
     assert pick_up.final_approach_linear_velocity is None
@@ -647,7 +647,7 @@ def test_pick_up_action_closes_the_gripper_on_what_it_grasps(immutable_model_wor
     """
     world, view, context = immutable_model_world
     pick_up = PickUpAction(
-        world.get_semantic_annotations_by_type(Milk)[0].grasp_poses()[0],
+        world.get_semantic_annotations_by_type(Milk)[0].grasp_candidates()[0],
         left_or_only_arm(context.robot),
     )
     sequential([pick_up], context=context)
@@ -901,7 +901,7 @@ def test_grasping_action_frees_the_gripper_for_its_whole_approach(
     world, view, context = immutable_model_world
     milk = world.get_semantic_annotations_by_type(Milk)[0]
     grasping = GraspingAction(
-        GraspPose.from_body_origin(milk), left_or_only_arm(context.robot)
+        GraspCandidate.from_body_origin(milk), left_or_only_arm(context.robot)
     )
     sequential([grasping], context=context)
 

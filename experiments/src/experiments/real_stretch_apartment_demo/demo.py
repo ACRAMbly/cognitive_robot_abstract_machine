@@ -191,7 +191,7 @@ class StretchApartmentDemonstration(RobotDemonstration):
                     accept_first_if_multiple=True,
                 ),
                 PickUpAction(
-                    cereal.grasp_poses()[0],
+                    cereal.grasp_candidates()[0],
                     context.robot.get_arms()[0],
                     perceive_before_grasp=True,
                 ),
@@ -233,7 +233,7 @@ class StretchApartmentDemonstration(RobotDemonstration):
                     accept_first_if_multiple=True,
                 ),
                 a(PickUpAction)(
-                    grasp=cereal.grasp_poses()[0],
+                    grasp=cereal.grasp_candidates()[0],
                     arm=context.robot.get_arms()[0],
                     perceive_before_grasp=True,
                 ),

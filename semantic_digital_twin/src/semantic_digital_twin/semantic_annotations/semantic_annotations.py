@@ -39,8 +39,8 @@ from semantic_digital_twin.semantic_annotations.mixins import (
     HasLegs,
     HasSink,
     HasShelfLayers,
-    GraspPose,
-    HasGraspPoses,
+    GraspCandidate,
+    HasGraspCandidates,
 )
 from semantic_digital_twin.spatial_types import (
     Point3,
@@ -89,7 +89,7 @@ class Furniture(SemanticAnnotation, ABC):
 
 
 @dataclass(eq=False)
-class Handle(HasGraspPoses):
+class Handle(HasGraspCandidates):
     """
     A handle is a physical entity that can be grasped by a hand or a robotic gripper to
     open or close an object.
@@ -981,7 +981,7 @@ class Wall(HasApertures):
 
 
 @dataclass(eq=False)
-class Bottle(HasGraspPoses):
+class Bottle(HasGraspCandidates):
     """
     Abstract class for bottles.
     """
@@ -1013,7 +1013,7 @@ class MustardBottle(Bottle):
 
 
 @dataclass(eq=False)
-class DrinkingContainer(HasGraspPoses): ...
+class DrinkingContainer(HasGraspCandidates): ...
 
 
 @dataclass(eq=False)
@@ -1031,11 +1031,11 @@ class Mug(DrinkingContainer):
 
 
 @dataclass(eq=False)
-class CookingContainer(HasGraspPoses): ...
+class CookingContainer(HasGraspCandidates): ...
 
 
 @dataclass(eq=False)
-class Lid(HasGraspPoses): ...
+class Lid(HasGraspCandidates): ...
 
 
 @dataclass(eq=False)
@@ -1067,7 +1067,7 @@ class PotLid(Lid):
 
 
 @dataclass(eq=False)
-class Plate(HasSupportingSurface, HasGraspPoses):
+class Plate(HasSupportingSurface, HasGraspCandidates):
     """
     A plate.
     """
@@ -1091,7 +1091,7 @@ class RimWallSection:
 
 
 @dataclass(eq=False)
-class Bowl(HasSupportingSurface, HasGraspPoses, IsPerceivable):
+class Bowl(HasSupportingSurface, HasGraspCandidates, IsPerceivable):
     """
     A bowl.
     """
@@ -1101,7 +1101,7 @@ class Bowl(HasSupportingSurface, HasGraspPoses, IsPerceivable):
     How far below the highest point of the bowl the fingers grip its wall.
     """
 
-    def grasp_poses(self) -> List[GraspPose]:
+    def grasp_candidates(self) -> List[GraspCandidate]:
         """
         The grasps that straddle the bowl's wall, approaching it from above.
 
@@ -1109,7 +1109,7 @@ class Bowl(HasSupportingSurface, HasGraspPoses, IsPerceivable):
         of its rim is grasped instead.
         """
         return [
-            GraspPose(
+            GraspCandidate(
                 self,
                 Pose(
                     position=section.center,
@@ -1131,7 +1131,7 @@ class Bowl(HasSupportingSurface, HasGraspPoses, IsPerceivable):
         runs, rather than a circle fitted through an irregular rim.
         """
         mesh = self.root.combined_mesh
-        yaws = np.linspace(0, 2 * np.pi, self.grasp_pose_count, endpoint=False)
+        yaws = np.linspace(0, 2 * np.pi, self.grasp_candidate_count, endpoint=False)
         directions = np.column_stack([np.cos(yaws), np.sin(yaws), np.zeros(len(yaws))])
         bowl_center = mesh.bounds.mean(axis=0)
         axis_point = np.array(
@@ -1159,7 +1159,7 @@ class Bowl(HasSupportingSurface, HasGraspPoses, IsPerceivable):
 
 # Food Items
 @dataclass(eq=False)
-class Food(HasGraspPoses):
+class Food(HasGraspCandidates):
     """
     A Group class for Food.
     """
@@ -1250,7 +1250,7 @@ class Milk(Food, IsPerceivable):
 
 
 @dataclass(eq=False)
-class SaltContainer(HasGraspPoses, IsPerceivable):
+class SaltContainer(HasGraspCandidates, IsPerceivable):
     """
     A container of salt.
     """
@@ -1482,21 +1482,21 @@ class Houseplant(HasRootBody):
 
 
 @dataclass(eq=False)
-class SprayBottle(HasGraspPoses):
+class SprayBottle(HasGraspCandidates):
     """
     A spray bottle.
     """
 
 
 @dataclass(eq=False)
-class Vase(HasGraspPoses):
+class Vase(HasGraspCandidates):
     """
     A vase.
     """
 
 
 @dataclass(eq=False)
-class Book(HasGraspPoses):
+class Book(HasGraspCandidates):
     """
     A book.
     """
@@ -1509,19 +1509,19 @@ class BookFront(HasRootBody): ...
 
 
 @dataclass(eq=False)
-class SaltPepperShaker(HasGraspPoses):
+class SaltPepperShaker(HasGraspCandidates):
     """
     A salt and pepper shaker.
     """
 
 
 @dataclass(eq=False)
-class Cutlery(HasGraspPoses):
+class Cutlery(HasGraspCandidates):
     """
     A piece of cutlery.
     """
 
-    def grasp_poses(self) -> List[GraspPose]:
+    def grasp_candidates(self) -> List[GraspCandidate]:
         """
         The grasp that reaches down onto the piece and closes across it.
 
@@ -1536,7 +1536,7 @@ class Cutlery(HasGraspPoses):
         along_y = bounding_box.y_interval.upper - bounding_box.y_interval.lower
         finger_axis = Vector3.NEGATIVE_Y() if along_x >= along_y else Vector3.X()
         return [
-            GraspPose(
+            GraspCandidate(
                 self,
                 Pose(
                     orientation=RotationMatrix.from_vectors(
@@ -1619,7 +1619,7 @@ class Human(Agent):
 
 
 @dataclass(eq=False)
-class Parcel(HasGraspPoses):
+class Parcel(HasGraspCandidates):
     """
     Represents a Parcel one may find in a amazon warehouse.
     """
@@ -1755,7 +1755,7 @@ class Cooktop(HasRootBody):
 
 
 @dataclass(eq=False)
-class Tool(HasGraspPoses, ABC):
+class Tool(HasGraspCandidates, ABC):
     """
     A tool that is held by a robot's end effector to act on other bodies.
     """

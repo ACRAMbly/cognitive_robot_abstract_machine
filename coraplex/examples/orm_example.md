@@ -53,12 +53,12 @@ from coraplex.datastructures.dataclasses import Context
 
 world = setup_world()
 pr2_view = PR2.from_world(world)
-# A location draws its candidates from a costmap, so a seed is what makes this
+# A location samples its candidates from a costmap, so a seed is what makes this
 # example run the same way twice.
 context = Context(world, pr2_view, sampling_seed=0)
 
 description = TransportAction.from_grasp(
-    world.get_semantic_annotations_by_type(Milk)[0].grasp_poses()[0],
+    world.get_semantic_annotations_by_type(Milk)[0].grasp_candidates()[0],
     Pose.from_xyz_quaternion(2.4, 3, 1.05, 0.0, 0.0, 0.0, 1.0, reference_frame=world.root),
     pr2_view.left_arm,
     context,

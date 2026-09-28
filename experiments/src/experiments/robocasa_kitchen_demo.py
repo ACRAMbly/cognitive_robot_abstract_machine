@@ -376,7 +376,7 @@ def _spawn_robot_and_prepare_pick_up(
             ParkArmsAction(pr2.get_arms()),
             MoveTorsoAction(TorsoState.HIGH),
             PickUpAction(
-                apple_annotation.grasp_poses()[0],
+                apple_annotation.grasp_candidates()[0],
                 pr2.right_arm,
             ),
         ],

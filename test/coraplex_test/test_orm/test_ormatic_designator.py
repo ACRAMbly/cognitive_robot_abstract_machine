@@ -89,7 +89,7 @@ def complex_plan(mutable_model_world):
 
     plan = execute_single(
         TransportAction.from_grasp(
-            milk.grasp_poses()[0],
+            milk.grasp_candidates()[0],
             Pose.from_xyz_quaternion(
                 2.4, 2.8, 1, 0, 0, 0, 1, reference_frame=world.root
             ),

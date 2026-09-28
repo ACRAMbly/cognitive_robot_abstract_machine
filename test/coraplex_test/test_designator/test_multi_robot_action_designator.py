@@ -70,7 +70,7 @@ from semantic_digital_twin.robots.hsrb import HSRB
 from semantic_digital_twin.robots.pr2 import PR2
 from semantic_digital_twin.robots.stretch import Stretch
 from semantic_digital_twin.robots.tiago import Tiago
-from semantic_digital_twin.semantic_annotations.mixins import GraspPose
+from semantic_digital_twin.semantic_annotations.mixins import GraspCandidate
 from semantic_digital_twin.semantic_annotations.semantic_annotations import (
     Elevator,
     FirstFloor,
@@ -423,7 +423,7 @@ def test_reach_action_multi(immutable_multiple_robot_apartment):
         [
             ParkArmsAction(context.robot.get_arms()),
             ReachAction(
-                grasp=GraspPose(milk, grasp_pose),
+                grasp=GraspCandidate(milk, grasp_pose),
                 arm=left_or_only_arm(context.robot),
             ),
         ],
@@ -513,7 +513,7 @@ def test_grasping(immutable_multiple_robot_apartment):
 
     milk = world.get_semantic_annotations_by_type(Milk)[0]
     grasping_action = GraspingAction(
-        GraspPose.from_body_origin(milk),
+        GraspCandidate.from_body_origin(milk),
         left_or_only_arm(context.robot),
     )
 
@@ -562,7 +562,7 @@ def test_pick_up_multi(mutable_multiple_robot_apartment, rclpy_node):
         [
             ParkArmsAction(context.robot.get_arms()),
             PickUpAction(
-                world.get_semantic_annotations_by_type(Milk)[0].grasp_poses()[0],
+                world.get_semantic_annotations_by_type(Milk)[0].grasp_candidates()[0],
                 left_or_only_arm(context.robot),
             ),
         ],
@@ -609,7 +609,7 @@ def test_place_multi(mutable_multiple_robot_apartment):
         [
             ParkArmsAction(context.robot.get_arms()),
             PickUpAction(
-                world.get_semantic_annotations_by_type(Milk)[0].grasp_poses()[0],
+                world.get_semantic_annotations_by_type(Milk)[0].grasp_candidates()[0],
                 left_or_only_arm(context.robot),
             ),
             PlaceAction(
@@ -775,7 +775,7 @@ def test_transport(mutable_multiple_robot_apartment, rclpy_node):
     context.ros_node = rclpy_node
     context.debug = True
     description = TransportAction.from_grasp(
-        world.get_semantic_annotations_by_type(Milk)[0].grasp_poses()[0],
+        world.get_semantic_annotations_by_type(Milk)[0].grasp_candidates()[0],
         Pose(
             Point3.from_iterable([3.1, 2.2, 0.95]),
             Quaternion.from_iterable([0.0, 0.0, 1.0, 0.0]),
@@ -822,7 +822,7 @@ def test_transport_open_container(mutable_multiple_robot_apartment, rclpy_node):
         5.1, 3.25, 0.75, yaw=1.57, reference_frame=world.root
     )
     description = TransportAction.from_grasp(
-        world.get_semantic_annotations_by_type(Spoon)[0].grasp_poses()[0],
+        world.get_semantic_annotations_by_type(Spoon)[0].grasp_candidates()[0],
         target_pose,
         right_or_only_arm(context.robot),
         context,

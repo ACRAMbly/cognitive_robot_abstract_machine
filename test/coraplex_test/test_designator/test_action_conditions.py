@@ -10,7 +10,7 @@ from coraplex.plans.factories import sequential
 from coraplex.querying.predicates import GripperIsFree
 from coraplex.robot_plans.actions.core.pick_up import PickUpAction
 from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix
-from semantic_digital_twin.semantic_annotations.mixins import GraspPose
+from semantic_digital_twin.semantic_annotations.mixins import GraspCandidate
 from semantic_digital_twin.semantic_annotations.semantic_annotations import Milk
 
 
@@ -33,7 +33,7 @@ def test_get_bound_variables(immutable_model_world):
     world, view, context = immutable_model_world
 
     milk = world.get_semantic_annotations_by_type(Milk)[0]
-    grasp = milk.grasp_poses()[0]
+    grasp = milk.grasp_candidates()[0]
     pick_action = PickUpAction(grasp, context.robot.left_arm)
 
     bound_variables = pick_action._create_variables()
@@ -59,7 +59,7 @@ def test_get_bound_variables(immutable_model_world):
     assert list(bound_variables["arm"]._domain_) == [context.robot.left_arm]
     assert bound_variables["arm"]._type_ == type(context.robot.left_arm)
     assert list(bound_variables["grasp"]._domain_) == [grasp]
-    assert bound_variables["grasp"]._type_ == GraspPose
+    assert bound_variables["grasp"]._type_ == GraspCandidate
 
 
 def test_pick_up_pre_condition_leaves_reaching_to_the_attempt(mutable_model_world):
@@ -69,7 +69,7 @@ def test_pick_up_pre_condition_leaves_reaching_to_the_attempt(mutable_model_worl
     """
     world, view, context = mutable_model_world
     milk = world.get_semantic_annotations_by_type(Milk)[0]
-    pick_action = PickUpAction(milk.grasp_poses()[0], context.robot.left_arm)
+    pick_action = PickUpAction(milk.grasp_candidates()[0], context.robot.left_arm)
     sequential([pick_action], context)
 
     assert _construct_and_evaluate_condition(pick_action, pick_action.pre_condition)
@@ -78,7 +78,7 @@ def test_pick_up_pre_condition_leaves_reaching_to_the_attempt(mutable_model_worl
 def test_pick_up_pre_condition_needs_a_free_gripper(mutable_model_world):
     world, view, context = mutable_model_world
     milk = world.get_semantic_annotations_by_type(Milk)[0]
-    pick_action = PickUpAction(milk.grasp_poses()[0], context.robot.left_arm)
+    pick_action = PickUpAction(milk.grasp_candidates()[0], context.robot.left_arm)
     # The standing pose from which the left arm reaches the milk.
     view.root.parent_connection.origin = HomogeneousTransformationMatrix.from_xyz_rpy(
         1.9, 1.4, 0
@@ -98,7 +98,7 @@ def test_pick_up_pre_condition_needs_a_free_gripper(mutable_model_world):
 def test_pick_up_post_condition(mutable_model_world):
     world, view, context = mutable_model_world
     milk = world.get_semantic_annotations_by_type(Milk)[0]
-    pick_action = PickUpAction(milk.grasp_poses()[0], context.robot.left_arm)
+    pick_action = PickUpAction(milk.grasp_candidates()[0], context.robot.left_arm)
     # The standing pose test_pick_up_pre_condition establishes as reaching the milk.
     view.root.parent_connection.origin = HomogeneousTransformationMatrix.from_xyz_rpy(
         1.9, 1.4, 0

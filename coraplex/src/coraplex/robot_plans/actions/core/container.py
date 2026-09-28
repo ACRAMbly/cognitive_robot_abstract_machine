@@ -26,7 +26,7 @@ from semantic_digital_twin.reasoning.predicates import allclose
 from semantic_digital_twin.reasoning.robot_predicates import is_body_in_gripper
 from semantic_digital_twin.robots.robot_part_mixins import HasMobileBase
 from semantic_digital_twin.robots.robot_parts import Arm
-from semantic_digital_twin.semantic_annotations.mixins import GraspPose
+from semantic_digital_twin.semantic_annotations.mixins import GraspCandidate
 from semantic_digital_twin.semantic_annotations.semantic_annotations import (
     Handle,
 )
@@ -60,7 +60,7 @@ class OpenAction(ActionDescription):
         return sequential(
             [
                 GraspingAction(
-                    GraspPose.from_body_origin(self.handle),
+                    GraspCandidate.from_body_origin(self.handle),
                     self.arm,
                     approach_clearance=self.approach_clearance,
                 ),
@@ -134,7 +134,7 @@ class CloseAction(ActionDescription):
         return sequential(
             [
                 GraspingAction(
-                    GraspPose.from_body_origin(self.handle),
+                    GraspCandidate.from_body_origin(self.handle),
                     self.arm,
                     approach_clearance=self.approach_clearance,
                 ),

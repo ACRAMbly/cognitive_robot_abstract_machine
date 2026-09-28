@@ -33,7 +33,10 @@ from krrood.entity_query_language.query.match import Match
 from krrood.patterns.field_metadata import JSONMetadata
 from semantic_digital_twin.reasoning.predicates import InsideOf
 from semantic_digital_twin.robots.robot_parts import Arm
-from semantic_digital_twin.semantic_annotations.mixins import GraspPose, HasGraspPoses
+from semantic_digital_twin.semantic_annotations.mixins import (
+    GraspCandidate,
+    HasGraspCandidates,
+)
 from semantic_digital_twin.semantic_annotations.semantic_annotations import (
     Drawer,
     Handle,
@@ -87,7 +90,7 @@ class TransportAction(ActionDescription, LimitsItsCandidates):
 
     @classmethod
     def from_grasp(
-        cls, grasp: GraspPose, target_location: Pose, arm: Arm, context: Context
+        cls, grasp: GraspCandidate, target_location: Pose, arm: Arm, context: Context
     ) -> Self:
         """
         A transport that takes an object by `grasp` to `target_location`, standing
@@ -96,7 +99,7 @@ class TransportAction(ActionDescription, LimitsItsCandidates):
         :param grasp: The grasp to take the object by.
         :param target_location: Where to put the object down.
         :param arm: The arm that carries the object.
-        :param context: The context the standing poses are drawn in.
+        :param context: The context the standing poses are sampled in.
         :return: The transport, standing near the object to pick it up and near the
             target to place it.
         """
@@ -209,7 +212,7 @@ class MoveAndPlaceAction(ActionDescription):
         cls,
         standing_position: Pose,
         target_location: Pose,
-        object_designator: HasGraspPoses,
+        object_designator: HasGraspCandidates,
     ) -> Self:
         """
         :param standing_position: Where the robot stands while placing.
@@ -256,7 +259,7 @@ class MoveAndPickUpAction(ActionDescription, LimitsItsCandidates):
     def from_standing_position(
         cls,
         standing_position: Pose,
-        grasp: GraspPose,
+        grasp: GraspCandidate,
         arm: Arm,
         approach_clearance: float = HasApproachesGraspPoses.approach_clearance,
         retreat_distance: float = HasApproachesGraspPoses.retreat_distance,

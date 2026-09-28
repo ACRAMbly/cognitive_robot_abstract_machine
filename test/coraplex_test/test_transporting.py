@@ -38,7 +38,10 @@ from semantic_digital_twin.semantic_annotations.semantic_annotations import (
     Milk,
 )
 from semantic_digital_twin.robots.robot_parts import AbstractRobot, Arm
-from semantic_digital_twin.semantic_annotations.mixins import GraspPose, HasGraspPoses
+from semantic_digital_twin.semantic_annotations.mixins import (
+    GraspCandidate,
+    HasGraspCandidates,
+)
 from semantic_digital_twin.spatial_types.spatial_types import Point3, Pose
 from semantic_digital_twin.world import World
 
@@ -79,13 +82,13 @@ def _pick_up_the_milk(world: World, context: Context) -> MoveAndPickUpAction:
             look_at=a(LookAtAction)(target=milk_pose),
         ),
         pick_up=a(PickUpAction)(
-            grasp=milk.grasp_poses()[0], arm=context.robot.right_arm
+            grasp=milk.grasp_candidates()[0], arm=context.robot.right_arm
         ),
     )
 
 
 def _place_at(
-    target: Pose, placed: HasGraspPoses, context: Context
+    target: Pose, placed: HasGraspCandidates, context: Context
 ) -> MoveAndPlaceAction:
     """
     :return: A place of `placed` at `target`, standing wherever its trial finds one
@@ -112,7 +115,7 @@ def _place_at(
 
 def _standing_positions(step: Match) -> ReachabilityLocation:
     """
-    :return: The location the standing pose of `step` is drawn from.
+    :return: The location the standing pose of `step` is sampled from.
     """
     return step.kwargs["navigate"].kwargs["target_location"]._domain_.domain
 
@@ -187,7 +190,7 @@ def test_a_transport_from_a_grasp_stands_around_the_object_then_the_target(
     target = Pose.from_xyz_rpy(4.0, 1.5, 0.9, reference_frame=world.root)
 
     transport = TransportAction.from_grasp(
-        milk.grasp_poses()[0], target, context.robot.right_arm, context
+        milk.grasp_candidates()[0], target, context.robot.right_arm, context
     )
 
     pick_up_location = _standing_positions(transport.pick_up)
@@ -207,7 +210,7 @@ def _pick_and_place_of_the_milk(world: World, arm: Arm) -> PickAndPlaceAction:
     milk = world.get_semantic_annotations_by_type(Milk)[0]
     return PickAndPlaceAction(
         pick_up=a(PickUpAction)(
-            grasp=variable(GraspPose, domain=milk.grasp_poses()), arm=arm
+            grasp=variable(GraspCandidate, domain=milk.grasp_candidates()), arm=arm
         ),
         place=a(PlaceAction)(
             object_designator=milk,
@@ -269,7 +272,7 @@ def _pick_up_near_a_drawer(world: World, context: Context) -> MoveAndPickUpActio
         )
     move_and_pick_up = MoveAndPickUpAction.from_standing_position(
         standing_position=Pose(reference_frame=world.root),
-        grasp=world.get_semantic_annotations_by_type(Milk)[0].grasp_poses()[0],
+        grasp=world.get_semantic_annotations_by_type(Milk)[0].grasp_candidates()[0],
         arm=context.robot.right_arm,
     )
     sequential([move_and_pick_up], context)
@@ -321,7 +324,7 @@ def test_move_and_pick_up_takes_the_grasp_it_was_given(mutable_model_world):
     rather than whichever grasp the object happens to list first.
     """
     world, robot, context = mutable_model_world
-    grasp = world.get_semantic_annotations_by_type(Milk)[0].grasp_poses()[-1]
+    grasp = world.get_semantic_annotations_by_type(Milk)[0].grasp_candidates()[-1]
     move_and_pick_up = MoveAndPickUpAction.from_standing_position(
         standing_position=Pose(reference_frame=world.root),
         grasp=grasp,
@@ -345,7 +348,7 @@ def test_move_and_pick_up_approaches_with_the_clearances_it_was_given(
     approach_clearance, retreat_distance = 0.07, 0.13
     move_and_pick_up = MoveAndPickUpAction.from_standing_position(
         standing_position=Pose(reference_frame=world.root),
-        grasp=world.get_semantic_annotations_by_type(Milk)[0].grasp_poses()[0],
+        grasp=world.get_semantic_annotations_by_type(Milk)[0].grasp_candidates()[0],
         arm=context.robot.left_arm,
         approach_clearance=approach_clearance,
         retreat_distance=retreat_distance,
@@ -454,7 +457,7 @@ def _placing_the_held_milk(world: World, context: Context) -> MoveAndPlaceAction
 MOVE_AND_ACT_STEPS = {
     "pick up": lambda world, context: MoveAndPickUpAction.from_standing_position(
         standing_position=_standing_pose(world),
-        grasp=world.get_semantic_annotations_by_type(Milk)[0].grasp_poses()[0],
+        grasp=world.get_semantic_annotations_by_type(Milk)[0].grasp_candidates()[0],
         arm=context.robot.left_arm,
     ),
     "place": _placing_the_held_milk,

@@ -18,7 +18,7 @@ from coraplex.robot_plans.actions.composite.tool_based import (
 from coraplex.robot_plans.motions.gripper import MoveTCPWaypointsAlignedMotion
 from krrood.ormatic.data_access_objects.helper import to_dao
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
-from semantic_digital_twin.semantic_annotations.mixins import HasGraspPoses
+from semantic_digital_twin.semantic_annotations.mixins import HasGraspCandidates
 from semantic_digital_twin.semantic_annotations.semantic_annotations import (
     PouringCup,
     CuttingKnife,
@@ -55,7 +55,7 @@ def _add_box_body(world, name, size, position):
 @pytest.fixture
 def tool_action_world(mutable_model_world):
     world, robot, context = mutable_model_world
-    container = HasGraspPoses(
+    container = HasGraspCandidates(
         root=_add_box_body(
             world, "tool_test_container", (0.2, 0.2, 0.1), (2.4, 2.2, 1.0)
         )

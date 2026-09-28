@@ -35,7 +35,7 @@ from semantic_digital_twin.reasoning.predicates import (
 )
 from semantic_digital_twin.robots.hsrb import HSRB
 from semantic_digital_twin.semantic_annotations.mixins import (
-    HasGraspPoses,
+    HasGraspCandidates,
     HasRootBody,
 )
 from semantic_digital_twin.spatial_types import Point3, Pose, Vector3
@@ -187,7 +187,7 @@ class Sage10kGymDemo(Sage10kAbstractDemoHSRB):
         object_of_interest = an(
             entity(
                 semantic_annotation := variable(
-                    HasGraspPoses, domain=self.world.semantic_annotations
+                    HasGraspCandidates, domain=self.world.semantic_annotations
                 )
             ).where(semantic_annotation.root == body)
         ).first()
@@ -206,7 +206,7 @@ class Sage10kGymDemo(Sage10kAbstractDemoHSRB):
                     Pose.from_xyz_rpy(0, 0.8, reference_frame=self.world.root)
                 ),
                 MoveAndPickUpAction.from_standing_position(
-                    grasp=object_of_interest.grasp_poses()[0],
+                    grasp=object_of_interest.grasp_candidates()[0],
                     standing_position=self.pickup_navigation_pose,
                     arm=arm,
                 ),
@@ -280,7 +280,7 @@ class Sage10kTVStudioDemo(Sage10kAbstractDemoHSRB):
                 yaw=1.78,
                 reference_frame=self.world.root,
             ),
-            grasp=self.book_to_pick.grasp_poses()[0],
+            grasp=self.book_to_pick.grasp_candidates()[0],
             arm=self.robot.get_arms()[0],
         )
         present_book = NavigateAction(target_location=self.robot_starting_pose)
@@ -353,7 +353,7 @@ class Sage10kCraftsmanLobbyDemo(Sage10kAbstractDemoHSRB):
         open_door = Sage10kOpenDoor(self.main_entrance)
         mpu = MoveAndPickUpAction.from_standing_position(
             standing_position=self.pickup_navigation_pose,
-            grasp=self.book_to_pick.grasp_poses()[0],
+            grasp=self.book_to_pick.grasp_candidates()[0],
             arm=self.robot.get_arms()[0],
         )
         mpp = MoveAndPlaceAction.from_standing_position(
@@ -425,7 +425,7 @@ class Sage10kTropicalWarehouse(Sage10kAbstractDemoHSRB):
         )
         mpu = MoveAndPickUpAction.from_standing_position(
             standing_position=self.pickup_navigation_pose,
-            grasp=self.target_to_pick.grasp_poses()[0],
+            grasp=self.target_to_pick.grasp_candidates()[0],
             arm=self.robot.get_arms()[0],
         )
 
@@ -487,7 +487,7 @@ class Sage10kVaporwave(Sage10kAbstractDemoHSRB):
         context = Context.from_world(self.world, query_backend=ProbabilisticBackend())
         mpu = MoveAndPickUpAction.from_standing_position(
             standing_position=self.pickup_navigation_pose,
-            grasp=self.target_to_pick.grasp_poses()[0],
+            grasp=self.target_to_pick.grasp_candidates()[0],
             arm=self.robot.get_arms()[0],
         )
 
@@ -572,7 +572,7 @@ class Sage10kEclecticResidence(Sage10kAbstractDemoHSRB):
         )
         mpu = MoveAndPickUpAction.from_standing_position(
             standing_position=self.pickup_navigation_pose,
-            grasp=self.target_to_pick.grasp_poses()[0],
+            grasp=self.target_to_pick.grasp_candidates()[0],
             arm=self.robot.get_arms()[0],
         )
 
@@ -614,7 +614,7 @@ class Sage10kSouthwesternStoreDemo(Sage10kAbstractDemoHSRB):
                     )
                 ),
                 MoveAndPickUpAction.from_standing_position(
-                    grasp=self.object_of_interest.grasp_poses()[0],
+                    grasp=self.object_of_interest.grasp_candidates()[0],
                     standing_position=self.pickup_navigation_pose,
                     arm=arm,
                 ),
@@ -731,7 +731,7 @@ class Sage10kBrutalistStoreDemo(Sage10kAbstractDemoHSRB):
                     )
                 ),
                 MoveAndPickUpAction.from_standing_position(
-                    grasp=self.object_of_interest.grasp_poses()[0],
+                    grasp=self.object_of_interest.grasp_candidates()[0],
                     standing_position=self.pickup_navigation_pose,
                     arm=arm,
                 ),
@@ -826,7 +826,7 @@ class Sage10kAmericanBuffetDemo(Sage10kAbstractDemoHSRB):
                 open_door,
                 ParkArmsAction(self.robot.get_arms()),
                 MoveAndPickUpAction.from_standing_position(
-                    grasp=self.object_of_interest.grasp_poses()[0],
+                    grasp=self.object_of_interest.grasp_candidates()[0],
                     standing_position=self.pickup_navigation_pose,
                     arm=arm,
                 ),

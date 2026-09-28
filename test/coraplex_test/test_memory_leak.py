@@ -66,7 +66,7 @@ def test_ref_chain_after_copy_with_execute_complex_plan(mutable_model_world):
 
     milk = copy_world.get_semantic_annotations_by_type(Milk)[0]
     description = TransportAction.from_grasp(
-        milk.grasp_poses()[0],
+        milk.grasp_candidates()[0],
         Pose.from_xyz_quaternion(3.1, 2.2, 0.95, 0.0, 0.0, 1.0, 0.0, world.root),
         copy_robot.right_arm,
         copy_context,
