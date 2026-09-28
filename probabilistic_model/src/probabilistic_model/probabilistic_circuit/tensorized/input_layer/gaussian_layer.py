@@ -6,7 +6,7 @@ from dataclasses import dataclass
 import numpy as np
 from random_events.interval import SimpleInterval, reals
 from random_events.variable import Variable
-from scipy.stats import norm
+from scipy.stats import norm, truncnorm
 from sortedcontainers import SortedSet
 from typing_extensions import List, Self, Type
 
@@ -16,6 +16,7 @@ from probabilistic_model.distributions.gaussian import (
 )
 from probabilistic_model.exceptions import ShapeMismatchError
 from probabilistic_model.probabilistic_circuit.tensorized.array_types import (
+    NodeIndices,
     NodeMask,
     NodeValues,
     SampleColumn,
@@ -139,10 +140,8 @@ class GaussianLayer(ContinuousLayerWithDensity):
             np.concatenate([layer.scale for layer in layers]),
         )
 
-    def sample_of_node(
-        self, node: int, amount: int, variables: SortedSet
-    ) -> SampleColumn:
-        return norm.rvs(loc=self.location[node], scale=self.scale[node], size=amount)
+    def sample_of_nodes(self, nodes: NodeIndices, variables: SortedSet) -> SampleColumn:
+        return norm.rvs(loc=self.location[nodes], scale=self.scale[nodes])
 
     def apply_translation_own(self, translation: VariableValues):
         self.location = self.location + translation[self.variable]
@@ -274,6 +273,15 @@ class TruncatedGaussianLayer(ContinuousLayerWithFiniteSupport):
             untruncated - self.cumulative_distribution_to_lower
         ) / self.normalizing_constant
         return np.minimum(1.0, np.where(left_included, result, 0.0))
+
+    def sample_of_nodes(self, nodes: NodeIndices, variables: SortedSet) -> SampleColumn:
+        location, scale = self.location[nodes], self.scale[nodes]
+        return truncnorm.rvs(
+            a=(self.lower[nodes] - location) / scale,
+            b=(self.upper[nodes] - location) / scale,
+            loc=location,
+            scale=scale,
+        )
 
     def node_distribution(
         self, index: int, variable: Variable
