@@ -10,6 +10,7 @@ from scipy.special import logsumexp
 from sortedcontainers import SortedSet
 
 from probabilistic_model.learning.nyga_induction import NygaInduction
+from probabilistic_model.probabilistic_circuit.jax.gaussian_layer import GaussianLayer
 from probabilistic_model.probabilistic_circuit.jax.input_layer import DiracDeltaLayer
 from probabilistic_model.probabilistic_circuit.jax.inner_layer import (
     SparseSumLayer,
@@ -207,6 +208,41 @@ class DiracDenseSumUnitTestCase(unittest.TestCase):
         l = self.sum_layer.log_likelihood_of_nodes_single(data)
         result = jnp.log(jnp.array([0.0, 0.4]))
         assert jnp.allclose(l, result)
+
+
+class UnlikelyEventTestCase(unittest.TestCase):
+    """
+    A sum layer stays finite for an event whose likelihood is below the smallest
+    positive single precision number, as the events of a circuit over many variables
+    are.
+    """
+
+    gaussians = GaussianLayer(0, jnp.array([0.0, 1.0]), jnp.zeros(2), jnp.zeros(2))
+    event = jnp.array([[20.0]])
+    log_weights = jnp.log(jnp.array([[0.25, 0.75]]))
+
+    def expected_log_likelihood(self) -> float:
+        child_log_likelihoods = np.asarray(
+            self.gaussians.log_likelihood_of_nodes(self.event)
+        )
+        return logsumexp(child_log_likelihoods + np.asarray(self.log_weights), axis=1)
+
+    def assert_finite_and_expected(self, sum_layer):
+        log_likelihood = np.asarray(sum_layer.log_likelihood_of_nodes(self.event))
+        self.assertTrue(np.isfinite(log_likelihood).all())
+        np.testing.assert_allclose(
+            log_likelihood[:, 0], self.expected_log_likelihood(), rtol=1e-5
+        )
+
+    def test_sparse_sum_layer(self):
+        self.assert_finite_and_expected(
+            SparseSumLayer([self.gaussians], [BCOO.fromdense(self.log_weights)])
+        )
+
+    def test_dense_sum_layer(self):
+        self.assert_finite_and_expected(
+            DenseSumLayer([self.gaussians], [self.log_weights])
+        )
 
 
 class NygaDistributionTestCase(unittest.TestCase):

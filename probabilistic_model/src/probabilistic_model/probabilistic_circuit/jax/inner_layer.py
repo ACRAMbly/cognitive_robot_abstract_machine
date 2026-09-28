@@ -275,27 +275,28 @@ class SparseSumLayer(SumLayer):
         return result
 
     def log_likelihood_of_nodes_single(self, x: jax.Array) -> jax.Array:
-        result = jnp.zeros(self.number_of_nodes, dtype=jnp.float32)
-
+        rows, weighted_log_likelihoods = [], []
         for log_weights, child_layer in self.log_weighted_child_layers:
-            # get the log likelihoods of the child nodes
             child_layer_log_likelihood = child_layer.log_likelihood_of_nodes_single(x)
-
-            # weight the log likelihood of the child nodes by the weight for each node of this layer
-            cloned_log_weights = copy_bcoo(log_weights)  # clone the log_weights
-
-            # multiply the log_weights with the child layer likelihood
-            cloned_log_weights.data += child_layer_log_likelihood[
-                cloned_log_weights.indices[:, 1]
-            ]
-            cloned_log_weights.data = jnp.exp(
-                cloned_log_weights.data
-            )  # exponent log_weights
-            result = result.at[cloned_log_weights.indices[:, 0]].add(
-                cloned_log_weights.data, indices_are_sorted=False, unique_indices=False
+            rows.append(log_weights.indices[:, 0])
+            weighted_log_likelihoods.append(
+                log_weights.data + child_layer_log_likelihood[log_weights.indices[:, 1]]
             )
+        rows = jnp.concatenate(rows)
+        weighted_log_likelihoods = jnp.concatenate(weighted_log_likelihoods)
 
-        return jnp.log(result) - self.log_normalization_constants
+        # a log-sum-exp per node, shifted by the largest entry of the node, so that a
+        # likelihood below the smallest positive float does not vanish to zero
+        maximum = jax.ops.segment_max(
+            weighted_log_likelihoods, rows, num_segments=self.number_of_nodes
+        )
+        shift = jax.lax.stop_gradient(jnp.where(jnp.isfinite(maximum), maximum, 0.0))
+        shifted_sum = jax.ops.segment_sum(
+            jnp.exp(weighted_log_likelihoods - shift[rows]),
+            rows,
+            num_segments=self.number_of_nodes,
+        )
+        return jnp.log(shifted_sum) + shift - self.log_normalization_constants
 
     def __deepcopy__(self, memo=None):
         if memo is None:
@@ -367,18 +368,20 @@ class DenseSumLayer(SumLayer):
         )
 
     def log_likelihood_of_nodes_single(self, x: jax.Array) -> jax.Array:
-        result = jnp.zeros(self.number_of_nodes, dtype=jnp.float32)
-
-        for log_weights, child_layer in self.log_weighted_child_layers:
-            # get the log likelihoods of the child nodes
-            child_layer_log_likelihood = child_layer.log_likelihood_of_nodes_single(x)
-
-            # weight the log likelihood of the child nodes by the weight for each node of this layer
-            log_likelihood = log_weights + child_layer_log_likelihood
-            log_likelihood = jnp.exp(logsumexp(log_likelihood, 1))
-            result += log_likelihood
-
-        return jnp.log(result) - self.log_normalization_constants
+        # stay in log space, so that a likelihood below the smallest positive float does
+        # not vanish to zero
+        log_likelihood_per_child_layer = jnp.stack(
+            [
+                logsumexp(
+                    log_weights + child_layer.log_likelihood_of_nodes_single(x), 1
+                )
+                for log_weights, child_layer in self.log_weighted_child_layers
+            ]
+        )
+        return (
+            logsumexp(log_likelihood_per_child_layer, 0)
+            - self.log_normalization_constants
+        )
 
     def __deepcopy__(self, memo=None):
         if memo is None:
