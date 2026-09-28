@@ -14,6 +14,7 @@ from krrood.exceptions import SourceDataNotProvided
 
 from ..dataset import deferred_import_owner
 from ..dataset.deferred_import_owner import Reading, SensorBindingItsReading
+from ..dataset.type_checking_cycle_owner import Content, HolderBindingItsContent
 from ..dataset.type_checking_import_of_missing_module import (
     OwnerOfAnnotationFromMissingModule,
 )
@@ -135,3 +136,19 @@ def test_subclass_binding_during_import_narrows_field_despite_deferred_import():
     )
 
     assert reading_field.type == Optional[Reading]
+
+
+# %% circular imports seen only while type checking
+
+
+def test_subclass_binding_during_import_narrows_field_despite_type_checking_cycle():
+    """
+    Binding a generic parameter while the module is still being imported narrows the
+    field, even though one of the module's ``TYPE_CHECKING`` imports targets a module
+    that imports it back.
+    """
+    content_field = next(
+        field for field in fields(HolderBindingItsContent) if field.name == "content"
+    )
+
+    assert content_field.type == Optional[Content]
