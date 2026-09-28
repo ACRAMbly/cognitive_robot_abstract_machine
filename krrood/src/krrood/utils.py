@@ -19,6 +19,7 @@ from typing import Union, Any
 
 from typing_extensions import (
     Dict,
+    Iterator,
     get_origin,
     get_args,
 )
@@ -493,7 +494,7 @@ def get_scope_from_imports(
 
     scope: Dict[str, Any] = {}
 
-    for node in ast.walk(parsed_tree):
+    for node in module_level_imports(parsed_tree):
         if isinstance(node, ast.Import):
             _handle_import_node(node, scope, package_name)
         elif isinstance(node, ast.ImportFrom):
@@ -505,6 +506,28 @@ def get_scope_from_imports(
             )
 
     return scope
+
+
+def module_level_imports(node: ast.AST) -> Iterator[ast.Import | ast.ImportFrom]:
+    """
+    Yield the import statements that bind names in the module namespace.
+
+    Imports inside functions, lambdas and class bodies are skipped, since the names they
+    bind are local to that body.
+
+    :param node: The node whose statements are searched.
+    :return: The module-level import statements, including those nested in compound
+        statements such as ``if TYPE_CHECKING:`` or ``try``.
+    """
+    for child in ast.iter_child_nodes(node):
+        if isinstance(child, (ast.Import, ast.ImportFrom)):
+            yield child
+            continue
+        if isinstance(
+            child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Lambda)
+        ):
+            continue
+        yield from module_level_imports(child)
 
 
 def get_and_import_module(
