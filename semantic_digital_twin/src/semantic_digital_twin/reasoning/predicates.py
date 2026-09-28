@@ -22,10 +22,8 @@ from krrood.entity_query_language.verbalization.vocabulary.parts_of_speech impor
     Verb,
 )
 from krrood.inheritance_path_length import inheritance_path_length
-from random_events.interval import Interval
 from semantic_digital_twin.datastructures.camera_resolution import CameraResolution
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
-from semantic_digital_twin.datastructures.variables import SpatialVariables
 from semantic_digital_twin.spatial_computations.ik_solver import (
     MaxIterationsException,
     UnreachableException,
@@ -253,19 +251,21 @@ def is_supported_by(
     supporting_body: Body,
     max_intersection_height: float = 0.1,
     contact_tolerance: float = 0.005,
+    max_slope: float = np.radians(30.0),
 ) -> bool:
     """
     Checks if one object is supporting another object.
 
-    An object rests on what touches it from underneath, which is read off where the two
+    An object rests on what touches it and pushes it up, which is read off how the two
     meet rather than from where their middles lie: a container carries its own middle
-    above what stands on its floor, and a wall's bounding box reaches far past the wall.
+    above what stands on its floor, a wall's bounding box reaches far past the wall, and
+    what touches an object only from the side does not hold it up. Up is the world's up.
 
     :param supported_body: Object that is supported
     :param supporting_body: Object that potentially supports the first object
-    :param max_intersection_height: Maximum height of the intersection between the two
-        objects. If the intersection is higher than this value, the check returns False
-        due to unhandled clipping.
+    :param max_intersection_height: How deep the two objects may sink into each other.
+        Sunk deeper, they are a clipping the simulation did not resolve, and the check
+        returns False.
     :param contact_tolerance: How far apart the two objects may be and still count as
         touching, and so how far above the supporting object the supported object may
         stand and still rest on it.
@@ -276,6 +276,8 @@ def is_supported_by(
         missed the surface it was aimed at by 1.9 mm; the default leaves room for that
         while staying far below the centimetres by which a body that is genuinely in
         the air clears a surface.
+    :param max_slope: How steeply, in radians, the supporting object may slope where the
+        two meet and still hold the supported object up.
     :return: True if the second object is supported by the first object, False otherwise
     """
     if supported_body is supporting_body:
@@ -288,40 +290,13 @@ def is_supported_by(
     if touch is None or touch.distance >= contact_tolerance:
         return False
 
-    root_P_touch = touch.root_P_point_on_body_b
-    if not Below(
-        Point3(
-            x=root_P_touch[0],
-            y=root_P_touch[1],
-            z=root_P_touch[2],
-            reference_frame=supported_body._world.root,
-        ),
-        supported_body.center_of_mass,
-        supported_body.global_transform,
-    )():
+    if touch.body_a is not supported_body:
+        touch = touch.reverse()
+    root_V_push = touch.root_V_contact_normal_from_b_to_a[:3]
+    if root_V_push[2] < np.cos(max_slope) * np.linalg.norm(root_V_push):
         return False
 
-    bounding_box_supported_body = (
-        supported_body.collision.as_bounding_box_collection_at_origin(
-            HomogeneousTransformationMatrix(reference_frame=supported_body)
-        ).event
-    )
-    bounding_box_supporting_body = (
-        supporting_body.collision.as_bounding_box_collection_at_origin(
-            HomogeneousTransformationMatrix(reference_frame=supported_body)
-        ).event
-    )
-
-    intersection = (
-        bounding_box_supported_body & bounding_box_supporting_body
-    ).bounding_box()
-
-    if intersection.is_empty():
-        return True
-
-    z_intersection: Interval = intersection[SpatialVariables.z.value]
-    size = sum([si.upper - si.lower for si in z_intersection.simple_sets])
-    return size < max_intersection_height
+    return -touch.distance < max_intersection_height
 
 
 @symbolic_function

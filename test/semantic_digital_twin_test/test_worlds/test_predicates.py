@@ -2,6 +2,7 @@ import inspect
 from copy import deepcopy
 from dataclasses import dataclass
 from typing import List
+from uuid import UUID
 
 import numpy as np
 
@@ -940,3 +941,235 @@ def test_a_body_does_not_support_itself(two_block_world):
     center, _ = two_block_world
 
     assert not is_supported_by(center, center)
+
+
+# %% a body rests on what pushes it up
+
+
+def _box_body(name: str, scale: Scale, identifier: UUID | None = None) -> Body:
+    """
+    A body shaped as one box of ``scale`` about its own origin.
+    """
+    body = (
+        Body(name=PrefixedName(name))
+        if identifier is None
+        else Body(name=PrefixedName(name), id=identifier)
+    )
+    body.collision = ShapeCollection(
+        [
+            Box(
+                scale=scale,
+                origin=HomogeneousTransformationMatrix.from_xyz_rpy(
+                    reference_frame=body
+                ),
+            )
+        ],
+        reference_frame=body,
+    )
+    return body
+
+
+def _fix_to(
+    parent: Body, child: Body, parent_T_child: HomogeneousTransformationMatrix
+) -> None:
+    """
+    Fix ``child`` to ``parent`` at ``parent_T_child``.
+    """
+    with parent._world.modify_world():
+        parent._world.add_connection(
+            FixedConnection(
+                parent=parent,
+                child=child,
+                parent_T_connection_expression=parent_T_child,
+            )
+        )
+
+
+def _steepest_supporting_slope() -> float:
+    """
+    How steeply what a body rests on may slope, as the predicate defaults it.
+    """
+    return inspect.signature(is_supported_by).parameters["max_slope"].default
+
+
+def test_a_body_touched_only_on_its_side_is_not_supported_by_what_touches_it():
+    """
+    A kerb touching the lower half of a crate's side pushes it sideways, not up, so the
+    crate does not rest on it.
+    """
+    world = World()
+    table = _box_body("table", Scale(2.0, 2.0, 0.1))
+    crate = _box_body("crate", Scale(0.2, 0.2, 0.2))
+    kerb = _box_body("kerb", Scale(0.1, 2.0, 0.06))
+    with world.modify_world():
+        world.add_kinematic_structure_entity(table)
+    _fix_to(
+        table,
+        crate,
+        HomogeneousTransformationMatrix.from_xyz_rpy(z=0.15, reference_frame=table),
+    )
+    _fix_to(
+        table,
+        kerb,
+        HomogeneousTransformationMatrix.from_xyz_rpy(
+            x=0.15, z=0.08, reference_frame=table
+        ),
+    )
+
+    assert not is_supported_by(crate, kerb)
+
+
+def _box_on_a_slope(slope: float) -> tuple[Body, Body]:
+    """
+    A box lying flat on a slab tilted by ``slope`` radians.
+
+    :return: The box and the slab.
+    """
+    world = World()
+    ground = _box_body("ground", Scale(0.01, 0.01, 0.01))
+    slab = _box_body("slab", Scale(1.0, 1.0, 0.05))
+    box = _box_body("box", Scale(0.1, 0.1, 0.1))
+    with world.modify_world():
+        world.add_kinematic_structure_entity(ground)
+    _fix_to(
+        ground,
+        slab,
+        HomogeneousTransformationMatrix.from_xyz_rpy(
+            z=1.0, pitch=slope, reference_frame=ground
+        ),
+    )
+    _fix_to(
+        slab,
+        box,
+        HomogeneousTransformationMatrix.from_xyz_rpy(z=0.075, reference_frame=slab),
+    )
+    return box, slab
+
+
+def test_a_body_on_a_slope_gentler_than_the_steepest_allowed_is_supported():
+    box, slab = _box_on_a_slope(_steepest_supporting_slope() / 2)
+
+    assert is_supported_by(box, slab)
+
+
+def test_a_body_on_a_slope_steeper_than_the_steepest_allowed_is_not_supported():
+    box, slab = _box_on_a_slope(_steepest_supporting_slope() * 1.5)
+
+    assert not is_supported_by(box, slab)
+
+
+def test_a_body_standing_upside_down_is_supported_by_what_it_stands_on():
+    """
+    Up is the world's up: a body turned over rests on what is underneath it all the same.
+    """
+    world = World()
+    table = _box_body("table", Scale(2.0, 2.0, 0.1))
+    crate = _box_body("crate", Scale(0.2, 0.2, 0.2))
+    with world.modify_world():
+        world.add_kinematic_structure_entity(table)
+    _fix_to(
+        table,
+        crate,
+        HomogeneousTransformationMatrix.from_xyz_rpy(
+            z=0.15, roll=np.pi, reference_frame=table
+        ),
+    )
+
+    assert is_supported_by(crate, table)
+
+
+@pytest.mark.parametrize(
+    "crate_identifier, table_identifier",
+    [(UUID(int=1), UUID(int=2)), (UUID(int=2), UUID(int=1))],
+)
+def test_a_body_rests_on_a_surface_whichever_of_the_two_is_checked_first(
+    crate_identifier: UUID, table_identifier: UUID
+):
+    """
+    A collision check lists the two bodies in an order of its own, which does not
+    change what rests on what.
+    """
+    world = World()
+    table = _box_body("table", Scale(2.0, 2.0, 0.1), table_identifier)
+    crate = _box_body("crate", Scale(0.2, 0.2, 0.2), crate_identifier)
+    with world.modify_world():
+        world.add_kinematic_structure_entity(table)
+    _fix_to(
+        table,
+        crate,
+        HomogeneousTransformationMatrix.from_xyz_rpy(z=0.15, reference_frame=table),
+    )
+
+    assert is_supported_by(crate, table)
+
+
+def test_a_body_taller_than_the_deepest_allowed_clipping_is_supported_by_the_floor_of_a_container():
+    """
+    A tall body standing on a container's floor sinks into nothing, though the
+    container's walls rise along the whole of it.
+    """
+    world = World()
+    container = Body(name=PrefixedName("container"))
+    container.collision = ShapeCollection(
+        [
+            Box(
+                scale=Scale(1.0, 1.0, CONTAINER_FLOOR_THICKNESS),
+                origin=HomogeneousTransformationMatrix.from_xyz_rpy(
+                    reference_frame=container
+                ),
+            ),
+            *(
+                Box(
+                    scale=Scale(0.05, 1.0, CONTAINER_WALL_HEIGHT),
+                    origin=HomogeneousTransformationMatrix.from_xyz_rpy(
+                        side * 0.5,
+                        0.0,
+                        CONTAINER_WALL_HEIGHT / 2,
+                        reference_frame=container,
+                    ),
+                )
+                for side in (-1, 1)
+            ),
+        ],
+        reference_frame=container,
+    )
+    height = (
+        inspect.signature(is_supported_by).parameters["max_intersection_height"].default
+        * 3
+    )
+    bottle = _box_body("bottle", Scale(0.05, 0.05, height))
+    with world.modify_world():
+        world.add_kinematic_structure_entity(container)
+    _fix_to(
+        container,
+        bottle,
+        HomogeneousTransformationMatrix.from_xyz_rpy(
+            z=CONTAINER_FLOOR_THICKNESS / 2 + height / 2, reference_frame=container
+        ),
+    )
+
+    assert is_supported_by(bottle, container)
+
+
+def test_a_body_sunk_deeper_than_the_deepest_allowed_clipping_is_not_supported():
+    """
+    Bodies sunk that far into each other are a clipping the simulation did not resolve,
+    not one resting on the other.
+    """
+    world = World()
+    table = _box_body("table", Scale(2.0, 2.0, 1.0))
+    crate = _box_body("crate", Scale(0.5, 0.5, 0.5))
+    deepest = (
+        inspect.signature(is_supported_by).parameters["max_intersection_height"].default
+    )
+    with world.modify_world():
+        world.add_kinematic_structure_entity(table)
+    _fix_to(
+        table,
+        crate,
+        HomogeneousTransformationMatrix.from_xyz_rpy(
+            z=0.5 + 0.25 - deepest * 1.5, reference_frame=table
+        ),
+    )
+
+    assert not is_supported_by(crate, table)
