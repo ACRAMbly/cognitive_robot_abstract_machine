@@ -34,7 +34,9 @@ from probabilistic_model.probabilistic_circuit.rx.helper import (
     uniform_measure_of_event,
     uniform_measure_of_simple_event,
 )
+from probabilistic_model.exceptions import ShapeMismatchError
 from probabilistic_model.probabilistic_circuit.tensorized.exceptions import (
+    NonPositiveScaleError,
     NumberOfWeightsMismatchError,
 )
 from probabilistic_model.probabilistic_circuit.tensorized.forward_sample_assignment import (
@@ -769,6 +771,53 @@ class InputLayerSamplingTestCase(unittest.TestCase):
                 self.assertTrue(
                     np.all(np.isfinite(log_likelihoods[np.arange(4), node_of_row]))
                 )
+
+
+class LocationAndScaleValidationTestCase(unittest.TestCase):
+    """
+    A Gaussian layer, truncated or not, needs one positive scale per location.
+    """
+
+    @staticmethod
+    def truncated_gaussian_layer(
+        location: np.ndarray, scale: np.ndarray, number_of_intervals: int = 2
+    ) -> TruncatedGaussianLayer:
+        return TruncatedGaussianLayer(
+            0,
+            np.tile([[-1.0, 1.0]], (number_of_intervals, 1)),
+            np.full((number_of_intervals, 2), int(Bound.CLOSED), dtype=np.int64),
+            location,
+            scale,
+        )
+
+    def test_layers_with_positive_scales_are_valid(self):
+        GaussianLayer(0, np.zeros(2), np.array([0.5, 2.0])).validate()
+        self.truncated_gaussian_layer(np.zeros(2), np.array([0.5, 2.0])).validate()
+
+    def test_non_positive_scale_is_invalid(self):
+        for scale in (
+            np.array([1.0, 0.0]),
+            np.array([-1.0, 1.0]),
+            np.array([np.nan, 1.0]),
+        ):
+            for layer in (
+                GaussianLayer(0, np.zeros(2), scale),
+                self.truncated_gaussian_layer(np.zeros(2), scale),
+            ):
+                with self.subTest(layer=type(layer).__name__, scale=scale):
+                    with self.assertRaises(NonPositiveScaleError):
+                        layer.validate()
+
+    def test_truncated_gaussian_layer_with_one_scale_per_location_is_required(self):
+        layer = self.truncated_gaussian_layer(np.zeros(2), np.ones(3))
+        with self.assertRaises(ShapeMismatchError):
+            layer.validate()
+
+    def test_truncated_gaussian_layer_still_needs_one_bound_per_interval_end(self):
+        layer = self.truncated_gaussian_layer(np.zeros(2), np.ones(2))
+        layer.bounds = layer.bounds[:1]
+        with self.assertRaises(ShapeMismatchError):
+            layer.validate()
 
 
 class SupportWithoutCopiesTestCase(unittest.TestCase):

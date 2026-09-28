@@ -23,6 +23,9 @@ from probabilistic_model.probabilistic_circuit.tensorized.array_types import (
     SampleNodeValues,
     VariableValues,
 )
+from probabilistic_model.probabilistic_circuit.tensorized.exceptions import (
+    NonPositiveScaleError,
+)
 from probabilistic_model.probabilistic_circuit.tensorized.inner_layer.base import Layer
 from probabilistic_model.probabilistic_circuit.tensorized.input_layer.continuous_layer_with_density import (
     ContinuousLayerWithDensity,
@@ -34,19 +37,39 @@ from probabilistic_model.probabilistic_circuit.tensorized.structural_query impor
 
 
 @dataclass(eq=False, repr=False)
-class GaussianLayer(ContinuousLayerWithDensity):
+class HasLocationAndScale:
     """
-    A layer of Gaussian distributions over one continuous variable.
+    Base class for the layers whose nodes are described by a Gaussian with a location
+    and a scale.
     """
 
     location: NodeValues
     """
-    The mean of every node.
+    The mean of the Gaussian of every node.
     """
 
     scale: NodeValues
     """
-    The standard deviation of every node.
+    The standard deviation of the Gaussian of every node.
+    """
+
+    def validate_own(self):
+        """
+        :raises ShapeMismatchError: If there is not one scale per location.
+        :raises NonPositiveScaleError: If a scale is not positive.
+        """
+        if self.location.shape != self.scale.shape:
+            raise ShapeMismatchError(self.location.shape, self.scale.shape)
+        # the negated comparison also catches a scale that is nan
+        non_positive = ~(self.scale > 0)
+        if non_positive.any():
+            raise NonPositiveScaleError(self.scale[non_positive])
+
+
+@dataclass(eq=False, repr=False)
+class GaussianLayer(HasLocationAndScale, ContinuousLayerWithDensity):
+    """
+    A layer of Gaussian distributions over one continuous variable.
     """
 
     @property
@@ -56,10 +79,6 @@ class GaussianLayer(ContinuousLayerWithDensity):
     @property
     def number_of_own_parameters(self) -> int:
         return 2 * self.number_of_nodes
-
-    def validate_own(self):
-        if self.location.shape != self.scale.shape:
-            raise ShapeMismatchError(self.location.shape, self.scale.shape)
 
     def log_likelihood_of_nodes_from_column(
         self, values: SampleColumn
@@ -210,23 +229,19 @@ class GaussianLayer(ContinuousLayerWithDensity):
 
 
 @dataclass(eq=False, repr=False)
-class TruncatedGaussianLayer(ContinuousLayerWithFiniteSupport):
+class TruncatedGaussianLayer(HasLocationAndScale, ContinuousLayerWithFiniteSupport):
     """
     A layer of truncated Gaussian distributions over one continuous variable.
+
+    The location and scale are those of the untruncated Gaussian of every node.
 
     This is the layer that truncating a :class:`GaussianLayer` to a bounded interval
     produces.
     """
 
-    location: NodeValues
-    """
-    The mean of the untruncated Gaussian of every node.
-    """
-
-    scale: NodeValues
-    """
-    The standard deviation of the untruncated Gaussian of every node.
-    """
+    def validate_own(self):
+        HasLocationAndScale.validate_own(self)
+        ContinuousLayerWithFiniteSupport.validate_own(self)
 
     @property
     def number_of_own_parameters(self) -> int:
