@@ -1,5 +1,4 @@
 import os
-from contextlib import nullcontext
 
 from coraplex.datastructures.dataclasses import Context
 from coraplex.datastructures.enums import Arms, ApproachDirection, VerticalAlignment
@@ -136,14 +135,15 @@ plan = sequential(
     context=context,
 ).plan
 
-segmentation = (
-    Segmind.create_for_semantic_annotation_types(
-        world,
-        (Milk, Bowl, Spoon),
-        detectors=(PickUpDetector, PlacingDetector, ContainmentDetector, GraspDetector),
-    )
-    if context.segment_events
-    else nullcontext()
+segmentation = Segmind.create_for_semantic_annotation_types(
+    world,
+    (Milk, Bowl, Spoon),
+    detector_types=(
+        PickUpDetector,
+        PlacingDetector,
+        ContainmentDetector,
+        GraspDetector,
+    ),
 )
 
 with simulated_robot, segmentation:

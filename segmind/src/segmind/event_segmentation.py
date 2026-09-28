@@ -5,14 +5,20 @@ SegMind itself: what it watches and what it is asked to detect while a run goes 
 from __future__ import annotations
 
 import logging
+import threading
+import time
 from dataclasses import dataclass, field
 
-from typing_extensions import List, Self, Sequence, Type
+from giskardpy.motion_statechart.context import MotionStatechartContext
+from typing_extensions import List, Optional, Self, Sequence, Type
 
-from segmind import event_logger
-from segmind.detectors.base import AbstractDetector
+from segmind.detector_selection import DetectorSelection
+from segmind.detectors.atomic_event_detectors_nodes import MotionDetector
+from segmind.detectors.base import AbstractDetector, SegmindContext
+from segmind.episode_segmenter import EpisodeSegmenterExecutor
+from segmind.event_logger import EventLogger
 from segmind.exceptions import NoSemanticAnnotationToWatch
-from segmind.live_segmenter import LiveSegmenter
+from segmind.statecharts.segmind_statechart import SegmindStatechart
 from semantic_digital_twin.world import World
 from semantic_digital_twin.world_description.world_entity import (
     Body,
@@ -22,14 +28,19 @@ from semantic_digital_twin.world_description.world_entity import (
 logger = logging.getLogger(__name__)
 
 
-@dataclass
+@dataclass(eq=False)
 class Segmind:
     """
     SegMind segmenting a run into events while it goes on.
 
-    Entering it starts the detectors and leaving it stops them and reports what they
-    detected, so a run states what it wants watched and what it wants detected, and
-    keeps the rest to its plan.
+    Entering it starts ticking the detectors on a thread of their own, and leaving it
+    stops them and reports what they detected, so a run states what it wants watched and
+    what it wants detected, and keeps the rest to its plan.
+
+    A tick holds the world's lock, so it never reads the world while another thread is
+    in the middle of changing it. After each tick the world is left to other threads for
+    at least as long as the tick held it, so a plan changing the world keeps going while
+    it is watched.
     """
 
     world: World
@@ -37,33 +48,74 @@ class Segmind:
     The world the run takes place in.
     """
 
-    bodies: List[Body]
+    detectors: List[AbstractDetector]
     """
-    The bodies the run handles, which the detectors watch.
-    """
-
-    detectors: Sequence[Type[AbstractDetector]] = ()
-    """
-    The kinds of detector asked for; every kind they are read from is brought along.
-    Without any, everything SegMind can detect.
+    The detectors ticked.
     """
 
-    segmenter: LiveSegmenter = field(init=False)
+    pause_between_ticks: float = field(kw_only=True, default=0.01)
     """
-    Ticks the detectors against the world while the run goes on.
+    The least time, in seconds, the world is left to other threads after a tick.
+    """
+
+    executor: EpisodeSegmenterExecutor = field(init=False)
+    """
+    Compiles and ticks the detectors.
+    """
+
+    stopping: threading.Event = field(init=False, default_factory=threading.Event)
+    """
+    Set when the detectors are to stop being ticked.
+    """
+
+    thread: Optional[threading.Thread] = field(init=False, default=None)
+    """
+    The thread the detectors are ticked on, once started.
     """
 
     def __post_init__(self) -> None:
-        self.segmenter = LiveSegmenter.create_for_bodies(
-            self.world, self.bodies, self.detectors
+        self.executor = EpisodeSegmenterExecutor(
+            context=MotionStatechartContext(world=self.world)
         )
+        self.executor.compile(SegmindStatechart().build_statechart(self.detectors))
+
+    @classmethod
+    def create_for_bodies(
+        cls,
+        world: World,
+        bodies: Sequence[Body],
+        detector_types: Sequence[Type[AbstractDetector]] = (),
+    ) -> Self:
+        """
+        SegMind detecting what happens to ``bodies``.
+
+        :param world: The world the run takes place in.
+        :param bodies: The bodies the run handles, which the detectors watch.
+        :param detector_types: The kinds of detector asked for. Every kind they are read
+            from is brought along (see
+            :class:`~segmind.detector_selection.DetectorSelection`), so asking for what is
+            to be detected is enough. Without any, every kind SegMind defines.
+        """
+        selection = (
+            DetectorSelection.of(*detector_types)
+            if detector_types
+            else DetectorSelection.of_every_kind()
+        )
+        detectors: List[AbstractDetector] = [
+            detector
+            for detector_type in selection.detector_types
+            for detector in detector_type.create_for_run(
+                bodies, selection.detector_types
+            )
+        ]
+        return cls(world=world, detectors=detectors)
 
     @classmethod
     def create_for_semantic_annotation_types(
         cls,
         world: World,
-        semantic_annotation_types: Sequence[type[SemanticAnnotation]],
-        detectors: Sequence[type[AbstractDetector]] = (),
+        semantic_annotation_types: Sequence[Type[SemanticAnnotation]],
+        detector_types: Sequence[Type[AbstractDetector]] = (),
     ) -> Self:
         """
         SegMind watching the bodies of every semantic annotation of the types a run
@@ -72,7 +124,7 @@ class Segmind:
         :param world: The world the run takes place in.
         :param semantic_annotation_types: The types whose annotations in ``world`` have
             their bodies watched.
-        :param detectors: The kinds of detector asked for.
+        :param detector_types: The kinds of detector asked for.
         :raises NoSemanticAnnotationToWatch: When ``world`` holds no annotation of a
             type asked for.
         """
@@ -82,11 +134,11 @@ class Segmind:
             for annotation in cls._annotations_of_type(world, semantic_annotation_type)
             for body in annotation.bodies
         ]
-        return cls(world=world, bodies=list(dict.fromkeys(bodies)), detectors=detectors)
+        return cls.create_for_bodies(world, list(dict.fromkeys(bodies)), detector_types)
 
     @staticmethod
     def _annotations_of_type(
-        world: World, semantic_annotation_type: type[SemanticAnnotation]
+        world: World, semantic_annotation_type: Type[SemanticAnnotation]
     ) -> List[SemanticAnnotation]:
         """
         :return: Every annotation of ``world`` of ``semantic_annotation_type``.
@@ -98,15 +150,90 @@ class Segmind:
         return annotations
 
     @property
+    def watched_bodies(self) -> List[Body]:
+        """
+        The bodies the detectors watch, each named once, in the order they are ticked.
+        """
+        return list(
+            dict.fromkeys(
+                detector.tracked_object
+                for detector in self.detectors
+                if detector.tracked_object is not None
+            )
+        )
+
+    @property
     def detector_names(self) -> List[str]:
         """
         The kinds of detector ticked, each named once, in the order they are ticked.
         """
         return list(
-            dict.fromkeys(
-                type(detector).__name__ for detector in self.segmenter.detectors
-            )
+            dict.fromkeys(type(detector).__name__ for detector in self.detectors)
         )
+
+    @property
+    def event_logger(self) -> EventLogger:
+        """
+        The logger holding every event the detectors detected.
+        """
+        return self.executor.context.require_extension(SegmindContext).logger
+
+    @property
+    def ticks_to_see_the_world_at_rest(self) -> int:
+        """
+        How many ticks of a still world the detectors need to conclude what it ended in:
+        the longest motion window among them, and at least one.
+        """
+        return max(
+            [
+                detector.window_size
+                for detector in self.detectors
+                if isinstance(detector, MotionDetector)
+            ],
+            default=1,
+        )
+
+    @property
+    def is_watching(self) -> bool:
+        """
+        Whether the detectors are being ticked on their thread.
+        """
+        return self.thread is not None and self.thread.is_alive()
+
+    def tick(self) -> None:
+        """
+        Tick the detectors once, while no other thread changes the world.
+        """
+        with self.world._world_lock:
+            self.executor.tick()
+
+    def start(self) -> None:
+        """
+        Start ticking the detectors on a thread of their own.
+        """
+        self.stopping.clear()
+        self.thread = threading.Thread(target=self._tick_until_stopped, daemon=True)
+        self.thread.start()
+
+    def stop(self) -> None:
+        """
+        Stop ticking the detectors, once they have seen the world at rest.
+        """
+        self.stopping.set()
+        self.thread.join()
+
+    def _tick_until_stopped(self) -> None:
+        """
+        Tick the detectors until told to stop, then as long as they need to see the
+        world at rest.
+        """
+        while not self.stopping.is_set():
+            started = time.monotonic()
+            self.tick()
+            held_for = time.monotonic() - started
+            self.stopping.wait(max(self.pause_between_ticks, held_for))
+        for _ in range(self.ticks_to_see_the_world_at_rest):
+            self.tick()
 
     def report_detected_events(self) -> None:
         """
@@ -116,20 +243,20 @@ class Segmind:
         and a run that already has a handler of its own would otherwise show each event
         through both.
         """
-        detected_events = logging.getLogger(event_logger.__name__)
+        detected_events = logging.getLogger(EventLogger.__module__)
         detected_events.setLevel(logging.DEBUG)
         if not detected_events.handlers:
             detected_events.addHandler(logging.StreamHandler())
         propagated = detected_events.propagate
         detected_events.propagate = False
-        self.segmenter.event_logger.print_events()
+        self.event_logger.print_events()
         detected_events.propagate = propagated
 
     def __enter__(self) -> Self:
         logger.info("SegMind detectors: %s", ", ".join(self.detector_names))
-        self.segmenter.start()
+        self.start()
         return self
 
     def __exit__(self, exception_type, exception, traceback) -> None:
-        self.segmenter.stop()
+        self.stop()
         self.report_detected_events()
