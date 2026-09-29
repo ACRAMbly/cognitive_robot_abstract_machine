@@ -18,7 +18,10 @@ from typing_extensions import (
     get_origin,
 )
 
-from krrood.adapters.json_serializer import JSONData
+from krrood.adapters.json_serializer import (
+    JSONData,
+    JSONSerializableTypeRegistry,
+)
 from krrood.ormatic.data_access_objects.alternative_mappings import AlternativeMapping
 from krrood.class_diagrams.class_diagram import (
     WrappedClass,
@@ -635,8 +638,8 @@ class WrappedTable(TableLike):
 
     def is_stored_as_a_value(self, type_endpoint: Type) -> bool:
         """
-        Whether a custom type keeps this type in its owner's own row, rather than a table
-        of its own holding it.
+        Whether a custom type keeps this type in its owner's own row, rather than a
+        table of its own holding it.
 
         A value is written whole - a :class:`SubclassJSONSerializer
         <krrood.adapters.json_serializer.SubclassJSONSerializer>` names its own subclass
@@ -644,11 +647,14 @@ class WrappedTable(TableLike):
         how to store it.
 
         :param type_endpoint: The type a field resolves to.
-        :return: True if a custom type stores it and no table maps it.
+        :return: True if a custom type or a JSON serializer registered for the type
+            stores it and no table maps it.
         """
-        return (
-            type_endpoint not in self.ormatic.mapped_classes
-            and type_endpoint in self.ormatic.type_mappings
+        return type_endpoint not in self.ormatic.mapped_classes and (
+            type_endpoint in self.ormatic.type_mappings
+            or JSONSerializableTypeRegistry().has_type_specific_serializer(
+                type_endpoint
+            )
         )
 
     def parse_field(self, wrapped_field: WrappedField):
@@ -727,6 +733,9 @@ class WrappedTable(TableLike):
             or type_endpoint in self.ormatic.type_mappings
             and wrapped_field.is_container
             or wrapped_field.type_endpoint is JSONData
+            or JSONSerializableTypeRegistry().has_type_specific_serializer(
+                type_endpoint
+            )
         ):
             logger.info(f"Parsing as JSON.")
             self.create_json_column(wrapped_field)
@@ -903,7 +912,8 @@ class WrappedTable(TableLike):
 
     def create_json_column(self, wrapped_field: WrappedField):
         """
-        Create a column for a list-like of built-in values.
+        Create a JSON column for a value, or a list-like of values, that krrood's JSON
+        serializer can write.
 
         :param wrapped_field: The field to extract the information from.
         """
@@ -911,13 +921,21 @@ class WrappedTable(TableLike):
         self.ormatic.imported_modules.add("typing_extensions")
         self.ormatic.imported_modules.add(type_endpoint.__module__)
         column_name = wrapped_field.field.name
-        container = (
-            Set
-            if isclass(wrapped_field.container_type)
-            and issubclass(wrapped_field.container_type, set)
-            else List
-        )
-        column_type = f"Mapped[{module_and_class_name(container)}[{module_and_class_name(wrapped_field.type_endpoint)}]]"
+        value_type = module_and_class_name(type_endpoint)
+        if not wrapped_field.is_container:
+            column_type = (
+                f"Mapped[{module_and_class_name(Optional)}[{value_type}]]"
+                if wrapped_field.is_optional
+                else f"Mapped[{value_type}]"
+            )
+        else:
+            container = (
+                Set
+                if isclass(wrapped_field.container_type)
+                and issubclass(wrapped_field.container_type, set)
+                else List
+            )
+            column_type = f"Mapped[{module_and_class_name(container)}[{value_type}]]"
         column_constructor = f"mapped_column(JSON, nullable={wrapped_field.is_optional}, use_existing_column=True)"
         self.custom_columns.append(
             ColumnConstructor(column_name, column_type, column_constructor)

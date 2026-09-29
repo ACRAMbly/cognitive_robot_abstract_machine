@@ -6,7 +6,6 @@ import fractions
 import ipaddress
 import logging
 import pathlib
-import re
 import uuid
 import zoneinfo
 from dataclasses import dataclass, field, is_dataclass
@@ -35,7 +34,6 @@ from krrood.ormatic.custom_types import (
     ComplexType,
     DateTimeType,
     Datetime64Type,
-    DecimalType,
     FractionType,
     IPv4AddressType,
     IPv4NetworkType,
@@ -55,12 +53,7 @@ from krrood.ormatic.custom_types import (
     NumpyUInt32Type,
     NumpyUInt8Type,
     PathType,
-    PatternType,
     PolymorphicEnumType,
-    PurePathType,
-    RangeType,
-    SliceType,
-    TimezoneType,
     TypeType,
     ZoneInfoType,
 )
@@ -219,20 +212,15 @@ class ORMatic:
             datetime.time: sqlalchemy.Time,
             datetime.timedelta: sqlalchemy.Interval,
             datetime.datetime: DateTimeType,
-            datetime.timezone: TimezoneType,
             zoneinfo.ZoneInfo: ZoneInfoType,
-            decimal.Decimal: DecimalType,
+            decimal.Decimal: sqlalchemy.Numeric,
             fractions.Fraction: FractionType,
             complex: ComplexType,
-            pathlib.PurePath: PurePathType,
             ipaddress.IPv4Address: IPv4AddressType,
             ipaddress.IPv6Address: IPv6AddressType,
             ipaddress.IPv4Network: IPv4NetworkType,
             ipaddress.IPv6Network: IPv6NetworkType,
             bytearray: ByteArrayType,
-            range: RangeType,
-            slice: SliceType,
-            re.Pattern: PatternType,
             np.ndarray: NumpyArrayType,
             np.float16: NumpyFloat16Type,
             np.float32: NumpyFloat32Type,

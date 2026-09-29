@@ -1,5 +1,4 @@
 import datetime
-import decimal
 import enum
 import fractions
 import importlib
@@ -7,13 +6,12 @@ import io
 import ipaddress
 import json
 import pathlib
-import re
 import zoneinfo
 from typing import Generic
 
 import numpy as np
 from sqlalchemy import Dialect, TypeDecorator, types
-from typing_extensions import Any, Dict, Optional, Type, TypeVar
+from typing_extensions import Any, Optional, Type, TypeVar
 
 from krrood.adapters.json_serializer import JSONData
 from krrood.ormatic.exceptions import ZoneInfoWithoutKey
@@ -38,8 +36,8 @@ class ValueType(TypeDecorator, Generic[T]):
 
     __class_getitem__ = Generic.__dict__["__class_getitem__"]
     """
-    SQLAlchemy type classes ignore subscription, so ``Generic``'s is restored to bind the
-    type parameter.
+    SQLAlchemy type classes ignore subscription, so ``Generic``'s is restored to bind
+    the type parameter.
     """
 
     @property
@@ -69,41 +67,6 @@ class TextValueType(ValueType[T]):
         if value is None:
             return None
         return self.python_type(value)
-
-
-class JSONObjectType(ValueType[T]):
-    """
-    Column type for values that are stored as a JSON object of the parts needed to
-    rebuild them.
-    """
-
-    impl = types.Text
-
-    def to_json_object(self, value: T) -> Dict[str, JSONData]:
-        """
-        :param value: The value to store.
-        :return: The parts needed to rebuild the value.
-        """
-        raise NotImplementedError
-
-    def from_json_object(self, json_object: Dict[str, JSONData]) -> T:
-        """
-        :param json_object: The parts written by :meth:`to_json_object`.
-        :return: The rebuilt value.
-        """
-        raise NotImplementedError
-
-    def process_bind_param(self, value: Optional[T], dialect: Dialect) -> Optional[str]:
-        if value is None:
-            return None
-        return json.dumps(self.to_json_object(value))
-
-    def process_result_value(
-        self, value: Optional[str], dialect: Dialect
-    ) -> Optional[T]:
-        if value is None:
-            return None
-        return self.from_json_object(json.loads(value))
 
 
 class NumpyScalarType(ValueType[T]):
@@ -213,69 +176,22 @@ class JSONDataType(ValueType[JSONData]):
 
 class DateTimeType(ValueType[datetime.datetime]):
     """
-    Column type for points in time, stored as ISO 8601 text of a fixed width.
+    Column type for points in time that stores timezone-aware values as the same instant
+    in UTC.
 
-    Timezone-aware values are stored as the same instant in UTC and are loaded back in
-    UTC, so values of different offsets compare and sort correctly in the database.
-    Naive values stay naive.
+    ..note:: Databases without timezone support, such as SQLite, return those values as
+        naive datetimes in UTC.
     """
 
-    impl = types.String(32)
+    impl = types.DateTime(timezone=True)
     cache_ok = True
 
     def process_bind_param(
         self, value: Optional[datetime.datetime], dialect: Dialect
-    ) -> Optional[str]:
-        if value is None:
-            return None
-        if value.tzinfo is not None:
-            value = value.astimezone(datetime.timezone.utc)
-        return value.isoformat(timespec="microseconds")
-
-    def process_result_value(
-        self, value: Optional[str], dialect: Dialect
     ) -> Optional[datetime.datetime]:
-        if value is None:
-            return None
-        return datetime.datetime.fromisoformat(value)
-
-
-class TimezoneKey(enum.StrEnum):
-    """
-    Keys of the JSON object a fixed-offset timezone is stored as.
-    """
-
-    OFFSET = "offset"
-    """
-    The offset from UTC in seconds.
-    """
-
-    NAME = "name"
-    """
-    The name the timezone was created with, if any.
-    """
-
-
-class TimezoneType(JSONObjectType[datetime.timezone]):
-    """
-    Column type for fixed-offset timezones, stored with the name they were created with.
-    """
-
-    cache_ok = True
-
-    def to_json_object(self, value: datetime.timezone) -> Dict[str, JSONData]:
-        offset, *name = value.__getinitargs__()
-        return {
-            TimezoneKey.OFFSET: offset.total_seconds(),
-            TimezoneKey.NAME: name[0] if name else None,
-        }
-
-    def from_json_object(self, json_object: Dict[str, JSONData]) -> datetime.timezone:
-        offset = datetime.timedelta(seconds=json_object[TimezoneKey.OFFSET])
-        name = json_object[TimezoneKey.NAME]
-        if name is None:
-            return datetime.timezone(offset)
-        return datetime.timezone(offset, name)
+        if value is None or value.tzinfo is None:
+            return value
+        return value.astimezone(datetime.timezone.utc)
 
 
 class ZoneInfoType(TextValueType[zoneinfo.ZoneInfo]):
@@ -295,15 +211,6 @@ class ZoneInfoType(TextValueType[zoneinfo.ZoneInfo]):
 
 
 # %% numbers
-
-
-class DecimalType(TextValueType[decimal.Decimal]):
-    """
-    Column type for decimal numbers, stored as text so that no digit is lost on
-    databases without an exact decimal type.
-    """
-
-    cache_ok = True
 
 
 class FractionType(TextValueType[fractions.Fraction]):
@@ -331,40 +238,6 @@ class PathType(TextValueType[pathlib.Path]):
     """
 
     cache_ok = True
-
-
-class PurePathKey(enum.StrEnum):
-    """
-    Keys of the JSON object a path is stored as.
-    """
-
-    TYPE = "type"
-    """
-    The full name of the path's class, which decides how the path is read.
-    """
-
-    PATH = "path"
-    """
-    The path as text.
-    """
-
-
-class PurePathType(JSONObjectType[pathlib.PurePath]):
-    """
-    Column type for paths of any flavour, stored with their class.
-    """
-
-    cache_ok = True
-
-    def to_json_object(self, value: pathlib.PurePath) -> Dict[str, JSONData]:
-        return {
-            PurePathKey.TYPE: module_and_class_name(type(value)),
-            PurePathKey.PATH: str(value),
-        }
-
-    def from_json_object(self, json_object: Dict[str, JSONData]) -> pathlib.PurePath:
-        path_type = resolve_class_from_full_name(json_object[PurePathKey.TYPE])
-        return path_type(json_object[PurePathKey.PATH])
 
 
 class IPv4AddressType(TextValueType[ipaddress.IPv4Address]):
@@ -403,7 +276,7 @@ class IPv6NetworkType(TextValueType[ipaddress.IPv6Network]):
     cache_ok = True
 
 
-# %% sequences and patterns
+# %% byte sequences
 
 
 class ByteArrayType(ValueType[bytearray]):
@@ -427,103 +300,6 @@ class ByteArrayType(ValueType[bytearray]):
         if value is None:
             return None
         return bytearray(value)
-
-
-class RangeKey(enum.StrEnum):
-    """
-    Keys of the JSON object a range or slice is stored as.
-    """
-
-    START = "start"
-    """
-    The first index.
-    """
-
-    STOP = "stop"
-    """
-    The index the range or slice ends before.
-    """
-
-    STEP = "step"
-    """
-    The distance between consecutive indices.
-    """
-
-
-class RangeType(JSONObjectType[range]):
-    """
-    Column type for ranges of integers.
-    """
-
-    cache_ok = True
-
-    def to_json_object(self, value: range) -> Dict[str, JSONData]:
-        return {
-            RangeKey.START: value.start,
-            RangeKey.STOP: value.stop,
-            RangeKey.STEP: value.step,
-        }
-
-    def from_json_object(self, json_object: Dict[str, JSONData]) -> range:
-        return range(
-            json_object[RangeKey.START],
-            json_object[RangeKey.STOP],
-            json_object[RangeKey.STEP],
-        )
-
-
-class SliceType(JSONObjectType[slice]):
-    """
-    Column type for slices whose bounds are JSON values, such as integers or None.
-    """
-
-    cache_ok = True
-
-    def to_json_object(self, value: slice) -> Dict[str, JSONData]:
-        return {
-            RangeKey.START: value.start,
-            RangeKey.STOP: value.stop,
-            RangeKey.STEP: value.step,
-        }
-
-    def from_json_object(self, json_object: Dict[str, JSONData]) -> slice:
-        return slice(
-            json_object[RangeKey.START],
-            json_object[RangeKey.STOP],
-            json_object[RangeKey.STEP],
-        )
-
-
-class PatternKey(enum.StrEnum):
-    """
-    Keys of the JSON object a compiled regular expression is stored as.
-    """
-
-    PATTERN = "pattern"
-    """
-    The source of the regular expression.
-    """
-
-    FLAGS = "flags"
-    """
-    The flags the regular expression was compiled with.
-    """
-
-
-class PatternType(JSONObjectType[re.Pattern]):
-    """
-    Column type for compiled regular expressions over text.
-    """
-
-    cache_ok = True
-
-    def to_json_object(self, value: re.Pattern) -> Dict[str, JSONData]:
-        return {PatternKey.PATTERN: value.pattern, PatternKey.FLAGS: value.flags}
-
-    def from_json_object(self, json_object: Dict[str, JSONData]) -> re.Pattern:
-        return re.compile(
-            json_object[PatternKey.PATTERN], json_object[PatternKey.FLAGS]
-        )
 
 
 # %% numpy

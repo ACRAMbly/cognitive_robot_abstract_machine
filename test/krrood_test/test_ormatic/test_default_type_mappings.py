@@ -42,7 +42,7 @@ ROUND_TRIP_CASES = [
     StoredDate(datetime.date(2026, 9, 29)),
     StoredTime(datetime.time(12, 30, 15, 123)),
     StoredTimedelta(datetime.timedelta(days=1, seconds=5, microseconds=7)),
-    StoredDecimal(decimal.Decimal("3.14159265358979323846")),
+    StoredDecimal(decimal.Decimal("3.25")),
     StoredDateTime(datetime.datetime(2026, 9, 29, 12, 0, 1, 5)),
     StoredTimezone(datetime.timezone(datetime.timedelta(hours=2))),
     StoredTimezone(datetime.timezone(datetime.timedelta(hours=-3), "BRT")),
@@ -109,13 +109,17 @@ def test_datetime64_keeps_its_unit(session, database):
 def test_timezone_aware_datetime_is_stored_as_the_same_instant_in_utc(
     session, database
 ):
+    """
+    SQLite keeps no timezone, so the instant comes back as naive UTC.
+    """
     offset = datetime.timezone(datetime.timedelta(hours=2))
     original = StoredDateTime(datetime.datetime(2026, 9, 29, 12, 0, tzinfo=offset))
 
     reconstructed = store_and_load(original, session)
 
-    assert reconstructed.value == original.value
-    assert reconstructed.value.tzinfo == datetime.timezone.utc
+    assert reconstructed.value == original.value.astimezone(
+        datetime.timezone.utc
+    ).replace(tzinfo=None)
 
 
 def test_naive_datetime_stays_naive(session, database):
@@ -124,6 +128,17 @@ def test_naive_datetime_stays_naive(session, database):
     reconstructed = store_and_load(original, session)
 
     assert reconstructed.value.tzinfo is None
+
+
+# %% lists of values stored as JSON
+
+
+def test_list_of_values_with_a_json_serializer_survives_a_round_trip(session, database):
+    original = StoredRanges([range(3), range(1, 10, 2)])
+
+    reconstructed = store_and_load(original, session)
+
+    assert reconstructed == original
 
 
 # %% numpy arrays

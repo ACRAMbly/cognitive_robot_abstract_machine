@@ -238,6 +238,18 @@ class StoredPattern:
     """
 
 
+@dataclass
+class StoredRanges:
+    """
+    Holds a list of ranges.
+    """
+
+    values: list[range]
+    """
+    The stored ranges.
+    """
+
+
 # %% numpy values
 
 
