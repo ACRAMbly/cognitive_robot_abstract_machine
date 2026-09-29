@@ -33,16 +33,6 @@ class MessageConverter(ABC, Generic[InputType, OutputType]):
     override the convert method. No registration is necessary.
     """
 
-    converter_module_suffix: ClassVar[str] = "_converters"
-    """
-    The name ending that marks a module of this package as defining converters.
-    """
-
-    _converter_modules_loaded: ClassVar[bool] = False
-    """
-    Whether the modules defining the converters have already been imported.
-    """
-
     @classmethod
     @property
     def input_type(cls) -> Type[InputType]:
@@ -104,7 +94,6 @@ class MessageConverter(ABC, Generic[InputType, OutputType]):
         :return: The subclass of this direction that converts the given object.
         :raises ROS2ConversionError: If no converter of this direction fits.
         """
-        cls._load_converter_modules()
         for sub_class in recursive_subclasses(cls):
             if sub_class.can_convert(input_obj):
                 return sub_class
