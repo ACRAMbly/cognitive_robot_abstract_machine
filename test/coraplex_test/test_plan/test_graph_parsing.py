@@ -801,8 +801,8 @@ def test_split_by_type_leading_and_trailing_match(pr2_apartment_context):
     assert splitted_list[2] == [last_model_change]
 
 
-def test_detect_before_grasp_transformation_applies(immutable_model_world):
-    world, view, context = immutable_model_world
+def test_detect_before_grasp_transformation_applies(pr2_apartment_context):
+    world, view, context = pr2_apartment_context
 
     context.plan_transformations.append(DetectBeforeGrasp())
 
