@@ -1,7 +1,9 @@
 from dataclasses import dataclass
 
 from krrood.entity_query_language.operators.causal import Cause
-from krrood.entity_query_language.factories import a, cause
+from krrood.entity_query_language.factories import a, cause, variable
+
+from ...dataset.expression_stand_ins import AssignedVariableStandIn
 
 # %% construction
 
@@ -20,7 +22,7 @@ class Pick:
     grasped: bool
 
 
-def _cause_attribute_match(match):
+def _arm_attribute_match(match):
     [attribute_match] = [
         attribute_match
         for attribute_match in match._matches_with_variables_
@@ -31,12 +33,12 @@ def _cause_attribute_match(match):
 
 def test_cause_flows_through_match_as_the_assigned_variable():
     match = a(Pick)(arm=cause, grasped=True)
-    assert isinstance(_cause_attribute_match(match).assigned_variable, Cause)
+    assert isinstance(_arm_attribute_match(match).assigned_variable, Cause)
 
 
 def test_cause_backfills_its_type_from_the_attribute_it_is_assigned_to():
     match = a(Pick)(arm=cause, grasped=True)
-    assert _cause_attribute_match(match).assigned_variable._type_ is float
+    assert _arm_attribute_match(match).assigned_variable._type_ is float
 
 
 def test_match_marks_a_cause_attribute_as_present():
@@ -68,3 +70,19 @@ def test_two_cause_marked_attributes_resolve_to_distinct_objects():
 def test_marking_attributes_as_cause_does_not_mutate_the_shared_instance():
     a(Pick)(arm=cause, grasped=cause)
     assert cause._type_ is None
+
+
+# %% a new kind of assigned value
+
+
+def test_new_kind_of_assigned_value_decides_the_variable_it_stands_for():
+    stand_in = AssignedVariableStandIn(variable(float, domain=[0.3]))
+    match = a(Pick)(arm=stand_in, grasped=True)
+    assert _arm_attribute_match(match).assigned_variable is stand_in.variable
+
+
+def test_new_kind_of_assigned_value_is_told_the_attribute_type():
+    stand_in = AssignedVariableStandIn(variable(float, domain=[0.3]))
+    match = a(Pick)(arm=stand_in, grasped=True)
+    _arm_attribute_match(match).assigned_variable
+    assert stand_in.attribute_type is float

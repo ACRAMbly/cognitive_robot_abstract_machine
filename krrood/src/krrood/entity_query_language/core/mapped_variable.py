@@ -41,6 +41,7 @@ from krrood.entity_query_language.core.base_expressions import (
     UnaryExpression,
     Bindings,
     OperationResult,
+    Operand,
     Selectable,
     SymbolicExpression,
     UnificationDict,
@@ -92,7 +93,7 @@ def attribute_names_for_completion(type_: Any) -> Set[str]:
     return names
 
 
-class HasSymbolicOperations(Generic[T], ABC):
+class HasSymbolicOperations(Operand, Generic[T], ABC):
     """
     Something that stands for a value of type ``T``, on which every operation builds a
     symbolic expression instead of computing an answer: reading an attribute, indexing,
@@ -476,6 +477,16 @@ class MappedVariable(UnaryExpression, CanBehaveLikeAVariable[T], ABC):
             current = current._child_
         return current
 
+    @property
+    def _variable_rooted_(self) -> SymbolicExpression:
+        """
+        :return: This chain re-rooted onto the variable its root selects, when that root
+            is a query, or else this chain as written.
+        :raises AmbiguousQueryAttribute: If it is rooted at a query selecting several
+            variables, which leaves the chain no single subject to be re-rooted onto.
+        """
+        return self._chain_root_._rerooted_on_selection_(self)
+
     def _set_external_root_instance_value_(self, instance: Any, value: Any):
         """
         Set the field of the instance at this access path to the given value.
@@ -647,9 +658,7 @@ class Attribute(SingleValueMapping[T]):
         :raises NotNumberLikeFieldError: If this attribute does not exist or is not
             number-like.
         """
-        from krrood.entity_query_language.query.query import variable_rooted
-
-        resolved_type = variable_rooted(self)._type_
+        resolved_type = self._variable_rooted_._type_
         is_number_like = (
             resolved_type is not None
             and issubclass(resolved_type, compatible_types)

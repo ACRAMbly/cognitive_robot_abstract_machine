@@ -1107,7 +1107,7 @@ class PositionalArgumentsInMatchPattern(DataclassException):
         return (
             "Name the fields to match, as in `a(Drawer)(handle=...)`. To call a matched "
             "instance that is itself callable, state the pattern first and call the "
-            "result: `a(Adder)(offset=1)(2)`, or `a(Adder)()(2)` for an empty pattern."
+            "result: `an(Adder)(offset=1)(2)`, or `an(Adder)()(2)` for an empty pattern."
         )
 
 

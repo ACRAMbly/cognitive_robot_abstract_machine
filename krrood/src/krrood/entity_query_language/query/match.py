@@ -37,13 +37,13 @@ from typing_extensions import (
 from krrood.class_diagrams.utils import get_type_hints_of_object
 from krrood.entity_query_language.core.base_expressions import (
     HasExpression,
+    MatchAssignedValue,
     Selectable,
     SymbolicExpression,
 )
 from krrood.entity_query_language.operators.causal import (
     Cause,
     CausesEffect,
-    Confounder,
 )
 from krrood.entity_query_language.core.helpers import _resolve_domain
 from krrood.entity_query_language.core.mapped_variable import (
@@ -77,7 +77,7 @@ if TYPE_CHECKING:
 
 
 @dataclass
-class AbstractMatchExpression(Generic[T], ABC):
+class AbstractMatchExpression(MatchAssignedValue, Generic[T], ABC):
     """
     Abstract base class for constructing and handling a match expression.
 
@@ -130,6 +130,15 @@ class AbstractMatchExpression(Generic[T], ABC):
             operation written on it is built.
         """
         ...
+
+    def _as_assigned_variable_(
+        self, attribute_type: Optional[Type]
+    ) -> Optional[Variable[T]]:
+        """
+        :param attribute_type: The type of the attribute this match is assigned to.
+        :return: The variable this match creates, which the attribute's value is bound to.
+        """
+        return self._variable_
 
     def resolve(self, *args, **kwargs) -> Self:
         """
@@ -229,21 +238,9 @@ class Match(
         >>>     body: Body
         >>> drawer = a(Drawer)(body=a(Body)(name="drawer_1")).from_(world.views)
 
-    A match reads like an instance of the matched class: every symbolic operation of
-    :class:`~krrood.entity_query_language.core.mapped_variable.HasSymbolicOperations` -
-    attribute access, indexing, calling, comparison and arithmetic - is built on
-    :attr:`_symbolic_expression_`, so ``drawer.body`` is that query's ``body`` and
-    carries the pattern. Names of the match's own methods (``where``, ``from_``,
-    ``resolve``, ...) are resolved normally and never delegated; a matched-class field
-    shadowed by one of them stays reachable through :attr:`_symbolic_expression_`.
-
-    The one operation the match keeps for itself is the *first* call, which states the
-    pattern; a matched class that is itself callable is called through a second pair of
-    parentheses - see :meth:`__call__`.
-
-    It also reads like a query: the modifiers of
-    :class:`~krrood.entity_query_language.query.query_modifiers.HasQueryModifiers` narrow
-    the lowered query and return the match, so a chain stays on the match.
+    A match reads like an instance of the matched class - ``drawer.body`` is the ``body``
+    of the query the match stands for - and like a query, whose modifiers return the
+    match.
 
     .. warning::
         Match can take a factory as a mean to construct `T`. If the keyword argument names of the match are not
@@ -313,8 +310,8 @@ class Match(
         symbolically, every time after that.
 
         The first parentheses after ``a(Drawer)`` state the pattern, so a matched class
-        that is itself callable is called through a second pair - ``a(Adder)(offset=1)(2)``,
-        or ``a(Adder)()(2)`` where the pattern is empty. The pattern parentheses take
+        that is itself callable is called through a second pair - ``an(Adder)(offset=1)(2)``,
+        or ``an(Adder)()(2)`` where the pattern is empty. The pattern parentheses take
         keyword arguments only, since a pattern names fields.
 
         A matched class whose instances are not callable has nothing a second call could
@@ -797,33 +794,19 @@ class AttributeMatch(AbstractMatchExpression[T]):
         self._conditions_.extend(self.assigned_value._conditions_)
 
     @cached_property
-    def assigned_variable(self) -> Selectable:
+    def assigned_variable(self) -> SymbolicExpression:
         """
-        :return: The symbolic variable representing the assigned value.
+        :return: The symbolic variable representing the assigned value; a plain value
+            stands for nothing symbolic and is wrapped in a literal of the attribute's
+            type.
         """
-        if isinstance(self.assigned_value, AbstractMatchExpression):
-            return self.assigned_value._variable_
-        if (
-            isinstance(self.assigned_value, (Cause, Confounder))
-            and self.assigned_value._type_ is None
-        ):
-            # `cause`/`confounder` are shared instances written directly into every
-            # matching kwarg, so unlike a plain literal (whose `Literal` wrapper is
-            # created fresh right here, with `_type_=self._type_`), an unresolved one has
-            # no declared type of its own yet, and mutating it in place would corrupt
-            # every other field also marked `cause`/`confounder`. Return a fresh,
-            # per-attribute copy with the type filled in instead, so code reading
-            # `assigned_variable._type_` (parametrization, generation) sees the
-            # attribute's declared type without touching the shared original.
-            return type(self.assigned_value)(_type_=self._type_)
-        elif not isinstance(self.assigned_value, SymbolicExpression):
+        if not isinstance(self.assigned_value, MatchAssignedValue):
             return Literal(
                 _name__=self._variable_._name_,
                 _type_=self._type_,
                 _value_=self.assigned_value,
             )
-        else:
-            return self.assigned_value
+        return self.assigned_value._as_assigned_variable_(self._type_)
 
     @cached_property
     def attribute(self) -> Attribute:

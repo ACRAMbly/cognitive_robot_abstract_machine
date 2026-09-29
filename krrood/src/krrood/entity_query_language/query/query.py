@@ -1163,25 +1163,3 @@ class Entity(Query[T]):
                 if chain_root(child)._id_ not in group_key_root_ids
             ]
         return super().aggregated_selections(group_key_root_ids)
-
-
-def variable_rooted(expression: SymbolicExpression) -> SymbolicExpression:
-    """
-    The form of an expression rooted at a variable rather than at a query.
-
-    A chain taken from a query names the same thing as the same chain taken from the
-    variable that query selects, so a reader that identifies an expression by how it is
-    written has to see both in the one form.
-
-    :param expression: An expression that may be a chain rooted at a query.
-    :return: The chain re-rooted onto that query's selection, or the expression itself
-        when it is not rooted at a query.
-    :raises AmbiguousQueryAttribute: If it is rooted at a query selecting several
-        variables, which leaves the chain no single subject to be re-rooted onto.
-    """
-    if not isinstance(expression, MappedVariable):
-        return expression
-    root = expression._chain_root_
-    if not isinstance(root, Query):
-        return expression
-    return root._rerooted_on_selection_(expression)
