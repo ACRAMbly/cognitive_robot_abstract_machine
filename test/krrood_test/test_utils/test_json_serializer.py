@@ -27,6 +27,7 @@ from krrood.adapters.json_serializer import (
     JSONAttributeDiff,
     shallow_diff_json,
     DataclassJSONSerializer,
+    ExternalClassJSONSerializer,
     JSONSerializableTypeRegistry,
 )
 from krrood.utils import get_full_class_name
@@ -574,6 +575,24 @@ class DataclassWithoutOwnSerializer:
 @pytest.mark.parametrize("clazz", [DataclassWithoutOwnSerializer, object])
 def test_type_without_its_own_serializer_is_not_recognised(clazz):
     assert not JSONSerializableTypeRegistry().has_type_specific_serializer(clazz)
+
+
+def test_serializer_defined_after_a_lookup_is_recognised():
+    class ValueWithLateSerializer:
+        """
+        A class whose serializer is only defined after it was looked up.
+        """
+
+    registry = JSONSerializableTypeRegistry()
+    assert not registry.has_type_specific_serializer(ValueWithLateSerializer)
+
+    @dataclass
+    class LateSerializer(ExternalClassJSONSerializer[ValueWithLateSerializer]):
+        """
+        A serializer defined after the lookup above.
+        """
+
+    assert registry.has_type_specific_serializer(ValueWithLateSerializer)
 
 
 # %% list diffs with repeated items

@@ -1,20 +1,12 @@
 from __future__ import annotations
 
-import datetime
-import decimal
-import fractions
-import ipaddress
 import logging
-import pathlib
-import uuid
-import zoneinfo
 from dataclasses import dataclass, field, is_dataclass
-from enum import Enum
+from functools import cached_property
 from inspect import isclass
-from types import ModuleType, NoneType
+from types import ModuleType
 from typing import Set
 
-import numpy as np
 import rustworkx as rx
 import sqlalchemy
 import krrood.ormatic.custom_types  # type: ignore
@@ -25,38 +17,11 @@ from krrood.ormatic.helper import (
     OrmaticInterfaceInformation,
 )
 from sortedcontainers import SortedSet
-from sqlalchemy import JSON
 from typing_extensions import List, Type, Dict
 from typing_extensions import Optional, TextIO
 
-from krrood.ormatic.custom_types import (
-    ByteArrayType,
-    ComplexType,
-    DateTimeType,
-    Datetime64Type,
-    FractionType,
-    IPv4AddressType,
-    IPv4NetworkType,
-    IPv6AddressType,
-    IPv6NetworkType,
-    JSONDataType,
-    NumpyArrayType,
-    NumpyBoolType,
-    NumpyFloat16Type,
-    NumpyFloat32Type,
-    NumpyFloat64Type,
-    NumpyInt16Type,
-    NumpyInt32Type,
-    NumpyInt64Type,
-    NumpyInt8Type,
-    NumpyUInt16Type,
-    NumpyUInt32Type,
-    NumpyUInt8Type,
-    PathType,
-    PolymorphicEnumType,
-    TypeType,
-    ZoneInfoType,
-)
+from krrood.ormatic.default_type_mappings import DefaultTypeMapping
+from krrood.ormatic.field_storage import FieldClassifier
 from krrood.ormatic.data_access_objects.alternative_mappings import AlternativeMapping
 from krrood.ormatic.data_access_objects.dao import DataAccessObject
 
@@ -70,7 +35,6 @@ from krrood.ormatic.wrapped_table import (
     AssociationObject,
     TableLike,
 )
-from krrood.adapters.json_serializer import SubclassJSONSerializer, JSONData
 from krrood.class_diagrams.class_diagram import (
     ClassDiagram,
     ClassRelation,
@@ -199,45 +163,11 @@ class ORMatic:
         """
         Add the default type mappings for every type that has no mapping yet.
         """
-        default_type_mappings = {
-            Type: TypeType,
-            type: TypeType,
-            Enum: PolymorphicEnumType,
-            SubclassJSONSerializer: JSON,
-            uuid.UUID: sqlalchemy.UUID,
-            pathlib.Path: PathType,
-            JSONData: JSONDataType,
-            NoneType: TypeType,
-            datetime.date: sqlalchemy.Date,
-            datetime.time: sqlalchemy.Time,
-            datetime.timedelta: sqlalchemy.Interval,
-            datetime.datetime: DateTimeType,
-            zoneinfo.ZoneInfo: ZoneInfoType,
-            decimal.Decimal: sqlalchemy.Numeric,
-            fractions.Fraction: FractionType,
-            complex: ComplexType,
-            ipaddress.IPv4Address: IPv4AddressType,
-            ipaddress.IPv6Address: IPv6AddressType,
-            ipaddress.IPv4Network: IPv4NetworkType,
-            ipaddress.IPv6Network: IPv6NetworkType,
-            bytearray: ByteArrayType,
-            np.ndarray: NumpyArrayType,
-            np.float16: NumpyFloat16Type,
-            np.float32: NumpyFloat32Type,
-            np.float64: NumpyFloat64Type,
-            np.int8: NumpyInt8Type,
-            np.int16: NumpyInt16Type,
-            np.int32: NumpyInt32Type,
-            np.int64: NumpyInt64Type,
-            np.uint8: NumpyUInt8Type,
-            np.uint16: NumpyUInt16Type,
-            np.uint32: NumpyUInt32Type,
-            np.bool_: NumpyBoolType,
-            np.datetime64: Datetime64Type,
-        }
-        for python_type, column_type in default_type_mappings.items():
-            if python_type not in self.type_mappings.keys():
-                self.type_mappings[python_type] = column_type
+        for default in DefaultTypeMapping:
+            if default.value.python_type not in self.type_mappings.keys():
+                self.type_mappings[default.value.python_type] = (
+                    default.value.column_type
+                )
 
         for key in self.type_mappings.keys():
             self.imported_modules.add(get_module_of_type(key))
@@ -379,6 +309,14 @@ class ORMatic:
         return [key.clazz for key in self.wrapped_tables.keys()] + [
             key.clazz for key in self.external_tables.keys()
         ]
+
+    @cached_property
+    def field_classifier(self) -> FieldClassifier:
+        """
+        :return: The classifier that decides how each field of the mapped classes is
+            stored.
+        """
+        return FieldClassifier(self)
 
     def table_for(self, wrapped_class: WrappedClass) -> TableLike:
         """

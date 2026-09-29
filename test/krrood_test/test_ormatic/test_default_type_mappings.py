@@ -12,6 +12,7 @@ from sqlalchemy import select
 
 from krrood.class_diagrams.class_diagram import ClassDiagram
 from krrood.ormatic.custom_types import NumpyType, ZoneInfoType
+from krrood.ormatic.default_type_mappings import DefaultTypeMapping
 from krrood.ormatic.data_access_objects.helper import get_dao_class, to_dao
 from krrood.ormatic.exceptions import ZoneInfoWithoutKey
 from krrood.ormatic.helper import OrmaticInterfaceInformation
@@ -185,3 +186,16 @@ def test_given_type_mapping_is_kept_over_the_default():
     )
 
     assert ormatic.type_mappings[np.ndarray] is NumpyType
+
+
+@pytest.mark.parametrize(
+    "default",
+    list(DefaultTypeMapping),
+    ids=[default.name for default in DefaultTypeMapping],
+)
+def test_default_type_mapping_is_used_when_none_is_given(default):
+    ormatic = ORMatic(ClassDiagram([]))
+
+    type_mappings = dict(ormatic.type_mappings.items())
+
+    assert type_mappings[default.value.python_type] is default.value.column_type

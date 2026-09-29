@@ -7,6 +7,7 @@ import ipaddress
 import json
 import pathlib
 import zoneinfo
+from functools import cache
 from typing import Generic
 
 import numpy as np
@@ -49,7 +50,16 @@ class ValueType(TypeDecorator, Generic[T]):
         """
         :return: The type of the values this column holds.
         """
-        return get_generic_type_parameters(type(self), ValueType)[0]
+        return self.bound_type()
+
+    @classmethod
+    @cache
+    def bound_type(cls) -> Type[T]:
+        """
+        :return: The type bound to the type parameter of this class, looked up once per
+            class since it is read for every value that is loaded.
+        """
+        return get_generic_type_parameters(cls, ValueType)[0]
 
 
 class TextValueType(ValueType[T]):
