@@ -241,6 +241,8 @@ def main():
         "ros-jazzy-control-msgs",
         "ros-jazzy-ur-robot-driver",
         "ros-jazzy-ur-client-library",
+        "ros-jazzy-rosidl_default_generators",
+        "ros-jazzy-rosidl_default_runtime",
     ]
     manager.dep_manager.install_packages(packages)
 
@@ -341,7 +343,7 @@ def main():
             "https://github.com/code-iai/iai_weiss_wpg_300-120-gripper.git",
             "main",
             "iai_weiss_wpg_300-120-gripper",
-            ["griplink"],
+            ["griplink/griplink"],
         ),
         Repository(
             "https://github.com/aws-robotics/aws-robomaker-small-warehouse-world.git",
