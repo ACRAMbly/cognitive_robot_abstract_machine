@@ -29,9 +29,3 @@ class HasBoundValue(ABC):
     def _bound_value_(cls, **kwargs: Any) -> Any:
         """:return: the value this operation contributes to a query result for the given argument
         values."""
-
-    @classmethod
-    @abstractmethod
-    def _binds_constructed_instance_(cls) -> bool:
-        """:return: whether :meth:`_bound_value_` is a newly constructed instance of this type rather
-        than a value computed from one, which may already exist."""
