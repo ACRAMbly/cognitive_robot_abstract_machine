@@ -241,8 +241,6 @@ def main():
         "ros-jazzy-control-msgs",
         "ros-jazzy-ur-robot-driver",
         "ros-jazzy-ur-client-library",
-        "ros-jazzy-rosidl_default_generators",
-        "ros-jazzy-rosidl_default_runtime",
     ]
     manager.dep_manager.install_packages(packages)
 
