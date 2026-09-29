@@ -32,6 +32,10 @@ class ValueType(TypeDecorator, Generic[T]):
 
     ..note:: Concrete subclasses must set ``cache_ok`` themselves, as SQLAlchemy only
         reads it from the class that is used as the column type.
+
+    ..note:: This cannot use
+        :class:`~krrood.patterns.subclass_safe_generic.SubClassSafeGeneric`: as a
+        dataclass it makes instances unhashable, which SQLAlchemy requires them to be.
     """
 
     __class_getitem__ = Generic.__dict__["__class_getitem__"]
