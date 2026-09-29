@@ -29,7 +29,6 @@ def simple_plan(pr2_apartment_context):
                 Pose.from_xyz_quaternion(
                     1.6, 1.9, 0, 0, 0, 0, 1, reference_frame=world.root
                 ),
-                True,
             ),
             MoveTorsoAction(TorsoState.HIGH),
             ParkArmsAction(Arms.BOTH),
