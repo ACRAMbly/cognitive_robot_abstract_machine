@@ -562,13 +562,16 @@ class Match(
             for attribute_match in self._matches_with_variables_
         )
 
-    def _is_kept_out_of_construction_(self, value: Any) -> bool:
+    def _is_kept_out_of_construction_(self, keyword: str, value: Any) -> bool:
         """
-        A keyword marked with a causal role that is no field of the matched class names
-        an aggregation statistic of it, which grounding computes rather than the
-        constructor receives.
+        A keyword that is no constructor parameter still belongs to the pattern when it
+        names an attribute of the matched class, such as a property or a method, since
+        the constructed instance provides it.
+
+        A keyword marked with a causal role names an aggregation statistic of the
+        matched class, which grounding computes.
         """
-        return isinstance(value, CausalRoleMarker)
+        return keyword in dir(self._type_) or isinstance(value, CausalRoleMarker)
 
     @property
     def _name_(self) -> str:

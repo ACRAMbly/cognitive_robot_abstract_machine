@@ -5,6 +5,7 @@ from krrood.entity_query_language.operators.causal import cause
 from krrood.patterns.exceptions import KeywordNamesNoFactoryParameter
 from krrood.patterns.factory_and_kwargs import HasFactoryAndKwargs
 
+from ..dataset.derived_attributes import Rectangle
 from ..dataset.example_classes import KRROODPosition
 
 
@@ -45,3 +46,13 @@ def test_misspelled_match_keyword_is_refused_at_construction():
 def test_match_keyword_marked_as_a_causal_role_is_left_out_of_construction():
     position = an(KRROODPosition)(x=1.0, y=2.0, z=3.0, distance_to_origin=cause)
     assert position.construct_instance() == KRROODPosition(1.0, 2.0, 3.0)
+
+
+def test_match_keyword_naming_a_property_of_the_matched_type_is_left_out_of_construction():
+    rectangle = an(Rectangle)(width=3.0, height=4.0, area=12.0)
+    assert rectangle.construct_instance() == Rectangle(3.0, 4.0)
+
+
+def test_match_keyword_naming_a_method_of_the_matched_type_is_left_out_of_construction():
+    rectangle = an(Rectangle)(width=3.0, height=4.0, perimeter=...)
+    assert rectangle.construct_instance() == Rectangle(3.0, 4.0)
