@@ -1,5 +1,6 @@
 import gc
 import operator
+from copy import deepcopy
 from dataclasses import dataclass
 
 import pytest
@@ -25,9 +26,12 @@ from krrood.entity_query_language.factories import (
     an,
 )
 from krrood.entity_query_language.operators.comparator import Comparator
+from krrood.entity_query_language.predicate import SymbolicFunction, symbolic_function
 from krrood.entity_query_language.operators.core_logical_operators import AND, OR
 from krrood.entity_query_language.query.query import Query
 from krrood.entity_query_language.query_graph import QueryGraph
+from krrood.entity_query_language.verbalization.fragments.base import WordFragment
+from krrood.entity_query_language.verbalization.vocabulary.parts_of_speech import Noun
 from krrood.symbol_graph.symbol_graph import Symbol
 from ..dataset.semantic_world_like_classes import (
     Handle,
@@ -1070,3 +1074,71 @@ def drawer_rule(doors_and_drawers_world):
         container=fixed_connection.expression.parent,
         handle=fixed_connection.expression.child,
     )
+
+
+# %% values a query returns without creating them
+
+
+@dataclass(unsafe_hash=True)
+class Team(Symbol):
+    captain: Person
+    """
+    The existing person a query can look up through the team.
+    """
+
+
+@symbolic_function
+def captain_of(team: Team) -> Person:
+    """
+    :return: The captain the team already holds.
+    """
+    return team.captain
+
+
+@dataclass(eq=False)
+class CaptainOf(SymbolicFunction):
+    """
+    A value operation returning the captain the team already holds.
+    """
+
+    team: Team
+    """
+    The team whose captain is returned.
+    """
+
+    def __call__(self) -> Person:
+        return self.team.captain
+
+    @classmethod
+    def _verbalization_fragment_(cls, fields):
+        return Noun(WordFragment(text="the captain")).as_fragment()
+
+
+def test_a_symbolic_function_result_is_not_explained_as_inferred():
+    captain = Person(name="Ada")
+    team = variable(Team, domain=[Team(captain=captain)])
+
+    assert list(entity(captain_of(team)).evaluate()) == [captain]
+    assert explain_inference(captain) is None
+
+
+def test_a_value_operation_result_is_not_explained_as_inferred():
+    captain = Person(name="Ada")
+    team = variable(Team, domain=[Team(captain=captain)])
+
+    assert list(entity(CaptainOf(team)).evaluate()) == [captain]
+    assert explain_inference(captain) is None
+
+
+# %% copying inferred instances
+
+
+def test_a_copy_of_an_inferred_instance_shares_its_explanation():
+    template = variable(Person, domain=[Person(name="Bob")])
+    (bob,) = entity(inference(Person)(name=template.name)).evaluate()
+
+    copied_bob = deepcopy(bob)
+
+    assert copied_bob is not bob
+    assert copied_bob == bob
+    assert explain_inference(copied_bob) is explain_inference(bob)

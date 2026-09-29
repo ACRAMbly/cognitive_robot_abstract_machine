@@ -265,6 +265,10 @@ class SymbolicCallable(Symbol, Verbalizable, HasBoundValue, ABC):
         """
         return cls._construct_normally_(**kwargs)
 
+    @classmethod
+    def _binds_constructed_instance_(cls) -> bool:
+        return True
+
     @abstractmethod
     def __call__(self) -> Any:
         """
@@ -324,6 +328,10 @@ class SymbolicFunction(SymbolicCallable, ABC):
         what it computes (exactly as a ``@symbolic_function`` is called), not the instance.
         """
         return cls._construct_normally_(**kwargs)()
+
+    @classmethod
+    def _binds_constructed_instance_(cls) -> bool:
+        return False
 
     @abstractmethod
     def __call__(self) -> Any:

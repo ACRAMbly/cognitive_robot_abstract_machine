@@ -304,6 +304,18 @@ class InstantiatedVariable(
                 break
 
     @cached_property
+    def _constructs_its_values_(self) -> bool:
+        """
+        Whether every value this variable binds is an instance it constructs, rather than
+        whatever a function returns, which may already exist.
+        """
+        if not inspect.isclass(self._type_):
+            return False
+        if issubclass(self._type_, HasBoundValue):
+            return self._type_._binds_constructed_instance_()
+        return True
+
+    @cached_property
     def _name_(self):
         return self._type_.__name__
 

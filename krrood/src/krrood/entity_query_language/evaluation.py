@@ -187,6 +187,8 @@ class InferenceRecorder(EvaluationObserver):
             return
         if isinstance(expression, Query):
             return
+        if not expression._constructs_its_values_:
+            return
         # Inline import justified: explanation.py → query_graph.py → evaluation.py
         # creates a load-time cycle that prevents a top-level import here.
         from krrood.entity_query_language.explanation.explanation import (
