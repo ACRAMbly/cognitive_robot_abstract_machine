@@ -522,12 +522,10 @@ def module_level_imports(node: ast.AST) -> Iterator[ast.Import | ast.ImportFrom]
     for child in ast.iter_child_nodes(node):
         if isinstance(child, (ast.Import, ast.ImportFrom)):
             yield child
-            continue
-        if isinstance(
+        elif not isinstance(
             child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Lambda)
         ):
-            continue
-        yield from module_level_imports(child)
+            yield from module_level_imports(child)
 
 
 def get_and_import_module(
