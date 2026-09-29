@@ -6,7 +6,7 @@ import numpy as np
 from random_events.product_algebra import Event, SimpleEvent, VariableMap
 from random_events.variable import Symbolic, Variable
 from sortedcontainers import SortedSet
-from typing_extensions import Any, Dict, Iterable, List, Optional, Self, Tuple
+from typing_extensions import Any, Dict, Iterable, List, Optional, Self, Tuple, Type
 
 from probabilistic_model.distributions.distributions import (
     IntegerDistribution,
@@ -36,9 +36,13 @@ from probabilistic_model.probabilistic_circuit.tensorized.input_layer.dirac_delt
     DiracDeltaLayer,
 )
 from probabilistic_model.probabilistic_circuit.tensorized.input_layer.discrete_layer import (
+    DiscreteLayer,
     IntegerLayer,
     SymbolicEncoding,
     SymbolicLayer,
+)
+from probabilistic_model.probabilistic_circuit.tensorized.input_layer.probability_table import (
+    ProbabilityTable,
 )
 from probabilistic_model.probabilistic_circuit.tensorized.moment_query import (
     MomentQuery,
@@ -177,6 +181,23 @@ class LayeredProbabilisticCircuit(ProbabilisticModel):
             )
             for variable, value in point.items()
         }
+
+    def store_discrete_probabilities_as(
+        self, table_type: Type[ProbabilityTable]
+    ) -> Self:
+        """
+        Store the probabilities of every discrete layer in a table of the given type, in
+        place.
+
+        :param table_type: The type of table, for instance
+            :class:`~probabilistic_model.probabilistic_circuit.tensorized.input_layer.probability_table.SparseProbabilityTable`
+            for variables with many states of which every node has only a few.
+        :return: This circuit.
+        """
+        for layer in self.layers:
+            if isinstance(layer, DiscreteLayer):
+                layer.table = table_type.of(layer.table)
+        return self
 
     # %% queries
 

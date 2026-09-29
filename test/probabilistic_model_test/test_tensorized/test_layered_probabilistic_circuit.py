@@ -65,9 +65,13 @@ from probabilistic_model.probabilistic_circuit.tensorized.input_layer.dirac_delt
     DiracDeltaLayer,
 )
 from probabilistic_model.probabilistic_circuit.tensorized.input_layer.discrete_layer import (
+    DiscreteLayer,
     IntegerLayer,
     SymbolicEncoding,
     SymbolicLayer,
+)
+from probabilistic_model.probabilistic_circuit.tensorized.input_layer.probability_table import (
+    SparseProbabilityTable,
 )
 from probabilistic_model.probabilistic_circuit.tensorized.input_layer.gaussian_layer import (
     GaussianLayer,
@@ -1278,6 +1282,69 @@ class SymbolicEncodingTestCase(unittest.TestCase):
             conditional.log_likelihood(samples),
             rx_conditional.log_likelihood(samples),
         )
+
+
+class ProbabilityTableChoiceTestCase(unittest.TestCase):
+    """
+    A circuit whose discrete layers store their probabilities sparsely answers every
+    query like the same circuit with dense tables.
+    """
+
+    circuits = {"mixed": mixed_circuit, "sparse symbolic": sparse_symbolic_circuit}
+
+    def setUp(self):
+        np.random.seed(69)
+
+    def dense_and_sparse(self, circuit):
+        dense = RustworkxCircuitToLayeredCircuitConverter.convert(circuit())
+        sparse = RustworkxCircuitToLayeredCircuitConverter.convert(
+            circuit()
+        ).store_discrete_probabilities_as(SparseProbabilityTable)
+        return dense, sparse
+
+    def test_every_discrete_layer_is_stored_sparsely(self):
+        for name, circuit in self.circuits.items():
+            with self.subTest(name):
+                _, sparse = self.dense_and_sparse(circuit)
+                discrete_layers = [
+                    layer for layer in sparse.layers if isinstance(layer, DiscreteLayer)
+                ]
+                self.assertTrue(discrete_layers)
+                for layer in discrete_layers:
+                    self.assertIsInstance(layer.table, SparseProbabilityTable)
+
+    def test_queries_agree(self):
+        for name, circuit in self.circuits.items():
+            with self.subTest(name):
+                dense, sparse = self.dense_and_sparse(circuit)
+                samples = dense.sample(300)
+                np.testing.assert_allclose(
+                    sparse.log_likelihood(samples), dense.log_likelihood(samples)
+                )
+                event = SimpleEvent.from_data({x: closed(0.5, 2.5)})
+                event.fill_missing_variables(dense.variables)
+                self.assertAlmostEqual(
+                    sparse.probability_of_simple_event(event),
+                    dense.probability_of_simple_event(event),
+                )
+                dense_truncated, dense_probability = dense.truncated(
+                    event.as_composite_set()
+                )
+                sparse_truncated, sparse_probability = sparse.truncated(
+                    event.as_composite_set()
+                )
+                self.assertAlmostEqual(sparse_probability, dense_probability)
+                np.testing.assert_allclose(
+                    sparse_truncated.log_likelihood(samples),
+                    dense_truncated.log_likelihood(samples),
+                )
+
+    def test_samples_of_a_sparse_circuit_are_likely_under_the_dense_one(self):
+        for name, circuit in self.circuits.items():
+            with self.subTest(name):
+                dense, sparse = self.dense_and_sparse(circuit)
+                samples = sparse.sample(300)
+                self.assertTrue(np.isfinite(dense.log_likelihood(samples)).all())
 
 
 class LayerTestCase(unittest.TestCase):

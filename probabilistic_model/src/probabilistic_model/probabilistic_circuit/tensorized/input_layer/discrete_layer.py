@@ -20,8 +20,8 @@ from probabilistic_model.distributions.distributions import (
 )
 from probabilistic_model.exceptions import ShapeMismatchError
 from probabilistic_model.probabilistic_circuit.tensorized.array_types import (
+    NodeIndices,
     NodeMask,
-    NodeStateValues,
     NodeValues,
     SampleArray,
     SampleColumn,
@@ -37,15 +37,16 @@ from probabilistic_model.probabilistic_circuit.tensorized.inner_layer.base impor
 from probabilistic_model.probabilistic_circuit.tensorized.input_layer.base import (
     InputLayer,
 )
+from probabilistic_model.probabilistic_circuit.tensorized.input_layer.probability_table import (
+    DenseProbabilityTable,
+    ProbabilityTable,
+)
 from probabilistic_model.probabilistic_circuit.tensorized.query_cache import (
     QueryCache,
     memoized,
 )
 from probabilistic_model.probabilistic_circuit.tensorized.structural_query import (
     LayerWithLogProbabilities,
-)
-from probabilistic_model.probabilistic_circuit.tensorized.utils import (
-    embedded_logsumexp,
 )
 from probabilistic_model.utils import MissingDict
 
@@ -55,23 +56,25 @@ class DiscreteLayer(InputLayer, ABC):
     """
     Abstract base class for the input layers of discrete univariate distributions.
 
-    The probability of every state of the variable is stored for every node, so that a
-    likelihood is a single gather from a (#nodes, #states) block.
+    The probability of every state for every node is held by a
+    :class:`~probabilistic_model.probabilistic_circuit.tensorized.input_layer.probability_table.ProbabilityTable`,
+    whose type decides how the probabilities are stored. Choose it with the
+    ``table_type`` of :meth:`from_distributions` or with :meth:`stored_as`.
     """
 
     states: States
     """
-    The states of the variable, sorted ascending.
+    The states of the variable, sorted ascending: the columns of the table.
     """
 
-    log_probabilities: NodeStateValues
+    table: ProbabilityTable
     """
-    The logarithmic probability of every state for every node.
+    The probability of every state for every node.
     """
 
     @property
     def number_of_nodes(self) -> int:
-        return self.log_probabilities.shape[0]
+        return self.table.number_of_nodes
 
     @property
     def number_of_states(self) -> int:
@@ -82,20 +85,13 @@ class DiscreteLayer(InputLayer, ABC):
 
     @property
     def number_of_own_parameters(self) -> int:
-        return int(self.log_probabilities.size)
-
-    @property
-    def probabilities(self) -> NodeStateValues:
-        """
-        :return: The probabilities of every state for every node in linear space.
-        """
-        return np.exp(self.log_probabilities)
+        return self.table.number_of_stored_entries
 
     def validate_own(self):
-        if self.log_probabilities.shape[1] != self.number_of_states:
+        if self.table.number_of_states != self.number_of_states:
             raise ShapeMismatchError(
+                (self.table.number_of_nodes, self.table.number_of_states),
                 (self.number_of_nodes, self.number_of_states),
-                self.log_probabilities.shape,
             )
 
     @abstractmethod
@@ -126,12 +122,9 @@ class DiscreteLayer(InputLayer, ABC):
     def log_likelihood_of_nodes(
         self, events: SampleArray, cache: Optional[QueryCache] = None
     ) -> SampleNodeValues:
-        indices = self.state_indices_of(self.column_of(events))
-        result = np.full((len(indices), self.number_of_nodes), -np.inf)
-        known = indices >= 0
-        if known.any():
-            result[known] = self.log_probabilities[:, indices[known]].T
-        return result
+        return self.table.log_probabilities_of_states(
+            self.state_indices_of(self.column_of(events))
+        )
 
     @memoized
     def cumulative_distribution_of_nodes(
@@ -146,8 +139,9 @@ class DiscreteLayer(InputLayer, ABC):
         variables: SortedSet,
         cache: Optional[QueryCache] = None,
     ) -> NodeValues:
-        selected = self.selected_states(event[variables[self.variable]])
-        return self.probabilities[:, selected].sum(axis=1)
+        return self.table.probability_of_states(
+            self.selected_states(event[variables[self.variable]])
+        )
 
     def type_of_truncated_layer(
         self, assignment: AbstractCompositeSet, singleton_allowed: bool
@@ -189,95 +183,117 @@ class DiscreteLayer(InputLayer, ABC):
         :param selected: The states to keep.
         :return: The layer with the probability of every other state set to zero and
             renormalized, and the log-probability of the kept states under every node.
-            A node without probability for the kept states keeps its parameters and is
-            removed by the prune pass.
+            A node without probability for the kept states keeps none and is removed by
+            the prune pass.
         """
-        probabilities = np.where(selected, self.probabilities, 0.0)
-        total = probabilities.sum(axis=1)
-        alive = total > 0
-
-        with np.errstate(divide="ignore", invalid="ignore"):
-            log_probabilities = np.log(
-                probabilities / np.where(alive, total, 1.0)[:, None]
-            )
-            node_log_probabilities = np.where(
-                alive, np.log(np.where(alive, total, 1.0)), -np.inf
-            )
-
-        log_probabilities = np.where(
-            alive[:, None], log_probabilities, self.log_probabilities
-        )
+        with np.errstate(divide="ignore"):
+            node_log_probabilities = np.log(self.table.probability_of_states(selected))
         return LayerWithLogProbabilities(
-            self.with_parameters(self.states.copy(), log_probabilities),
+            self.with_table(self.table.restricted_to(selected).normalized()),
             node_log_probabilities,
         )
 
     def normalize_own(self):
-        self.log_probabilities = self.log_probabilities - embedded_logsumexp(
-            self.log_probabilities, axis=1
-        ).reshape(-1, 1)
+        self.table = self.table.normalized()
 
     def probabilities_of_node(self, node: int) -> MissingDict:
         """
         :param node: The index of a node.
         :return: The probability of every state with a non-zero probability.
         """
+        indices, probabilities = self.table.probabilities_of_node(node)
         return MissingDict(
             float,
             {
                 int(state): float(probability)
-                for state, probability in zip(self.states, self.probabilities[node])
-                if probability > 0
+                for state, probability in zip(self.states[indices], probabilities)
             },
         )
 
-    def with_parameters(
-        self, states: States, log_probabilities: NodeStateValues
-    ) -> Self:
+    def with_table(self, table: ProbabilityTable) -> Self:
         """
-        :param states: The states of the new layer.
-        :param log_probabilities: The logarithmic probability of every state for every
-            node of the new layer.
-        :return: A layer over the same variable as this one with these parameters.
+        :param table: The probability table of the new layer, over the states of this
+            one.
+        :return: A layer over the same variable and states as this one with this table.
         """
-        return self.__class__(self.variable, states, log_probabilities)
+        return self.__class__(self.variable, self.states.copy(), table)
+
+    def stored_as(self, table_type: Type[ProbabilityTable]) -> Self:
+        """
+        :param table_type: The type of table to store the probabilities in.
+        :return: This layer with its probabilities stored in a table of that type.
+        """
+        return self.with_table(table_type.of(self.table))
 
     @classmethod
     def from_distributions(
-        cls, variable_index: int, distributions: List[DiscreteDistribution]
+        cls,
+        variable_index: int,
+        distributions: List[DiscreteDistribution],
+        table_type: Type[ProbabilityTable] = DenseProbabilityTable,
     ) -> Self:
-        return cls(variable_index, *cls.parameters_of(distributions))
+        """
+        :param variable_index: The index of the variable of the distributions.
+        :param distributions: One distribution per node.
+        :param table_type: The type of table to store the probabilities in.
+        :return: The layer with one node per distribution.
+        """
+        return cls(variable_index, *cls.parameters_of(distributions, table_type))
 
     @classmethod
     def parameters_of(
-        cls, distributions: List[DiscreteDistribution]
-    ) -> Tuple[States, NodeStateValues]:
+        cls,
+        distributions: List[DiscreteDistribution],
+        table_type: Type[ProbabilityTable],
+    ) -> Tuple[States, ProbabilityTable]:
         """
         :param distributions: Distributions over the variable of this layer.
-        :return: The states that any of the distributions has, and the logarithmic
+        :param table_type: The type of table to store the probabilities in.
+        :return: The states that any of the distributions has, and the table of the
             probability of every state under every distribution.
         """
         probabilities_by_state = [
             cls.probabilities_by_state_of(distribution)
             for distribution in distributions
         ]
-        states = sorted(
-            {
-                state
-                for probabilities in probabilities_by_state
-                for state in probabilities
-            }
+        states = np.array(
+            sorted(
+                {
+                    state
+                    for probabilities in probabilities_by_state
+                    for state in probabilities
+                }
+            ),
+            dtype=np.int64,
         )
-        state_to_column = {state: index for index, state in enumerate(states)}
-
-        probabilities = np.zeros((len(distributions), len(states)))
-        for row, probabilities_of_row in enumerate(probabilities_by_state):
-            for state, probability in probabilities_of_row.items():
-                probabilities[row, state_to_column[state]] = probability
-
-        with np.errstate(divide="ignore"):
-            log_probabilities = np.log(probabilities)
-        return np.array(states, dtype=np.int64), log_probabilities
+        rows = np.concatenate(
+            [
+                np.full(len(probabilities), row, dtype=np.int64)
+                for row, probabilities in enumerate(probabilities_by_state)
+            ]
+        )
+        columns = np.searchsorted(
+            states,
+            np.array(
+                [
+                    state
+                    for probabilities in probabilities_by_state
+                    for state in probabilities
+                ],
+                dtype=np.int64,
+            ),
+        )
+        values = np.array(
+            [
+                probability
+                for probabilities in probabilities_by_state
+                for probability in probabilities.values()
+            ],
+            dtype=float,
+        )
+        return states, table_type.from_entries(
+            rows, columns, values, (len(distributions), len(states))
+        )
 
     @classmethod
     def probabilities_by_state_of(
@@ -291,30 +307,28 @@ class DiscreteLayer(InputLayer, ABC):
         return dict(distribution.probabilities)
 
     def select_nodes(self, mask: NodeMask) -> Self:
-        return self.with_parameters(self.states.copy(), self.log_probabilities[mask])
+        return self.with_table(self.table.select_nodes(mask))
 
     @classmethod
     def concatenate(cls, layers: List[Self]) -> Self:
         """
-        Truncating a discrete layer never changes its states, so the probability blocks
+        Truncating a discrete layer never changes its states, so the probability tables
         of the layers line up.
 
         :param layers: Layers with the same variable and states.
-        :return: One layer with the nodes of all layers, in order.
+        :return: One layer with the nodes of all layers, in order, stored like the table
+            of the first layer.
         """
-        return layers[0].with_parameters(
-            layers[0].states.copy(),
-            np.concatenate([layer.log_probabilities for layer in layers]),
+        table_type = type(layers[0].table)
+        return layers[0].with_table(
+            table_type.concatenate([table_type.of(layer.table) for layer in layers])
         )
 
-    def sample_of_node(
-        self, node: int, amount: int, variables: SortedSet
-    ) -> SampleColumn:
-        probabilities = self.probabilities[node]
-        total = probabilities.sum()
-        if total <= 0:
-            return np.full(amount, np.nan)
-        return np.random.choice(self.states, size=amount, p=probabilities / total)
+    def sample_of_nodes(self, nodes: NodeIndices, variables: SortedSet) -> SampleColumn:
+        indices = self.table.sample_state_indices(nodes)
+        return np.where(
+            indices >= 0, self.states[np.maximum(indices, 0)].astype(float), np.nan
+        )
 
     def __deepcopy__(self, memo: Optional[Dict[int, Any]] = None) -> Self:
         """
@@ -325,7 +339,7 @@ class DiscreteLayer(InputLayer, ABC):
             memo = {}
         if id(self) in memo:
             return memo[id(self)]
-        result = self.with_parameters(self.states.copy(), self.log_probabilities.copy())
+        result = self.with_table(self.table.copy())
         memo[id(self)] = result
         return result
 
@@ -404,20 +418,21 @@ class SymbolicLayer(DiscreteLayer):
     The hash of every domain element of the variable, at the position of the element.
     """
 
-    def with_parameters(
-        self, states: States, log_probabilities: NodeStateValues
-    ) -> Self:
+    def with_table(self, table: ProbabilityTable) -> Self:
         return self.__class__(
-            self.variable, states, log_probabilities, self.domain_hashes
+            self.variable, self.states.copy(), table, self.domain_hashes
         )
 
     @classmethod
     def from_distributions(
-        cls, variable_index: int, distributions: List[SymbolicDistribution]
+        cls,
+        variable_index: int,
+        distributions: List[SymbolicDistribution],
+        table_type: Type[ProbabilityTable] = DenseProbabilityTable,
     ) -> Self:
         return cls(
             variable_index,
-            *cls.parameters_of(distributions),
+            *cls.parameters_of(distributions, table_type),
             SymbolicEncoding(distributions[0].variable).hashes,
         )
 
@@ -472,10 +487,10 @@ class IntegerLayer(DiscreteLayer):
     ) -> SampleNodeValues:
         column = np.asarray(self.column_of(events), dtype=float).reshape(-1, 1)
         reached = column >= self.states.reshape(1, -1)
-        return reached.astype(float) @ self.probabilities.T
+        return self.table.dot(reached.astype(float).T).T
 
     def moment_of_nodes_own(
         self, order: int, center: float, variable: Variable
     ) -> NodeValues:
         deviations = (self.states.astype(float) - center) ** order
-        return self.probabilities @ deviations
+        return self.table.dot(deviations)
