@@ -219,10 +219,7 @@ class DiscreteLayer(InputLayer, ABC):
         table_type: Type[ProbabilityTable] = DenseProbabilityTable,
     ) -> Self:
         """
-        :param variable_index: The index of the variable of the distributions.
-        :param distributions: One distribution per node.
         :param table_type: The type of table to store the probabilities in.
-        :return: The layer with one node per distribution.
         """
         return cls(variable_index, *cls.parameters_of(distributions, table_type))
 

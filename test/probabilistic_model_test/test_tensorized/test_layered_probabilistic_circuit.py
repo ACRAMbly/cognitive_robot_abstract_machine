@@ -941,12 +941,12 @@ class ConditionalTestCase(unittest.TestCase):
         layered = RustworkxCircuitToLayeredCircuitConverter.convert(rx_circuit)
 
         point = {n: 2}
-        rx_conditional, _ = rx_circuit.log_conditional(point)
+        rx_conditional, rx_probability = rx_circuit.log_conditional(point)
         conditional, probability = layered.log_conditional(point)
 
-        # only the second component has n = 2; rx loses the weight of the sum unit when
-        # a single child survives, so the probability is checked in closed form
+        # only the second component has n = 2
         self.assertAlmostEqual(probability, np.log(0.6 * 0.3))
+        self.assertAlmostEqual(probability, rx_probability)
         # the point mass is an integer layer, so it answers interval events of n
         self.assertTrue(
             any(isinstance(layer, IntegerLayer) for layer in conditional.layers)
