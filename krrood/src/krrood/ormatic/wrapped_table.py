@@ -641,7 +641,6 @@ class WrappedTable(TableLike):
         :param wrapped_field: The field to store.
         """
         storage = self.ormatic.field_classifier.classify(wrapped_field)
-        logger.info(f"Storing as {storage.name}.")
         if storage is FieldStorage.NOT_STORED:
             return
         column_creators = {

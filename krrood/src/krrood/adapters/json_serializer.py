@@ -6,7 +6,6 @@ import pathlib
 import re
 import uuid
 from datetime import timedelta, timezone
-from functools import cache
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, fields, is_dataclass
 from dataclasses import field
@@ -133,14 +132,12 @@ class JSONSerializableTypeRegistry(metaclass=SingletonMeta):
         else:
             return min(distances, key=distances.get)
 
-    @staticmethod
-    @cache
-    def has_type_specific_serializer(clazz: Type) -> bool:
+    def has_type_specific_serializer(self, clazz: Type) -> bool:
         """
         Whether a serializer is registered for the class or one of its superclasses.
 
         Serializers that match classes by their shape, such as the one for any dataclass,
-        do not count. The answer is cached until the next serializer is defined.
+        do not count.
 
         :param clazz: The class to check.
         :return: True if a serializer is registered for the class hierarchy.
@@ -457,14 +454,6 @@ class ExternalClassJSONSerializer(HasGeneric[T], ABC):
     Create a new subclass of this class pointing to your original class whenever you
     can't change its inheritance path to `SubclassJSONSerializer`.
     """
-
-    def __init_subclass__(cls, **kwargs):
-        """
-        Forget which classes have a serializer of their own, as a new serializer can
-        change the answer.
-        """
-        super().__init_subclass__(**kwargs)
-        JSONSerializableTypeRegistry.has_type_specific_serializer.cache_clear()
 
     @classmethod
     def to_json(cls, obj: Any, **kwargs) -> Dict[str, Any]:

@@ -13,7 +13,7 @@ from types import NoneType
 
 import numpy as np
 import sqlalchemy
-from typing_extensions import Any, Type
+from typing_extensions import Type
 
 from krrood.adapters.json_serializer import JSONData, SubclassJSONSerializer
 from krrood.ormatic.custom_types import (
@@ -52,9 +52,9 @@ class TypeMapping:
     A Python type and the SQLAlchemy column type that stores its values.
     """
 
-    python_type: Any
+    python_type: Type
     """
-    The type of the values, a class or a typing construct such as ``typing.Type``.
+    The type of the values.
     """
 
     column_type: Type[sqlalchemy.types.TypeEngine]
@@ -70,7 +70,6 @@ class DefaultTypeMapping(enum.Enum):
 
     # %% types, enums, identifiers and JSON
 
-    TYPING_TYPE = TypeMapping(Type, TypeType)
     TYPE = TypeMapping(type, TypeType)
     ENUM = TypeMapping(enum.Enum, PolymorphicEnumType)
     SUBCLASS_JSON_SERIALIZER = TypeMapping(SubclassJSONSerializer, sqlalchemy.JSON)

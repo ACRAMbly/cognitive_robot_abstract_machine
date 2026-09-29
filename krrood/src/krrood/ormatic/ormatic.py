@@ -130,6 +130,8 @@ class ORMatic:
     def __post_init__(self):
         self.imported_modules.add(get_module_of_type(TypeDict))
         self.imported_modules.add("krrood.ormatic.base")
+        # optional columns are annotated with typing.Optional
+        self.imported_modules.add(get_module_of_type(Optional))
         for dependency in self.ormatic_interface_dependencies:
             self.imported_modules.add(dependency.__name__)
         self._fill_type_mappings()
