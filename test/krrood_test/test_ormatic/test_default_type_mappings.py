@@ -198,4 +198,4 @@ def test_default_type_mapping_is_used_when_none_is_given(default):
 
     type_mappings = dict(ormatic.type_mappings.items())
 
-    assert type_mappings[default.value.python_type] is default.value.column_type
+    assert type_mappings[default.python_type] is default.column_type

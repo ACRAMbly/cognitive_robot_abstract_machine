@@ -63,58 +63,60 @@ class TypeMapping:
     """
 
 
-class DefaultTypeMapping(enum.Enum):
+class DefaultTypeMapping(TypeMapping, enum.Enum):
     """
     The type mappings ORMatic uses for every type the caller gives no mapping for.
+
+    Each member is a :class:`TypeMapping` of its Python type and column type.
     """
 
     # %% types, enums, identifiers and JSON
 
-    TYPE = TypeMapping(type, TypeType)
-    ENUM = TypeMapping(enum.Enum, PolymorphicEnumType)
-    SUBCLASS_JSON_SERIALIZER = TypeMapping(SubclassJSONSerializer, sqlalchemy.JSON)
-    UUID = TypeMapping(uuid.UUID, sqlalchemy.UUID)
-    PATH = TypeMapping(pathlib.Path, PathType)
-    JSON_DATA = TypeMapping(JSONData, JSONDataType)
-    NONE = TypeMapping(NoneType, TypeType)
+    TYPE = type, TypeType
+    ENUM = enum.Enum, PolymorphicEnumType
+    SUBCLASS_JSON_SERIALIZER = SubclassJSONSerializer, sqlalchemy.JSON
+    UUID = uuid.UUID, sqlalchemy.UUID
+    PATH = pathlib.Path, PathType
+    JSON_DATA = JSONData, JSONDataType
+    NONE = NoneType, TypeType
 
     # %% dates and times
 
-    DATE = TypeMapping(datetime.date, sqlalchemy.Date)
-    TIME = TypeMapping(datetime.time, sqlalchemy.Time)
-    TIMEDELTA = TypeMapping(datetime.timedelta, sqlalchemy.Interval)
-    DATETIME = TypeMapping(datetime.datetime, DateTimeType)
-    ZONE_INFO = TypeMapping(zoneinfo.ZoneInfo, ZoneInfoType)
+    DATE = datetime.date, sqlalchemy.Date
+    TIME = datetime.time, sqlalchemy.Time
+    TIMEDELTA = datetime.timedelta, sqlalchemy.Interval
+    DATETIME = datetime.datetime, DateTimeType
+    ZONE_INFO = zoneinfo.ZoneInfo, ZoneInfoType
 
     # %% numbers
 
-    DECIMAL = TypeMapping(decimal.Decimal, sqlalchemy.Numeric)
-    FRACTION = TypeMapping(fractions.Fraction, FractionType)
-    COMPLEX = TypeMapping(complex, ComplexType)
+    DECIMAL = decimal.Decimal, sqlalchemy.Numeric
+    FRACTION = fractions.Fraction, FractionType
+    COMPLEX = complex, ComplexType
 
     # %% network addresses
 
-    IPV4_ADDRESS = TypeMapping(ipaddress.IPv4Address, IPv4AddressType)
-    IPV6_ADDRESS = TypeMapping(ipaddress.IPv6Address, IPv6AddressType)
-    IPV4_NETWORK = TypeMapping(ipaddress.IPv4Network, IPv4NetworkType)
-    IPV6_NETWORK = TypeMapping(ipaddress.IPv6Network, IPv6NetworkType)
+    IPV4_ADDRESS = ipaddress.IPv4Address, IPv4AddressType
+    IPV6_ADDRESS = ipaddress.IPv6Address, IPv6AddressType
+    IPV4_NETWORK = ipaddress.IPv4Network, IPv4NetworkType
+    IPV6_NETWORK = ipaddress.IPv6Network, IPv6NetworkType
 
     # %% byte sequences
 
-    BYTE_ARRAY = TypeMapping(bytearray, ByteArrayType)
+    BYTE_ARRAY = bytearray, ByteArrayType
 
     # %% numpy
 
-    NUMPY_ARRAY = TypeMapping(np.ndarray, NumpyArrayType)
-    NUMPY_FLOAT16 = TypeMapping(np.float16, NumpyFloat16Type)
-    NUMPY_FLOAT32 = TypeMapping(np.float32, NumpyFloat32Type)
-    NUMPY_FLOAT64 = TypeMapping(np.float64, NumpyFloat64Type)
-    NUMPY_INT8 = TypeMapping(np.int8, NumpyInt8Type)
-    NUMPY_INT16 = TypeMapping(np.int16, NumpyInt16Type)
-    NUMPY_INT32 = TypeMapping(np.int32, NumpyInt32Type)
-    NUMPY_INT64 = TypeMapping(np.int64, NumpyInt64Type)
-    NUMPY_UINT8 = TypeMapping(np.uint8, NumpyUInt8Type)
-    NUMPY_UINT16 = TypeMapping(np.uint16, NumpyUInt16Type)
-    NUMPY_UINT32 = TypeMapping(np.uint32, NumpyUInt32Type)
-    NUMPY_BOOL = TypeMapping(np.bool_, NumpyBoolType)
-    NUMPY_DATETIME64 = TypeMapping(np.datetime64, Datetime64Type)
+    NUMPY_ARRAY = np.ndarray, NumpyArrayType
+    NUMPY_FLOAT16 = np.float16, NumpyFloat16Type
+    NUMPY_FLOAT32 = np.float32, NumpyFloat32Type
+    NUMPY_FLOAT64 = np.float64, NumpyFloat64Type
+    NUMPY_INT8 = np.int8, NumpyInt8Type
+    NUMPY_INT16 = np.int16, NumpyInt16Type
+    NUMPY_INT32 = np.int32, NumpyInt32Type
+    NUMPY_INT64 = np.int64, NumpyInt64Type
+    NUMPY_UINT8 = np.uint8, NumpyUInt8Type
+    NUMPY_UINT16 = np.uint16, NumpyUInt16Type
+    NUMPY_UINT32 = np.uint32, NumpyUInt32Type
+    NUMPY_BOOL = np.bool_, NumpyBoolType
+    NUMPY_DATETIME64 = np.datetime64, Datetime64Type

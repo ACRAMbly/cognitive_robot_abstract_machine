@@ -166,10 +166,8 @@ class ORMatic:
         Add the default type mappings for every type that has no mapping yet.
         """
         for default in DefaultTypeMapping:
-            if default.value.python_type not in self.type_mappings.keys():
-                self.type_mappings[default.value.python_type] = (
-                    default.value.column_type
-                )
+            if default.python_type not in self.type_mappings.keys():
+                self.type_mappings[default.python_type] = default.column_type
 
         for key in self.type_mappings.keys():
             self.imported_modules.add(get_module_of_type(key))
