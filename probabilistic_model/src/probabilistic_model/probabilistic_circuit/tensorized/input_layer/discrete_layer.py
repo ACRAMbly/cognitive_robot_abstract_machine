@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import functools
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
@@ -8,9 +9,9 @@ from random_events.interval import Interval
 from random_events.product_algebra import SimpleEvent
 from random_events.set import Set
 from random_events.sigma_algebra import AbstractCompositeSet
-from random_events.variable import Variable
+from random_events.variable import Symbolic, Variable
 from sortedcontainers import SortedSet
-from typing_extensions import Any, List, Optional, Self, Type
+from typing_extensions import Any, Dict, List, Optional, Self, Tuple, Type
 
 from probabilistic_model.distributions.distributions import (
     DiscreteDistribution,
@@ -109,15 +110,16 @@ class DiscreteLayer(InputLayer, ABC):
         """
         Look up the index of every value in :attr:`states`.
 
-        :param values: The values, as they appear in a sample array.
+        :param values: The values of the variable as the layers read them: the value
+            itself for an integer variable and the position of the domain element for a
+            symbolic variable, see :class:`SymbolicEncoding`.
         :return: The index of every value, or ``-1`` for values that are not a state.
         """
-        hashes = np.asarray(
-            [hash(value) for value in np.asarray(values).reshape(-1)], dtype=np.int64
-        )
-        positions = np.searchsorted(self.states, hashes)
+        values = np.asarray(values, dtype=float).reshape(-1)
+        states = self.states.astype(float)
+        positions = np.searchsorted(states, values)
         positions = np.clip(positions, 0, max(self.number_of_states - 1, 0))
-        found = self.states[positions] == hashes
+        found = states[positions] == values
         return np.where(found, positions, -1)
 
     @memoized
@@ -159,15 +161,25 @@ class DiscreteLayer(InputLayer, ABC):
         Truncating a discrete distribution keeps the probabilities of the states the
         assignment contains and renormalizes, which is one masked row-sum for the whole
         layer.
+
+        :param assignment: The assignment of the variable of this layer.
+        :param singleton_allowed: Whether the truncation may leave a single state; a
+            discrete layer handles that case like any other.
+        :return: The truncated layer and the probability of the assignment under every
+            node, in log space.
         """
         return self.renormalized_to(self.selected_states(assignment))
 
     def log_conditional_of_value(self, value: Any) -> LayerWithLogProbabilities:
         """
         Conditioning on a value is truncating to the state of that value.
+
+        :param value: The value as the layer reads it, see :meth:`state_indices_of`.
+        :return: The conditioned layer and the log-probability of the value under every
+            node.
         """
         selected = np.zeros(self.number_of_states, dtype=bool)
-        [index] = self.state_indices_of(np.array([value], dtype=object))
+        [index] = self.state_indices_of(np.array([value], dtype=float))
         if index >= 0:
             selected[index] = True
         return self.renormalized_to(selected)
@@ -196,7 +208,7 @@ class DiscreteLayer(InputLayer, ABC):
             alive[:, None], log_probabilities, self.log_probabilities
         )
         return LayerWithLogProbabilities(
-            self.__class__(self.variable, self.states.copy(), log_probabilities),
+            self.with_parameters(self.states.copy(), log_probabilities),
             node_log_probabilities,
         )
 
@@ -219,41 +231,78 @@ class DiscreteLayer(InputLayer, ABC):
             },
         )
 
+    def with_parameters(
+        self, states: States, log_probabilities: NodeStateValues
+    ) -> Self:
+        """
+        :param states: The states of the new layer.
+        :param log_probabilities: The logarithmic probability of every state for every
+            node of the new layer.
+        :return: A layer over the same variable as this one with these parameters.
+        """
+        return self.__class__(self.variable, states, log_probabilities)
+
     @classmethod
     def from_distributions(
         cls, variable_index: int, distributions: List[DiscreteDistribution]
     ) -> Self:
+        return cls(variable_index, *cls.parameters_of(distributions))
+
+    @classmethod
+    def parameters_of(
+        cls, distributions: List[DiscreteDistribution]
+    ) -> Tuple[States, NodeStateValues]:
+        """
+        :param distributions: Distributions over the variable of this layer.
+        :return: The states that any of the distributions has, and the logarithmic
+            probability of every state under every distribution.
+        """
+        probabilities_by_state = [
+            cls.probabilities_by_state_of(distribution)
+            for distribution in distributions
+        ]
         states = sorted(
             {
                 state
-                for distribution in distributions
-                for state in distribution.probabilities
+                for probabilities in probabilities_by_state
+                for state in probabilities
             }
         )
         state_to_column = {state: index for index, state in enumerate(states)}
 
         probabilities = np.zeros((len(distributions), len(states)))
-        for row, distribution in enumerate(distributions):
-            for state, probability in distribution.probabilities.items():
+        for row, probabilities_of_row in enumerate(probabilities_by_state):
+            for state, probability in probabilities_of_row.items():
                 probabilities[row, state_to_column[state]] = probability
 
         with np.errstate(divide="ignore"):
             log_probabilities = np.log(probabilities)
-        return cls(variable_index, np.array(states, dtype=np.int64), log_probabilities)
+        return np.array(states, dtype=np.int64), log_probabilities
+
+    @classmethod
+    def probabilities_by_state_of(
+        cls, distribution: DiscreteDistribution
+    ) -> Dict[int, float]:
+        """
+        :param distribution: A distribution over the variable of this layer.
+        :return: The probability of every state of the distribution, keyed by the state
+            as this layer stores it.
+        """
+        return dict(distribution.probabilities)
 
     def select_nodes(self, mask: NodeMask) -> Self:
-        return self.__class__(
-            self.variable, self.states.copy(), self.log_probabilities[mask]
-        )
+        return self.with_parameters(self.states.copy(), self.log_probabilities[mask])
 
     @classmethod
     def concatenate(cls, layers: List[Self]) -> Self:
         """
         Truncating a discrete layer never changes its states, so the probability blocks
         of the layers line up.
+
+        :param layers: Layers with the same variable and states.
+        :return: One layer with the nodes of all layers, in order.
         """
-        return cls(
-            layers[0].variable,
+        return layers[0].with_parameters(
             layers[0].states.copy(),
             np.concatenate([layer.log_probabilities for layer in layers]),
         )
@@ -267,16 +316,79 @@ class DiscreteLayer(InputLayer, ABC):
             return np.full(amount, np.nan)
         return np.random.choice(self.states, size=amount, p=probabilities / total)
 
-    def __deepcopy__(self, memo=None) -> Self:
+    def __deepcopy__(self, memo: Optional[Dict[int, Any]] = None) -> Self:
+        """
+        :param memo: The copies made so far, keyed by the id of the original.
+        :return: A copy of this layer that shares no arrays with it.
+        """
         if memo is None:
             memo = {}
         if id(self) in memo:
             return memo[id(self)]
-        result = self.__class__(
-            self.variable, self.states.copy(), self.log_probabilities.copy()
-        )
+        result = self.with_parameters(self.states.copy(), self.log_probabilities.copy())
         memo[id(self)] = result
         return result
+
+
+@dataclass
+class SymbolicEncoding:
+    """
+    The translation between the two representations of a value of a symbolic variable.
+
+    The events and samples of this package hold the hash of a domain element. A symbolic
+    layer holds the position of the element in the domain instead, a small integer that
+    it looks up without hashing. The layered circuit encodes its input once per query
+    and decodes its samples.
+    """
+
+    variable: Symbolic
+    """
+    The symbolic variable.
+    """
+
+    @functools.cached_property
+    def elements(self) -> Tuple[Any, ...]:
+        """
+        :return: The domain elements of the variable, in the order that defines their
+            positions.
+        """
+        return tuple(
+            simple_set.element for simple_set in self.variable.domain.simple_sets
+        )
+
+    @functools.cached_property
+    def hashes(self) -> SampleColumn:
+        """
+        :return: The hash of every domain element, at its position.
+        """
+        return np.array([hash(element) for element in self.elements], dtype=float)
+
+    def indices_of_hashes(self, values: SampleColumn) -> StateIndices:
+        """
+        :param values: Values of the variable as the events of this package hold them.
+        :return: The position of every value in the domain, or ``-1`` for a value that
+            is not the hash of a domain element.
+        """
+        values = np.asarray(values, dtype=float).reshape(-1)
+        order = np.argsort(self.hashes)
+        sorted_hashes = self.hashes[order]
+        positions = np.clip(np.searchsorted(sorted_hashes, values), 0, len(order) - 1)
+        found = sorted_hashes[positions] == values
+        return np.where(found, order[positions], -1)
+
+    def hashes_of_indices(self, indices: StateIndices) -> SampleColumn:
+        """
+        :param indices: Positions of domain elements.
+        :return: The value of every position as the events of this package hold it.
+        """
+        return self.hashes[np.asarray(indices, dtype=np.int64)]
+
+    def index_of_element(self, element: Any) -> int:
+        """
+        :param element: A domain element, or its hash.
+        :return: The position of the element in the domain, or ``-1``.
+        """
+        return int(self.indices_of_hashes(np.array([hash(element)], dtype=float))[0])
 
 
 @dataclass(eq=False, repr=False)
@@ -284,20 +396,58 @@ class SymbolicLayer(DiscreteLayer):
     """
     A layer of categorical distributions over one symbolic variable.
 
-    The states are the hashes of the domain elements, which is the representation that
-    the events of this package use.
+    The states are the positions of the domain elements, see :class:`SymbolicEncoding`.
     """
+
+    domain_hashes: SampleColumn
+    """
+    The hash of every domain element of the variable, at the position of the element.
+    """
+
+    def with_parameters(
+        self, states: States, log_probabilities: NodeStateValues
+    ) -> Self:
+        return self.__class__(
+            self.variable, states, log_probabilities, self.domain_hashes
+        )
+
+    @classmethod
+    def from_distributions(
+        cls, variable_index: int, distributions: List[SymbolicDistribution]
+    ) -> Self:
+        return cls(
+            variable_index,
+            *cls.parameters_of(distributions),
+            SymbolicEncoding(distributions[0].variable).hashes,
+        )
+
+    @classmethod
+    def probabilities_by_state_of(
+        cls, distribution: SymbolicDistribution
+    ) -> Dict[int, float]:
+        encoding = SymbolicEncoding(distribution.variable)
+        return {
+            encoding.index_of_element(hash_value): probability
+            for hash_value, probability in distribution.probabilities.items()
+        }
 
     def node_distribution(self, index: int, variable: Variable) -> SymbolicDistribution:
         return SymbolicDistribution(
-            variable=variable, probabilities=self.probabilities_of_node(index)
+            variable=variable,
+            probabilities=MissingDict(
+                float,
+                {
+                    int(self.domain_hashes[state]): probability
+                    for state, probability in self.probabilities_of_node(index).items()
+                },
+            ),
         )
 
     def selected_states(self, assignment: Set) -> StateMask:
         hashes = np.array(
-            [hash(element) for element in assignment.simple_sets], dtype=np.int64
+            [hash(simple_set) for simple_set in assignment.simple_sets], dtype=float
         )
-        return np.isin(self.states, hashes)
+        return np.isin(self.domain_hashes[self.states], hashes)
 
 
 @dataclass(eq=False, repr=False)

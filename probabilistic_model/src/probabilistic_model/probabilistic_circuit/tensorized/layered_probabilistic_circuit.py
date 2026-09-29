@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 import numpy as np
 from random_events.product_algebra import Event, SimpleEvent, VariableMap
-from random_events.variable import Variable
+from random_events.variable import Symbolic, Variable
 from sortedcontainers import SortedSet
 from typing_extensions import Any, Dict, Iterable, List, Optional, Self, Tuple
 
@@ -37,6 +37,7 @@ from probabilistic_model.probabilistic_circuit.tensorized.input_layer.dirac_delt
 )
 from probabilistic_model.probabilistic_circuit.tensorized.input_layer.discrete_layer import (
     IntegerLayer,
+    SymbolicEncoding,
     SymbolicLayer,
 )
 from probabilistic_model.probabilistic_circuit.tensorized.moment_query import (
@@ -122,13 +123,68 @@ class LayeredProbabilisticCircuit(ProbabilisticModel):
             f"with {len(self.layers)} layers and {self.number_of_nodes} nodes"
         )
 
+    # %% symbolic values
+
+    @property
+    def symbolic_encodings(self) -> Dict[int, SymbolicEncoding]:
+        """
+        :return: The encoding of every symbolic variable, keyed by its column.
+        """
+        return {
+            column: SymbolicEncoding(variable)
+            for column, variable in enumerate(self.variables)
+            if isinstance(variable, Symbolic)
+        }
+
+    def encoded(self, events: SampleArray) -> SampleArray:
+        """
+        :param events: Events whose symbolic values are hashes of domain elements.
+        :return: The events with every symbolic value replaced by the position of its
+            element in the domain, which the symbolic layers read.
+        """
+        encodings = self.symbolic_encodings
+        if not encodings:
+            return np.asarray(events)
+        events = np.array(events, dtype=float)
+        for column, encoding in encodings.items():
+            events[:, column] = encoding.indices_of_hashes(events[:, column])
+        return events
+
+    def decoded(self, samples: SampleArray) -> SampleArray:
+        """
+        :param samples: Samples whose symbolic values are positions in the domain.
+        :return: The samples with every symbolic value replaced by the hash of its
+            domain element, in place.
+        """
+        for column, encoding in self.symbolic_encodings.items():
+            sampled = ~np.isnan(samples[:, column])
+            samples[sampled, column] = encoding.hashes_of_indices(
+                samples[sampled, column]
+            )
+        return samples
+
+    def encoded_point(self, point: Dict[Variable, Any]) -> Dict[Variable, Any]:
+        """
+        :param point: A partial point whose symbolic values are domain elements.
+        :return: The point with every symbolic value replaced by its position in the
+            domain.
+        """
+        return {
+            variable: (
+                SymbolicEncoding(variable).index_of_element(value)
+                if isinstance(variable, Symbolic)
+                else value
+            )
+            for variable, value in point.items()
+        }
+
     # %% queries
 
     def log_likelihood(self, events: SampleArray) -> SampleValues:
-        return self.root.log_likelihood_of_nodes(np.asarray(events))[:, 0]
+        return self.root.log_likelihood_of_nodes(self.encoded(events))[:, 0]
 
     def cumulative_distribution_function(self, events: SampleArray) -> SampleValues:
-        return self.root.cumulative_distribution_of_nodes(np.asarray(events))[:, 0]
+        return self.root.cumulative_distribution_of_nodes(self.encoded(events))[:, 0]
 
     def probability_of_simple_event(self, event: SimpleEvent) -> float:
         return float(
@@ -155,7 +211,7 @@ class LayeredProbabilisticCircuit(ProbabilisticModel):
         samples = np.full((amount, len(self.variables)), np.nan)
         for layer in order:
             layer.sample_forward(assignment, samples, self.variables)
-        return samples
+        return self.decoded(samples)
 
     def moment(self, order: OrderType, center: CenterType) -> MomentType:
         result = self.root.moment_of_nodes(
@@ -391,7 +447,7 @@ class LayeredProbabilisticCircuit(ProbabilisticModel):
         """
         query = StructuralQuery(self.variables)
         conditioned = self.root.log_conditional_of_point(
-            point, query, cache=QueryCache()
+            self.encoded_point(point), query, cache=QueryCache()
         )
 
         log_probability = float(conditioned.log_probabilities[0])
