@@ -67,7 +67,6 @@ from probabilistic_model.probabilistic_circuit.tensorized.input_layer.dirac_delt
 from probabilistic_model.probabilistic_circuit.tensorized.input_layer.discrete_layer import (
     DiscreteLayer,
     IntegerLayer,
-    SymbolicEncoding,
     SymbolicLayer,
 )
 from probabilistic_model.probabilistic_circuit.tensorized.input_layer.probability_table import (
@@ -88,6 +87,9 @@ from probabilistic_model.probabilistic_circuit.rx.probabilistic_circuit import (
     ProductUnit,
     SumUnit,
     leaf,
+)
+from probabilistic_model.probabilistic_circuit.tensorized.symbolic_encoding import (
+    SymbolicEncoding,
 )
 from probabilistic_model.utils import MissingDict
 
@@ -932,6 +934,33 @@ class ConditionalTestCase(unittest.TestCase):
         np.testing.assert_allclose(
             conditional.log_likelihood(samples),
             rx_conditional.log_likelihood(samples),
+        )
+
+    def test_conditioning_on_an_integer_variable(self):
+        rx_circuit = mixed_circuit()
+        layered = RustworkxCircuitToLayeredCircuitConverter.convert(rx_circuit)
+
+        point = {n: 2}
+        rx_conditional, _ = rx_circuit.log_conditional(point)
+        conditional, probability = layered.log_conditional(point)
+
+        # only the second component has n = 2; rx loses the weight of the sum unit when
+        # a single child survives, so the probability is checked in closed form
+        self.assertAlmostEqual(probability, np.log(0.6 * 0.3))
+        # the point mass is an integer layer, so it answers interval events of n
+        self.assertTrue(
+            any(isinstance(layer, IntegerLayer) for layer in conditional.layers)
+        )
+        event = SimpleEvent.from_data(
+            {
+                x: closed(1.5, 3.0),
+                n: closed(1, 3),
+                s: Set.from_iterable([SymbolEnum.A]),
+            }
+        )
+        self.assertAlmostEqual(
+            conditional.probability_of_simple_event(event),
+            rx_conditional.probability_of_simple_event(event),
         )
 
     def test_conditioning_on_every_variable(self):

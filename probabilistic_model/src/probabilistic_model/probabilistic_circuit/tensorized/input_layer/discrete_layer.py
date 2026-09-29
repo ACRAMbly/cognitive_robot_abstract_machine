@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import functools
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
@@ -9,7 +8,7 @@ from random_events.interval import Interval
 from random_events.product_algebra import SimpleEvent
 from random_events.set import Set
 from random_events.sigma_algebra import AbstractCompositeSet
-from random_events.variable import Symbolic, Variable
+from random_events.variable import Variable
 from sortedcontainers import SortedSet
 from typing_extensions import Any, Dict, List, Optional, Self, Tuple, Type
 
@@ -47,6 +46,9 @@ from probabilistic_model.probabilistic_circuit.tensorized.query_cache import (
 )
 from probabilistic_model.probabilistic_circuit.tensorized.structural_query import (
     LayerWithLogProbabilities,
+)
+from probabilistic_model.probabilistic_circuit.tensorized.symbolic_encoding import (
+    SymbolicEncoding,
 )
 from probabilistic_model.utils import MissingDict
 
@@ -151,27 +153,11 @@ class DiscreteLayer(InputLayer, ABC):
     def log_truncated_of_assignment(
         self, assignment: AbstractCompositeSet, singleton_allowed: bool
     ) -> LayerWithLogProbabilities:
-        """
-        Truncating a discrete distribution keeps the probabilities of the states the
-        assignment contains and renormalizes, which is one masked row-sum for the whole
-        layer.
-
-        :param assignment: The assignment of the variable of this layer.
-        :param singleton_allowed: Whether the truncation may leave a single state; a
-            discrete layer handles that case like any other.
-        :return: The truncated layer and the probability of the assignment under every
-            node, in log space.
-        """
+        # a single state left is handled like any other set of states
         return self.renormalized_to(self.selected_states(assignment))
 
     def log_conditional_of_value(self, value: Any) -> LayerWithLogProbabilities:
-        """
-        Conditioning on a value is truncating to the state of that value.
-
-        :param value: The value as the layer reads it, see :meth:`state_indices_of`.
-        :return: The conditioned layer and the log-probability of the value under every
-            node.
-        """
+        # the value is read like the values of events, see state_indices_of
         selected = np.zeros(self.number_of_states, dtype=bool)
         [index] = self.state_indices_of(np.array([value], dtype=float))
         if index >= 0:
@@ -311,14 +297,8 @@ class DiscreteLayer(InputLayer, ABC):
 
     @classmethod
     def concatenate(cls, layers: List[Self]) -> Self:
-        """
-        Truncating a discrete layer never changes its states, so the probability tables
-        of the layers line up.
-
-        :param layers: Layers with the same variable and states.
-        :return: One layer with the nodes of all layers, in order, stored like the table
-            of the first layer.
-        """
+        # truncating a discrete layer never changes its states, so the tables line up;
+        # the result is stored like the table of the first layer
         table_type = type(layers[0].table)
         return layers[0].with_table(
             table_type.concatenate([table_type.of(layer.table) for layer in layers])
@@ -331,10 +311,6 @@ class DiscreteLayer(InputLayer, ABC):
         )
 
     def __deepcopy__(self, memo: Optional[Dict[int, Any]] = None) -> Self:
-        """
-        :param memo: The copies made so far, keyed by the id of the original.
-        :return: A copy of this layer that shares no arrays with it.
-        """
         if memo is None:
             memo = {}
         if id(self) in memo:
@@ -342,67 +318,6 @@ class DiscreteLayer(InputLayer, ABC):
         result = self.with_table(self.table.copy())
         memo[id(self)] = result
         return result
-
-
-@dataclass
-class SymbolicEncoding:
-    """
-    The translation between the two representations of a value of a symbolic variable.
-
-    The events and samples of this package hold the hash of a domain element. A symbolic
-    layer holds the position of the element in the domain instead, a small integer that
-    it looks up without hashing. The layered circuit encodes its input once per query
-    and decodes its samples.
-    """
-
-    variable: Symbolic
-    """
-    The symbolic variable.
-    """
-
-    @functools.cached_property
-    def elements(self) -> Tuple[Any, ...]:
-        """
-        :return: The domain elements of the variable, in the order that defines their
-            positions.
-        """
-        return tuple(
-            simple_set.element for simple_set in self.variable.domain.simple_sets
-        )
-
-    @functools.cached_property
-    def hashes(self) -> SampleColumn:
-        """
-        :return: The hash of every domain element, at its position.
-        """
-        return np.array([hash(element) for element in self.elements], dtype=float)
-
-    def indices_of_hashes(self, values: SampleColumn) -> StateIndices:
-        """
-        :param values: Values of the variable as the events of this package hold them.
-        :return: The position of every value in the domain, or ``-1`` for a value that
-            is not the hash of a domain element.
-        """
-        values = np.asarray(values, dtype=float).reshape(-1)
-        order = np.argsort(self.hashes)
-        sorted_hashes = self.hashes[order]
-        positions = np.clip(np.searchsorted(sorted_hashes, values), 0, len(order) - 1)
-        found = sorted_hashes[positions] == values
-        return np.where(found, order[positions], -1)
-
-    def hashes_of_indices(self, indices: StateIndices) -> SampleColumn:
-        """
-        :param indices: Positions of domain elements.
-        :return: The value of every position as the events of this package hold it.
-        """
-        return self.hashes[np.asarray(indices, dtype=np.int64)]
-
-    def index_of_element(self, element: Any) -> int:
-        """
-        :param element: A domain element, or its hash.
-        :return: The position of the element in the domain, or ``-1``.
-        """
-        return int(self.indices_of_hashes(np.array([hash(element)], dtype=float))[0])
 
 
 @dataclass(eq=False, repr=False)

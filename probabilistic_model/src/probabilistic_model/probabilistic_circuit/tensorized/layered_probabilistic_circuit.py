@@ -38,7 +38,6 @@ from probabilistic_model.probabilistic_circuit.tensorized.input_layer.dirac_delt
 from probabilistic_model.probabilistic_circuit.tensorized.input_layer.discrete_layer import (
     DiscreteLayer,
     IntegerLayer,
-    SymbolicEncoding,
     SymbolicLayer,
 )
 from probabilistic_model.probabilistic_circuit.tensorized.input_layer.probability_table import (
@@ -55,6 +54,9 @@ from probabilistic_model.probabilistic_circuit.tensorized.row_grouped_sparse_arr
 from probabilistic_model.probabilistic_circuit.tensorized.structural_query import (
     LayerWithLogProbabilities,
     StructuralQuery,
+)
+from probabilistic_model.probabilistic_circuit.tensorized.symbolic_encoding import (
+    SymbolicEncoding,
 )
 from probabilistic_model.probabilistic_model import (
     CenterType,
@@ -507,6 +509,13 @@ class LayeredProbabilisticCircuit(ProbabilisticModel):
         variable_index: int, distribution: UnivariateDistribution
     ) -> InputLayer:
         """
+        The layer that a conditioned variable is reattached with.
+
+        For a discrete variable this is a discrete layer, since a Dirac delta layer can
+        neither hold the symbolic or integer distribution that
+        :func:`~probabilistic_model.distributions.helper.make_dirac` creates for it nor
+        answer a set of symbols as an event.
+
         :param variable_index: The index of the variable of the distribution.
         :param distribution: A distribution that puts all of its mass on one value, as
             :func:`~probabilistic_model.distributions.helper.make_dirac` creates it.

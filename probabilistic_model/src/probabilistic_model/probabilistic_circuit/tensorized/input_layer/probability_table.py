@@ -6,10 +6,8 @@ from dataclasses import dataclass
 
 import numpy as np
 import numpy.typing as npt
-from krrood.adapters import json_serializer
-from krrood.adapters.json_serializer import SubclassJSONSerializer
 from scipy.sparse import csc_array, csr_array, vstack
-from typing_extensions import Any, Dict, List, Self, Tuple
+from typing_extensions import List, Self, Tuple
 
 from probabilistic_model.probabilistic_circuit.tensorized.array_types import (
     NodeIndices,
@@ -22,18 +20,12 @@ from probabilistic_model.probabilistic_circuit.tensorized.array_types import (
 )
 
 
-class ProbabilityTable(SubclassJSONSerializer, ABC):
+class ProbabilityTable(ABC):
     """
     The probability of every state for every node of a discrete layer, a table of shape
     (#nodes, #states).
 
-    A discrete layer answers every query through the operations of its table, so the
-    way the table is stored can be chosen for the use case: a dense table looks the
-    probabilities of events up fastest, and a sparse table stays small and fast for the
-    operations over whole rows when every node has only a few of many states, as the
-    leaves of a joint probability tree over an integer variable with a wide range do.
-
-    A table is not changed after it was created; every operation that changes the
+    A discrete layer answers every query through the operations of its table. A table is not changed after it was created; every operation that changes the
     probabilities returns a new table of the same type.
     """
 
@@ -194,6 +186,29 @@ class ProbabilityTable(SubclassJSONSerializer, ABC):
 
     # %% sampling
 
+    def cumulative_distribution_of_entries(
+        self,
+    ) -> Tuple[NodeIndices, StateIndices, npt.NDArray[np.float64]]:
+        """
+        :return: The node and the state of every non-zero entry, sorted by node and then
+            by state, and the probability of the node for all states up to and including
+            the state of the entry, divided by the total probability of the node.
+        """
+        rows, columns, probabilities = self.entries()
+        if len(rows) == 0:
+            return rows, columns, np.zeros(0)
+        cumulative = np.cumsum(probabilities)
+        first_of_row = np.r_[True, rows[1:] != rows[:-1]]
+        # the first entry of the row of every entry, carried forward over the row
+        start_of_row = np.maximum.accumulate(
+            np.where(first_of_row, np.arange(len(rows)), 0)
+        )
+        cumulative_within_row = cumulative - (cumulative - probabilities)[start_of_row]
+        totals = np.bincount(
+            rows, weights=probabilities, minlength=self.number_of_nodes
+        )
+        return rows, columns, cumulative_within_row / totals[rows]
+
     def sample_state_indices(self, nodes: NodeIndices) -> StateIndices:
         """
         Draw one state per entry of ``nodes`` from the node of the entry, all at once.
@@ -206,15 +221,10 @@ class ProbabilityTable(SubclassJSONSerializer, ABC):
         :return: The drawn state index per entry, ``-1`` for a node without mass.
         """
         nodes = np.asarray(nodes, dtype=np.int64)
-        rows, columns, probabilities = self.entries()
+        rows, columns, cumulative = self.cumulative_distribution_of_entries()
         if len(rows) == 0:
             return np.full(len(nodes), -1)
-        totals = np.bincount(
-            rows, weights=probabilities, minlength=self.number_of_nodes
-        )
-        shifted_cumulative = (
-            cumulative_distribution_per_row(rows, probabilities / totals[rows]) + rows
-        )
+        shifted_cumulative = cumulative + rows
         # the last entry of every row reaches its end exactly, whatever the rounding
         last_of_row = np.r_[rows[1:] != rows[:-1], True]
         shifted_cumulative[last_of_row] = rows[last_of_row] + 1.0
@@ -224,27 +234,8 @@ class ProbabilityTable(SubclassJSONSerializer, ABC):
         # rounding must not carry a draw into the next row
         last_entry_of_node = np.searchsorted(rows, nodes, side="right") - 1
         entry = np.minimum(entry, last_entry_of_node)
-        has_mass = totals[nodes] > 0
+        has_mass = np.bincount(rows, minlength=self.number_of_nodes)[nodes] > 0
         return np.where(has_mass, columns[np.maximum(entry, 0)], -1)
-
-
-def cumulative_distribution_per_row(
-    rows: NodeIndices, probabilities: npt.NDArray[np.float64]
-) -> npt.NDArray[np.float64]:
-    """
-    :param rows: The row of every entry, ascending.
-    :param probabilities: The probability of every entry.
-    :return: The cumulative sum of the probabilities within the row of every entry.
-    """
-    if len(rows) == 0:
-        return np.zeros(0)
-    cumulative = np.cumsum(probabilities)
-    first_of_row = np.r_[True, rows[1:] != rows[:-1]]
-    # the first entry of the row of every entry, carried forward over the row
-    start_of_row = np.maximum.accumulate(
-        np.where(first_of_row, np.arange(len(rows)), 0)
-    )
-    return cumulative - (cumulative - probabilities)[start_of_row]
 
 
 @dataclass(eq=False)
@@ -252,8 +243,9 @@ class DenseProbabilityTable(ProbabilityTable):
     """
     A probability table stored as one dense array of log-probabilities.
 
-    A likelihood is a single gather from the array. Use it when the variable has few
-    states or the nodes have most of them.
+    A likelihood is a single gather from the array, so this is the fastest table for
+    looking up the probabilities of events. Use it when the variable has few states or
+    the nodes have most of them.
     """
 
     log_probabilities: NodeStateValues
@@ -339,17 +331,6 @@ class DenseProbabilityTable(ProbabilityTable):
     def copy(self) -> Self:
         return self.__class__(self.log_probabilities.copy())
 
-    def to_json(self, **kwargs) -> Dict[str, Any]:
-        result = super().to_json(**kwargs)
-        result["log_probabilities"] = json_serializer.to_json(
-            self.log_probabilities, **kwargs
-        )
-        return result
-
-    @classmethod
-    def _from_json(cls, data: Dict[str, Any], **kwargs) -> Self:
-        return cls(json_serializer.from_json(data["log_probabilities"], **kwargs))
-
 
 @dataclass(eq=False)
 class SparseProbabilityTable(ProbabilityTable):
@@ -358,7 +339,9 @@ class SparseProbabilityTable(ProbabilityTable):
 
     Operations over whole rows cost the number of stored entries instead of the size of
     the table. A likelihood densifies only the columns of the states that the events
-    contain. Use it when the variable has many states and every node only a few of them.
+    contain. Use it when the variable has many states and every node only a few of them,
+    as in the leaves of a joint probability tree over an integer variable with a wide
+    range.
     """
 
     probabilities: csr_array
@@ -479,28 +462,3 @@ class SparseProbabilityTable(ProbabilityTable):
 
     def copy(self) -> Self:
         return self.__class__(self.probabilities.copy())
-
-    def to_json(self, **kwargs) -> Dict[str, Any]:
-        result = super().to_json(**kwargs)
-        rows, columns, probabilities = self.entries()
-        for name, value in (
-            ("rows", rows),
-            ("columns", columns),
-            ("probabilities", probabilities),
-            ("shape", np.array(self.probabilities.shape)),
-        ):
-            result[name] = json_serializer.to_json(value, **kwargs)
-        return result
-
-    @classmethod
-    def _from_json(cls, data: Dict[str, Any], **kwargs) -> Self:
-        rows, columns, probabilities, shape = (
-            json_serializer.from_json(data[name], **kwargs)
-            for name in ("rows", "columns", "probabilities", "shape")
-        )
-        return cls.from_entries(
-            np.asarray(rows, dtype=np.int64),
-            np.asarray(columns, dtype=np.int64),
-            np.asarray(probabilities, dtype=float),
-            tuple(int(size) for size in shape),
-        )

@@ -1,7 +1,9 @@
+import dataclasses
 import unittest
 
 import numpy as np
 from krrood.adapters import json_serializer
+from krrood.adapters.json_field import JSONField
 
 from probabilistic_model.probabilistic_circuit.tensorized.input_layer.probability_table import (
     DenseProbabilityTable,
@@ -147,6 +149,17 @@ class ProbabilityTableTestCase(unittest.TestCase):
                 # a node without mass has no state to draw
                 np.testing.assert_array_equal(states[nodes == 2], -1)
 
+    def test_cumulative_distribution_of_entries(self):
+        unnormalized = PROBABILITIES * 7.0
+        for table_type in TABLE_TYPES:
+            with self.subTest(table_type.__name__):
+                rows, columns, cumulative = table_of(
+                    table_type, unnormalized
+                ).cumulative_distribution_of_entries()
+                np.testing.assert_array_equal(rows, [0, 0, 0, 1])
+                np.testing.assert_array_equal(columns, [0, 2, 4, 3])
+                np.testing.assert_allclose(cumulative, [0.1, 0.7, 1.0, 1.0])
+
     def test_samples_of_unnormalized_rows(self):
         for table_type in TABLE_TYPES:
             with self.subTest(table_type.__name__):
@@ -158,7 +171,13 @@ class ProbabilityTableTestCase(unittest.TestCase):
         for table_type in TABLE_TYPES:
             with self.subTest(table_type.__name__):
                 table = table_of(table_type)
-                restored = json_serializer.from_json(json_serializer.to_json(table))
+                serialized = json_serializer.to_json(table)
+                # every field is written by the generic dataclass serializer
+                self.assertEqual(
+                    set(serialized) - {JSONField.TYPE},
+                    {field_.name for field_ in dataclasses.fields(table_type)},
+                )
+                restored = json_serializer.from_json(serialized)
                 self.assertIsInstance(restored, table_type)
                 np.testing.assert_allclose(
                     restored.dense_probabilities(), PROBABILITIES
