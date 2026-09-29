@@ -42,6 +42,7 @@ from krrood.entity_query_language.core.base_expressions import (
     SymbolicExpression,
 )
 from krrood.entity_query_language.operators.causal import (
+    CausalRoleMarker,
     Cause,
     CausesEffect,
 )
@@ -560,6 +561,14 @@ class Match(
             isinstance(attribute_match.assigned_value, Cause)
             for attribute_match in self._matches_with_variables_
         )
+
+    def _is_kept_out_of_construction_(self, value: Any) -> bool:
+        """
+        A keyword marked with a causal role that is no field of the matched class names
+        an aggregation statistic of it, which grounding computes rather than the
+        constructor receives.
+        """
+        return isinstance(value, CausalRoleMarker)
 
     @property
     def _name_(self) -> str:
