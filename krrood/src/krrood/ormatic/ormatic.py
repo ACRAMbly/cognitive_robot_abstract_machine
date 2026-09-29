@@ -1,14 +1,21 @@
 from __future__ import annotations
 
+import datetime
+import decimal
+import fractions
+import ipaddress
 import logging
 import pathlib
+import re
 import uuid
+import zoneinfo
 from dataclasses import dataclass, field, is_dataclass
 from enum import Enum
 from inspect import isclass
 from types import ModuleType, NoneType
 from typing import Set
 
+import numpy as np
 import rustworkx as rx
 import sqlalchemy
 import krrood.ormatic.custom_types  # type: ignore
@@ -24,10 +31,38 @@ from typing_extensions import List, Type, Dict
 from typing_extensions import Optional, TextIO
 
 from krrood.ormatic.custom_types import (
-    TypeType,
-    PolymorphicEnumType,
-    PathType,
+    ByteArrayType,
+    ComplexType,
+    DateTimeType,
+    Datetime64Type,
+    DecimalType,
+    FractionType,
+    IPv4AddressType,
+    IPv4NetworkType,
+    IPv6AddressType,
+    IPv6NetworkType,
     JSONDataType,
+    NumpyArrayType,
+    NumpyBoolType,
+    NumpyFloat16Type,
+    NumpyFloat32Type,
+    NumpyFloat64Type,
+    NumpyInt16Type,
+    NumpyInt32Type,
+    NumpyInt64Type,
+    NumpyInt8Type,
+    NumpyUInt16Type,
+    NumpyUInt32Type,
+    NumpyUInt8Type,
+    PathType,
+    PatternType,
+    PolymorphicEnumType,
+    PurePathType,
+    RangeType,
+    SliceType,
+    TimezoneType,
+    TypeType,
+    ZoneInfoType,
 )
 from krrood.ormatic.data_access_objects.alternative_mappings import AlternativeMapping
 from krrood.ormatic.data_access_objects.dao import DataAccessObject
@@ -121,10 +156,11 @@ class ORMatic:
         default_factory=dict, init=False
     )
     """
-    Lookup-only stand-ins for classes already mapped by an ormatic-interface
-    dependency (see :attr:`externally_mapped_classes`). Never rendered by the
-    generator; consulted only to resolve foreign keys, relationships, and parent
-    classes that point at them.
+    Lookup-only stand-ins for classes already mapped by an ormatic-interface dependency
+    (see :attr:`externally_mapped_classes`).
+
+    Never rendered by the generator; consulted only to resolve foreign keys,
+    relationships, and parent classes that point at them.
     """
 
     association_objects: List[AssociationObject] = field(
@@ -146,7 +182,9 @@ class ORMatic:
         self.create_type_annotations_map()
 
         for wrapped_table in self.wrapped_tables.values():
-            self.imported_modules.add(get_module_of_type(wrapped_table.wrapped_clazz.clazz))
+            self.imported_modules.add(
+                get_module_of_type(wrapped_table.wrapped_clazz.clazz)
+            )
 
         # externally-mapped classes may live further up the chain than the immediate dependency
         for external_table in self.external_tables.values():
@@ -166,16 +204,52 @@ class ORMatic:
 
     def _fill_type_mappings(self):
         """
-        Fill the type mappings of this with needed defaults.
+        Add the default type mappings for every type that has no mapping yet.
         """
-        self.type_mappings[Type] = TypeType
-        self.type_mappings[type] = TypeType
-        self.type_mappings[Enum] = PolymorphicEnumType
-        self.type_mappings[SubclassJSONSerializer] = JSON
-        self.type_mappings[uuid.UUID] = sqlalchemy.UUID
-        self.type_mappings[pathlib.Path] = PathType
-        self.type_mappings[JSONData] = JSONDataType
-        self.type_mappings[NoneType] = TypeType
+        default_type_mappings = {
+            Type: TypeType,
+            type: TypeType,
+            Enum: PolymorphicEnumType,
+            SubclassJSONSerializer: JSON,
+            uuid.UUID: sqlalchemy.UUID,
+            pathlib.Path: PathType,
+            JSONData: JSONDataType,
+            NoneType: TypeType,
+            datetime.date: sqlalchemy.Date,
+            datetime.time: sqlalchemy.Time,
+            datetime.timedelta: sqlalchemy.Interval,
+            datetime.datetime: DateTimeType,
+            datetime.timezone: TimezoneType,
+            zoneinfo.ZoneInfo: ZoneInfoType,
+            decimal.Decimal: DecimalType,
+            fractions.Fraction: FractionType,
+            complex: ComplexType,
+            pathlib.PurePath: PurePathType,
+            ipaddress.IPv4Address: IPv4AddressType,
+            ipaddress.IPv6Address: IPv6AddressType,
+            ipaddress.IPv4Network: IPv4NetworkType,
+            ipaddress.IPv6Network: IPv6NetworkType,
+            bytearray: ByteArrayType,
+            range: RangeType,
+            slice: SliceType,
+            re.Pattern: PatternType,
+            np.ndarray: NumpyArrayType,
+            np.float16: NumpyFloat16Type,
+            np.float32: NumpyFloat32Type,
+            np.float64: NumpyFloat64Type,
+            np.int8: NumpyInt8Type,
+            np.int16: NumpyInt16Type,
+            np.int32: NumpyInt32Type,
+            np.int64: NumpyInt64Type,
+            np.uint8: NumpyUInt8Type,
+            np.uint16: NumpyUInt16Type,
+            np.uint32: NumpyUInt32Type,
+            np.bool_: NumpyBoolType,
+            np.datetime64: Datetime64Type,
+        }
+        for python_type, column_type in default_type_mappings.items():
+            if python_type not in self.type_mappings.keys():
+                self.type_mappings[python_type] = column_type
 
         for key in self.type_mappings.keys():
             self.imported_modules.add(get_module_of_type(key))

@@ -8,7 +8,6 @@ import sys
 from collections.abc import Sequence
 from copy import copy
 from dataclasses import dataclass, Field, MISSING
-from datetime import datetime
 from functools import cached_property, lru_cache
 from inspect import isclass
 from types import NoneType, UnionType
@@ -32,7 +31,7 @@ from krrood.class_diagrams.utils import (
     common_base_class,
     get_type_hints_of_object,
 )
-from krrood.utils import module_and_class_name, is_builtin_type
+from krrood.utils import module_and_class_name
 
 if TYPE_CHECKING:
     from krrood.class_diagrams.class_diagram import WrappedClass
@@ -156,9 +155,11 @@ class WrappedField:
 
     @cached_property
     def is_builtin_type(self) -> bool:
-        return is_builtin_type(self.type_endpoint) or (
-            self.type_endpoint in [datetime, NoneType]
-        )
+        """
+        :return: True if the field holds a builtin value that SQLAlchemy maps to a
+            column by itself. Other builtins, such as ``complex``, need a type mapping.
+        """
+        return self.type_endpoint in (int, float, str, bool, bytes, NoneType)
 
     @cached_property
     def is_container(self) -> bool:
