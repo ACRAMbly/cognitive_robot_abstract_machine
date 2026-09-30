@@ -1,6 +1,6 @@
-import os
 from dataclasses import dataclass
 from os.path import dirname
+from pathlib import Path
 
 import pytest
 from typing_extensions import Type
@@ -186,7 +186,7 @@ class SavedRDRModel:
     A classifier written to disk, and what a test needs to read it back.
     """
 
-    directory: str
+    directory: Path
     """
     The directory the model was written into.
     """
@@ -200,7 +200,7 @@ class SavedRDRModel:
         """
         :return: The classifier read back from the written model.
         """
-        return GeneralRDR.load(self.directory, model_name=self.name)
+        return GeneralRDR.load(str(self.directory), model_name=self.name)
 
 
 @pytest.fixture
@@ -210,5 +210,5 @@ def saved_drawer_cabinet_rdr(request, drawer_cabinet_rdr) -> SavedRDRModel:
     for it, so a test reading a saved model neither waits on another test having written
     one nor writes the path a test running beside it is writing.
     """
-    directory = os.path.join(dirname(__file__), "..", "test_results", request.node.name)
-    return SavedRDRModel(directory, drawer_cabinet_rdr.save(directory))
+    directory = Path(__file__).parent.parent / "test_results" / request.node.name
+    return SavedRDRModel(directory, drawer_cabinet_rdr.save(str(directory)))
