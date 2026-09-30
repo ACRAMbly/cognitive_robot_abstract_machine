@@ -46,9 +46,9 @@ class HasFactoryAndKwargs(Generic[T]):
         """
         constructed_kwargs = {}
         for key, value in self._kwargs_.items():
+            if self._is_kept_out_of_construction_(key, value):
+                continue
             if not self._is_factory_parameter_(key):
-                if self._is_kept_out_of_construction_(key, value):
-                    continue
                 raise KeywordNamesNoFactoryParameter(
                     factory=self._factory_, keyword=key
                 )
@@ -76,10 +76,11 @@ class HasFactoryAndKwargs(Generic[T]):
 
     def _is_kept_out_of_construction_(self, keyword: str, value: Any) -> bool:
         """
-        :param keyword: A keyword argument that names no parameter of :attr:`_factory_`.
+        :param keyword: A keyword argument.
         :param value: The value given for that keyword.
-        :return: Whether that keyword means something other than a constructor
-            argument, so it is left out of construction rather than refused.
+        :return: Whether that keyword names no parameter of :attr:`_factory_` and means
+            something other than a constructor argument, so it is left out of
+            construction rather than refused.
         """
         return False
 

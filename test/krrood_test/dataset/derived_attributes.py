@@ -23,6 +23,12 @@ class Rectangle:
     The length of the vertical sides.
     """
 
+    layer: int = 0
+    """
+    The drawing layer the rectangle sits on, a constructor parameter that is also a
+    class attribute.
+    """
+
     @classmethod
     def from_sides(cls, first_side: float, second_side: float) -> Rectangle:
         """

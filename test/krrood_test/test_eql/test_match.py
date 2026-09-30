@@ -257,7 +257,7 @@ def test_from_after_where_still_restricts_the_search():
 
 def test_from_without_kwargs_selects_all(handles_and_containers_world):
     world = handles_and_containers_world
-    # an(Type).from_(X) with no kwargs is a valid "any Type in X" select.
+    # a(Type).from_(X) with no kwargs is a valid "any Type in X" select.
     selected = a(FixedConnection).from_(world.connections).tolist()
     assert selected
     assert all(isinstance(connection, FixedConnection) for connection in selected)
@@ -306,7 +306,7 @@ def test_an_infers_target_type_from_annotated_callable():
     def make_position(x: float = 1.0, y: float = 2.0, z: float = 3.0) -> KRROODPosition:
         return KRROODPosition(x, y, z)
 
-    match = an(make_position)
+    match = a(make_position)
     assert match._type_ is KRROODPosition
 
 
@@ -322,7 +322,7 @@ def test_an_uses_explicit_target_type_for_unannotated_callable():
     def make_position(x, y, z):
         return KRROODPosition(x, y, z)
 
-    match = an(make_position, target_type=KRROODPosition)
+    match = a(make_position, target_type=KRROODPosition)
     assert match._type_ is KRROODPosition
 
 
@@ -331,7 +331,7 @@ def test_an_raises_when_callable_type_cannot_be_determined():
         return KRROODPosition(x, y, z)
 
     with pytest.raises(MatchTypeCannotBeDetermined):
-        an(make_position)
+        a(make_position)
 
 
 def test_a_infers_target_type_from_annotated_callable():
@@ -494,7 +494,7 @@ def test_the_quantifies_a_match_itself():
 
 def test_an_quantifies_a_match_itself():
     positions = [KRROODPosition(1.0, 0.0, 0.0), KRROODPosition(5.0, 0.0, 0.0)]
-    assert an(a(KRROODPosition)(x=5.0).from_(positions)).tolist() == [positions[1]]
+    assert a(a(KRROODPosition)(x=5.0).from_(positions)).tolist() == [positions[1]]
 
 
 def test_entity_selects_a_match():

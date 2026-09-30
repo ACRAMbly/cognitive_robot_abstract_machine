@@ -608,13 +608,15 @@ class Match(
 
     def _is_kept_out_of_construction_(self, keyword: str, value: Any) -> bool:
         """
-        A keyword that is no constructor parameter still belongs to the pattern when it
-        names an attribute of the matched class, such as a property or a method, since
-        the constructed instance provides it.
+        A keyword the factory does not take still belongs to the pattern when it names
+        an attribute of the matched class, such as a property or a method, since the
+        constructed instance provides it.
 
         A keyword marked with a causal role names an aggregation statistic of the
         matched class, which grounding computes.
         """
+        if self._is_factory_parameter_(keyword):
+            return False
         return keyword in dir(self._type_) or isinstance(value, CausalRoleMarker)
 
     @property

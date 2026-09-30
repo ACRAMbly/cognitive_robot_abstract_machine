@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from enum import Enum, auto
 from typing_extensions import List
 
-from krrood.entity_query_language.factories import a, cause, confounder
+from krrood.entity_query_language.factories import a, an, cause, confounder
 from krrood.parametrization.feature_extraction.aggregations import (
     AggregationStatistic,
     aggregation_statistic,
@@ -99,7 +99,7 @@ def test_cause_on_an_aggregation_statistic_resolves_its_return_type():
     names this variable on the circuit, so a search variable under that name would never
     match anything a real ``RelationalCircuitRegistry`` grounds.
     """
-    match = a(Assembly)(
+    match = an(Assembly)(
         component_count=cause,
         components=[a(Component)(weight=...)],
     )
@@ -112,7 +112,7 @@ def test_cause_on_an_aggregation_statistic_resolves_its_return_type():
 
 
 def test_confounder_on_an_aggregation_statistic_resolves_its_return_type():
-    match = a(Assembly)(
+    match = an(Assembly)(
         component_count=confounder,
         components=[a(Component)(weight=...)],
     )
