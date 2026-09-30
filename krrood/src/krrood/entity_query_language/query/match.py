@@ -527,14 +527,14 @@ class Match(
         """
         Select, from instances constructed for this match, those that satisfy it.
 
-        Construction sets what the pattern leaves open and passes the constructor what
-        it states, but a stated value of an attribute the constructor does not take,
-        such as a property, and a ``where`` condition hold only if the constructed
-        values happen to imply them.
+        Construction passes the factory every value it takes, but a stated value of an
+        attribute the factory does not take, such as a property, and a ``where``
+        condition hold only if the constructed values happen to imply them.
 
         :param instances: Instances constructed from this match's pattern.
         :return: The query selecting the instances that have every value the pattern
-            states and satisfy every ``where`` condition.
+            states for an attribute its factory does not take, and satisfy every
+            ``where`` condition.
         """
         from krrood.entity_query_language.factories import entity
 
@@ -549,13 +549,19 @@ class Match(
     def _conditions_on_stated_values_(self) -> Iterator[ConditionType]:
         """
         :return: The conditions requiring an attribute to have the plain value the
-            pattern states for it, anywhere in the pattern; an attribute left open with
-            ``...`` or given a symbolic value states no single value.
+            pattern states for it, anywhere in the pattern, where the factory building
+            the attribute's owner does not take it. A value the factory takes is its
+            to keep under any name, and an attribute left open with ``...`` or given a
+            symbolic value states no single value.
         """
         for attribute_match in self._matches_with_variables_:
             value = attribute_match.assigned_value
             if isinstance(value, MatchAssignedValue) or self._is_or_contains_ellipsis(
                 value
+            ):
+                continue
+            if attribute_match._stating_match_._is_factory_parameter_(
+                attribute_match.attribute_name
             ):
                 continue
             yield from attribute_match._conditions_
@@ -919,6 +925,16 @@ class AttributeMatch(AbstractMatchExpression[T]):
             final_step._set_child_instance_value_(
                 current_value, self.assigned_variable._value_
             )
+
+    @property
+    def _stating_match_(self) -> Match:
+        """
+        :return: The match whose pattern states this attribute, and whose factory
+            builds the object owning it.
+        """
+        if isinstance(self._parent_, AttributeMatch):
+            return self._parent_.assigned_value
+        return self._parent_
 
     @property
     def name_from_variable_access_path(self):

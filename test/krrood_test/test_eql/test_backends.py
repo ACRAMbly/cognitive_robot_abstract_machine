@@ -336,3 +336,14 @@ def test_enumerating_backend_rejects_instances_contradicting_a_derived_attribute
         (3, 4),
         (4, 3),
     }
+
+
+def test_enumerating_backend_keeps_instances_whose_factory_renames_a_stated_value():
+    query = a(Rectangle.from_sides)(
+        first_side=variable(int, [3, 4]), second_side=RECTANGLE_SIDES[0][1]
+    )
+    rectangles = query.evaluate(backend=EntityQueryLanguageGenerativeBackend())
+    assert {(rectangle.width, rectangle.height) for rectangle in rectangles} == {
+        (3, RECTANGLE_SIDES[0][1]),
+        (4, RECTANGLE_SIDES[0][1]),
+    }

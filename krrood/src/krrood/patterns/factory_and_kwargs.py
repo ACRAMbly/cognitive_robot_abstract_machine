@@ -44,15 +44,9 @@ class HasFactoryAndKwargs(Generic[T]):
         :raises KeywordNamesNoFactoryParameter: If a keyword argument names no parameter
             of :attr:`_factory_` and is not kept out of construction.
         """
-        parameters = inspect.signature(self._factory_).parameters.values()
-        accepts_arbitrary_keywords = any(
-            parameter.kind is inspect.Parameter.VAR_KEYWORD for parameter in parameters
-        )
-        parameter_names = {parameter.name for parameter in parameters}
-
         constructed_kwargs = {}
         for key, value in self._kwargs_.items():
-            if not accepts_arbitrary_keywords and key not in parameter_names:
+            if not self._is_factory_parameter_(key):
                 if self._is_kept_out_of_construction_(key, value):
                     continue
                 raise KeywordNamesNoFactoryParameter(
@@ -68,6 +62,17 @@ class HasFactoryAndKwargs(Generic[T]):
                     self._recurse_construct_instance_and_get_value(value)
                 )
         return self._factory_(**constructed_kwargs)
+
+    def _is_factory_parameter_(self, keyword: str) -> bool:
+        """
+        :param keyword: A keyword argument.
+        :return: Whether :attr:`_factory_` takes that keyword, as a parameter of that
+            name or through arbitrary keywords (a ``**kwargs`` parameter).
+        """
+        return any(
+            parameter.kind is inspect.Parameter.VAR_KEYWORD or parameter.name == keyword
+            for parameter in inspect.signature(self._factory_).parameters.values()
+        )
 
     def _is_kept_out_of_construction_(self, keyword: str, value: Any) -> bool:
         """

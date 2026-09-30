@@ -23,6 +23,16 @@ class Rectangle:
     The length of the vertical sides.
     """
 
+    @classmethod
+    def from_sides(cls, first_side: float, second_side: float) -> Rectangle:
+        """
+        :param first_side: The length of the horizontal sides.
+        :param second_side: The length of the vertical sides.
+        :return: The rectangle with those sides, which keeps neither under the name of
+            its parameter.
+        """
+        return cls(first_side, second_side)
+
     @property
     def area(self) -> float:
         """
