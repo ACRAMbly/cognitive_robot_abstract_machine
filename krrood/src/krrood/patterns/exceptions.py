@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from typing_extensions import Any, Type
+from typing_extensions import Any, List, Type
 
 from krrood.exceptions import DataclassException
 
@@ -121,12 +121,12 @@ class AmbiguousRuleError(DataclassException):
     Surfaced as an error so an accidental overlap is caught rather than masked.
     """
 
-    subject: object
+    subject: Any
     """
     What the rules were asked about when the collision occurred.
     """
 
-    candidates: "list[type]"
+    candidates: List[Type]
     """
     The equally specific rule classes that collided.
     """
