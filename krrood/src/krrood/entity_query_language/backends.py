@@ -36,7 +36,7 @@ from krrood.entity_query_language.exceptions import (
     SelectiveBackendCannotResolveEllipsisMatch,
     UnderspecifiedStatementInfeasibleForEntityQueryLanguageGeneration,
 )
-from krrood.entity_query_language.factories import entity, set_of, variable
+from krrood.entity_query_language.factories import set_of, variable
 from krrood.entity_query_language.query.match import Match, AttributeMatch
 from krrood.entity_query_language.query.query import Entity, Query
 from krrood.ormatic.eql_interface import eql_to_sql
@@ -206,7 +206,8 @@ class EntityQueryLanguageGenerativeBackend(GenerativeBackend):
     A generative backend that constructs new instances deterministically: it treats a
     match's unspecified leaves as variables, enumerates every combination over their
     (discrete) domains, constructs an instance per combination via the type's
-    constructor, and keeps those that satisfy the match's ``where`` conditions.
+    constructor, and keeps those that satisfy the match: the values its pattern states
+    and its ``where`` conditions.
     """
 
     def _evaluate(self, expression: Match[T]) -> Iterable[T]:
@@ -218,16 +219,12 @@ class EntityQueryLanguageGenerativeBackend(GenerativeBackend):
                 self._convert_attribute_match_to_variable(attribute_match)
             )
 
-        expression._variable_._update_domain_(
+        satisfying = expression._select_satisfying_(
             self._generate_raw_results(expression, variables)
         )
-
-        filtered_results = entity(expression._variable_)._quantify_(
+        yield from satisfying._quantify_(
             expression._quantifier_type_
-        )
-        if expression._where_conditions_:
-            filtered_results = filtered_results.where(*expression._where_conditions_)
-        yield from filtered_results._evaluate_natively_()
+        )._evaluate_natively_()
 
     @staticmethod
     def _check_attribute_match_is_suitable_for_generation(
@@ -298,6 +295,10 @@ class ProbabilisticBackend(GenerativeBackend):
     """
     A backend that generates elements from a tractable probabilistic model using a model
     registry.
+
+    A sampled instance contradicting the match, in a value the model does not cover such
+    as a property's, is rejected, so fewer instances than :attr:`number_of_samples` may
+    be generated.
     """
 
     model_registry: ModelRegistry = field(default_factory=FullyFactorizedRegistry)
@@ -421,12 +422,13 @@ class ProbabilisticBackend(GenerativeBackend):
         log_likelihoods = truncated.log_likelihood(samples)
         samples = samples[log_likelihoods.argsort()[::-1]]
 
-        # create new objects with the values from the samples
-        for sample in samples:
-            instance = parameters.construct_instance_from_model_sample(
-                truncated.variables, sample
-            )
-            yield instance
+        # create new objects with the values from the samples, and reject those
+        # contradicting a value the model does not cover, such as a property's
+        instances = (
+            parameters.construct_instance_from_model_sample(truncated.variables, sample)
+            for sample in samples
+        )
+        yield from expression._select_satisfying_(instances)._evaluate_natively_()
 
     @staticmethod
     def _resolve_cause_and_effect_variables(

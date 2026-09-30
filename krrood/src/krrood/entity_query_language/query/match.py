@@ -32,6 +32,7 @@ from typing_extensions import (
     TYPE_CHECKING,
     Self,
     Iterator,
+    Iterable,
 )
 
 from krrood.class_diagrams.utils import get_type_hints_of_object
@@ -521,6 +522,43 @@ class Match(
         :return: An iterator over the matching elements.
         """
         return self._symbolic_expression_._evaluate_natively_()
+
+    def _select_satisfying_(self, instances: Iterable[T]) -> Entity[T]:
+        """
+        Select, from instances constructed for this match, those that satisfy it.
+
+        Construction sets what the pattern leaves open and passes the constructor what
+        it states, but a stated value of an attribute the constructor does not take,
+        such as a property, and a ``where`` condition hold only if the constructed
+        values happen to imply them.
+
+        :param instances: Instances constructed from this match's pattern.
+        :return: The query selecting the instances that have every value the pattern
+            states and satisfy every ``where`` condition.
+        """
+        from krrood.entity_query_language.factories import entity
+
+        self._variable_._update_domain_(instances)
+        selection = entity(self._variable_)
+        conditions = [*self._conditions_on_stated_values_, *self._where_conditions_]
+        if conditions:
+            selection = selection.where(*conditions)
+        return selection
+
+    @property
+    def _conditions_on_stated_values_(self) -> Iterator[ConditionType]:
+        """
+        :return: The conditions requiring an attribute to have the plain value the
+            pattern states for it, anywhere in the pattern; an attribute left open with
+            ``...`` or given a symbolic value states no single value.
+        """
+        for attribute_match in self._matches_with_variables_:
+            value = attribute_match.assigned_value
+            if isinstance(value, MatchAssignedValue) or self._is_or_contains_ellipsis(
+                value
+            ):
+                continue
+            yield from attribute_match._conditions_
 
     @property
     def _has_ellipsis_attributes_(self) -> bool:
