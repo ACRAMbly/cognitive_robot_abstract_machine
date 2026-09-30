@@ -9,9 +9,7 @@ from sqlalchemy.orm import RelationshipProperty
 from krrood.exceptions import DataclassException
 
 if TYPE_CHECKING:
-    from krrood.class_diagrams.wrapped_field import WrappedField
     from krrood.ormatic.data_access_objects.alternative_mappings import FunctionMapping
-    from krrood.ormatic.field_storage import FieldStorageRule
     from krrood.ormatic.data_access_objects.conversion_order import (
         ConversionOrderConstraint,
     )
@@ -183,33 +181,6 @@ class ZoneInfoWithoutKey(DataclassException, ValueError):
         return (
             "create the timezone from its key, e.g. zoneinfo.ZoneInfo('Europe/Berlin')."
         )
-
-
-@dataclass
-class AmbiguousFieldStorage(DataclassException, TypeError):
-    """
-    Raised when more than one rule claims how a field is stored.
-    """
-
-    wrapped_field: WrappedField
-    """
-    The field the rules disagree on.
-    """
-
-    rules: List[FieldStorageRule]
-    """
-    The rules that all apply to the field.
-    """
-
-    def error_message(self) -> str:
-        rule_names = ", ".join(type(rule).__name__ for rule in self.rules)
-        return (
-            f"The field {self.wrapped_field.field.name} of "
-            f"{self.wrapped_field.clazz.clazz.__name__} is claimed by {rule_names}."
-        )
-
-    def suggest_correction(self) -> str:
-        return "make the conditions of these rules exclude each other."
 
 
 @dataclass

@@ -110,3 +110,33 @@ class UnmemoizableOwnerError(DataclassException):
             f"Memoize on an object whose lifetime can be tracked, or cache "
             f"{self.function_name}() with functools.lru_cache instead."
         )
+
+
+@dataclass
+class AmbiguousRuleError(DataclassException):
+    """
+    Two or more rules of a family are equally specific for the same subject, a collision
+    that would otherwise resolve silently by registration order.
+
+    Surfaced as an error so an accidental overlap is caught rather than masked.
+    """
+
+    subject: object
+    """
+    What the rules were asked about when the collision occurred.
+    """
+
+    candidates: "list[type]"
+    """
+    The equally specific rule classes that collided.
+    """
+
+    def error_message(self) -> str:
+        names = ", ".join(sorted(candidate.__name__ for candidate in self.candidates))
+        return f"{names} are equally specific for {self.subject!r}."
+
+    def suggest_correction(self) -> str:
+        return (
+            "Make the colliding guards mutually exclusive, or have one rule subclass the other "
+            "to declare it the more-specific special case."
+        )

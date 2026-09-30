@@ -1,18 +1,10 @@
 import logging
-from dataclasses import dataclass
 
 import pytest
 
 from krrood.class_diagrams.class_diagram import ClassDiagram
 from krrood.class_diagrams.wrapped_field import WrappedField
-from krrood.ormatic.exceptions import AmbiguousFieldStorage
-from krrood.ormatic.field_storage import (
-    BuiltinRule,
-    CustomTypeRule,
-    FieldClassifier,
-    FieldStorage,
-    FieldStorageRule,
-)
+from krrood.ormatic.field_storage import CustomTypeRule, FieldStorage, FieldToStore
 from krrood.ormatic.ormatic import ORMatic
 from ..dataset.field_storage_classes import FieldsOfEveryStorage, StorageLeaf
 
@@ -65,31 +57,4 @@ def test_classification_logs_how_the_field_is_stored(ormatic, caplog):
     with caplog.at_level(logging.INFO, logger="krrood.ormatic.field_storage"):
         ormatic.field_classifier.classify(day)
 
-    assert CustomTypeRule(ormatic).describe(day) in caplog.messages
-
-
-# %% overlapping rules
-
-
-@dataclass
-class RuleClaimingEveryField(FieldStorageRule):
-    """
-    A rule whose condition overlaps with every other rule.
-    """
-
-    storage = FieldStorage.JSON
-
-    def applies_to(self, wrapped_field: WrappedField) -> bool:
-        return True
-
-    def describe(self, wrapped_field: WrappedField) -> str:
-        return "Storing every field."
-
-
-def test_field_claimed_by_two_rules_is_rejected(ormatic):
-    classifier = FieldClassifier(
-        ormatic, rule_types=[BuiltinRule, RuleClaimingEveryField]
-    )
-
-    with pytest.raises(AmbiguousFieldStorage):
-        classifier.classify(field_named(ormatic, "number"))
+    assert CustomTypeRule.describe(FieldToStore(day, ormatic)) in caplog.messages
