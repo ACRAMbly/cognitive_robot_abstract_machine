@@ -1,6 +1,7 @@
 import inspect
 from copy import deepcopy
 from dataclasses import dataclass, field
+from functools import lru_cache
 
 from typing_extensions import Callable, Dict, Any, Generic, TypeVar
 
@@ -46,7 +47,7 @@ class HasFactoryAndKwargs(Generic[T]):
         """
         constructed_kwargs = {}
         for key, value in self._kwargs_.items():
-            if self._is_kept_out_of_construction_(key, value):
+            if self._is_kept_out_of_construction_(key, type(value)):
                 continue
             if not self._is_factory_parameter_(key):
                 raise KeywordNamesNoFactoryParameter(
@@ -69,15 +70,36 @@ class HasFactoryAndKwargs(Generic[T]):
         :return: Whether :attr:`_factory_` takes that keyword, as a parameter of that
             name or through arbitrary keywords (a ``**kwargs`` parameter).
         """
+        return self._factory_takes_keyword_(self._factory_, keyword)
+
+    @staticmethod
+    def _factory_takes_keyword_(factory: Callable[..., Any], keyword: str) -> bool:
+        """
+        :param factory: A factory.
+        :param keyword: A keyword argument.
+        :return: Whether the factory takes that keyword, as a parameter of that name or
+            through arbitrary keywords (a ``**kwargs`` parameter).
+        """
         return any(
             parameter.kind is inspect.Parameter.VAR_KEYWORD or parameter.name == keyword
-            for parameter in inspect.signature(self._factory_).parameters.values()
+            for parameter in HasFactoryAndKwargs._factory_signature_(
+                factory
+            ).parameters.values()
         )
 
-    def _is_kept_out_of_construction_(self, keyword: str, value: Any) -> bool:
+    @staticmethod
+    @lru_cache(maxsize=None)
+    def _factory_signature_(factory: Callable[..., Any]) -> inspect.Signature:
+        """
+        :param factory: A factory.
+        :return: Its signature, read once per factory.
+        """
+        return inspect.signature(factory)
+
+    def _is_kept_out_of_construction_(self, keyword: str, value_type: type) -> bool:
         """
         :param keyword: A keyword argument.
-        :param value: The value given for that keyword.
+        :param value_type: The type of the value given for that keyword.
         :return: Whether that keyword names no parameter of :attr:`_factory_` and means
             something other than a constructor argument, so it is left out of
             construction rather than refused.

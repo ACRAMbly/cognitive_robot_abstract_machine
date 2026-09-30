@@ -1,8 +1,11 @@
+import inspect
+
 import pytest
 
 from krrood.entity_query_language.factories import a
 from krrood.entity_query_language.operators.causal import cause
 from krrood.patterns.exceptions import KeywordNamesNoFactoryParameter
+from krrood.patterns import factory_and_kwargs
 from krrood.patterns.factory_and_kwargs import HasFactoryAndKwargs
 
 from ..dataset.derived_attributes import Rectangle
@@ -61,3 +64,24 @@ def test_match_keyword_naming_a_method_of_the_matched_type_is_left_out_of_constr
 def test_match_keyword_naming_a_constructor_parameter_that_is_also_a_class_attribute_is_constructed_with():
     rectangle = a(Rectangle)(width=3.0, height=4.0, layer=2)
     assert rectangle.construct_instance() == Rectangle(3.0, 4.0, layer=2)
+
+
+# %% deciding which keywords are constructed with
+
+
+def test_repeated_construction_reads_the_factory_signature_once(monkeypatch):
+    def make_rectangle(width: float, height: float) -> Rectangle:
+        return Rectangle(width, height)
+
+    signature_reads = []
+    read_signature = inspect.signature
+
+    def counting_signature(callable_):
+        signature_reads.append(callable_)
+        return read_signature(callable_)
+
+    monkeypatch.setattr(factory_and_kwargs.inspect, "signature", counting_signature)
+    rectangle = a(make_rectangle)(width=3.0, height=4.0, area=12.0)
+    rectangle.construct_instance()
+    rectangle.construct_instance()
+    assert signature_reads == [make_rectangle]

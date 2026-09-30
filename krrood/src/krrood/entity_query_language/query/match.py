@@ -17,7 +17,7 @@ import uuid
 from abc import ABC, abstractmethod
 from collections import deque
 from dataclasses import dataclass, field
-from functools import cached_property
+from functools import cached_property, lru_cache
 from inspect import ismethod, isfunction, isclass
 from typing import assert_never, Any
 
@@ -606,7 +606,7 @@ class Match(
             for attribute_match in self._matches_with_variables_
         )
 
-    def _is_kept_out_of_construction_(self, keyword: str, value: Any) -> bool:
+    def _is_kept_out_of_construction_(self, keyword: str, value_type: type) -> bool:
         """
         A keyword the factory does not take still belongs to the pattern when it names
         an attribute of the matched class, such as a property or a method, since the
@@ -615,9 +615,26 @@ class Match(
         A keyword marked with a causal role names an aggregation statistic of the
         matched class, which grounding computes.
         """
-        if self._is_factory_parameter_(keyword):
+        return self._is_pattern_keyword_kept_out_of_construction_(
+            self._factory_, self._type_, keyword, value_type
+        )
+
+    @staticmethod
+    @lru_cache(maxsize=None)
+    def _is_pattern_keyword_kept_out_of_construction_(
+        factory: Callable[..., Any], matched_type: type, keyword: str, value_type: type
+    ) -> bool:
+        """
+        :param factory: The factory constructing the matched instance.
+        :param matched_type: The matched class.
+        :param keyword: A keyword of the pattern.
+        :param value_type: The type of the value the pattern gives for that keyword.
+        :return: Whether that keyword is left out of construction, decided once per
+            factory, matched class, keyword and value type.
+        """
+        if HasFactoryAndKwargs._factory_takes_keyword_(factory, keyword):
             return False
-        return keyword in dir(self._type_) or isinstance(value, CausalRoleMarker)
+        return keyword in dir(matched_type) or issubclass(value_type, CausalRoleMarker)
 
     @property
     def _name_(self) -> str:
