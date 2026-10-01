@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from abc import abstractmethod, ABC
 from dataclasses import dataclass, field
-from typing import Optional, Dict, Set, List, Any
+from typing import Optional, Dict, Set, List, Any, TYPE_CHECKING
 
 from giskardpy.motion_statechart.context import MotionStatechartContext, ContextExtension
 from giskardpy.motion_statechart.data_types import ObservationStateValues
@@ -14,6 +14,9 @@ from segmind.event_logger import EventLogger
 from semantic_digital_twin.semantic_annotations.semantic_annotations import Aperture
 from semantic_digital_twin.world_description.connections import Connection6DoF
 from semantic_digital_twin.world_description.world_entity import Body
+
+if TYPE_CHECKING:
+    from krrood.entity_query_language.predicate import Triple
 
 
 @dataclass
@@ -132,13 +135,14 @@ class AbstractDetector(MotionStatechartNode, ABC):
         return ObservationStateValues.TRUE if events else ObservationStateValues.FALSE
 
 
-    def get_relation(self, context: MotionStatechartContext, tracked_objects: List[Body], predicate) -> Dict[Body, Set[Body]]:
+    def get_relation(self, context: MotionStatechartContext, tracked_objects: List[Body], relation: type[Triple]) -> Dict[Body, Set[Body]]:
         """
         Get the relation between tracked objects.
 
         :param context: The context containing world information.
         :param tracked_objects: List of bodies to check for contact changes.
-        :param predicate: Function that returns true if the objects are related.
+        :param relation: The relation between two bodies, constructed from the tracked
+            body and each other body, which holds when they are related.
         :return: Dictionary mapping bodies to sets of related bodies.
         """
 
@@ -148,7 +152,7 @@ class AbstractDetector(MotionStatechartNode, ABC):
             for body in bodies_with_collision:
                 if body is obj:
                     continue
-                if predicate(obj, body):
+                if relation(obj, body)():
                     related_bodies.setdefault(obj, set()).add(body)
         return related_bodies
 

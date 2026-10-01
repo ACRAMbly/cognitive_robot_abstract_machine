@@ -46,11 +46,7 @@ class SupportDetector(AbstractDetector):
 
         events = []
         latest_support = segmind_context.latest_support
-        new_support_pairs = self.get_relation(
-            context,
-            objects_to_check,
-            lambda supported, supporting: SupportedBy(supported, supporting)(),
-        )
+        new_support_pairs = self.get_relation(context, objects_to_check, SupportedBy)
         for body, support in new_support_pairs.items():
             new_supports = (
                 support
@@ -96,11 +92,7 @@ class LossOfSupportDetector(AbstractDetector):
 
         events = []
         latest_support = segmind_context.latest_support
-        new_support_pairs = self.get_relation(
-            context,
-            objects_to_check,
-            lambda supported, supporting: SupportedBy(supported, supporting)(),
-        )
+        new_support_pairs = self.get_relation(context, objects_to_check, SupportedBy)
 
         for body, support in list(latest_support.items()):
             loss_supports = support - new_support_pairs.get(body, set())

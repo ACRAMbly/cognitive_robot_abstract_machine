@@ -46,9 +46,7 @@ class ContactDetector(AbstractDetector):
         :param tracked_objects: List of bodies to check for new contacts.
         :return: List of ContactEvent instances generated during this update.
         """
-        new_contact_pairs = self.get_relation(
-            context, tracked_objects, lambda body1, body2: InContactWith(body1, body2)()
-        )
+        new_contact_pairs = self.get_relation(context, tracked_objects, InContactWith)
 
         events = []
         for obj, contact_list in new_contact_pairs.items():
@@ -97,9 +95,7 @@ class LossOfContactDetector(AbstractDetector):
         :param tracked_objects: List of bodies to check for lost contacts.
         :return: List of LossOfContactEvent instances generated during this update.
         """
-        new_contact_pairs = self.get_relation(
-            context, tracked_objects, lambda body1, body2: InContactWith(body1, body2)()
-        )
+        new_contact_pairs = self.get_relation(context, tracked_objects, InContactWith)
 
         events = []
         for obj, contact_list in list(segmind_context.latest_contact_bodies.items()):
