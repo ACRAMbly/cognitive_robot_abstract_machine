@@ -61,33 +61,6 @@ if TYPE_CHECKING:
 
 
 @dataclass(eq=False)
-class Stable(Predicate):
-    """
-    Whether a body stays where it is once physics runs.
-
-    Answered by simulating the world for ten seconds and comparing the body's
-    coordinates before and after.
-    """
-
-    obj: Body
-    """
-    The body whose stability is asked about.
-    """
-
-    def __call__(self) -> bool:
-        raise NotImplementedError("Needs multiverse")
-
-    @classmethod
-    def _verbalization_fragment_(cls, fields: RenderedFields) -> VerbalizationFragment:
-        """
-        Reads as *"the body is stable"*.
-
-        :param fields: The rendered fragment for each field, keyed by field name.
-        """
-        return clause(Noun(fields["obj"]), Copula(), Adjective("stable"))
-
-
-@dataclass(eq=False)
 class InContactWith(Triple):
     """
     Whether two bodies are touching, by how close their collision geometry comes.

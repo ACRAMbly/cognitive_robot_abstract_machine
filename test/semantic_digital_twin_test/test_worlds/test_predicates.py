@@ -19,7 +19,6 @@ from semantic_digital_twin.reasoning.predicates import (
     InContactWith,
     PlaceIsOccupied,
     Reachable,
-    Stable,
     SupportedBy,
     Supports,
     ViewDependentSpatialRelation,
@@ -787,7 +786,6 @@ def test_a_view_dependent_spatial_relation_is_a_predicate():
 @pytest.mark.parametrize(
     "relation",
     [
-        Stable,
         InContactWith,
         VisibleTo,
         Reachable,
