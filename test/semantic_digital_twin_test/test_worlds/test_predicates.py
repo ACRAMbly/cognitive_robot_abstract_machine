@@ -13,7 +13,6 @@ from semantic_digital_twin.reasoning.predicates import (
     RightOf,
     Behind,
     InFrontOf,
-    occluding_bodies,
     InsideOf,
     InsideRegion,
     InContactWith,
@@ -22,7 +21,6 @@ from semantic_digital_twin.reasoning.predicates import (
     SupportedBy,
     Supports,
     ViewDependentSpatialRelation,
-    VisibleTo,
 )
 from krrood.entity_query_language.predicate import ObjectType, Predicate, SubjectType
 from krrood.entity_query_language.testing.result_verification import (
@@ -39,6 +37,8 @@ from semantic_digital_twin.reasoning.robot_predicates import (
     bodies_in_gripper,
     is_pose_free_for_robot,
     is_gripper_holding_something,
+    occluding_bodies,
+    VisibleTo,
 )
 from semantic_digital_twin.robots.robot_parts import Camera, EndEffector
 from semantic_digital_twin.robots.pr2 import PR2
@@ -853,6 +853,7 @@ def test_support_relates_the_supported_thing_to_what_holds_it_up():
         (InContactWith, Body, Body),
         (SupportedBy, Body, Body),
         (InsideRegion, Body, Region),
+        (VisibleTo, KinematicStructureEntity, Camera),
     ],
 )
 def test_a_relation_states_the_types_it_relates(relation, subject_type, object_type):

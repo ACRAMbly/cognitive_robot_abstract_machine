@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from abc import ABC
-from copy import deepcopy
 from dataclasses import dataclass
 from typing import Optional, Any
 
@@ -32,20 +31,16 @@ from krrood.entity_query_language.verbalization.vocabulary.parts_of_speech impor
 )
 from krrood.inheritance_path_length import inheritance_path_length
 from random_events.interval import Interval
-from semantic_digital_twin.datastructures.camera_resolution import CameraResolution
-from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 from semantic_digital_twin.datastructures.variables import SpatialVariables
 from semantic_digital_twin.spatial_computations.ik_solver import (
     MaxIterationsException,
     UnreachableException,
 )
-from semantic_digital_twin.spatial_computations.raytracer import RayTracer
 from semantic_digital_twin.spatial_types import Vector3, Point3, math
 from semantic_digital_twin.spatial_types.spatial_types import (
     HomogeneousTransformationMatrix,
     Pose,
 )
-from semantic_digital_twin.world_description.connections import FixedConnection
 from semantic_digital_twin.world_description.geometry import VolumetricBoundingBox
 from semantic_digital_twin.world_description.world_entity import (
     Body,
@@ -55,9 +50,6 @@ from semantic_digital_twin.world_description.world_entity import (
 
 if TYPE_CHECKING:
     from semantic_digital_twin.world import World
-    from semantic_digital_twin.robots.robot_parts import (
-        Camera,
-    )
 
 
 @dataclass(eq=False)
@@ -123,140 +115,6 @@ class InContactWith(Triple[Body, Body]):
             Prepositions.WITH,
             Noun(fields["body2"]),
         )
-
-
-@symbolic_function
-def get_visible_bodies(camera: Camera) -> List[KinematicStructureEntity]:
-    """
-    Get all bodies and regions that are visible from the given camera using a
-    segmentation mask.
-
-    :param camera: The camera for which the visible objects should be returned
-    :return: A list of bodies/regions that are visible from the camera
-    """
-    rt = RayTracer(camera._world)
-    rt.update_scene()
-
-    seg = rt.create_segmentation_mask(
-        camera.root_T_forward_view,
-        resolution=CameraResolution(width=256, height=256),
-        min_distance=0.2,
-        field_of_view=camera.field_of_view,
-    )
-    indices = np.unique(seg)
-    indices = indices[indices > -1]
-    bodies = [camera._world.kinematic_structure[i] for i in indices]
-
-    return bodies
-
-
-@dataclass(eq=False)
-class VisibleTo(Triple[KinematicStructureEntity, "Camera"]):
-    """
-    Whether a camera can see something.
-    """
-
-    entity: KinematicStructureEntity
-    """
-    The thing that may be in view.
-    """
-
-    camera: Camera
-    """
-    The camera looking.
-    """
-
-    @property
-    def subject(self) -> KinematicStructureEntity:
-        return self.entity
-
-    @property
-    def object(self) -> Camera:
-        return self.camera
-
-    @classmethod
-    def _verbalization_fragment_(cls, fields: RenderedFields) -> VerbalizationFragment:
-        """
-        Reads as *"the entity is visible to the camera"*.
-
-        :param fields: The rendered fragment for each field, keyed by field name.
-        """
-        return clause(
-            Noun(fields["entity"]),
-            Copula(),
-            Adjective("visible"),
-            Prepositions.TO,
-            Noun(fields["camera"]),
-        )
-
-    def __call__(self) -> bool:
-        return self.entity in get_visible_bodies(self.camera)
-
-
-@symbolic_function
-def occluding_bodies(camera: Camera, body: Body) -> List[Body]:
-    """
-    Determines the bodies that occlude a given body in the scene as seen from a
-    specified camera.
-
-    This function uses a ray-tracing approach to check occlusion. Every body that hides
-    anything from the target body is an occluding body.
-
-    :param camera: The camera for which the occluding bodies should be returned
-    :param body: The body for which the occluding bodies should be returned
-    :return: A list of bodies that are occluding the given body.
-    """
-    camera_pose = camera.root_T_forward_view
-
-    # create a world only containing the target body
-    world_without_occlusion = deepcopy(body._world)
-    root = Body(name=PrefixedName("root"))
-    with world_without_occlusion.modify_world():
-        world_without_occlusion.clear()
-        world_without_occlusion.add_body(root)
-        copied_body = Body.from_json(body.to_json())
-        root_T_body = body.global_transform
-        root_T_body.reference_frame = root
-        root_to_copied_body = FixedConnection(
-            parent=root,
-            child=copied_body,
-            parent_T_connection_expression=root_T_body,
-        )
-        world_without_occlusion.add_connection(root_to_copied_body)
-
-    # get segmentation mask without occlusion
-    ray_tracer_without_occlusion = RayTracer(world_without_occlusion)
-    ray_tracer_without_occlusion.update_scene()
-    segmentation_mask_without_occlusion = (
-        ray_tracer_without_occlusion.create_segmentation_mask(
-            camera_pose,
-            resolution=CameraResolution(width=256, height=256),
-            min_distance=0.1,
-            field_of_view=camera.field_of_view,
-        )
-    )
-
-    # get segmentation mask with occlusion
-    ray_tracer_with_occlusion = RayTracer(camera._world)
-    ray_tracer_with_occlusion.update_scene()
-    segmentation_mask_with_occlusion = (
-        ray_tracer_with_occlusion.create_segmentation_mask(
-            camera_pose,
-            resolution=CameraResolution(width=256, height=256),
-            min_distance=0.1,
-            field_of_view=camera.field_of_view,
-        )
-    )
-
-    # pixels where the target body is visible when nothing else is in the scene
-    target_pixels = segmentation_mask_without_occlusion == copied_body.index
-
-    # whatever covers those pixels in the real scene (except the target itself)
-    # is occluding the target
-    indices = np.unique(segmentation_mask_with_occlusion[target_pixels])
-    indices = indices[(indices > -1) & (indices != body.index)]
-    bodies = [camera._world.kinematic_structure[i] for i in indices]
-    return bodies
 
 
 @dataclass(eq=False)
