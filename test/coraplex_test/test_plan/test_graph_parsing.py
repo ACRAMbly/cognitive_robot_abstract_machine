@@ -449,8 +449,8 @@ def test_parse_transport_plan(mutable_model_world, rclpy_node):
         [
             MoveTorsoAction(TorsoState.HIGH),
             ParkArmsAction(context.robot.get_arms()),
-            TransportAction.from_grasp(
-                world.get_semantic_annotations_by_type(Milk)[0].grasp_candidates()[0],
+            TransportAction.from_graspable_by_closest_grasps(
+                world.get_semantic_annotations_by_type(Milk)[0],
                 Pose.from_xyz_rpy(2.37, 2.5, 1.05, reference_frame=world.root),
                 context.robot.right_arm,
                 context,

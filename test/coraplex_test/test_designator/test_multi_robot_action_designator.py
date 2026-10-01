@@ -774,8 +774,8 @@ def test_transport(mutable_multiple_robot_apartment, rclpy_node):
     VizMarkerPublisher(_world=world, node=rclpy_node)
     context.ros_node = rclpy_node
     context.debug = True
-    description = TransportAction.from_grasp(
-        world.get_semantic_annotations_by_type(Milk)[0].grasp_candidates()[0],
+    description = TransportAction.from_graspable_by_closest_grasps(
+        world.get_semantic_annotations_by_type(Milk)[0],
         Pose(
             Point3.from_iterable([3.1, 2.2, 0.95]),
             Quaternion.from_iterable([0.0, 0.0, 1.0, 0.0]),
@@ -821,8 +821,8 @@ def test_transport_open_container(mutable_multiple_robot_apartment, rclpy_node):
     target_pose = Pose.from_xyz_rpy(
         5.1, 3.25, 0.75, yaw=1.57, reference_frame=world.root
     )
-    description = TransportAction.from_grasp(
-        world.get_semantic_annotations_by_type(Spoon)[0].grasp_candidates()[0],
+    description = TransportAction.from_graspable_by_closest_grasps(
+        world.get_semantic_annotations_by_type(Spoon)[0],
         target_pose,
         right_or_only_arm(context.robot),
         context,

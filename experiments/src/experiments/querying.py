@@ -220,10 +220,8 @@ def build_plan() -> Plan:
             try_in_order(
                 [
                     code(_failing_step),
-                    TransportAction.from_grasp(
-                        world.get_semantic_annotations_by_type(Milk)[
-                            0
-                        ].grasp_candidates()[0],
+                    TransportAction.from_graspable_by_closest_grasps(
+                        world.get_semantic_annotations_by_type(Milk)[0],
                         Pose.from_xyz_rpy(
                             4.9, 3.3, 0.8, yaw=1.57, reference_frame=world.root
                         ),
@@ -233,14 +231,14 @@ def build_plan() -> Plan:
                 ],
                 context=context,
             ),
-            TransportAction.from_grasp(
-                bowl_annotation.grasp_candidates()[0],
+            TransportAction.from_graspable_by_closest_grasps(
+                bowl_annotation,
                 Pose.from_xyz_rpy(5.0, 3.3, 0.75, yaw=1.57, reference_frame=world.root),
                 pr2.left_arm,
                 context,
             ),
-            TransportAction.from_grasp(
-                spoon_annotation.grasp_candidates()[0],
+            TransportAction.from_graspable_by_closest_grasps(
+                spoon_annotation,
                 Pose.from_xyz_rpy(5.1, 3.3, 0.75, yaw=1.57, reference_frame=world.root),
                 pr2.left_arm,
                 context,

@@ -26,6 +26,7 @@ from coraplex.robot_plans.actions.core.navigation import (
     LookAtAction,
     NavigateAction,
 )
+from coraplex.querying.predicates import IsAmongTheClosestGraspsTo
 from coraplex.robot_plans.actions.core.pick_up import PickUpAction
 from coraplex.robot_plans.actions.core.placing import PlaceAction
 from coraplex.robot_plans.actions.core.robot_body import ParkArmsAction
@@ -89,38 +90,31 @@ class TransportAction(ActionDescription, LimitsItsCandidates):
     """
 
     @classmethod
-    def from_grasp(
-        cls, grasp: GraspCandidate, target_location: Pose, arm: Arm, context: Context
+    def from_graspable_by_closest_grasps(
+        cls,
+        graspable: HasGraspCandidates,
+        target_location: Pose,
+        arm: Arm,
+        context: Context,
+        number_of_grasps: int = IsAmongTheClosestGraspsTo.number_of_grasps,
     ) -> Self:
         """
-        A transport that takes an object by `grasp` to `target_location`, standing
-        wherever each step can be carried out from.
+        A transport that takes `graspable` to `target_location`, standing wherever each
+        step can be carried out from and taking the object by the grasps closest to the
+        robot there.
 
-        :param grasp: The grasp to take the object by.
+        :param graspable: The object to transport.
         :param target_location: Where to put the object down.
         :param arm: The arm that carries the object.
         :param context: The context the standing poses are sampled in.
+        :param number_of_grasps: How many of the object's grasps closest to a standing
+            pose are tried from there.
         :return: The transport, standing near the object to pick it up and near the
             target to place it.
         """
-        object_pose = grasp.graspable.root.global_pose
         return cls(
-            pick_up=a(MoveAndPickUpAction)(
-                navigate=a(NavigateAction)(
-                    target_location=variable(
-                        Pose,
-                        domain=ReachabilityLocation(
-                            Pose(reference_frame=grasp.graspable.root),
-                            arm,
-                            context=context,
-                        ),
-                    )
-                ),
-                face_and_look_at=a(FaceAndLookAtAction)(
-                    face_at=a(FaceAtAction)(target=object_pose),
-                    look_at=a(LookAtAction)(target=object_pose),
-                ),
-                pick_up=a(PickUpAction)(grasp=grasp, arm=arm),
+            pick_up=MoveAndPickUpAction.from_graspable_by_closest_grasps(
+                graspable, arm, context, number_of_grasps
             ),
             place=a(MoveAndPlaceAction)(
                 navigate=a(NavigateAction)(
@@ -136,7 +130,7 @@ class TransportAction(ActionDescription, LimitsItsCandidates):
                     look_at=a(LookAtAction)(target=target_location),
                 ),
                 place=a(PlaceAction)(
-                    object_designator=grasp.graspable, target_location=target_location
+                    object_designator=graspable, target_location=target_location
                 ),
             ),
         )
@@ -272,7 +266,7 @@ class MoveAndPickUpAction(ActionDescription, LimitsItsCandidates):
         :param retreat_distance: How far the gripper retreats with the object.
         :return: The step picking the object up from `standing_position`.
         """
-        object_pose = grasp.graspable.root.global_pose
+        object_pose = Pose(reference_frame=grasp.graspable.root)
         return cls(
             navigate=NavigateAction(standing_position),
             face_and_look_at=FaceAndLookAtAction(
@@ -284,6 +278,54 @@ class MoveAndPickUpAction(ActionDescription, LimitsItsCandidates):
                 approach_clearance=approach_clearance,
                 retreat_distance=retreat_distance,
             ),
+        )
+
+    @classmethod
+    def from_graspable_by_closest_grasps(
+        cls,
+        graspable: HasGraspCandidates,
+        arm: Arm,
+        context: Context,
+        number_of_grasps: int = IsAmongTheClosestGraspsTo.number_of_grasps,
+    ) -> Match:
+        """
+        A pick-up of `graspable`, standing wherever it can be reached from and taking it
+        by the grasps closest to the robot there.
+
+        The closeness is a ``where`` condition on the returned match,
+        :class:`~coraplex.querying.predicates.IsAmongTheClosestGraspsTo`.
+
+        :param graspable: The object to pick up.
+        :param arm: The arm to pick up with.
+        :param context: The context the standing poses are sampled in.
+        :param number_of_grasps: How many of the object's grasps closest to a standing
+            pose are tried from there.
+        :return: The pick-up, with the standing pose and the grasp left open.
+        """
+        grasps = graspable.grasp_candidates()
+        object_pose = Pose(reference_frame=graspable.root)
+        step = a(cls)(
+            navigate=a(NavigateAction)(
+                target_location=variable(
+                    Pose,
+                    domain=ReachabilityLocation(object_pose, arm, context=context),
+                )
+            ),
+            face_and_look_at=a(FaceAndLookAtAction)(
+                face_at=a(FaceAtAction)(target=object_pose),
+                look_at=a(LookAtAction)(target=object_pose),
+            ),
+            pick_up=a(PickUpAction)(
+                grasp=variable(GraspCandidate, domain=grasps), arm=arm
+            ),
+        )
+        return step.where(
+            IsAmongTheClosestGraspsTo(
+                step.variable.pick_up.grasp,
+                step.variable.navigate.target_location,
+                grasps,
+                number_of_grasps,
+            )
         )
 
     @property
@@ -322,13 +364,13 @@ class MoveAndPickUpAction(ActionDescription, LimitsItsCandidates):
             return []
         handle = drawer_annotation[0].handle
         arm = self.pick_up.arm
-        handle_pose = handle.root.global_pose
+        handle_pose = Pose(reference_frame=handle.root)
         open_the_drawer = a(MoveAndOpenAction)(
             navigate=a(NavigateAction)(
                 target_location=variable(
                     Pose,
                     domain=ReachabilityLocation(
-                        Pose(reference_frame=handle.root),
+                        handle_pose,
                         arm,
                         ReachFraction.ACCESSING,
                         context=self.context,
@@ -376,7 +418,7 @@ class MoveAndOpenAction(ActionDescription):
         :param arm: The arm to open with.
         :return: The step opening the container from `standing_position`.
         """
-        handle_pose = handle.root.global_pose
+        handle_pose = Pose(reference_frame=handle.root)
         return cls(
             navigate=NavigateAction(standing_position),
             face_and_look_at=FaceAndLookAtAction(

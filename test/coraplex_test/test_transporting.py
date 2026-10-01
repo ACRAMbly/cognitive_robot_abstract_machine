@@ -2,6 +2,8 @@
 How a transport moves to an object, fetches it and puts it down.
 """
 
+import itertools
+
 import numpy as np
 import pytest
 from typing_extensions import Callable, List, Type
@@ -30,6 +32,7 @@ from coraplex.robot_plans.actions.composite.transporting import (
     TransportAction,
 )
 from coraplex.robot_plans.actions.core.pick_up import PickUpAction
+from coraplex.querying.predicates import IsAmongTheClosestGraspsTo
 from coraplex.robot_plans.actions.core.placing import PlaceAction
 from coraplex.robot_plans.actions.core.robot_body import MoveTorsoAction
 from semantic_digital_twin.semantic_annotations.semantic_annotations import (
@@ -42,8 +45,14 @@ from semantic_digital_twin.semantic_annotations.mixins import (
     GraspCandidate,
     HasGraspCandidates,
 )
-from semantic_digital_twin.spatial_types.spatial_types import Point3, Pose
+from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix
+from semantic_digital_twin.spatial_types.spatial_types import (
+    Point3,
+    Pose,
+    RotationMatrix,
+)
 from semantic_digital_twin.world import World
+from semantic_digital_twin.world_description.world_entity import Body
 
 # %% where the robot stands is tried together with what it does there
 
@@ -178,19 +187,19 @@ def test_a_transport_leaves_the_torso_where_it_is(mutable_model_world):
     ]
 
 
-def test_a_transport_from_a_grasp_stands_around_the_object_then_the_target(
+def test_a_transport_of_a_graspable_stands_around_the_object_then_the_target(
     mutable_model_world,
 ):
     """
-    Built from a grasp alone, a transport leaves only where the robot stands open: close
-    to the object for the pick-up, and close to the target for the place.
+    Built from the object alone, a transport stands close to the object for the pick-up,
+    and close to the target for the place.
     """
     world, robot, context = mutable_model_world
     milk = world.get_semantic_annotations_by_type(Milk)[0]
     target = Pose.from_xyz_rpy(4.0, 1.5, 0.9, reference_frame=world.root)
 
-    transport = TransportAction.from_grasp(
-        milk.grasp_candidates()[0], target, context.robot.right_arm, context
+    transport = TransportAction.from_graspable_by_closest_grasps(
+        milk, target, context.robot.right_arm, context
     )
 
     pick_up_location = _standing_positions(transport.pick_up)
@@ -367,6 +376,434 @@ def test_move_and_pick_up_approaches_with_the_clearances_it_was_given(
     )
 
 
+# %% picking up by the grasps closest to where the robot stands
+
+STANDING_DISTANCE = 1.0
+"""
+How far from the milk, against the world's x-axis, the robot stands, so that the milk
+lies straight ahead along that axis.
+"""
+
+CLOSER_BY = 0.05
+"""
+How much nearer the robot, in meters, the closer grasp lies than the milk's own grasps.
+"""
+
+RAISED_BY = 0.2
+"""
+How much higher, in meters, the raised grasp lies than the milk's own grasps.
+"""
+
+NON_DEFAULT_NUMBER_OF_GRASPS = 2
+"""
+A number of closest grasps other than the default, so that the number is seen to be
+passed on.
+"""
+
+
+def _standing_behind_the_milk(world: World) -> Pose:
+    """
+    :return: A standing pose from which the milk lies straight ahead along the world's
+        x-axis.
+    """
+    milk_pose = world.get_semantic_annotations_by_type(Milk)[0].root.global_pose
+    return Pose.from_xyz_rpy(
+        milk_pose.x - STANDING_DISTANCE, milk_pose.y, 0.0, reference_frame=world.root
+    )
+
+
+def _standing_in_front_of(grasp: GraspCandidate, world: World) -> Pose:
+    """
+    :return: A standing pose on the floor :data:`STANDING_DISTANCE` back along the
+        direction `grasp` is approached along, so that it is approached straight from
+        there.
+    """
+    world_T_grasp = world.transform(grasp.root_T_grasp, world.root).to_np()
+    world_P_standing = world_T_grasp[:3, 3] - STANDING_DISTANCE * world_T_grasp[:3, 0]
+    return Pose.from_xyz_rpy(
+        world_P_standing[0], world_P_standing[1], 0.0, reference_frame=world.root
+    )
+
+
+def _raised(grasp: GraspCandidate, height: float) -> GraspCandidate:
+    """
+    :param height: How far to move the grasp up along its object's z-axis.
+    :return: `grasp`, approached the same way from higher up.
+    """
+    root_P_grasp = grasp.root_T_grasp.to_np()[:3, 3] + np.array([0.0, 0.0, height])
+    return GraspCandidate(
+        grasp.graspable,
+        Pose(
+            position=Point3.from_iterable(root_P_grasp),
+            orientation=grasp.root_T_grasp.to_quaternion(),
+            reference_frame=grasp.graspable.root,
+        ),
+    )
+
+
+def _turned_around(grasp: GraspCandidate, nearer_by: float = 0.0) -> GraspCandidate:
+    """
+    :param nearer_by: How far to move the grasp back along the direction `grasp` is
+        approached along.
+    :return: `grasp`, approached from the opposite side.
+    """
+    root_T_grasp = grasp.root_T_grasp
+    root_P_grasp = root_T_grasp.to_np()[:3, 3] - nearer_by * root_T_grasp.to_np()[:3, 0]
+    return GraspCandidate(
+        grasp.graspable,
+        Pose(
+            position=Point3.from_iterable(root_P_grasp),
+            orientation=(
+                root_T_grasp.to_rotation_matrix() @ RotationMatrix.from_rpy(yaw=np.pi)
+            ).to_quaternion(),
+            reference_frame=grasp.graspable.root,
+        ),
+    )
+
+
+def _grasp_signature(grasp: GraspCandidate) -> tuple:
+    """
+    :return: The grasp's transform, rounded, to tell grasps of separately generated
+        lists apart by value.
+    """
+    return tuple(np.round(grasp.root_T_grasp.to_np(), 6).ravel())
+
+
+def _assert_each_standing_pose_keeps_the_closest_grasps(
+    pick_ups: List[MoveAndPickUpAction],
+    graspable: HasGraspCandidates,
+    number_of_grasps: int,
+) -> None:
+    """
+    Assert that each standing pose among `pick_ups` is tried with exactly the
+    `number_of_grasps` grasps of `graspable` closest to it.
+    """
+    pick_ups_by_standing_pose = {}
+    for pick_up in pick_ups:
+        pick_ups_by_standing_pose.setdefault(
+            id(pick_up.navigate.target_location), []
+        ).append(pick_up)
+    grasps = graspable.grasp_candidates()
+    for pick_ups_from_one_pose in pick_ups_by_standing_pose.values():
+        standing_position = pick_ups_from_one_pose[0].navigate.target_location
+        closest = {
+            _grasp_signature(grasp)
+            for grasp in grasps
+            if IsAmongTheClosestGraspsTo(
+                grasp, standing_position, grasps, number_of_grasps
+            )()
+        }
+        kept = [
+            _grasp_signature(pick_up.pick_up.grasp)
+            for pick_up in pick_ups_from_one_pose
+        ]
+        assert len(kept) == number_of_grasps
+        assert set(kept) == closest
+
+
+def test_a_grasp_approached_straight_from_the_standing_position_is_the_closest(
+    mutable_model_world,
+):
+    world, robot, context = mutable_model_world
+    grasps = world.get_semantic_annotations_by_type(Milk)[0].grasp_candidates()
+
+    assert IsAmongTheClosestGraspsTo(
+        grasps[0], _standing_in_front_of(grasps[0], world), grasps, number_of_grasps=1
+    )()
+
+
+def test_a_grasp_approached_from_the_far_side_is_not_among_the_closest(
+    mutable_model_world,
+):
+    world, robot, context = mutable_model_world
+    grasps = world.get_semantic_annotations_by_type(Milk)[0].grasp_candidates()
+
+    assert not IsAmongTheClosestGraspsTo(
+        _turned_around(grasps[0]), _standing_in_front_of(grasps[0], world), grasps
+    )()
+
+
+def test_a_nearer_grasp_is_the_closest_however_it_is_approached(mutable_model_world):
+    """
+    Distance is ranked before the direction a grasp is approached along, which only
+    decides between grasps at the same distance.
+    """
+    world, robot, context = mutable_model_world
+    grasps = world.get_semantic_annotations_by_type(Milk)[0].grasp_candidates()
+
+    assert IsAmongTheClosestGraspsTo(
+        _turned_around(grasps[0], nearer_by=CLOSER_BY),
+        _standing_in_front_of(grasps[0], world),
+        grasps,
+        number_of_grasps=1,
+    )()
+
+
+def test_a_grasp_higher_up_is_as_close_as_one_below_it(mutable_model_world):
+    """
+    Only the horizontal distance counts, so between a grasp and one at the same spot
+    higher up, the direction they are approached along decides.
+    """
+    world, robot, context = mutable_model_world
+    grasps = world.get_semantic_annotations_by_type(Milk)[0].grasp_candidates()
+    raised_head_on = _raised(grasps[0], RAISED_BY)
+
+    assert IsAmongTheClosestGraspsTo(
+        raised_head_on,
+        _standing_in_front_of(grasps[0], world),
+        [_turned_around(grasps[0]), raised_head_on],
+        number_of_grasps=1,
+    )()
+
+
+def test_a_pick_up_of_a_graspable_tries_each_standing_pose_with_its_closest_grasps(
+    mutable_model_world,
+):
+    world, robot, context = mutable_model_world
+    milk = world.get_semantic_annotations_by_type(Milk)[0]
+    step = MoveAndPickUpAction.from_graspable_by_closest_grasps(
+        milk, context.robot.right_arm, context
+    )
+
+    pick_ups = list(
+        itertools.islice(
+            context.query_backend.evaluate(step),
+            2 * IsAmongTheClosestGraspsTo.number_of_grasps,
+        )
+    )
+
+    assert len({id(pick_up.navigate.target_location) for pick_up in pick_ups}) == 2
+    _assert_each_standing_pose_keeps_the_closest_grasps(
+        pick_ups, milk, IsAmongTheClosestGraspsTo.number_of_grasps
+    )
+
+
+def test_a_pick_up_of_a_graspable_tries_as_many_closest_grasps_as_asked_for(
+    mutable_model_world,
+):
+    world, robot, context = mutable_model_world
+    milk = world.get_semantic_annotations_by_type(Milk)[0]
+    step = MoveAndPickUpAction.from_graspable_by_closest_grasps(
+        milk,
+        context.robot.right_arm,
+        context,
+        number_of_grasps=NON_DEFAULT_NUMBER_OF_GRASPS,
+    )
+
+    pick_ups = list(
+        itertools.islice(
+            context.query_backend.evaluate(step), 2 * NON_DEFAULT_NUMBER_OF_GRASPS
+        )
+    )
+
+    assert len({id(pick_up.navigate.target_location) for pick_up in pick_ups}) == 2
+    _assert_each_standing_pose_keeps_the_closest_grasps(
+        pick_ups, milk, NON_DEFAULT_NUMBER_OF_GRASPS
+    )
+
+
+def test_a_transport_of_a_graspable_picks_it_up_by_the_closest_grasps(
+    mutable_model_world,
+):
+    world, robot, context = mutable_model_world
+    milk = world.get_semantic_annotations_by_type(Milk)[0]
+    transport = TransportAction.from_graspable_by_closest_grasps(
+        milk,
+        Pose.from_xyz_rpy(4.0, 1.5, 0.9, reference_frame=world.root),
+        context.robot.right_arm,
+        context,
+    )
+
+    pick_ups = list(
+        itertools.islice(
+            context.query_backend.evaluate(transport.pick_up),
+            IsAmongTheClosestGraspsTo.number_of_grasps,
+        )
+    )
+
+    _assert_each_standing_pose_keeps_the_closest_grasps(
+        pick_ups, milk, IsAmongTheClosestGraspsTo.number_of_grasps
+    )
+
+
+def test_a_transport_of_a_graspable_tries_as_many_closest_grasps_as_asked_for(
+    mutable_model_world,
+):
+    world, robot, context = mutable_model_world
+    milk = world.get_semantic_annotations_by_type(Milk)[0]
+    transport = TransportAction.from_graspable_by_closest_grasps(
+        milk,
+        Pose.from_xyz_rpy(4.0, 1.5, 0.9, reference_frame=world.root),
+        context.robot.right_arm,
+        context,
+        number_of_grasps=NON_DEFAULT_NUMBER_OF_GRASPS,
+    )
+
+    pick_ups = list(
+        itertools.islice(
+            context.query_backend.evaluate(transport.pick_up),
+            NON_DEFAULT_NUMBER_OF_GRASPS,
+        )
+    )
+
+    _assert_each_standing_pose_keeps_the_closest_grasps(
+        pick_ups, milk, NON_DEFAULT_NUMBER_OF_GRASPS
+    )
+
+
+def test_the_closest_grasps_can_be_required_of_a_pick_up_from_a_fixed_standing_pose(
+    mutable_model_world,
+):
+    """
+    The condition applies to a pick-up whatever its caller left open, so a fixed
+    standing pose is tried with only the grasps closest to it.
+    """
+    world, robot, context = mutable_model_world
+    milk = world.get_semantic_annotations_by_type(Milk)[0]
+    grasps = milk.grasp_candidates()
+    object_pose = Pose(reference_frame=milk.root)
+    step = a(MoveAndPickUpAction)(
+        navigate=NavigateAction(_standing_behind_the_milk(world)),
+        face_and_look_at=FaceAndLookAtAction(
+            FaceAtAction(object_pose), LookAtAction(object_pose)
+        ),
+        pick_up=a(PickUpAction)(
+            grasp=variable(GraspCandidate, domain=grasps),
+            arm=context.robot.right_arm,
+        ),
+    )
+    step.where(
+        IsAmongTheClosestGraspsTo(
+            step.variable.pick_up.grasp,
+            step.variable.navigate.target_location,
+            grasps,
+            number_of_grasps=NON_DEFAULT_NUMBER_OF_GRASPS,
+        )
+    )
+
+    pick_ups = list(context.query_backend.evaluate(step))
+
+    _assert_each_standing_pose_keeps_the_closest_grasps(
+        pick_ups, milk, NON_DEFAULT_NUMBER_OF_GRASPS
+    )
+
+
+# %% a step faces what it acts on where that is when the step runs
+
+MOVED_MILK_POSITION = (2.4, 2.1, 0.95)
+"""
+Where the milk is moved to after a pick-up of it has been built.
+"""
+
+
+def _move_the_milk(world: World) -> Milk:
+    """
+    Move the milk away from where it stood, as a step running before a pick-up of it
+    might.
+
+    :return: The milk.
+    """
+    milk = world.get_semantic_annotations_by_type(Milk)[0]
+    milk.root.parent_connection.origin = HomogeneousTransformationMatrix.from_xyz_rpy(
+        *MOVED_MILK_POSITION, reference_frame=world.root
+    )
+    return milk
+
+
+def _assert_every_target_is_at(targets: List[Pose], body: Body, world: World) -> None:
+    """
+    Assert that every target resolves to where `body` is now.
+    """
+    for target in targets:
+        np.testing.assert_allclose(
+            world.transform(target, world.root).to_position().to_np(),
+            body.global_pose.to_position().to_np(),
+        )
+
+
+def test_a_transport_of_a_graspable_faces_it_where_it_is_when_it_picks_it_up(
+    mutable_model_world,
+):
+    world, robot, context = mutable_model_world
+    milk = world.get_semantic_annotations_by_type(Milk)[0]
+    transport = TransportAction.from_graspable_by_closest_grasps(
+        milk,
+        Pose.from_xyz_rpy(4.0, 1.5, 0.9, reference_frame=world.root),
+        context.robot.right_arm,
+        context,
+    )
+
+    _move_the_milk(world)
+
+    facing = transport.pick_up.kwargs["face_and_look_at"].kwargs
+    _assert_every_target_is_at(
+        [facing["face_at"].kwargs["target"], facing["look_at"].kwargs["target"]],
+        milk.root,
+        world,
+    )
+
+
+def test_a_move_and_pick_up_faces_the_object_where_it_is_when_it_picks_it_up(
+    mutable_model_world,
+):
+    world, robot, context = mutable_model_world
+    milk = world.get_semantic_annotations_by_type(Milk)[0]
+    move_and_pick_up = MoveAndPickUpAction.from_standing_position(
+        standing_position=Pose(reference_frame=world.root),
+        grasp=milk.grasp_candidates()[0],
+        arm=context.robot.left_arm,
+    )
+
+    _move_the_milk(world)
+
+    facing = move_and_pick_up.face_and_look_at
+    _assert_every_target_is_at(
+        [facing.face_at.target, facing.look_at.target], milk.root, world
+    )
+
+
+OPENED_DRAWER_POSITION = 0.3
+"""
+How far :data:`DRAWER` is pulled out after an opening of it has been built.
+"""
+
+
+def test_a_move_and_open_faces_the_handle_where_it_is_when_it_opens_the_container(
+    mutable_model_world,
+):
+    world, robot, context = mutable_model_world
+    handle = Handle(root=world.get_body_by_name(DRAWER_HANDLE))
+    move_and_open = MoveAndOpenAction.from_standing_position(
+        Pose(reference_frame=world.root), handle, context.robot.left_arm
+    )
+
+    world.get_connection_by_name(f"{DRAWER}_joint").position = OPENED_DRAWER_POSITION
+
+    facing = move_and_open.face_and_look_at
+    _assert_every_target_is_at(
+        [facing.face_at.target, facing.look_at.target], handle.root, world
+    )
+
+
+def test_opening_a_container_on_the_way_faces_the_handle_where_it_is_when_it_opens_it(
+    mutable_model_world,
+):
+    world, robot, context = mutable_model_world
+    move_and_pick_up = _pick_up_near_a_drawer(world, context)
+    [open_on_the_way] = move_and_pick_up._make_open_container_actions(
+        world.get_body_by_name(DRAWER)
+    )
+
+    world.get_connection_by_name(f"{DRAWER}_joint").position = OPENED_DRAWER_POSITION
+
+    facing = open_on_the_way.kwargs["face_and_look_at"].kwargs
+    _assert_every_target_is_at(
+        [facing["face_at"].kwargs["target"], facing["look_at"].kwargs["target"]],
+        world.get_body_by_name(DRAWER_HANDLE),
+        world,
+    )
+
+
 # %% placing and opening from a standing position
 
 
@@ -414,9 +851,6 @@ def test_a_move_and_open_from_a_standing_position_opens_the_given_handle(
     )
 
     assert move_and_open.navigate.target_location is standing_position
-    assert move_and_open.face_and_look_at.face_at.target.reference_frame is (
-        handle.root.global_pose.reference_frame
-    )
     assert move_and_open.open_container.handle is handle
     assert move_and_open.open_container.arm is context.robot.left_arm
 

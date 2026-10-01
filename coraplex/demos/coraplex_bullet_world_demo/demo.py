@@ -505,8 +505,8 @@ class BulletWorldDemonstration(RobotDemonstration):
             [
                 ParkArmsAction(context.robot.get_arms()),
                 MoveTorsoAction(TorsoState.HIGH),
-                TransportAction.from_grasp(
-                    self.milk.annotation_in(world).grasp_candidates()[0],
+                TransportAction.from_graspable_by_closest_grasps(
+                    self.milk.annotation_in(world),
                     self.milk.target_location(world),
                     left_arm,
                     context,
@@ -552,8 +552,8 @@ class BulletWorldDemonstration(RobotDemonstration):
                         ),
                     ),
                 ),
-                TransportAction.from_grasp(
-                    self.spoon.annotation_in(world).grasp_candidates()[0],
+                TransportAction.from_graspable_by_closest_grasps(
+                    self.spoon.annotation_in(world),
                     self.spoon.target_location(world),
                     left_arm,
                     context,
