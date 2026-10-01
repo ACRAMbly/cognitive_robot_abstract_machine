@@ -156,7 +156,7 @@ class VisibleTo(Triple):
     Whether a camera can see something.
     """
 
-    obj: KinematicStructureEntity
+    entity: KinematicStructureEntity
     """
     The thing that may be in view.
     """
@@ -168,7 +168,7 @@ class VisibleTo(Triple):
 
     @property
     def subject(self) -> KinematicStructureEntity:
-        return self.obj
+        return self.entity
 
     @property
     def object(self) -> Camera:
@@ -177,12 +177,12 @@ class VisibleTo(Triple):
     @classmethod
     def _verbalization_fragment_(cls, fields: RenderedFields) -> VerbalizationFragment:
         """
-        Reads as *"the thing is visible to the camera"*.
+        Reads as *"the entity is visible to the camera"*.
 
         :param fields: The rendered fragment for each field, keyed by field name.
         """
         return clause(
-            Noun(fields["obj"]),
+            Noun(fields["entity"]),
             Copula(),
             Adjective("visible"),
             Prepositions.TO,
@@ -190,7 +190,7 @@ class VisibleTo(Triple):
         )
 
     def __call__(self) -> bool:
-        return self.obj in get_visible_bodies(self.camera)
+        return self.entity in get_visible_bodies(self.camera)
 
 
 @symbolic_function

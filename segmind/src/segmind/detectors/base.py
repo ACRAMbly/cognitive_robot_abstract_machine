@@ -2,21 +2,21 @@ from __future__ import annotations
 
 from abc import abstractmethod, ABC
 from dataclasses import dataclass, field
-from typing import Optional, Dict, Set, List, Any, TYPE_CHECKING
+from typing import Optional, Dict, Set, List, Any
+
+from typing_extensions import TypeVar
 
 from giskardpy.motion_statechart.context import MotionStatechartContext, ContextExtension
 from giskardpy.motion_statechart.data_types import ObservationStateValues
 from giskardpy.motion_statechart.graph_node import MotionStatechartNode, NodeArtifacts
 from giskardpy.motion_statechart.motion_statechart import MotionStatechart
+from krrood.entity_query_language.predicate import Triple
 from segmind.datastructures.events import MotionEvent, DetectionEvent, RotationEvent
 from segmind.datastructures.object_tracker import ObjectTrackerFactory
 from segmind.event_logger import EventLogger
 from semantic_digital_twin.semantic_annotations.semantic_annotations import Aperture
 from semantic_digital_twin.world_description.connections import Connection6DoF
 from semantic_digital_twin.world_description.world_entity import Body
-
-if TYPE_CHECKING:
-    from krrood.entity_query_language.predicate import Triple
 
 
 @dataclass
@@ -32,6 +32,11 @@ class DetectorStateChart(MotionStatechart):
 IndexedBodyPairs = Dict[Body, Set[Body]]
 """
 Type hint for dictionaries mapping bodies to sets of bodies
+"""
+
+BodyRelation = TypeVar("BodyRelation", bound=Triple)
+"""
+A relation between two bodies.
 """
 
 
@@ -135,7 +140,7 @@ class AbstractDetector(MotionStatechartNode, ABC):
         return ObservationStateValues.TRUE if events else ObservationStateValues.FALSE
 
 
-    def get_relation(self, context: MotionStatechartContext, tracked_objects: List[Body], relation: type[Triple]) -> Dict[Body, Set[Body]]:
+    def get_relation(self, context: MotionStatechartContext, tracked_objects: List[Body], relation: type[BodyRelation]) -> Dict[Body, Set[Body]]:
         """
         Get the relation between tracked objects.
 
@@ -148,12 +153,12 @@ class AbstractDetector(MotionStatechartNode, ABC):
 
         related_bodies: Dict[Body, Set[Body]] = {}
         bodies_with_collision = context.world.bodies_with_collision
-        for obj in tracked_objects:
+        for tracked_body in tracked_objects:
             for body in bodies_with_collision:
-                if body is obj:
+                if body is tracked_body:
                     continue
-                if relation(obj, body)():
-                    related_bodies.setdefault(obj, set()).add(body)
+                if relation(tracked_body, body)():
+                    related_bodies.setdefault(tracked_body, set()).add(body)
         return related_bodies
 
     @abstractmethod

@@ -109,7 +109,9 @@ class PerceptionQuery(SubclassJSONSerializer):
 
         robot_camera = self.robot.get_default_camera()
         return [
-            body for body in region_bodies if VisibleTo(obj=body, camera=robot_camera)()
+            body
+            for body in region_bodies
+            if VisibleTo(entity=body, camera=robot_camera)()
         ]
 
     def to_json(self, **kwargs) -> Dict[str, Any]:

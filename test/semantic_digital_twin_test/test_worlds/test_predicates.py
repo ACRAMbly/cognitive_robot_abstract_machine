@@ -196,7 +196,7 @@ def test_get_visible_objects(pr2_world_copy: World):
 
     camera = pr2_world_copy.get_semantic_annotations_by_type(Camera)[0]
 
-    assert VisibleTo(obj=body, camera=camera)()
+    assert VisibleTo(entity=body, camera=camera)()
 
 
 def test_camera_view_frame_x_axis_is_the_forward_axis(pr2_world_copy: World):
@@ -244,12 +244,12 @@ def test_visibility_follows_camera_orientation(pr2_world_copy: World):
     camera = pr2_world_copy.get_semantic_annotations_by_type(Camera)[0]
     head_pan = pr2_world_copy.get_degree_of_freedom_by_name("head_pan_joint")
 
-    assert not VisibleTo(obj=body, camera=camera)()
+    assert not VisibleTo(entity=body, camera=camera)()
 
     pr2_world_copy.state[head_pan.id].position = np.pi / 2
     pr2_world_copy.notify_state_change()
 
-    assert VisibleTo(obj=body, camera=camera)()
+    assert VisibleTo(entity=body, camera=camera)()
 
 
 def test_occluding_bodies(pr2_world_state_reset: World):
