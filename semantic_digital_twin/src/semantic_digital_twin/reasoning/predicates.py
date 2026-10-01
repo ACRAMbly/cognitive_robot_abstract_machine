@@ -61,7 +61,7 @@ if TYPE_CHECKING:
 
 
 @dataclass(eq=False)
-class InContactWith(Triple):
+class InContactWith(Triple[Body, Body]):
     """
     Whether two bodies are touching, by how close their collision geometry comes.
 
@@ -151,7 +151,7 @@ def get_visible_bodies(camera: Camera) -> List[KinematicStructureEntity]:
 
 
 @dataclass(eq=False)
-class VisibleTo(Triple):
+class VisibleTo(Triple[KinematicStructureEntity, "Camera"]):
     """
     Whether a camera can see something.
     """
@@ -350,7 +350,7 @@ def compute_euclidean_planar_distance(
 
 
 @dataclass(eq=False)
-class SupportedBy(Triple):
+class SupportedBy(Triple[Body, Body]):
     """
     Whether one body rests on another.
 
@@ -473,7 +473,7 @@ class Supports(Predicate):
 
 
 @dataclass(eq=False)
-class InsideRegion(Triple):
+class InsideRegion(Triple[Body, Region]):
     """
     Whether a body lies in a region, by what fraction of its collision volume falls
     inside the region's area.

@@ -24,7 +24,7 @@ from semantic_digital_twin.reasoning.predicates import (
     ViewDependentSpatialRelation,
     VisibleTo,
 )
-from krrood.entity_query_language.predicate import Predicate
+from krrood.entity_query_language.predicate import ObjectType, Predicate, SubjectType
 from krrood.entity_query_language.testing.result_verification import (
     placeholder_operands,
 )
@@ -845,6 +845,19 @@ def test_support_relates_the_supported_thing_to_what_holds_it_up():
 
     assert relation.subject is supported
     assert relation.object is supporting
+
+
+@pytest.mark.parametrize(
+    "relation, subject_type, object_type",
+    [
+        (InContactWith, Body, Body),
+        (SupportedBy, Body, Body),
+        (InsideRegion, Body, Region),
+    ],
+)
+def test_a_relation_states_the_types_it_relates(relation, subject_type, object_type):
+    assert relation.get_type_of_generic_parameter(SubjectType) is subject_type
+    assert relation.get_type_of_generic_parameter(ObjectType) is object_type
 
 
 # %% how a relation reads

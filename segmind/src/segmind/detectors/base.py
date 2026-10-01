@@ -34,9 +34,9 @@ IndexedBodyPairs = Dict[Body, Set[Body]]
 Type hint for dictionaries mapping bodies to sets of bodies
 """
 
-BodyRelation = TypeVar("BodyRelation", bound=Triple)
+BodyRelation = TypeVar("BodyRelation", bound=Triple[Body, Body])
 """
-A relation between two bodies.
+A relation whose subject and object are both bodies.
 """
 
 
@@ -146,8 +146,8 @@ class AbstractDetector(MotionStatechartNode, ABC):
 
         :param context: The context containing world information.
         :param tracked_objects: List of bodies to check for contact changes.
-        :param relation: The relation between two bodies, constructed from the tracked
-            body and each other body, which holds when they are related.
+        :param relation: The relation between two bodies, with each tracked body as its
+            subject and each other body as its object.
         :return: Dictionary mapping bodies to sets of related bodies.
         """
 
@@ -157,7 +157,7 @@ class AbstractDetector(MotionStatechartNode, ABC):
             for body in bodies_with_collision:
                 if body is tracked_body:
                     continue
-                if relation(tracked_body, body)():
+                if relation.from_subject_object(tracked_body, body)():
                     related_bodies.setdefault(tracked_body, set()).add(body)
         return related_bodies
 
