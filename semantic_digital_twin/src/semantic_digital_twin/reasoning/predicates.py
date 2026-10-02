@@ -46,6 +46,8 @@ from semantic_digital_twin.world_description.world_entity import (
     Body,
     Region,
     KinematicStructureEntity,
+    TBody,
+    TRegion,
 )
 
 if TYPE_CHECKING:
@@ -53,7 +55,7 @@ if TYPE_CHECKING:
 
 
 @dataclass(eq=False)
-class InContactWith(Triple[Body, Body]):
+class InContactWith(Triple[TBody, TBody]):
     """
     Whether two bodies are touching, by how close their collision geometry comes.
 
@@ -62,12 +64,12 @@ class InContactWith(Triple[Body, Body]):
     judgement is stated.
     """
 
-    body1: Body
+    body1: TBody
     """
     The first body.
     """
 
-    body2: Body
+    body2: TBody
     """
     The other body.
     """
@@ -78,11 +80,11 @@ class InContactWith(Triple[Body, Body]):
     """
 
     @property
-    def subject(self) -> Body:
+    def subject(self) -> TBody:
         return self.body1
 
     @property
-    def object(self) -> Body:
+    def object(self) -> TBody:
         return self.body2
 
     def __call__(self) -> bool:
@@ -208,7 +210,7 @@ def compute_euclidean_planar_distance(
 
 
 @dataclass(eq=False)
-class SupportedBy(Triple[Body, Body]):
+class SupportedBy(Triple[TBody, TBody]):
     """
     Whether one body rests on another.
 
@@ -217,12 +219,12 @@ class SupportedBy(Triple[Body, Body]):
     :attr:`maximum_intersection_height` draws the line at.
     """
 
-    supported: Body
+    supported: TBody
     """
     The body that may be resting.
     """
 
-    supporting: Body
+    supporting: TBody
     """
     The body that may be holding it up.
     """
@@ -234,11 +236,11 @@ class SupportedBy(Triple[Body, Body]):
     """
 
     @property
-    def subject(self) -> Body:
+    def subject(self) -> TBody:
         return self.supported
 
     @property
-    def object(self) -> Body:
+    def object(self) -> TBody:
         return self.supporting
 
     @classmethod
@@ -331,7 +333,7 @@ class Supports(Predicate):
 
 
 @dataclass(eq=False)
-class InsideRegion(Triple[Body, Region]):
+class InsideRegion(Triple[TBody, TRegion]):
     """
     Whether a body lies in a region, by what fraction of its collision volume falls
     inside the region's area.
@@ -341,12 +343,12 @@ class InsideRegion(Triple[Body, Region]):
     :attr:`minimum_contained_fraction` is where the judgement is stated.
     """
 
-    body: Body
+    body: TBody
     """
     The body that may be in the region.
     """
 
-    region: Region
+    region: TRegion
     """
     The region it may be in.
     """
@@ -357,11 +359,11 @@ class InsideRegion(Triple[Body, Region]):
     """
 
     @property
-    def subject(self) -> Body:
+    def subject(self) -> TBody:
         return self.body
 
     @property
-    def object(self) -> Region:
+    def object(self) -> TRegion:
         return self.region
 
     def __call__(self) -> bool:

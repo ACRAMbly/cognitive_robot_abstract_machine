@@ -22,7 +22,7 @@ from semantic_digital_twin.reasoning.predicates import (
     Supports,
     ViewDependentSpatialRelation,
 )
-from krrood.entity_query_language.predicate import ObjectType, Predicate, SubjectType
+from krrood.entity_query_language.predicate import Predicate
 from krrood.entity_query_language.testing.result_verification import (
     placeholder_operands,
 )
@@ -40,7 +40,7 @@ from semantic_digital_twin.reasoning.robot_predicates import (
     occluding_bodies,
     VisibleTo,
 )
-from semantic_digital_twin.robots.robot_parts import Camera, EndEffector
+from semantic_digital_twin.robots.robot_parts import Camera, EndEffector, TCamera
 from semantic_digital_twin.robots.pr2 import PR2
 from semantic_digital_twin.spatial_types.spatial_types import Pose, Quaternion
 from semantic_digital_twin.testing import *
@@ -56,10 +56,13 @@ from semantic_digital_twin.world_description.geometry import (
     VolumetricBoundingBox,
 )
 from semantic_digital_twin.world_description.shape_collection import ShapeCollection
+from semantic_digital_twin.semantic_annotations.mixins import TKinematicStructureEntity
 from semantic_digital_twin.world_description.world_entity import (
     Body,
     Region,
     KinematicStructureEntity,
+    TBody,
+    TRegion,
 )
 
 
@@ -848,17 +851,22 @@ def test_support_relates_the_supported_thing_to_what_holds_it_up():
 
 
 @pytest.mark.parametrize(
-    "relation, subject_type, object_type",
+    "relation, type_parameters",
     [
-        (InContactWith, Body, Body),
-        (SupportedBy, Body, Body),
-        (InsideRegion, Body, Region),
-        (VisibleTo, KinematicStructureEntity, Camera),
+        (InContactWith, [TBody]),
+        (SupportedBy, [TBody]),
+        (InsideRegion, [TBody, TRegion]),
+        (VisibleTo, [TKinematicStructureEntity, TCamera]),
     ],
 )
-def test_a_relation_states_the_types_it_relates(relation, subject_type, object_type):
-    assert relation.get_type_of_generic_parameter(SubjectType) is subject_type
-    assert relation.get_type_of_generic_parameter(ObjectType) is object_type
+def test_a_relation_is_generic_in_the_kinds_of_thing_it_relates(
+    relation, type_parameters
+):
+    """
+    A relation leaves open which kind of body, region or camera it relates, up to the
+    bound of each type parameter, so a narrower relation can bind them.
+    """
+    assert relation.get_generic_type_parameters() == type_parameters
 
 
 # %% how a relation reads

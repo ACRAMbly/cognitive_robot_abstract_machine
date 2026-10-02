@@ -45,7 +45,9 @@ from semantic_digital_twin.robots.robot_parts import (
     AbstractRobot,
     Camera,
     EndEffector,
+    TCamera,
 )
+from semantic_digital_twin.semantic_annotations.mixins import TKinematicStructureEntity
 from semantic_digital_twin.semantic_annotations.semantic_annotations import Floor
 from semantic_digital_twin.spatial_computations.raytracer import RayTracer
 from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix
@@ -276,27 +278,27 @@ def get_visible_bodies(camera: Camera) -> List[KinematicStructureEntity]:
 
 
 @dataclass(eq=False)
-class VisibleTo(Triple[KinematicStructureEntity, Camera]):
+class VisibleTo(Triple[TKinematicStructureEntity, TCamera]):
     """
     Whether a camera can see something.
     """
 
-    entity: KinematicStructureEntity
+    entity: TKinematicStructureEntity
     """
     The thing that may be in view.
     """
 
-    camera: Camera
+    camera: TCamera
     """
     The camera looking.
     """
 
     @property
-    def subject(self) -> KinematicStructureEntity:
+    def subject(self) -> TKinematicStructureEntity:
         return self.entity
 
     @property
-    def object(self) -> Camera:
+    def object(self) -> TCamera:
         return self.camera
 
     @classmethod
