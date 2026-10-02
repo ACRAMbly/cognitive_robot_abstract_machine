@@ -118,3 +118,14 @@ NodeStateValues: TypeAlias = npt.NDArray[np.float64]
 """
 One value per node of a layer and state of a discrete variable, shape (#nodes, #states).
 """
+
+StateValues: TypeAlias = npt.NDArray[np.float64]
+"""
+One value per state of a discrete variable, shape (#states,), or k values per state,
+shape (#states, k).
+"""
+
+TableEntryValues: TypeAlias = npt.NDArray[np.float64]
+"""
+One value per entry of a probability table, in the order the table lists its entries.
+"""
