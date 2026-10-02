@@ -215,7 +215,7 @@ class InstantiatedVariable(
     The properties of the variable as keyword arguments.
     """
 
-    _child_vars_: Dict[str, SymbolicExpression] = field(
+    _child_variables_: Dict[str, SymbolicExpression] = field(
         default_factory=dict, init=False, repr=False
     )
     """
@@ -229,25 +229,25 @@ class InstantiatedVariable(
     """
 
     def __post_init__(self):
-        self._update_child_vars_from_kwargs_()
-        self._operation_children_ = tuple(self._child_vars_.values())
+        self._update_child_variables_from_kwargs_()
+        self._operation_children_ = tuple(self._child_variables_.values())
         # This is done here as it uses `_operation_children_`
         super().__post_init__()
 
-    def _update_child_vars_from_kwargs_(self):
+    def _update_child_variables_from_kwargs_(self):
         """
         Set the child variables from the kwargs dictionary.
         """
-        for k, v in self._kwargs_.items():
-            self._child_vars_[k] = SymbolicExpression._as_operand_(v, k)
+        for name, value in self._kwargs_.items():
+            self._child_variables_[name] = SymbolicExpression._as_operand_(value, name)
 
     def _evaluate__(
         self,
         sources: OperationResult,
     ) -> Iterable[OperationResult]:
-        yield from self._instantiate_using_child_vars_and_yield_results_(sources)
+        yield from self._instantiate_using_child_variables_and_yield_results_(sources)
 
-    def _instantiate_using_child_vars_and_yield_results_(
+    def _instantiate_using_child_variables_and_yield_results_(
         self, sources: OperationResult
     ) -> Iterator[OperationResult]:
         """
@@ -256,9 +256,9 @@ class InstantiatedVariable(
         """
         for child_result in self._evaluate_product_(sources):
             # An argument without a binding is left out, so its default applies.
-            kwargs = {
+            arguments = {
                 name: child_result.bindings[child._id_]
-                for name, child in self._child_vars_.items()
+                for name, child in self._child_variables_.items()
                 if child._id_ in child_result.bindings
             }
             # A callable class (Predicate / SymbolicFunction) implements HasBoundValue -- it binds the
@@ -271,7 +271,7 @@ class InstantiatedVariable(
                 and issubclass(self._type_, HasBoundValue)
                 else self._type_
             )
-            instance = bind(**kwargs)
+            instance = bind(**arguments)
 
             bindings = {self._id_: instance} | child_result.bindings
             result = self._build_operation_result_(bindings, child_result)
@@ -284,9 +284,9 @@ class InstantiatedVariable(
         MultiArityExpressionThatPerformsACartesianProduct._replace_child_field_(
             self, old_child, new_child
         )
-        for k, v in self._child_vars_.items():
-            if v is old_child:
-                self._child_vars_[k] = new_child
+        for name, child in self._child_variables_.items():
+            if child is old_child:
+                self._child_variables_[name] = new_child
 
     @cached_property
     def _name_(self):

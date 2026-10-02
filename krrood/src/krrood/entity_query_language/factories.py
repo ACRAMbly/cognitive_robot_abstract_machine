@@ -893,9 +893,9 @@ def get_conditioned_statements(
     """
     condition_results = []
     for node in [
-        s
-        for s in statement._children_
-        if s._id_ != statement._id_ and not isinstance(s, (Variable, Attribute))
+        child
+        for child in statement._children_
+        if child._id_ != statement._id_ and not isinstance(child, (Variable, Attribute))
     ]:
         node_result = node.evaluate()
         if condition(node_result):
