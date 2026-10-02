@@ -61,12 +61,12 @@ from semantic_digital_twin.semantic_annotations.semantic_annotations import Milk
 
 
 @pytest.fixture
-def reach_action_executable(immutable_model_world):
+def reach_action_executable(pr2_apartment_context):
     """
     A real, 2-motion ``GiskardExecutable`` with pre-/post-conditions, built the same way
     ``test_merge_motions`` in ``test_graph_parsing.py`` does.
     """
-    world, view, context = immutable_model_world
+    world, view, context = pr2_apartment_context
     milk_connection = world.get_body_by_name("milk.stl").parent_connection
     milk_connection.origin = HomogeneousTransformationMatrix.from_xyz_rpy(
         2, 1.5, 0.7, 0, 0, 0, reference_frame=milk_connection.parent
@@ -316,13 +316,13 @@ def test_prepare_for_execution_watches_the_whole_motion_for_progress(
 
 
 def test_a_motion_that_stops_approaching_its_goal_is_given_up_on(
-    immutable_model_world,
+    pr2_apartment_context,
 ):
     """
     Nothing bounds the tick loop but the monitor, so a reach the arm cannot close on has
     to end the run rather than tick forever.
     """
-    world, view, context = immutable_model_world
+    world, view, context = pr2_apartment_context
     milk = world.get_semantic_annotations_by_type(Milk)[0]
     milk.root.parent_connection.origin = HomogeneousTransformationMatrix.from_xyz_rpy(
         2, 1.5, 50, reference_frame=milk.root.parent_connection.parent

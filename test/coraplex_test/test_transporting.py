@@ -11,7 +11,6 @@ from typing_extensions import Callable, List, Type
 from krrood.entity_query_language.factories import a, variable
 from krrood.entity_query_language.query.match import Match
 from coraplex.datastructures.dataclasses import Context
-from coraplex.datastructures.enums import ReachFraction
 from coraplex.execution_environment import simulated_robot
 from coraplex.locations.locations import ReachabilityLocation
 from coraplex.plans.factories import sequential
@@ -36,7 +35,6 @@ from coraplex.querying.predicates import IsAmongTheClosestGraspsTo
 from coraplex.robot_plans.actions.core.placing import PlaceAction
 from coraplex.robot_plans.actions.core.robot_body import MoveTorsoAction
 from semantic_digital_twin.semantic_annotations.semantic_annotations import (
-    Drawer,
     Handle,
     Milk,
 )
@@ -140,12 +138,12 @@ def _transport_of_the_milk(world: World, context: Context) -> TransportAction:
     )
 
 
-def test_a_transport_grounds_the_steps_it_is_given(mutable_model_world):
+def test_a_transport_grounds_the_steps_it_is_given(pr2_apartment_context):
     """
     The caller decides what is left open in each step, so the transport grounds the
     steps it was given rather than steps of its own.
     """
-    world, robot, context = mutable_model_world
+    world, robot, context = pr2_apartment_context
     transport = _transport_of_the_milk(world, context)
     sequential([transport], context)
 
@@ -155,12 +153,12 @@ def test_a_transport_grounds_the_steps_it_is_given(mutable_model_world):
     ]
 
 
-def test_a_transport_tries_a_bounded_number_of_candidates(mutable_model_world):
+def test_a_transport_tries_a_bounded_number_of_candidates(pr2_apartment_context):
     """
     Each standing pose is tried by running the step from it, so a step that can succeed
     from nowhere has to give up after a fixed number of them.
     """
-    world, robot, context = mutable_model_world
+    world, robot, context = pr2_apartment_context
     transport = _transport_of_the_milk(world, context)
     sequential([transport], context)
 
@@ -174,8 +172,8 @@ def test_a_transport_tries_a_bounded_number_of_candidates(mutable_model_world):
     assert limits
 
 
-def test_a_transport_leaves_the_torso_where_it_is(mutable_model_world):
-    world, robot, context = mutable_model_world
+def test_a_transport_leaves_the_torso_where_it_is(pr2_apartment_context):
+    world, robot, context = pr2_apartment_context
     transport = _transport_of_the_milk(world, context)
     sequential([transport], context)
 
@@ -188,13 +186,13 @@ def test_a_transport_leaves_the_torso_where_it_is(mutable_model_world):
 
 
 def test_a_transport_of_a_graspable_stands_around_the_object_then_the_target(
-    mutable_model_world,
+    pr2_apartment_context,
 ):
     """
     Built from the object alone, a transport stands close to the object for the pick-up,
     and close to the target for the place.
     """
-    world, robot, context = mutable_model_world
+    world, robot, context = pr2_apartment_context
     milk = world.get_semantic_annotations_by_type(Milk)[0]
     target = Pose.from_xyz_rpy(4.0, 1.5, 0.9, reference_frame=world.root)
 
@@ -228,8 +226,8 @@ def _pick_and_place_of_the_milk(world: World, arm: Arm) -> PickAndPlaceAction:
     )
 
 
-def test_a_pick_and_place_grounds_the_steps_it_is_given(mutable_model_world):
-    world, robot, context = mutable_model_world
+def test_a_pick_and_place_grounds_the_steps_it_is_given(pr2_apartment_context):
+    world, robot, context = pr2_apartment_context
     pick_and_place = _pick_and_place_of_the_milk(world, robot.right_arm)
     sequential([pick_and_place], context)
 
@@ -240,8 +238,8 @@ def test_a_pick_and_place_grounds_the_steps_it_is_given(mutable_model_world):
     ] == [PickUpAction, PlaceAction]
 
 
-def test_a_pick_and_place_tries_a_bounded_number_of_candidates(mutable_model_world):
-    world, robot, context = mutable_model_world
+def test_a_pick_and_place_tries_a_bounded_number_of_candidates(pr2_apartment_context):
+    world, robot, context = pr2_apartment_context
     pick_and_place = _pick_and_place_of_the_milk(world, robot.right_arm)
     sequential([pick_and_place], context)
 
@@ -255,84 +253,15 @@ def test_a_pick_and_place_tries_a_bounded_number_of_candidates(mutable_model_wor
     assert limits
 
 
-# %% fetching an object out of a drawer
-
-DRAWER = "cabinet10_drawer_top"
-"""
-The apartment drawer the transport opens on its way to the object inside it.
-"""
-
-DRAWER_HANDLE = "handle_cab10_t"
-"""
-The handle of :data:`DRAWER`.
-"""
-
-
-def _pick_up_near_a_drawer(world: World, context: Context) -> MoveAndPickUpAction:
-    """
-    :return: A pick-up of the milk in a world where :data:`DRAWER` is annotated.
-    """
-    with world.modify_world():
-        world.add_semantic_annotation_recursively(
-            Drawer(
-                root=world.get_body_by_name(DRAWER),
-                handle=Handle(root=world.get_body_by_name(DRAWER_HANDLE)),
-            )
-        )
-    move_and_pick_up = MoveAndPickUpAction.from_standing_position(
-        standing_position=Pose(reference_frame=world.root),
-        grasp=world.get_semantic_annotations_by_type(Milk)[0].grasp_candidates()[0],
-        arm=context.robot.right_arm,
-    )
-    sequential([move_and_pick_up], context)
-    return move_and_pick_up
-
-
-def test_opening_a_container_on_the_way_is_tried_with_the_move_to_it(
-    mutable_model_world,
-):
-    """
-    An object inside a drawer is fetched by opening the drawer first, from a standing
-    pose of its own.
-    """
-    world, robot, context = mutable_model_world
-    move_and_pick_up = _pick_up_near_a_drawer(world, context)
-
-    assert [
-        action.type
-        for action in move_and_pick_up._make_open_container_actions(
-            world.get_body_by_name(DRAWER)
-        )
-    ] == [MoveAndOpenAction]
-
-
-def test_opening_a_container_on_the_way_stands_where_it_is_opened_from(
-    mutable_model_world,
-):
-    """
-    The robot stands back for opening a container the way it does for any container,
-    rather than as close as it would to grasp something that stays put.
-    """
-    world, robot, context = mutable_model_world
-    move_and_pick_up = _pick_up_near_a_drawer(world, context)
-
-    [open_on_the_way] = move_and_pick_up._make_open_container_actions(
-        world.get_body_by_name(DRAWER)
-    )
-    location = _standing_positions(open_on_the_way)
-
-    assert location.reach_fraction == ReachFraction.ACCESSING
-
-
 # %% moving to an object and picking it up
 
 
-def test_move_and_pick_up_takes_the_grasp_it_was_given(mutable_model_world):
+def test_move_and_pick_up_takes_the_grasp_it_was_given(pr2_apartment_context):
     """
     The caller chooses the grasp, so the pick-up at the end of the walk takes that one
     rather than whichever grasp the object happens to list first.
     """
-    world, robot, context = mutable_model_world
+    world, robot, context = pr2_apartment_context
     grasp = world.get_semantic_annotations_by_type(Milk)[0].grasp_candidates()[-1]
     move_and_pick_up = MoveAndPickUpAction.from_standing_position(
         standing_position=Pose(reference_frame=world.root),
@@ -351,9 +280,9 @@ def test_move_and_pick_up_takes_the_grasp_it_was_given(mutable_model_world):
 
 
 def test_move_and_pick_up_approaches_with_the_clearances_it_was_given(
-    mutable_model_world,
+    pr2_apartment_context,
 ):
-    world, robot, context = mutable_model_world
+    world, robot, context = pr2_apartment_context
     approach_clearance, retreat_distance = 0.07, 0.13
     move_and_pick_up = MoveAndPickUpAction.from_standing_position(
         standing_position=Pose(reference_frame=world.root),
@@ -502,9 +431,9 @@ def _assert_each_standing_pose_keeps_the_closest_grasps(
 
 
 def test_a_grasp_approached_straight_from_the_standing_position_is_the_closest(
-    mutable_model_world,
+    pr2_apartment_context,
 ):
-    world, robot, context = mutable_model_world
+    world, robot, context = pr2_apartment_context
     grasps = world.get_semantic_annotations_by_type(Milk)[0].grasp_candidates()
 
     assert IsAmongTheClosestGraspsTo(
@@ -513,9 +442,9 @@ def test_a_grasp_approached_straight_from_the_standing_position_is_the_closest(
 
 
 def test_a_grasp_approached_from_the_far_side_is_not_among_the_closest(
-    mutable_model_world,
+    pr2_apartment_context,
 ):
-    world, robot, context = mutable_model_world
+    world, robot, context = pr2_apartment_context
     grasps = world.get_semantic_annotations_by_type(Milk)[0].grasp_candidates()
 
     assert not IsAmongTheClosestGraspsTo(
@@ -523,12 +452,12 @@ def test_a_grasp_approached_from_the_far_side_is_not_among_the_closest(
     )()
 
 
-def test_a_nearer_grasp_is_the_closest_however_it_is_approached(mutable_model_world):
+def test_a_nearer_grasp_is_the_closest_however_it_is_approached(pr2_apartment_context):
     """
     Distance is ranked before the direction a grasp is approached along, which only
     decides between grasps at the same distance.
     """
-    world, robot, context = mutable_model_world
+    world, robot, context = pr2_apartment_context
     grasps = world.get_semantic_annotations_by_type(Milk)[0].grasp_candidates()
 
     assert IsAmongTheClosestGraspsTo(
@@ -539,12 +468,12 @@ def test_a_nearer_grasp_is_the_closest_however_it_is_approached(mutable_model_wo
     )()
 
 
-def test_a_grasp_higher_up_is_as_close_as_one_below_it(mutable_model_world):
+def test_a_grasp_higher_up_is_as_close_as_one_below_it(pr2_apartment_context):
     """
     Only the horizontal distance counts, so between a grasp and one at the same spot
     higher up, the direction they are approached along decides.
     """
-    world, robot, context = mutable_model_world
+    world, robot, context = pr2_apartment_context
     grasps = world.get_semantic_annotations_by_type(Milk)[0].grasp_candidates()
     raised_head_on = _raised(grasps[0], RAISED_BY)
 
@@ -557,9 +486,9 @@ def test_a_grasp_higher_up_is_as_close_as_one_below_it(mutable_model_world):
 
 
 def test_a_pick_up_of_a_graspable_tries_each_standing_pose_with_its_closest_grasps(
-    mutable_model_world,
+    pr2_apartment_context,
 ):
-    world, robot, context = mutable_model_world
+    world, robot, context = pr2_apartment_context
     milk = world.get_semantic_annotations_by_type(Milk)[0]
     step = MoveAndPickUpAction.from_graspable_by_closest_grasps(
         milk, context.robot.right_arm, context
@@ -579,9 +508,9 @@ def test_a_pick_up_of_a_graspable_tries_each_standing_pose_with_its_closest_gras
 
 
 def test_a_pick_up_of_a_graspable_tries_as_many_closest_grasps_as_asked_for(
-    mutable_model_world,
+    pr2_apartment_context,
 ):
-    world, robot, context = mutable_model_world
+    world, robot, context = pr2_apartment_context
     milk = world.get_semantic_annotations_by_type(Milk)[0]
     step = MoveAndPickUpAction.from_graspable_by_closest_grasps(
         milk,
@@ -603,9 +532,9 @@ def test_a_pick_up_of_a_graspable_tries_as_many_closest_grasps_as_asked_for(
 
 
 def test_a_transport_of_a_graspable_picks_it_up_by_the_closest_grasps(
-    mutable_model_world,
+    pr2_apartment_context,
 ):
-    world, robot, context = mutable_model_world
+    world, robot, context = pr2_apartment_context
     milk = world.get_semantic_annotations_by_type(Milk)[0]
     transport = TransportAction.from_graspable_by_closest_grasps(
         milk,
@@ -627,9 +556,9 @@ def test_a_transport_of_a_graspable_picks_it_up_by_the_closest_grasps(
 
 
 def test_a_transport_of_a_graspable_tries_as_many_closest_grasps_as_asked_for(
-    mutable_model_world,
+    pr2_apartment_context,
 ):
-    world, robot, context = mutable_model_world
+    world, robot, context = pr2_apartment_context
     milk = world.get_semantic_annotations_by_type(Milk)[0]
     transport = TransportAction.from_graspable_by_closest_grasps(
         milk,
@@ -652,13 +581,13 @@ def test_a_transport_of_a_graspable_tries_as_many_closest_grasps_as_asked_for(
 
 
 def test_the_closest_grasps_can_be_required_of_a_pick_up_from_a_fixed_standing_pose(
-    mutable_model_world,
+    pr2_apartment_context,
 ):
     """
     The condition applies to a pick-up whatever its caller left open, so a fixed
     standing pose is tried with only the grasps closest to it.
     """
-    world, robot, context = mutable_model_world
+    world, robot, context = pr2_apartment_context
     milk = world.get_semantic_annotations_by_type(Milk)[0]
     grasps = milk.grasp_candidates()
     object_pose = Pose(reference_frame=milk.root)
@@ -722,9 +651,9 @@ def _assert_every_target_is_at(targets: List[Pose], body: Body, world: World) ->
 
 
 def test_a_transport_of_a_graspable_faces_it_where_it_is_when_it_picks_it_up(
-    mutable_model_world,
+    pr2_apartment_context,
 ):
-    world, robot, context = mutable_model_world
+    world, robot, context = pr2_apartment_context
     milk = world.get_semantic_annotations_by_type(Milk)[0]
     transport = TransportAction.from_graspable_by_closest_grasps(
         milk,
@@ -744,9 +673,9 @@ def test_a_transport_of_a_graspable_faces_it_where_it_is_when_it_picks_it_up(
 
 
 def test_a_move_and_pick_up_faces_the_object_where_it_is_when_it_picks_it_up(
-    mutable_model_world,
+    pr2_apartment_context,
 ):
-    world, robot, context = mutable_model_world
+    world, robot, context = pr2_apartment_context
     milk = world.get_semantic_annotations_by_type(Milk)[0]
     move_and_pick_up = MoveAndPickUpAction.from_standing_position(
         standing_position=Pose(reference_frame=world.root),
@@ -762,6 +691,16 @@ def test_a_move_and_pick_up_faces_the_object_where_it_is_when_it_picks_it_up(
     )
 
 
+DRAWER = "cabinet10_drawer_top"
+"""
+The apartment drawer the opening tests pull out.
+"""
+
+DRAWER_HANDLE = "handle_cab10_t"
+"""
+The handle of :data:`DRAWER`.
+"""
+
 OPENED_DRAWER_POSITION = 0.3
 """
 How far :data:`DRAWER` is pulled out after an opening of it has been built.
@@ -769,9 +708,9 @@ How far :data:`DRAWER` is pulled out after an opening of it has been built.
 
 
 def test_a_move_and_open_faces_the_handle_where_it_is_when_it_opens_the_container(
-    mutable_model_world,
+    pr2_apartment_context,
 ):
-    world, robot, context = mutable_model_world
+    world, robot, context = pr2_apartment_context
     handle = Handle(root=world.get_body_by_name(DRAWER_HANDLE))
     move_and_open = MoveAndOpenAction.from_standing_position(
         Pose(reference_frame=world.root), handle, context.robot.left_arm
@@ -782,25 +721,6 @@ def test_a_move_and_open_faces_the_handle_where_it_is_when_it_opens_the_containe
     facing = move_and_open.face_and_look_at
     _assert_every_target_is_at(
         [facing.face_at.target, facing.look_at.target], handle.root, world
-    )
-
-
-def test_opening_a_container_on_the_way_faces_the_handle_where_it_is_when_it_opens_it(
-    mutable_model_world,
-):
-    world, robot, context = mutable_model_world
-    move_and_pick_up = _pick_up_near_a_drawer(world, context)
-    [open_on_the_way] = move_and_pick_up._make_open_container_actions(
-        world.get_body_by_name(DRAWER)
-    )
-
-    world.get_connection_by_name(f"{DRAWER}_joint").position = OPENED_DRAWER_POSITION
-
-    facing = open_on_the_way.kwargs["face_and_look_at"].kwargs
-    _assert_every_target_is_at(
-        [facing["face_at"].kwargs["target"], facing["look_at"].kwargs["target"]],
-        world.get_body_by_name(DRAWER_HANDLE),
-        world,
     )
 
 
@@ -821,9 +741,9 @@ def _hold_the_milk(world: World, arm: Arm) -> Milk:
 
 
 def test_a_move_and_place_from_a_standing_position_places_the_given_object(
-    mutable_model_world,
+    pr2_apartment_context,
 ):
-    world, robot, context = mutable_model_world
+    world, robot, context = pr2_apartment_context
     milk = world.get_semantic_annotations_by_type(Milk)[0]
     standing_position = Pose(reference_frame=world.root)
     target = Pose.from_xyz_rpy(4.0, 1.5, 0.9, reference_frame=world.root)
@@ -840,9 +760,9 @@ def test_a_move_and_place_from_a_standing_position_places_the_given_object(
 
 
 def test_a_move_and_open_from_a_standing_position_opens_the_given_handle(
-    mutable_model_world,
+    pr2_apartment_context,
 ):
-    world, robot, context = mutable_model_world
+    world, robot, context = pr2_apartment_context
     handle = Handle(root=world.get_body_by_name(DRAWER_HANDLE))
     standing_position = Pose(reference_frame=world.root)
 
@@ -900,14 +820,14 @@ MOVE_AND_ACT_STEPS = {
 
 @pytest.mark.parametrize("build", MOVE_AND_ACT_STEPS.values(), ids=MOVE_AND_ACT_STEPS)
 def test_a_move_and_act_step_only_ever_stands_where_it_was_sent(
-    mutable_model_world, build: Callable[[World, Context], ActionDescription]
+    pr2_apartment_context, build: Callable[[World, Context], ActionDescription]
 ):
     """
     Its plan is built before the robot moves, so turning to face the target has to be
     worked out from where the robot is sent rather than from where it stands at first,
     or the robot is sent back there before it acts.
     """
-    world, robot, context = mutable_model_world
+    world, robot, context = pr2_apartment_context
     step = build(world, context)
     sequential([step], context)
 
@@ -930,8 +850,8 @@ def _assert_base_faces(robot: AbstractRobot, target: Point3):
     )
 
 
-def test_facing_after_navigating_turns_where_the_robot_was_sent(mutable_model_world):
-    world, robot, context = mutable_model_world
+def test_facing_after_navigating_turns_where_the_robot_was_sent(pr2_apartment_context):
+    world, robot, context = pr2_apartment_context
     target = Pose.from_xyz_rpy(4.0, 2.5, 0.9, reference_frame=world.root)
     plan = sequential(
         [NavigateAction(_standing_pose(world)), FaceAtAction(target)], context
@@ -949,9 +869,9 @@ def test_facing_after_navigating_turns_where_the_robot_was_sent(mutable_model_wo
 
 
 def test_facing_a_target_given_relative_to_a_body_turns_towards_that_body(
-    mutable_model_world,
+    pr2_apartment_context,
 ):
-    world, robot, context = mutable_model_world
+    world, robot, context = pr2_apartment_context
     milk = world.get_semantic_annotations_by_type(Milk)[0].root
     plan = sequential(
         [
@@ -968,9 +888,9 @@ def test_facing_a_target_given_relative_to_a_body_turns_towards_that_body(
 
 
 def test_facing_and_looking_at_a_target_turns_the_base_and_the_camera_towards_it(
-    mutable_model_world,
+    pr2_apartment_context,
 ):
-    world, robot, context = mutable_model_world
+    world, robot, context = pr2_apartment_context
     target = Pose.from_xyz_rpy(4.0, 2.5, 0.9, reference_frame=world.root)
     plan = sequential(
         [

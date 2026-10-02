@@ -2,18 +2,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import timedelta
-from typing import List
-
 from typing_extensions import Any, Self
 
-from krrood.entity_query_language.factories import (
-    a,
-    an,
-    entity,
-    variable,
-)
+from krrood.entity_query_language.factories import a, variable
 from coraplex.datastructures.dataclasses import Context
-from coraplex.datastructures.enums import ReachFraction
 from coraplex.locations.locations import ReachabilityLocation
 from coraplex.plans.factories import sequential
 from coraplex.plans.plan_node import PlanNode
@@ -32,18 +24,13 @@ from coraplex.robot_plans.actions.core.placing import PlaceAction
 from coraplex.robot_plans.actions.core.robot_body import ParkArmsAction
 from krrood.entity_query_language.query.match import Match
 from krrood.patterns.field_metadata import JSONMetadata
-from semantic_digital_twin.reasoning.predicates import InsideOf
 from semantic_digital_twin.robots.robot_parts import Arm
 from semantic_digital_twin.semantic_annotations.mixins import (
     GraspCandidate,
     HasGraspCandidates,
 )
-from semantic_digital_twin.semantic_annotations.semantic_annotations import (
-    Drawer,
-    Handle,
-)
+from semantic_digital_twin.semantic_annotations.semantic_annotations import Handle
 from semantic_digital_twin.spatial_types.spatial_types import Pose
-from semantic_digital_twin.world_description.world_entity import Body
 
 
 @dataclass
@@ -230,8 +217,7 @@ class MoveAndPlaceAction(ActionDescription):
 @dataclass
 class MoveAndPickUpAction(ActionDescription, LimitsItsCandidates):
     """
-    Navigates to where the robot stands, faces the object and picks it up, opening the
-    drawer it is in first.
+    Navigates to where the robot stands, faces the object and picks it up.
     """
 
     navigate: NavigateAction
@@ -330,61 +316,7 @@ class MoveAndPickUpAction(ActionDescription, LimitsItsCandidates):
 
     @property
     def _action_plan(self) -> PlanNode:
-        children = []
-        for container in self._containers_around_the_object():
-            children.extend(self._make_open_container_actions(container))
-        children.extend([self.navigate, self.face_and_look_at, self.pick_up])
-        return sequential(children)
-
-    def _containers_around_the_object(self) -> List[Body]:
-        """
-        :return: The bodies the object to pick up lies inside of.
-        """
-        object_body = self.pick_up.grasp.graspable.root
-        return [
-            body
-            for body in self.world.bodies
-            if body != object_body
-            and InsideOf(object_body, body).compute_containment_ratio() > 0.9
-        ]
-
-    def _make_open_container_actions(self, container: Body) -> List[Match]:
-        """
-        :param container: A body the object lies inside of.
-        :return: The step opening it, from a standing pose tried together with the
-            opening, or nothing if the container is not a known drawer.
-        """
-        drawer_annotation = an(
-            entity(
-                drawer := variable(Drawer, domain=self.world.semantic_annotations)
-            ).where(drawer.root == container)
-        )
-        drawer_annotation = list(drawer_annotation.evaluate())
-        if len(drawer_annotation) == 0:
-            return []
-        handle = drawer_annotation[0].handle
-        arm = self.pick_up.arm
-        handle_pose = Pose(reference_frame=handle.root)
-        open_the_drawer = a(MoveAndOpenAction)(
-            navigate=a(NavigateAction)(
-                target_location=variable(
-                    Pose,
-                    domain=ReachabilityLocation(
-                        handle_pose,
-                        arm,
-                        ReachFraction.ACCESSING,
-                        context=self.context,
-                    ),
-                )
-            ),
-            face_and_look_at=a(FaceAndLookAtAction)(
-                face_at=a(FaceAtAction)(target=handle_pose),
-                look_at=a(LookAtAction)(target=handle_pose),
-            ),
-            open_container=a(OpenAction)(handle=handle, arm=arm),
-        )
-        self._bound_candidates(open_the_drawer)
-        return [open_the_drawer]
+        return sequential([self.navigate, self.face_and_look_at, self.pick_up])
 
 
 @dataclass

@@ -24,9 +24,9 @@ from semantic_digital_twin.spatial_types.spatial_types import Pose
 # ---- Occupancy locations tests ----
 
 
-def test_attachment_exclusion(immutable_model_world, rclpy_node):
+def test_attachment_exclusion(pr2_apartment_context, rclpy_node):
 
-    world, robot_view, context = immutable_model_world
+    world, robot_view, context = pr2_apartment_context
 
     robot_view.root.parent_connection.origin = (
         HomogeneousTransformationMatrix.from_xyz_rpy(
@@ -59,8 +59,8 @@ def test_attachment_exclusion(immutable_model_world, rclpy_node):
     assert np.sum(o.map[80:90, 90:110]) != 0
 
 
-def test_merge_costmap(immutable_model_world):
-    world, robot_view, context = immutable_model_world
+def test_merge_costmap(pr2_apartment_context):
+    world, robot_view, context = pr2_apartment_context
     o = OccupancyCostmap(
         distance_to_obstacle=0.2,
         height=200,
@@ -91,9 +91,9 @@ def test_merge_costmap(immutable_model_world):
 
 
 def test_a_merged_map_samples_on_the_terms_of_the_map_it_was_merged_into(
-    immutable_model_world,
+    pr2_apartment_context,
 ):
-    world, robot_view, context = immutable_model_world
+    world, robot_view, context = pr2_apartment_context
     origin = Pose.from_xyz_quaternion(0, 0, 0, 0, 0, 0, 1, world.root)
     sampling = Sampling(number_of_samples=17, seed=3)
     first = GaussianCostmap(
@@ -119,8 +119,8 @@ def test_a_merged_map_samples_on_the_terms_of_the_map_it_was_merged_into(
     assert (first & second).sampling == sampling
 
 
-def test_occupancy_robot_exclusion(immutable_model_world):
-    world, robot_view, context = immutable_model_world
+def test_occupancy_robot_exclusion(pr2_apartment_context):
+    world, robot_view, context = pr2_apartment_context
     robot_view.root.parent_connection.origin = (
         HomogeneousTransformationMatrix.from_xyz_rpy(10, 10)
     )
@@ -136,12 +136,12 @@ def test_occupancy_robot_exclusion(immutable_model_world):
     assert np.sum(occupancy_map.map) == 137641
 
 
-def test_occupancy_leaves_the_floor_free(immutable_model_world):
+def test_occupancy_leaves_the_floor_free(pr2_apartment_context):
     """
     The ground the robot drives on is not an obstacle: over a patch of open floor every
     cell stays free, and only what stands on the floor occupies anything.
     """
-    world, robot_view, context = immutable_model_world
+    world, robot_view, context = pr2_apartment_context
 
     occupancy_map = OccupancyCostmap(
         resolution=0.02,
@@ -156,9 +156,9 @@ def test_occupancy_leaves_the_floor_free(immutable_model_world):
     assert np.all(occupancy_map.create_ray_mask_around_origin() == 1)
 
 
-def test_gaussian_costmap(immutable_model_world):
+def test_gaussian_costmap(pr2_apartment_context):
 
-    world, robot_view, context = immutable_model_world
+    world, robot_view, context = pr2_apartment_context
     gaussian_map = GaussianCostmap(
         resolution=0.02,
         origin=Pose.from_xyz_quaternion(3.1, 2.2, 0, 0, 0, 1, 0, world.root),
@@ -172,7 +172,7 @@ def test_gaussian_costmap(immutable_model_world):
 
 
 def test_a_reachability_map_rates_only_the_side_the_robot_can_reach_from(
-    immutable_model_world,
+    pr2_apartment_context,
 ):
     """
     Merging an occupancy map into a gaussian one is what keeps a target's standing poses
@@ -181,7 +181,7 @@ def test_a_reachability_map_rates_only_the_side_the_robot_can_reach_from(
     Which of the rated entries a sampling then offers is the sampling's business; a
     stray candidate is what the collision and reachability checks on a location are for.
     """
-    world, robot_view, context = immutable_model_world
+    world, robot_view, context = pr2_apartment_context
     occupancy_map = OccupancyCostmap(
         resolution=0.02,
         height=400,
@@ -208,8 +208,8 @@ def test_a_reachability_map_rates_only_the_side_the_robot_can_reach_from(
 # ----- Sampling test ---------------
 
 
-def test_position_generation(immutable_model_world):
-    world, robot_view, context = immutable_model_world
+def test_position_generation(pr2_apartment_context):
+    world, robot_view, context = pr2_apartment_context
     np_map = np.zeros((200, 200))
     np_map[90:110, 90:110] = 1
     gaussian_map = GaussianCostmap(
@@ -226,8 +226,8 @@ def test_position_generation(immutable_model_world):
         assert 0.8 <= pose.to_position().y <= 1.2
 
 
-def test_segment_map(immutable_model_world):
-    world, robot_view, context = immutable_model_world
+def test_segment_map(pr2_apartment_context):
+    world, robot_view, context = pr2_apartment_context
     np_map = np.zeros((200, 200))
     np_map[90:110, 90:110] = 1
     np_map[20:40, 20:40] = 1
@@ -250,8 +250,8 @@ def test_segment_map(immutable_model_world):
     assert np.sum(map_1[90:110, 90:110]) == 20**2 and np.sum(map_1[20:40, 20:40]) == 0
 
 
-def test_sample_x_axis(immutable_model_world):
-    world, robot_view, context = immutable_model_world
+def test_sample_x_axis(pr2_apartment_context):
+    world, robot_view, context = pr2_apartment_context
     np_map = np.zeros((200, 200))
     np_map[:, 99:101] = 1
 
@@ -269,8 +269,8 @@ def test_sample_x_axis(immutable_model_world):
         assert -0.05 < pose.to_position().y < 0.05
 
 
-def test_sample_x_axis_offset(immutable_model_world):
-    world, robot_view, context = immutable_model_world
+def test_sample_x_axis_offset(pr2_apartment_context):
+    world, robot_view, context = pr2_apartment_context
     np_map = np.zeros((200, 200))
     np_map[120:140, 90:110] = 1
 
@@ -289,8 +289,8 @@ def test_sample_x_axis_offset(immutable_model_world):
         assert 0.4 <= pose.to_position().x <= 0.8
 
 
-def test_sample_x_axis_offset_non_id(immutable_model_world):
-    world, robot_view, context = immutable_model_world
+def test_sample_x_axis_offset_non_id(pr2_apartment_context):
+    world, robot_view, context = pr2_apartment_context
     np_map = np.zeros((200, 200))
     np_map[120:140, 90:110] = 1
 
@@ -309,8 +309,8 @@ def test_sample_x_axis_offset_non_id(immutable_model_world):
         assert 3.4 <= pose.to_position().x <= 3.8 + tolerance
 
 
-def test_sample_to_pose_gau(immutable_model_world):
-    world, robot_view, context = immutable_model_world
+def test_sample_to_pose_gau(pr2_apartment_context):
+    world, robot_view, context = pr2_apartment_context
     np_map = np.zeros((200, 200))
     np_map[120:140, 90:110] = 1
     gaussian_map = GaussianCostmap(
@@ -340,8 +340,8 @@ def test_sample_to_pose_gau(immutable_model_world):
         assert 3.4 <= pose.to_position().x <= 3.8 + tolerance
 
 
-def test_sample_y_axis(immutable_model_world):
-    world, robot_view, context = immutable_model_world
+def test_sample_y_axis(pr2_apartment_context):
+    world, robot_view, context = pr2_apartment_context
     np_map = np.zeros((200, 200))
     np_map[99:101, :] = 1
     gaussian_map = GaussianCostmap(
@@ -357,8 +357,8 @@ def test_sample_y_axis(immutable_model_world):
         assert -0.05 < pose.to_position().x < 0.05
 
 
-def test_sample_rotated(immutable_model_world):
-    world, robot_view, context = immutable_model_world
+def test_sample_rotated(pr2_apartment_context):
+    world, robot_view, context = pr2_apartment_context
     np_map = np.zeros((200, 200))
     np_map[120:121, 99:101] = 1
     gaussian_map = GaussianCostmap(
@@ -384,8 +384,8 @@ def test_sample_rotated(immutable_model_world):
         assert 0.4 <= pose.to_position().x <= 0.45
 
 
-def test_sample_to_pose(immutable_model_world):
-    world, robot_view, context = immutable_model_world
+def test_sample_to_pose(pr2_apartment_context):
+    world, robot_view, context = pr2_apartment_context
 
     np_map = np.zeros((200, 200))
     np_map[130, 160] = 1
@@ -406,8 +406,8 @@ def test_sample_to_pose(immutable_model_world):
     assert pose.to_position().z == 0
 
 
-def test_sample_highest_first(immutable_model_world):
-    world, robot_view, context = immutable_model_world
+def test_sample_highest_first(pr2_apartment_context):
+    world, robot_view, context = pr2_apartment_context
     np_map = np.zeros((200, 200))
     np_map[40, 40] = 1
     np_map[80, 80] = 2
@@ -434,8 +434,8 @@ def test_sample_highest_first(immutable_model_world):
     )
 
 
-def test_segment_highest_first(immutable_model_world):
-    world, robot_view, context = immutable_model_world
+def test_segment_highest_first(pr2_apartment_context):
+    world, robot_view, context = pr2_apartment_context
     np_map = np.zeros((200, 200))
     np_map[40:45, 40:45] = 1
     np_map[80:85, 80:85] = 3
@@ -457,8 +457,8 @@ def test_segment_highest_first(immutable_model_world):
     assert np.max(segmented_maps[2]) == 1
 
 
-def test_segment_empty_map(immutable_model_world):
-    world, robot_view, context = immutable_model_world
+def test_segment_empty_map(pr2_apartment_context):
+    world, robot_view, context = pr2_apartment_context
     np_map = np.zeros((200, 200))
     gaussian_map = GaussianCostmap(
         resolution=0.02,
@@ -523,13 +523,13 @@ def _stand_off_distances(
     )
 
 
-def test_weighted_sampling_reaches_the_whole_ring(immutable_model_world):
+def test_weighted_sampling_reaches_the_whole_ring(pr2_apartment_context):
     """
     A ring says a stand-off distance is likely, not that it is the only one worth
     trying, so a pose needing a few centimetres more has to come up inside the budget a
     caller can afford to simulate.
     """
-    world, _, _ = immutable_model_world
+    world, _, _ = pr2_apartment_context
     budget = 50
 
     ring = _ring_map(world)
@@ -538,7 +538,7 @@ def test_weighted_sampling_reaches_the_whole_ring(immutable_model_world):
 
 
 def test_weighted_sampling_still_favours_what_the_map_rates_highest(
-    immutable_model_world,
+    pr2_apartment_context,
 ):
     """
     Weighting has to follow the map rather than ignore it, or the ring stops meaning
@@ -548,7 +548,7 @@ def test_weighted_sampling_still_favours_what_the_map_rates_highest(
     pulled outwards whatever the ratings say. What the rating buys is how much closer to
     the ring the sampling stays than it would without one.
     """
-    world, _, _ = immutable_model_world
+    world, _, _ = pr2_apartment_context
     ring = _ring_map(world)
 
     weighted_median = float(np.median(_stand_off_distances(ring, 0, 400)))
@@ -559,11 +559,11 @@ def test_weighted_sampling_still_favours_what_the_map_rates_highest(
     assert abs(weighted_median - ring.distance) < abs(ignored_median - ring.distance)
 
 
-def test_a_seeded_sampling_repeats(immutable_model_world):
+def test_a_seeded_sampling_repeats(pr2_apartment_context):
     """
     A run has to be reproducible to be debugged, so a caller can fix the sampling.
     """
-    world, _, _ = immutable_model_world
+    world, _, _ = pr2_apartment_context
     ring = _ring_map(world)
 
     first = _stand_off_distances(ring, 7, 40)
@@ -574,12 +574,12 @@ def test_a_seeded_sampling_repeats(immutable_model_world):
     assert not np.array_equal(first, different)
 
 
-def test_an_unseeded_sampling_varies(immutable_model_world):
+def test_an_unseeded_sampling_varies(pr2_apartment_context):
     """
     Without a seed each run explores the region afresh, which is the point of sampling
     from the map rather than ranking it.
     """
-    world, _, _ = immutable_model_world
+    world, _, _ = pr2_apartment_context
     ring = _ring_map(world)
 
     first = _stand_off_distances(ring, None, 40)
@@ -588,14 +588,14 @@ def test_an_unseeded_sampling_varies(immutable_model_world):
     assert not np.array_equal(first, again)
 
 
-def test_how_many_candidates_to_sample_is_the_callers_to_say(immutable_model_world):
+def test_how_many_candidates_to_sample_is_the_callers_to_say(pr2_apartment_context):
     """
     How many candidates a map offers belongs to whoever samples from it, not to the map.
 
     A map built once is sampled from by callers that can afford to judge different
     numbers of them.
     """
-    world, _, _ = immutable_model_world
+    world, _, _ = pr2_apartment_context
     ring = _ring_map(world)
 
     few = list(ring.candidates(Sampling(number_of_samples=12)))
@@ -605,12 +605,12 @@ def test_how_many_candidates_to_sample_is_the_callers_to_say(immutable_model_wor
     assert len(many) == 300
 
 
-def test_a_sampled_candidate_faces_the_maps_origin(immutable_model_world):
+def test_a_sampled_candidate_faces_the_maps_origin(pr2_apartment_context):
     """
     A candidate says where to stand and which way to look, and looking at the origin is
     what puts whatever the map was built around in front of the robot.
     """
-    world, _, _ = immutable_model_world
+    world, _, _ = pr2_apartment_context
     ring = _ring_map(world)
 
     sampled = list(
@@ -640,13 +640,13 @@ def _everywhere_map(world) -> RingCostmap:
 
 
 def test_a_sparsely_rated_map_is_sampled_from_within_its_rated_entries(
-    immutable_model_world,
+    pr2_apartment_context,
 ):
     """
     A map whose rated region is a fraction of its extent is the ordinary case, and the
     default sample budget far exceeds what such a map rates.
     """
-    world, _, _ = immutable_model_world
+    world, _, _ = pr2_apartment_context
     costmap = _sparsely_rated_map(world)
 
     poses = list(costmap.candidates(Sampling(seed=0)))
@@ -658,7 +658,7 @@ def test_a_sparsely_rated_map_is_sampled_from_within_its_rated_entries(
 
 
 def test_a_budget_smaller_than_the_segment_count_still_offers_candidates(
-    immutable_model_world,
+    pr2_apartment_context,
 ):
     """
     A budget is spread over the segments a map falls into, and a caller that can only
@@ -667,7 +667,7 @@ def test_a_budget_smaller_than_the_segment_count_still_offers_candidates(
     Sharing the budget out by rating leaves nothing for any segment once it is smaller
     than the number of them, which would have the map offer nothing at all.
     """
-    world, _, _ = immutable_model_world
+    world, _, _ = pr2_apartment_context
     costmap = _sparsely_rated_map(world)
     asked_for = len(costmap.segment_map()) - 1
 
@@ -676,12 +676,12 @@ def test_a_budget_smaller_than_the_segment_count_still_offers_candidates(
     assert len(poses) == asked_for
 
 
-def test_a_segment_is_sampled_from_as_much_as_it_is_rated(immutable_model_world):
+def test_a_segment_is_sampled_from_as_much_as_it_is_rated(pr2_apartment_context):
     """
     A segment the map barely rates has to be sampled from barely, or a region worth
     standing in and one worth avoiding are offered alike however the map rates them.
     """
-    world, _, _ = immutable_model_world
+    world, _, _ = pr2_apartment_context
     costmap = _ring_map(world)
     costmap.map = np.zeros((200, 200))
     costmap.map[20:40, 20:40] = 1.0
@@ -697,12 +697,12 @@ def test_a_segment_is_sampled_from_as_much_as_it_is_rated(immutable_model_world)
     assert sampled_from_preferred == round(budget * float(preferred_share))
 
 
-def test_a_map_offers_no_more_candidates_than_it_holds(immutable_model_world):
+def test_a_map_offers_no_more_candidates_than_it_holds(pr2_apartment_context):
     """
     An entry is offered once, so a budget beyond what the map holds is capped at its
     extent rather than running up to the budget over its segments.
     """
-    world, _, _ = immutable_model_world
+    world, _, _ = pr2_apartment_context
     costmap = _ring_map(world)
     costmap.map = np.ones((3, 3))
 
@@ -712,7 +712,7 @@ def test_a_map_offers_no_more_candidates_than_it_holds(immutable_model_world):
 
 
 @pytest.mark.parametrize("asked_for", [0, -1, -5])
-def test_a_map_asked_for_no_candidates_says_so(immutable_model_world, asked_for):
+def test_a_map_asked_for_no_candidates_says_so(pr2_apartment_context, asked_for):
     """
     No sampling satisfies a request for fewer than one candidate, so it is refused where
     it is asked for rather than quietly answered with an empty map.
@@ -720,7 +720,7 @@ def test_a_map_asked_for_no_candidates_says_so(immutable_model_world, asked_for)
     Refused at the call rather than once the sampling is iterated, so a caller that
     hands the candidates on is told where the mistake is.
     """
-    world, _, _ = immutable_model_world
+    world, _, _ = pr2_apartment_context
     costmap = _ring_map(world)
 
     with pytest.raises(NonPositiveNumberOfSamples):

@@ -29,8 +29,8 @@ def _construct_and_evaluate_condition(action, action_condition):
     )
 
 
-def test_get_bound_variables(immutable_model_world):
-    world, view, context = immutable_model_world
+def test_get_bound_variables(pr2_apartment_context):
+    world, view, context = pr2_apartment_context
 
     milk = world.get_semantic_annotations_by_type(Milk)[0]
     grasp = milk.grasp_candidates()[0]
@@ -38,7 +38,7 @@ def test_get_bound_variables(immutable_model_world):
 
     bound_variables = pick_action._create_variables()
 
-    assert len(bound_variables) == 15
+    assert len(bound_variables) == 14
     assert list(bound_variables.keys()) == [
         "position_threshold",
         "orientation_threshold",
@@ -54,7 +54,6 @@ def test_get_bound_variables(immutable_model_world):
         "grasp",
         "arm",
         "tolerate_grasp_stall",
-        "perceive_before_grasp",
     ]
     assert list(bound_variables["arm"]._domain_) == [context.robot.left_arm]
     assert bound_variables["arm"]._type_ == type(context.robot.left_arm)
@@ -62,12 +61,12 @@ def test_get_bound_variables(immutable_model_world):
     assert bound_variables["grasp"]._type_ == GraspCandidate
 
 
-def test_pick_up_pre_condition_leaves_reaching_to_the_attempt(mutable_model_world):
+def test_pick_up_pre_condition_leaves_reaching_to_the_attempt(pr2_apartment_context):
     """
     A precondition only checks the current state cheaply, so a grasp out of reach from
     where the robot starts does not refuse the pick-up while the gripper is free.
     """
-    world, view, context = mutable_model_world
+    world, view, context = pr2_apartment_context
     milk = world.get_semantic_annotations_by_type(Milk)[0]
     pick_action = PickUpAction(milk.grasp_candidates()[0], context.robot.left_arm)
     sequential([pick_action], context)
@@ -75,8 +74,8 @@ def test_pick_up_pre_condition_leaves_reaching_to_the_attempt(mutable_model_worl
     assert _construct_and_evaluate_condition(pick_action, pick_action.pre_condition)
 
 
-def test_pick_up_pre_condition_needs_a_free_gripper(mutable_model_world):
-    world, view, context = mutable_model_world
+def test_pick_up_pre_condition_needs_a_free_gripper(pr2_apartment_context):
+    world, view, context = pr2_apartment_context
     milk = world.get_semantic_annotations_by_type(Milk)[0]
     pick_action = PickUpAction(milk.grasp_candidates()[0], context.robot.left_arm)
     # The standing pose from which the left arm reaches the milk.
@@ -95,8 +94,8 @@ def test_pick_up_pre_condition_needs_a_free_gripper(mutable_model_world):
     assert not evaluate_condition(pre_condition)
 
 
-def test_pick_up_post_condition(mutable_model_world):
-    world, view, context = mutable_model_world
+def test_pick_up_post_condition(pr2_apartment_context):
+    world, view, context = pr2_apartment_context
     milk = world.get_semantic_annotations_by_type(Milk)[0]
     pick_action = PickUpAction(milk.grasp_candidates()[0], context.robot.left_arm)
     # The standing pose test_pick_up_pre_condition establishes as reaching the milk.

@@ -25,11 +25,11 @@ Extents of the box the approach sequence has to clear.
 
 
 @pytest.fixture
-def boxed_pr2_world(mutable_simple_pr2_world):
+def boxed_pr2_world(simple_pr2_context):
     """
     A PR2 next to a graspable box of known extents, a meter above the world root.
     """
-    world, robot, context = mutable_simple_pr2_world
+    world, robot, context = simple_pr2_context
     with world.modify_world():
         box = Body(
             name=PrefixedName("approach_box"),

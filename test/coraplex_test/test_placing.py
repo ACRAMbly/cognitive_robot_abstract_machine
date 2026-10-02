@@ -32,11 +32,11 @@ How far the held object is turned about the tool frame's z-axis.
 
 
 @pytest.fixture
-def pr2_holding_milk(mutable_simple_pr2_world):
+def pr2_holding_milk(simple_pr2_context):
     """
     A PR2 whose left tool frame holds the milk off-centre, at :data:`HELD_AT`.
     """
-    world, robot, _ = mutable_simple_pr2_world
+    world, robot, _ = simple_pr2_context
     milk_body = world.get_body_by_name("milk.stl")
     milk = Milk(root=milk_body)
     tool_frame = robot.left_arm.end_effector.tool_frame
@@ -81,14 +81,14 @@ def test_place_derives_the_grasp_from_the_live_tool_frame_transform(pr2_holding_
 # %% releasing what has not been picked up yet
 
 
-def test_place_uses_the_grasp_its_pick_up_will_take(mutable_model_world):
+def test_place_uses_the_grasp_its_pick_up_will_take(pr2_apartment_context):
     """
     A plan is built before it runs, so a place that follows a pick-up in the same plan
     is expanded while the object is still on its shelf, nowhere near the gripper. The
     grasp then has to come from the pick-up that is going to take it, not from where
     the object happens to lie.
     """
-    world, robot, context = mutable_model_world
+    world, robot, context = pr2_apartment_context
     milk = world.get_semantic_annotations_by_type(Milk)[0]
     target = Pose.from_xyz_rpy(1.2, 0.4, 0.9, reference_frame=world.root)
 
@@ -103,11 +103,11 @@ def test_place_uses_the_grasp_its_pick_up_will_take(mutable_model_world):
     )
 
 
-def test_a_place_of_an_object_nothing_holds_is_refused(mutable_model_world):
+def test_a_place_of_an_object_nothing_holds_is_refused(pr2_apartment_context):
     """
     Nothing in the gripper and no pick-up before it leaves no arm to place with.
     """
-    world, robot, context = mutable_model_world
+    world, robot, context = pr2_apartment_context
     milk = world.get_semantic_annotations_by_type(Milk)[0]
     target = Pose.from_xyz_rpy(1.2, 0.4, 0.9, reference_frame=world.root)
 
@@ -143,12 +143,12 @@ def test_place_takes_the_arm_that_holds_the_object(pr2_holding_milk):
     assert _arms_moved_by(place) == {robot.left_arm}
 
 
-def test_place_takes_the_arm_its_pick_up_will_use(mutable_model_world):
+def test_place_takes_the_arm_its_pick_up_will_use(pr2_apartment_context):
     """
     A plan is built before it runs, so a place that follows a pick-up in the same plan
     places with the arm that pick-up is going to hold the object in.
     """
-    world, robot, context = mutable_model_world
+    world, robot, context = pr2_apartment_context
     milk = world.get_semantic_annotations_by_type(Milk)[0]
     target = Pose.from_xyz_rpy(1.2, 0.4, 0.9, reference_frame=world.root)
     pick_up = PickUpAction(milk.grasp_candidates()[0], robot.right_arm)

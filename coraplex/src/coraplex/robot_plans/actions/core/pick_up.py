@@ -7,8 +7,6 @@ from typing_extensions import Any, Dict, Optional
 
 from coraplex.plans.attachment_nodes import ReAttachNode
 from coraplex.plans.plan_node import PlanNode
-from coraplex.robot_plans.actions.core.misc import DetectAction
-from coraplex.robot_plans.actions.core.navigation import LookAtAction
 from krrood.entity_query_language.core.variable import Variable
 from krrood.entity_query_language.factories import (
     or_,
@@ -19,7 +17,6 @@ from krrood.entity_query_language.factories import (
 from coraplex.datastructures.dataclasses import Context
 from coraplex.datastructures.enums import (
     MovementType,
-    DetectionTechnique,
 )
 from coraplex.plans.factories import sequential
 from coraplex.querying.predicates import GripperIsFree
@@ -122,14 +119,6 @@ class ReachAction(
     :class:`PickUpAction` to open before its slower final approach.
     """
 
-    perceive_before_grasp: bool = False
-    """
-    Whether to look at the target and detect the object before the final approach.
-
-    When False the reach goes straight from the pre-pose to the target, grasping at the
-    pose the world already holds.
-    """
-
     @property
     def _action_plan(self) -> PlanNode:
         pre_grasp_pose, tool_goal, _ = self.grasp_pose_sequence(
@@ -153,17 +142,6 @@ class ReachAction(
                 MoveGripperMotion(
                     motion=GripperState.OPEN, gripper=self.arm.end_effector
                 )
-            )
-        if self.perceive_before_grasp:
-            children.extend(
-                [
-                    LookAtAction(tool_goal),
-                    DetectAction(
-                        DetectionTechnique.TYPES,
-                        object_sem_annotation=type(self.grasp.graspable),
-                        accept_first_if_multiple=True,
-                    ),
-                ]
             )
         children.append(
             MoveToolCenterPointMotion(
@@ -227,14 +205,6 @@ class PickUpAction(
     one.
     """
 
-    perceive_before_grasp: bool = False
-    """
-    Whether to look at the object and detect it before the final approach.
-
-    Passed on to the reach this pick-up is built from; see
-    :attr:`ReachAction.perceive_before_grasp`.
-    """
-
     def _grasp_attempt_plan(self, grasp: GraspCandidate) -> PlanNode:
         """
         :param grasp: The grasp to attempt, so the attempt and the lift that
@@ -256,7 +226,6 @@ class PickUpAction(
                     grasp_closing_velocity=self.grasp_closing_velocity,
                     grasp_stall_minimum_time=self.grasp_stall_minimum_time,
                     tolerate_grasp_stall=self.tolerate_grasp_stall,
-                    perceive_before_grasp=self.perceive_before_grasp,
                     grasp_detection_threshold=self.grasp_detection_threshold,
                     position_threshold=self.position_threshold,
                     orientation_threshold=self.orientation_threshold,
@@ -339,14 +308,6 @@ class GraspingAction(
     :attr:`~coraplex.robot_plans.motions.gripper.MoveGripperMotion.tolerate_stall`).
     """
 
-    perceive_before_grasp: bool = False
-    """
-    Whether to look at the object and detect it before the final approach.
-
-    Passed on to the reach this grasp is built from; see
-    :attr:`ReachAction.perceive_before_grasp`.
-    """
-
     @property
     def _action_plan(self) -> PlanNode:
         return sequential(
@@ -363,7 +324,6 @@ class GraspingAction(
                     open_gripper_at_pre_pose=True,
                     position_threshold=self.position_threshold,
                     orientation_threshold=self.orientation_threshold,
-                    perceive_before_grasp=self.perceive_before_grasp,
                     grasp_detection_threshold=self.grasp_detection_threshold,
                 ),
                 MoveGripperMotion(

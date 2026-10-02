@@ -10,23 +10,23 @@ from ...conftest import SAMPLING_SEED
 # %% debug validation
 
 
-def test_debug_requires_a_ros_node(immutable_model_world):
+def test_debug_requires_a_ros_node(pr2_apartment_context):
     """
     Debug output is visualized over ROS, so a context constructed in debug mode without
     a node is rejected at construction rather than failing later during execution.
     """
-    world, robot, _ = immutable_model_world
+    world, robot, _ = pr2_apartment_context
 
     with pytest.raises(ValueError):
         Context(world, robot, _debug=True)
 
 
-def test_debug_raises_the_coraplex_log_level(immutable_model_world, rclpy_node):
+def test_debug_raises_the_coraplex_log_level(pr2_apartment_context, rclpy_node):
     """
     Constructing a context in debug mode lowers the package's log level, so debug
     messages are emitted without the caller touching logging.
     """
-    world, robot, _ = immutable_model_world
+    world, robot, _ = pr2_apartment_context
     coraplex_logger = logging.getLogger("coraplex")
     previous_level = coraplex_logger.level
 
@@ -37,11 +37,11 @@ def test_debug_raises_the_coraplex_log_level(immutable_model_world, rclpy_node):
         coraplex_logger.setLevel(previous_level)
 
 
-def test_default_context_logs_at_info(immutable_model_world):
+def test_default_context_logs_at_info(pr2_apartment_context):
     """
     Without debug mode the package logs at info level.
     """
-    world, robot, _ = immutable_model_world
+    world, robot, _ = pr2_apartment_context
     coraplex_logger = logging.getLogger("coraplex")
     previous_level = coraplex_logger.level
 
@@ -56,10 +56,9 @@ def test_default_context_logs_at_info(immutable_model_world):
 # %% repeatable location samples
 
 WORLD_FIXTURES_WITH_A_CONTEXT = [
-    "mutable_model_world",
-    "immutable_model_world",
-    "mutable_simple_pr2_world",
-    "immutable_simple_pr2_world",
+    "pr2_apartment_context",
+    "simple_pr2_context",
+    "stretch_apartment_context",
     "apartment_world_pr2_copy_with_context",
 ]
 """
@@ -81,13 +80,13 @@ def test_a_shared_fixture_fixes_the_samples_its_context_makes(world_fixture, req
 # %% copying something that belongs to a run
 
 
-def test_a_copied_context_is_the_same_context(immutable_model_world, rclpy_node):
+def test_a_copied_context_is_the_same_context(pr2_apartment_context, rclpy_node):
     """
     A context is the run an object belongs to, holding the world it acts on and the ROS
     node it talks through, so copying an object that refers to it keeps referring to
     that run rather than trying to copy the run itself.
     """
-    world, robot, context = immutable_model_world
+    world, robot, context = pr2_apartment_context
     context.ros_node = rclpy_node
 
     assert deepcopy(context) is context

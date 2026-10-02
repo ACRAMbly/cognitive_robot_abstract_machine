@@ -48,6 +48,7 @@ from coraplex.robot_plans.actions.core.robot_body import (
     ParkArmsAction,
     SetGripperAction,
 )
+from coraplex.robot_plans.plan_transformations import DetectBeforeGrasp
 from krrood.entity_query_language.factories import a
 from semantic_digital_twin.api import (
     BodySpecification,
@@ -152,6 +153,7 @@ class StretchApartmentDemonstration(RobotDemonstration):
             ros_node=self.ros_node,
             evaluate_conditions=False,
             alternative_motion_mappings=self.alternative_motion_mappings,
+            plan_transformations=[DetectBeforeGrasp()],
         )
 
     def build_plan(self, context: Context) -> PlanNode:
@@ -193,7 +195,6 @@ class StretchApartmentDemonstration(RobotDemonstration):
                 PickUpAction(
                     cereal.grasp_candidates()[0],
                     context.robot.get_arms()[0],
-                    perceive_before_grasp=True,
                 ),
                 ParkArmsAction(context.robot.get_arms()),
                 NavigateAction(
@@ -235,7 +236,6 @@ class StretchApartmentDemonstration(RobotDemonstration):
                 a(PickUpAction)(
                     grasp=cereal.grasp_candidates()[0],
                     arm=context.robot.get_arms()[0],
-                    perceive_before_grasp=True,
                 ),
                 ParkArmsAction(context.robot.get_arms()),
                 NavigateAction(

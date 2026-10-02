@@ -24,6 +24,7 @@ from coraplex.exceptions import NoFloorBelowRobot
 from coraplex.robot_plans.mixins import HasApproachesGraspPoses
 from coraplex.execution_environment import simulated_robot
 from coraplex.plans.factories import sequential, execute_single
+from coraplex.robot_plans.plan_transformations import OpenDrawerBeforeMoveAndPickUp
 from coraplex.robot_plans.actions.composite.transporting import TransportAction
 from coraplex.robot_plans.actions.core.container import OpenAction, CloseAction
 from coraplex.robot_plans.actions.core.misc import DetectAction, MoveToReach
@@ -49,9 +50,6 @@ from coraplex.robot_plans.actions.core.robot_body import (
     FollowToolCenterPointPathAction,
 )
 from giskardpy.utils.utils_for_tests import compare_axis_angle, compare_orientations
-from semantic_digital_twin.adapters.ros.visualization.viz_marker import (
-    VizMarkerPublisher,
-)
 from semantic_digital_twin.callbacks.callback import ModelChangeCallback
 from semantic_digital_twin.datastructures.definitions import (
     TorsoState,
@@ -61,6 +59,7 @@ from semantic_digital_twin.datastructures.definitions import (
 from semantic_digital_twin.robots.robot_part_mixins import HasMobileBase
 from semantic_digital_twin.robots.robot_parts import AbstractRobot, EndEffector
 from ..conftest import left_or_only_arm, right_or_only_arm
+from ..world_snapshot import WorldSnapshot
 
 try:
     from semantic_digital_twin.robots.garmi import Garmi
@@ -271,11 +270,15 @@ def setup_multi_robot_apartment(
 
 
 @pytest.fixture
-def immutable_multiple_robot_apartment(
+def multiple_robot_apartment_context(
     setup_multi_robot_apartment,
 ) -> Generator[Tuple[World, AbstractRobot, Context]]:
+    """
+    The shared apartment world with one robot, the robot and a context for both,
+    returned to its initial model, state and full body control setting after the test.
+    """
     world, view = setup_multi_robot_apartment
-    state = deepcopy(world.state._data)
+    snapshot = WorldSnapshot.capture(world)
     full_body_controlled = (
         view.mobile_base.full_body_controlled
         if isinstance(view, HasMobileBase)
@@ -288,29 +291,11 @@ def immutable_multiple_robot_apartment(
         sampling_seed=SAMPLING_SEED,
     )
     view.mobile_base.full_body_controlled = full_body_controlled
-    world.state._data[:] = state
-    world.notify_state_change()
+    snapshot.restore()
 
 
-@pytest.fixture
-def mutable_multiple_robot_apartment(setup_multi_robot_apartment):
-    world, view = setup_multi_robot_apartment
-    copy_world: World = deepcopy(world)
-    copy_view = copy_world.get_semantic_annotation_by_id(view.id)
-    return (
-        copy_world,
-        copy_view,
-        Context(
-            copy_world,
-            copy_view,
-            alternative_motion_mappings=ALTERNATIVE_MOTION_MAPPINGS,
-            sampling_seed=SAMPLING_SEED,
-        ),
-    )
-
-
-def test_move_torso_multi(immutable_multiple_robot_apartment):
-    world, view, context = immutable_multiple_robot_apartment
+def test_move_torso_multi(multiple_robot_apartment_context):
+    world, view, context = multiple_robot_apartment_context
     plan = execute_single(MoveTorsoAction(TorsoState.HIGH), context=context)
     with simulated_robot:
         plan.perform()
@@ -321,8 +306,8 @@ def test_move_torso_multi(immutable_multiple_robot_apartment):
         assert connection.position == pytest.approx(target, abs=0.01)
 
 
-def test_navigate_multi(immutable_multiple_robot_apartment, rclpy_node):
-    world, view, context = immutable_multiple_robot_apartment
+def test_navigate_multi(multiple_robot_apartment_context, rclpy_node):
+    world, view, context = multiple_robot_apartment_context
     target_position = [5, 2, 0]
 
     plan = execute_single(
@@ -345,8 +330,8 @@ def test_navigate_multi(immutable_multiple_robot_apartment, rclpy_node):
     assert world_V_forward.to_np()[:3].flatten() == pytest.approx([1, 0, 0], abs=0.01)
 
 
-def test_move_gripper_multi(immutable_multiple_robot_apartment):
-    world, view, context = immutable_multiple_robot_apartment
+def test_move_gripper_multi(multiple_robot_apartment_context):
+    world, view, context = multiple_robot_apartment_context
 
     plan = execute_single(
         SetGripperAction(
@@ -379,8 +364,8 @@ def test_move_gripper_multi(immutable_multiple_robot_apartment):
         assert connection.position == pytest.approx(target, abs=0.02)
 
 
-def test_park_arms_multi(immutable_multiple_robot_apartment):
-    world, robot, context = immutable_multiple_robot_apartment
+def test_park_arms_multi(multiple_robot_apartment_context):
+    world, robot, context = multiple_robot_apartment_context
     description = ParkArmsAction(context.robot.get_arms())
     plan = execute_single(description, context)
     assert description.arms == context.robot.get_arms()
@@ -403,8 +388,8 @@ def test_park_arms_multi(immutable_multiple_robot_apartment):
         )
 
 
-def test_reach_action_multi(immutable_multiple_robot_apartment):
-    world, view, context = immutable_multiple_robot_apartment
+def test_reach_action_multi(multiple_robot_apartment_context):
+    world, view, context = multiple_robot_apartment_context
 
     left_arm = left_or_only_arm(context.robot)
 
@@ -447,8 +432,8 @@ def test_reach_action_multi(immutable_multiple_robot_apartment):
     )
 
 
-def test_follow_tcp_path_multi(immutable_multiple_robot_apartment):
-    world, robot, context = immutable_multiple_robot_apartment
+def test_follow_tcp_path_multi(multiple_robot_apartment_context):
+    world, robot, context = multiple_robot_apartment_context
 
     if isinstance(robot, (Tiago)):
         # do not allow since
@@ -507,8 +492,8 @@ def test_follow_tcp_path_multi(immutable_multiple_robot_apartment):
     assert dist < 0.01
 
 
-def test_grasping(immutable_multiple_robot_apartment):
-    world, robot, context = immutable_multiple_robot_apartment
+def test_grasping(multiple_robot_apartment_context):
+    world, robot, context = multiple_robot_apartment_context
     left_arm = left_or_only_arm(context.robot)
 
     milk = world.get_semantic_annotations_by_type(Milk)[0]
@@ -544,8 +529,8 @@ def test_grasping(immutable_multiple_robot_apartment):
     )
 
 
-def test_pick_up_multi(mutable_multiple_robot_apartment, rclpy_node):
-    world, view, context = mutable_multiple_robot_apartment
+def test_pick_up_multi(multiple_robot_apartment_context, rclpy_node):
+    world, view, context = multiple_robot_apartment_context
     context.evaluate_conditions = False
 
     left_arm = left_or_only_arm(context.robot)
@@ -590,8 +575,8 @@ def test_pick_up_multi(mutable_multiple_robot_apartment, rclpy_node):
     root.plan.validate()
 
 
-def test_place_multi(mutable_multiple_robot_apartment):
-    world, view, context = mutable_multiple_robot_apartment
+def test_place_multi(multiple_robot_apartment_context):
+    world, view, context = multiple_robot_apartment_context
 
     left_arm = left_or_only_arm(context.robot)
     milk_body = world.get_body_by_name("milk.stl")
@@ -636,8 +621,8 @@ def test_place_multi(mutable_multiple_robot_apartment):
     root.plan.validate()
 
 
-def test_look_at(immutable_multiple_robot_apartment):
-    world, robot_view, context = immutable_multiple_robot_apartment
+def test_look_at(multiple_robot_apartment_context):
+    world, robot_view, context = multiple_robot_apartment_context
     description = LookAtAction(
         Pose(Point3.from_iterable([3, 0, 1]), reference_frame=world.root)
     )
@@ -652,8 +637,8 @@ def test_look_at(immutable_multiple_robot_apartment):
         plan.perform()
 
 
-def test_detect(mutable_multiple_robot_apartment):
-    world, robot, context = mutable_multiple_robot_apartment
+def test_detect(multiple_robot_apartment_context):
+    world, robot, context = multiple_robot_apartment_context
     milk_body = world.get_body_by_name("milk.stl")
 
     # East of the multi-storey building the fixture merges in, so that the robot looks
@@ -686,8 +671,8 @@ def test_detect(mutable_multiple_robot_apartment):
     )
 
 
-def test_open(immutable_multiple_robot_apartment):
-    world, robot, context = immutable_multiple_robot_apartment
+def test_open(multiple_robot_apartment_context):
+    world, robot, context = multiple_robot_apartment_context
 
     plan = sequential(
         [
@@ -714,8 +699,8 @@ def test_open(immutable_multiple_robot_apartment):
     ).position == pytest.approx(0.45, abs=0.1)
 
 
-def test_close(immutable_multiple_robot_apartment, rclpy_node):
-    world, robot, context = immutable_multiple_robot_apartment
+def test_close(multiple_robot_apartment_context, rclpy_node):
+    world, robot, context = multiple_robot_apartment_context
 
     world.get_connection_by_name("cabinet10_drawer_middle_joint").position = 0.3
     world.notify_state_change()
@@ -747,8 +732,8 @@ def test_close(immutable_multiple_robot_apartment, rclpy_node):
     ).position == pytest.approx(0, abs=0.1)
 
 
-def test_facing(immutable_multiple_robot_apartment):
-    world, robot, context = immutable_multiple_robot_apartment
+def test_facing(multiple_robot_apartment_context):
+    world, robot, context = multiple_robot_apartment_context
 
     with simulated_robot:
         milk_pose = world.get_body_by_name("milk.stl").global_pose
@@ -769,11 +754,8 @@ def test_facing(immutable_multiple_robot_apartment):
         )
 
 
-def test_transport(mutable_multiple_robot_apartment, rclpy_node):
-    world, robot, context = mutable_multiple_robot_apartment
-    VizMarkerPublisher(_world=world, node=rclpy_node)
-    context.ros_node = rclpy_node
-    context.debug = True
+def test_transport(multiple_robot_apartment_context, rclpy_node):
+    world, robot, context = multiple_robot_apartment_context
     description = TransportAction.from_graspable_by_closest_grasps(
         world.get_semantic_annotations_by_type(Milk)[0],
         Pose(
@@ -794,8 +776,8 @@ def test_transport(mutable_multiple_robot_apartment, rclpy_node):
     plan.plan.validate()
 
 
-def test_move_to_reach(immutable_multiple_robot_apartment, rclpy_node):
-    world, robot, context = immutable_multiple_robot_apartment
+def test_move_to_reach(multiple_robot_apartment_context, rclpy_node):
+    world, robot, context = multiple_robot_apartment_context
     move_to_reach = MoveToReach(
         target_pose_offset_robot=Pose2D(0.2, -0.55),
         reference_T_tool_frame=Pose.from_xyz_rpy(
@@ -810,17 +792,14 @@ def test_move_to_reach(immutable_multiple_robot_apartment, rclpy_node):
         plan.perform()
 
 
-def test_transport_open_container(mutable_multiple_robot_apartment, rclpy_node):
-    world, robot, context = mutable_multiple_robot_apartment
+def test_transport_open_container(multiple_robot_apartment_context, rclpy_node):
+    world, robot, context = multiple_robot_apartment_context
     if isinstance(robot, HSRB):
         return
-    context.ros_node = rclpy_node
-    context.debug = True
-    v = VizMarkerPublisher(_world=world, node=rclpy_node)
-    v.with_collision_visualization()
     target_pose = Pose.from_xyz_rpy(
         5.1, 3.25, 0.75, yaw=1.57, reference_frame=world.root
     )
+    context.plan_transformations.append(OpenDrawerBeforeMoveAndPickUp())
     description = TransportAction.from_graspable_by_closest_grasps(
         world.get_semantic_annotations_by_type(Spoon)[0],
         target_pose,
@@ -843,12 +822,12 @@ def test_transport_open_container(mutable_multiple_robot_apartment, rclpy_node):
     plan.plan.validate()
 
 
-def test_multi_robot_gcs_navigation(immutable_multiple_robot_apartment, rclpy_node):
+def test_multi_robot_gcs_navigation(multiple_robot_apartment_context, rclpy_node):
     """
     The robot ends up at the target, having driven around the furniture between it and
     where it started rather than through it.
     """
-    world, robot, context = immutable_multiple_robot_apartment
+    world, robot, context = multiple_robot_apartment_context
     target_position = [5, 1]
 
     plan = execute_single(
@@ -867,13 +846,13 @@ def test_multi_robot_gcs_navigation(immutable_multiple_robot_apartment, rclpy_no
 
 
 def test_gcs_navigation_arrives_at_each_waypoint_facing_the_next_one(
-    immutable_multiple_robot_apartment,
+    multiple_robot_apartment_context,
 ):
     """
     Lining a waypoint's orientation up with the leg leaving it saves the next leg the
     turn it would otherwise start with, which is what a differential drive pays for.
     """
-    world, robot, context = immutable_multiple_robot_apartment
+    world, robot, context = multiple_robot_apartment_context
 
     action = PathPlanningNavigateAction(
         Pose.from_xyz_rpy(5, 1, 0, reference_frame=world.root)
@@ -899,14 +878,14 @@ def test_gcs_navigation_arrives_at_each_waypoint_facing_the_next_one(
 
 
 def test_gcs_navigation_plans_on_the_floor_the_robot_stands_on(
-    immutable_multiple_robot_apartment,
+    multiple_robot_apartment_context,
 ):
     """
     The free space the robot drives through is the one above the floor it stands on, so
     the multi-storey building standing next to the apartment contributes obstacles but
     not the surface the path is laid out on.
     """
-    world, robot, context = immutable_multiple_robot_apartment
+    world, robot, context = multiple_robot_apartment_context
 
     action = PathPlanningNavigateAction(
         Pose.from_xyz_rpy(5, 1, 0, reference_frame=world.root)
@@ -931,13 +910,13 @@ def test_gcs_navigation_plans_on_the_floor_the_robot_stands_on(
 
 
 def test_gcs_navigation_takes_a_waypoints_height_from_that_waypoints_frame(
-    immutable_multiple_robot_apartment,
+    multiple_robot_apartment_context,
 ):
     """
     A waypoint is expressed in the floor's frame, so the height the robot keeps while
     driving to it has to be read in that same frame rather than in the world's.
     """
-    world, robot, context = immutable_multiple_robot_apartment
+    world, robot, context = multiple_robot_apartment_context
 
     action = PathPlanningNavigateAction(
         Pose.from_xyz_rpy(5, 1, 0, reference_frame=world.root)
@@ -953,13 +932,13 @@ def test_gcs_navigation_takes_a_waypoints_height_from_that_waypoints_frame(
 
 
 def test_gcs_navigation_needs_a_floor_below_the_robot(
-    mutable_multiple_robot_apartment,
+    multiple_robot_apartment_context,
 ):
     """
     Without a floor there is no surface to lay a path out on, which is a broken world
     rather than an unreachable target.
     """
-    world, robot, context = mutable_multiple_robot_apartment
+    world, robot, context = multiple_robot_apartment_context
     robot.root.parent_connection.origin = HomogeneousTransformationMatrix.from_xyz_rpy(
         -50, -50, 0
     )
@@ -1020,8 +999,8 @@ class ElevatorOperator(ModelChangeCallback):
         self.elevator.open()
 
 
-def test_elevator_navigation(mutable_multiple_robot_apartment, rclpy_node):
-    world, robot, context = mutable_multiple_robot_apartment
+def test_elevator_navigation(multiple_robot_apartment_context, rclpy_node):
+    world, robot, context = multiple_robot_apartment_context
 
     elevator = world.get_semantic_annotations_by_type(Elevator)[0]
     elevator.open()

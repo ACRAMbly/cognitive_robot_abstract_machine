@@ -24,12 +24,12 @@ def _reach_of(pick_up: PickUpAction) -> ReachAction:
     return reach_node.designator
 
 
-def test_pick_up_takes_the_grasp_it_is_given(immutable_model_world):
+def test_pick_up_takes_the_grasp_it_is_given(pr2_apartment_context):
     """
     A caller that settled on a grasp -- together with the pose the robot stands at, say
     -- has the pick-up take that one instead of ranking the object's grasps again.
     """
-    world, view, context = immutable_model_world
+    world, view, context = pr2_apartment_context
     milk = world.get_semantic_annotations_by_type(Milk)[0]
     given = GraspCandidate(
         milk, Pose.from_xyz_rpy(yaw=np.pi / 3, reference_frame=milk.root)
@@ -41,12 +41,12 @@ def test_pick_up_takes_the_grasp_it_is_given(immutable_model_world):
     assert pick_up.grasp is given
 
 
-def test_pick_up_reaches_for_the_grasp_it_settled_on(immutable_model_world):
+def test_pick_up_reaches_for_the_grasp_it_settled_on(pr2_apartment_context):
     """
     The grasp the pick-up chose is the one its plan reaches for, so a caller's choice
     reaches the motions rather than stopping at the action.
     """
-    world, view, context = immutable_model_world
+    world, view, context = pr2_apartment_context
     milk = world.get_semantic_annotations_by_type(Milk)[0]
     given = GraspCandidate(
         milk, Pose.from_xyz_rpy(yaw=np.pi / 3, reference_frame=milk.root)
@@ -58,14 +58,14 @@ def test_pick_up_reaches_for_the_grasp_it_settled_on(immutable_model_world):
     assert _reach_of(pick_up).grasp is given
 
 
-def test_pick_up_keeps_its_grasp_even_when_it_cannot_be_reached(immutable_model_world):
+def test_pick_up_keeps_its_grasp_even_when_it_cannot_be_reached(pr2_apartment_context):
     """
     The action takes the grasp it was given and no other.
 
     Quietly swapping in one that works would perform a different action than the one
     described.
     """
-    world, view, context = immutable_model_world
+    world, view, context = pr2_apartment_context
     milk = world.get_semantic_annotations_by_type(Milk)[0]
     view.root.parent_connection.origin = HomogeneousTransformationMatrix.from_xyz_rpy(
         1.9, 1.4, 0

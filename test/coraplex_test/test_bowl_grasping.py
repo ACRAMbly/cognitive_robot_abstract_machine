@@ -89,11 +89,11 @@ def test_the_bowls_origin_is_not_grippable(bowl):
 
 
 @pytest.fixture
-def pr2_and_bowl(mutable_simple_pr2_world):
+def pr2_and_bowl(simple_pr2_context):
     """
     A PR2 in a world with the demos' bowl standing on the counter.
     """
-    world, robot, _ = mutable_simple_pr2_world
+    world, robot, _ = simple_pr2_context
     bowl_world = STLParser(BOWL_MESH).parse()
     with world.modify_world():
         world.merge_world_at_pose(
