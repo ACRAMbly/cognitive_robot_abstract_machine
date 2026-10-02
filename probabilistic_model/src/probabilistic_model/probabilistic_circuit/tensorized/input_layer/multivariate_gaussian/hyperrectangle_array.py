@@ -6,9 +6,10 @@ import numpy as np
 from random_events.interval import Bound, SimpleInterval
 from random_events.product_algebra import SimpleEvent
 from random_events.variable import Variable
-from typing_extensions import Any, Self, Sequence
+from typing_extensions import Any, List, Self, Sequence
 
 from probabilistic_model.probabilistic_circuit.tensorized.array_types import (
+    NodeIndices,
     NodeScopeIntervalBounds,
     NodeScopeIntervals,
     SampleNodeMask,
@@ -19,11 +20,11 @@ from probabilistic_model.probabilistic_circuit.tensorized.array_types import (
 @dataclass
 class HyperrectangleArray:
     """
-    Axis-aligned boxes over the variables in the scope of a layer, one simple interval
-    per variable and box.
+    Hyperrectangles, which are axis-aligned boxes, over the variables in the scope of a
+    layer: one simple interval per variable and hyperrectangle.
 
-    The leading axes enumerate the boxes: a single box has the shape
-    (#variables of the layer, 2), one box per node (#nodes, #variables of the layer, 2).
+    The leading axes enumerate the hyperrectangles: a single one has the shape
+    (#variables of the layer, 2), one per node (#nodes, #variables of the layer, 2).
     """
 
     interval: NodeScopeIntervals
@@ -40,7 +41,7 @@ class HyperrectangleArray:
     def of_simple_intervals(cls, intervals: Sequence[SimpleInterval]) -> Self:
         """
         :param intervals: One simple interval per variable in the scope of a layer.
-        :return: The box they span.
+        :return: The hyperrectangle they span.
         """
         return cls(
             np.array(
@@ -53,26 +54,54 @@ class HyperrectangleArray:
             ),
         )
 
+    @classmethod
+    def stack(cls, hyperrectangles: List[Self]) -> Self:
+        """
+        :param hyperrectangles: Single hyperrectangles over the same variables.
+        :return: All of them along a new first axis, one per node.
+        """
+        return cls(
+            np.array([hyperrectangle.interval for hyperrectangle in hyperrectangles]),
+            np.array([hyperrectangle.bounds for hyperrectangle in hyperrectangles]),
+        )
+
+    @classmethod
+    def concatenate(cls, arrays: List[Self]) -> Self:
+        """
+        :param arrays: Hyperrectangles over the same variables, one per node each.
+        :return: All of their hyperrectangles, in order.
+        """
+        return cls(
+            np.concatenate([array.interval for array in arrays]),
+            np.concatenate([array.bounds for array in arrays]),
+        )
+
     @property
     def lower(self) -> np.ndarray:
+        """
+        :return: The lower bound of every interval.
+        """
         return self.interval[..., 0]
 
     @property
     def upper(self) -> np.ndarray:
+        """
+        :return: The upper bound of every interval.
+        """
         return self.interval[..., 1]
 
     @property
     def is_whole_space(self) -> bool:
         """
-        :return: Whether every box leaves every variable unbounded.
+        :return: Whether every hyperrectangle leaves every variable unbounded.
         """
         return bool(np.all(self.lower == -np.inf) and np.all(self.upper == np.inf))
 
     def intersection_with(self, other: HyperrectangleArray) -> HyperrectangleArray:
         """
         :param other: Hyperrectangles whose shape broadcasts against these.
-        :return: The intersection of every box with the matching box of ``other``.
-            Where two bounds coincide the result is open if either of them is.
+        :return: The intersection of every hyperrectangle with the matching one of
+            ``other``. Where two bounds coincide the result is open if either of them is.
             :attr:`Bound.OPEN` is the larger value, so that is a maximum.
         """
         own_lower, other_lower = np.broadcast_arrays(self.lower, other.lower)
@@ -112,9 +141,9 @@ class HyperrectangleArray:
 
     def contains(self, values: SampleScopeValues) -> SampleNodeMask:
         """
-        :param values: Points over the variables of the boxes, shape (#samples,
-            #variables of the layer).
-        :return: Whether every box, one per node, contains every point, shape
+        :param values: Points over the variables of the hyperrectangles, shape
+            (#samples, #variables of the layer).
+        :return: Whether every hyperrectangle, one per node, contains every point, shape
             (#samples, #nodes).
         """
         points = values[:, None, :]
@@ -126,9 +155,9 @@ class HyperrectangleArray:
 
     def simple_event_of(self, index: int, variables: Sequence[Variable]) -> SimpleEvent:
         """
-        :param index: The index of a box along the first axis.
-        :param variables: The variables of the box.
-        :return: That box as a simple event.
+        :param index: The index of a hyperrectangle along the first axis.
+        :param variables: The variables of the hyperrectangle.
+        :return: That hyperrectangle as a simple event.
         """
         return SimpleEvent.from_data(
             {
@@ -145,16 +174,40 @@ class HyperrectangleArray:
     def select(self, indices: Any) -> HyperrectangleArray:
         """
         :param indices: A mask or index array over the first axis.
-        :return: The selected boxes.
+        :return: The selected hyperrectangles.
         """
         return HyperrectangleArray(self.interval[indices], self.bounds[indices])
 
-    def broadcast_to(self, number_of_boxes: int) -> HyperrectangleArray:
+    def over(self, positions: NodeIndices) -> HyperrectangleArray:
         """
-        :param number_of_boxes: How many copies to make of this single box.
+        :param positions: Positions of variables of the hyperrectangles.
+        :return: The hyperrectangles over only those variables, in that order.
+        """
+        return HyperrectangleArray(
+            self.interval[..., positions, :], self.bounds[..., positions, :]
+        )
+
+    def translated(self, offsets: np.ndarray) -> HyperrectangleArray:
+        """
+        :param offsets: What to move every variable by.
+        :return: The moved hyperrectangles.
+        """
+        return HyperrectangleArray(self.interval + offsets[:, None], self.bounds)
+
+    def scaled(self, factors: np.ndarray) -> HyperrectangleArray:
+        """
+        :param factors: What to multiply every variable by.
+        :return: The scaled hyperrectangles.
+        """
+        return HyperrectangleArray(self.interval * factors[:, None], self.bounds)
+
+    def broadcast_to(self, number_of_hyperrectangles: int) -> HyperrectangleArray:
+        """
+        :param number_of_hyperrectangles: How many copies to make of this single
+            hyperrectangle.
         :return: The copies, one per entry of the first axis.
         """
         return HyperrectangleArray(
-            np.tile(self.interval, (number_of_boxes, 1, 1)),
-            np.tile(self.bounds, (number_of_boxes, 1, 1)),
+            np.tile(self.interval, (number_of_hyperrectangles, 1, 1)),
+            np.tile(self.bounds, (number_of_hyperrectangles, 1, 1)),
         )

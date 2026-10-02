@@ -277,7 +277,12 @@ class TruncatedMultivariateGaussianLeavesToTruncatedMultivariateGaussianLayerCon
     MultivariateLeavesToLayerConverter[
         TruncatedMultivariateGaussianDistribution, TruncatedMultivariateGaussianLayer
     ]
-): ...
+):
+    """
+    .. note::
+        A layer has one burn-in period length and one way to integrate moments for all
+        of its nodes. Both are taken from the first leaf.
+    """
 
 
 class RustworkxCircuitToLayeredCircuitConverter(

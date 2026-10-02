@@ -100,19 +100,24 @@ class MultivariateGaussianArray:
             + log_determinant
         )
 
-    def probability_of_boxes(self, boxes: HyperrectangleArray) -> NodeValues:
+    def probability_of_hyperrectangles(
+        self, hyperrectangles: HyperrectangleArray
+    ) -> NodeValues:
         """
-        The probability of an axis-aligned box under a correlated Gaussian has no closed
-        form, so it is integrated numerically by :mod:`scipy.stats.multivariate_normal`
-        over the variables the box bounds. A box that bounds only one variable is
-        answered in closed form for all Gaussians at once.
+        The probability of an axis-aligned hyperrectangle under a correlated Gaussian
+        has no closed form, so it is integrated numerically by
+        :mod:`scipy.stats.multivariate_normal` over the variables the hyperrectangle
+        bounds. A hyperrectangle that bounds only one variable is answered in closed
+        form for all Gaussians at once.
 
-        :param boxes: One box per Gaussian.
-        :return: The probability of every box under its Gaussian.
+        :param hyperrectangles: One hyperrectangle per Gaussian.
+        :return: The probability of every hyperrectangle under its Gaussian.
         """
         result = np.zeros(self.number_of_gaussians)
-        possible = (boxes.lower < boxes.upper).all(axis=1)
-        bounded = np.isfinite(boxes.lower) | np.isfinite(boxes.upper)
+        possible = (hyperrectangles.lower < hyperrectangles.upper).all(axis=1)
+        bounded = np.isfinite(hyperrectangles.lower) | np.isfinite(
+            hyperrectangles.upper
+        )
 
         for pattern in np.unique(bounded[possible], axis=0):
             nodes = possible & (bounded == pattern).all(axis=1)
@@ -124,16 +129,16 @@ class MultivariateGaussianArray:
                 mean = self.mean[nodes, position]
                 deviation = np.sqrt(self.covariance.variances[nodes, position])
                 result[nodes] = ndtr(
-                    (boxes.upper[nodes, position] - mean) / deviation
-                ) - ndtr((boxes.lower[nodes, position] - mean) / deviation)
+                    (hyperrectangles.upper[nodes, position] - mean) / deviation
+                ) - ndtr((hyperrectangles.lower[nodes, position] - mean) / deviation)
             else:
                 for node in np.flatnonzero(nodes):
                     result[node] = multivariate_normal(
                         self.mean[node, positions],
                         self.covariance.matrices[node][np.ix_(positions, positions)],
                     ).cdf(
-                        boxes.upper[node, positions],
-                        lower_limit=boxes.lower[node, positions],
+                        hyperrectangles.upper[node, positions],
+                        lower_limit=hyperrectangles.lower[node, positions],
                     )
         return np.clip(result, 0.0, 1.0)
 

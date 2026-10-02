@@ -29,6 +29,9 @@ from probabilistic_model.distributions.multivariate_gaussian import (
     Covariance,
     MultivariateGaussianDistribution,
 )
+from probabilistic_model.distributions.truncated_multivariate_gaussian import (
+    MomentIntegration,
+)
 from probabilistic_model.distributions.uniform import UniformDistribution
 from probabilistic_model.learning.gaussian_mixture.gaussian_mixture_model import (
     GaussianMixtureModel,
@@ -580,39 +583,38 @@ class MultivariateGaussianTruncationTestCase(unittest.TestCase):
             atol=0.03,
         )
 
-    def test_the_settings_of_the_moments_follow_the_distributions_through_the_layer(
+    def test_the_way_to_integrate_moments_follows_the_distributions_through_the_layer(
         self,
     ):
         rx_circuit = single_gaussian()
         event = box(x=closed(-1.0, 2.0), y=closed(0.0, 1.5)).as_composite_set()
         rx_truncated, _ = rx_circuit.truncated(event)
         [leaf] = rx_truncated.leaves
+        moment_integration = MomentIntegration(
+            deviations_integrated_over=6.0, panels=8, nodes_per_panel=12
+        )
         leaf.distribution = dataclasses.replace(
-            leaf.distribution,
-            highest_order_of_moment=3,
-            deviations_integrated_over=6.0,
-            quadrature_panels=8,
-            quadrature_nodes_per_panel=12,
+            leaf.distribution, moment_integration=moment_integration
         )
         layered = RustworkxCircuitToLayeredCircuitConverter.convert(rx_truncated)
         further, _ = layered.truncated(
             box(x=closed(-0.5, 1.0), y=closed(0.0, 1.5)).as_composite_set()
         )
         [restored] = LayeredCircuitToRustworkxCircuitConverter.convert(further).leaves
-        self.assertEqual(restored.distribution.highest_order_of_moment, 3)
-        self.assertEqual(restored.distribution.deviations_integrated_over, 6.0)
-        self.assertEqual(restored.distribution.quadrature_panels, 8)
-        self.assertEqual(restored.distribution.quadrature_nodes_per_panel, 12)
-        third_moment = further.moment(VariableMap({x: 3}), VariableMap({x: 0.0}))
-        self.assertTrue(np.isfinite(third_moment[x]))
+        self.assertEqual(restored.distribution.moment_integration, moment_integration)
 
-    def test_a_truncated_gaussian_has_no_closed_form_moment_above_the_second(self):
-        layered = RustworkxCircuitToLayeredCircuitConverter.convert(gaussian_mixture())
-        truncated, _ = layered.truncated(
-            box(x=closed(-1.0, 2.0), y=closed(0.0, 1.5)).as_composite_set()
-        )
-        with self.assertRaises(NoClosedFormError):
-            truncated.moment(VariableMap({x: 3}), VariableMap({x: 0.0}))
+    def test_a_higher_moment_of_a_truncated_gaussian_agrees_with_rustworkx(self):
+        rx_circuit = gaussian_mixture()
+        layered = RustworkxCircuitToLayeredCircuitConverter.convert(rx_circuit)
+        event = box(x=closed(-1.0, 2.0), y=closed(0.0, 1.5)).as_composite_set()
+        rx_truncated, _ = rx_circuit.truncated(event.__deepcopy__())
+        truncated, _ = layered.truncated(event.__deepcopy__())
+        order = VariableMap({x: 3, y: 4})
+        center = VariableMap({x: 0.5, y: 0.0})
+        moment = truncated.moment(order, center)
+        expected = rx_truncated.moment(order, center)
+        for variable in (x, y):
+            self.assertAlmostEqual(moment[variable], expected[variable])
 
 
 # %% conditioning

@@ -70,8 +70,8 @@ class MultivariateGaussianArrayTestCase(unittest.TestCase):
         )
         np.testing.assert_allclose(self.gaussians.log_density(POINTS), expected)
 
-    def test_probability_of_boxes(self):
-        boxes = HyperrectangleArray.of_simple_intervals(
+    def test_probability_of_hyperrectangles(self):
+        hyperrectangles = HyperrectangleArray.of_simple_intervals(
             [
                 interval.simple_sets[0]
                 for interval in (closed(-1.0, 1.0), closed(-2.0, 0.5), reals())
@@ -84,7 +84,9 @@ class MultivariateGaussianArrayTestCase(unittest.TestCase):
             for distribution in DISTRIBUTIONS
         ]
         np.testing.assert_allclose(
-            self.gaussians.probability_of_boxes(boxes), expected, atol=1e-4
+            self.gaussians.probability_of_hyperrectangles(hyperrectangles),
+            expected,
+            atol=1e-4,
         )
 
     def test_marginal_is_the_marginal_of_every_distribution(self):

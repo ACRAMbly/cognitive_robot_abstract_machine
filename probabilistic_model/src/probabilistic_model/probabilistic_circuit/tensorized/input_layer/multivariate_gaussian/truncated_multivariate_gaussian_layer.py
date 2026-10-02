@@ -9,14 +9,13 @@ from sortedcontainers import SortedSet
 from typing_extensions import Any, List, Optional, Self, Tuple, Type
 
 from probabilistic_model.distributions.truncated_multivariate_gaussian import (
+    MomentIntegration,
     TruncatedMultivariateGaussianDistribution,
 )
 from probabilistic_model.exceptions import ShapeMismatchError
 from probabilistic_model.probabilistic_circuit.tensorized.array_types import (
     NodeIndices,
     NodeMask,
-    NodeScopeIntervalBounds,
-    NodeScopeIntervals,
     NodeValues,
     NodeVariableValues,
     SampleArray,
@@ -53,25 +52,22 @@ from probabilistic_model.probabilistic_circuit.tensorized.structural_query impor
 @dataclasses.dataclass(eq=False, repr=False)
 class TruncatedMultivariateGaussianLayer(AbstractMultivariateGaussianLayer):
     """
-    A layer of Gaussians over several continuous variables, each confined to a box.
+    A layer of Gaussians over several continuous variables, each confined to a
+    hyperrectangle.
 
-    This is the layer that truncating a :class:`MultivariateGaussianLayer` to a box
-    produces.
-    """
-
-    interval: NodeScopeIntervals
-    """
-    The lower and upper bound of the box of every node, per variable.
+    This is the layer that truncating a :class:`MultivariateGaussianLayer` to a
+    hyperrectangle produces.
     """
 
-    bounds: NodeScopeIntervalBounds
+    hyperrectangles: HyperrectangleArray
     """
-    Whether the bounds of the box of every node are open or closed.
+    The hyperrectangle that every node is confined to.
     """
 
     log_normalizing_constant: NodeValues
     """
-    The log-probability of the box of every node under its untruncated Gaussian.
+    The log-probability of the hyperrectangle of every node under its untruncated
+    Gaussian.
     """
 
     burn_in_period_length: int = 100
@@ -80,33 +76,12 @@ class TruncatedMultivariateGaussianLayer(AbstractMultivariateGaussianLayer):
     becomes a sample.
     """
 
-    highest_order_of_moment: int = 2
+    moment_integration: MomentIntegration = dataclasses.field(
+        default_factory=MomentIntegration
+    )
     """
-    The highest order of a moment that every node answers.
+    How the moments of every node are integrated numerically.
     """
-
-    deviations_integrated_over: float = 10.0
-    """
-    How many standard deviations around its mean an unbounded variable is integrated
-    over to answer a moment.
-    """
-
-    quadrature_panels: int = 16
-    """
-    How many panels the interval of a variable is split into to integrate over it.
-    """
-
-    quadrature_nodes_per_panel: int = 16
-    """
-    How many Gauss-Legendre nodes every panel is integrated with.
-    """
-
-    @property
-    def boxes(self) -> HyperrectangleArray:
-        """
-        :return: The box of every node.
-        """
-        return HyperrectangleArray(self.interval, self.bounds)
 
     @property
     def number_of_own_parameters(self) -> int:
@@ -118,10 +93,10 @@ class TruncatedMultivariateGaussianLayer(AbstractMultivariateGaussianLayer):
     def validate_own(self):
         super().validate_own()
         expected = (self.number_of_nodes, self.number_of_scope_variables, 2)
-        if self.interval.shape != expected:
-            raise ShapeMismatchError(self.interval.shape, expected)
-        if self.bounds.shape != expected:
-            raise ShapeMismatchError(self.bounds.shape, expected)
+        if self.hyperrectangles.interval.shape != expected:
+            raise ShapeMismatchError(self.hyperrectangles.interval.shape, expected)
+        if self.hyperrectangles.bounds.shape != expected:
+            raise ShapeMismatchError(self.hyperrectangles.bounds.shape, expected)
         if self.log_normalizing_constant.shape != (self.number_of_nodes,):
             raise ShapeMismatchError(
                 self.log_normalizing_constant.shape, (self.number_of_nodes,)
@@ -132,12 +107,11 @@ class TruncatedMultivariateGaussianLayer(AbstractMultivariateGaussianLayer):
     ) -> TruncatedMultivariateGaussianDistribution:
         return TruncatedMultivariateGaussianDistribution(
             untruncated=self.untruncated_distribution(index, variables),
-            box=self.boxes.simple_event_of(index, self.scope_variables(variables)),
+            box=self.hyperrectangles.simple_event_of(
+                index, self.scope_variables(variables)
+            ),
             burn_in_period_length=self.burn_in_period_length,
-            highest_order_of_moment=self.highest_order_of_moment,
-            deviations_integrated_over=self.deviations_integrated_over,
-            quadrature_panels=self.quadrature_panels,
-            quadrature_nodes_per_panel=self.quadrature_nodes_per_panel,
+            moment_integration=self.moment_integration,
         )
 
     @classmethod
@@ -157,26 +131,24 @@ class TruncatedMultivariateGaussianLayer(AbstractMultivariateGaussianLayer):
             [distribution.untruncated for distribution in distributions],
             scope_variables,
         )
-        boxes = [
-            HyperrectangleArray.of_simple_intervals(
-                [distribution.interval_of(variable) for variable in scope_variables]
-            )
-            for distribution in distributions
-        ]
+        hyperrectangles = HyperrectangleArray.stack(
+            [
+                HyperrectangleArray.of_simple_intervals(
+                    [distribution.interval_of(variable) for variable in scope_variables]
+                )
+                for distribution in distributions
+            ]
+        )
         return cls(
-            scope,
-            untruncated.mean,
-            untruncated.covariance,
-            np.array([box.interval for box in boxes]),
-            np.array([box.bounds for box in boxes]),
-            np.log(
+            scope=scope,
+            mean=untruncated.mean,
+            covariance=untruncated.covariance,
+            hyperrectangles=hyperrectangles,
+            log_normalizing_constant=np.log(
                 [distribution.normalizing_constant for distribution in distributions]
             ),
-            distributions[0].burn_in_period_length,
-            distributions[0].highest_order_of_moment,
-            distributions[0].deviations_integrated_over,
-            distributions[0].quadrature_panels,
-            distributions[0].quadrature_nodes_per_panel,
+            burn_in_period_length=distributions[0].burn_in_period_length,
+            moment_integration=distributions[0].moment_integration,
         )
 
     def with_nodes(self, indices: Any) -> Self:
@@ -189,8 +161,7 @@ class TruncatedMultivariateGaussianLayer(AbstractMultivariateGaussianLayer):
             scope=self.scope.copy(),
             mean=self.mean[indices],
             covariance=self.covariance.select(indices),
-            interval=self.interval[indices],
-            bounds=self.bounds[indices],
+            hyperrectangles=self.hyperrectangles.select(indices),
             log_normalizing_constant=self.log_normalizing_constant[indices],
         )
 
@@ -206,8 +177,9 @@ class TruncatedMultivariateGaussianLayer(AbstractMultivariateGaussianLayer):
             covariance=CovarianceArray.concatenate(
                 [layer.covariance for layer in layers]
             ),
-            interval=np.concatenate([layer.interval for layer in layers]),
-            bounds=np.concatenate([layer.bounds for layer in layers]),
+            hyperrectangles=HyperrectangleArray.concatenate(
+                [layer.hyperrectangles for layer in layers]
+            ),
             log_normalizing_constant=np.concatenate(
                 [layer.log_normalizing_constant for layer in layers]
             ),
@@ -221,7 +193,7 @@ class TruncatedMultivariateGaussianLayer(AbstractMultivariateGaussianLayer):
     ) -> SampleNodeValues:
         values = self.values_of_scope(events)
         return np.where(
-            self.boxes.contains(values),
+            self.hyperrectangles.contains(values),
             self.untruncated_gaussians.log_density(values)
             - self.log_normalizing_constant,
             -np.inf,
@@ -231,14 +203,14 @@ class TruncatedMultivariateGaussianLayer(AbstractMultivariateGaussianLayer):
     def cumulative_distribution_of_nodes(
         self, events: SampleArray, cache: Optional[QueryCache] = None
     ) -> SampleNodeValues:
-        # the probability of the part of the box below the point
+        # the probability of the part of the hyperrectangle below the point
         values = self.values_of_scope(events)
-        lower, upper = self.boxes.lower, self.boxes.upper
+        lower, upper = self.hyperrectangles.lower, self.hyperrectangles.upper
         result = np.zeros((len(values), self.number_of_nodes))
         for node in range(self.number_of_nodes):
-            below_the_box = np.any(values < lower[node], axis=1)
+            below_the_hyperrectangle = np.any(values < lower[node], axis=1)
             result[:, node] = np.where(
-                below_the_box,
+                below_the_hyperrectangle,
                 0.0,
                 np.atleast_1d(
                     multivariate_normal(
@@ -257,10 +229,10 @@ class TruncatedMultivariateGaussianLayer(AbstractMultivariateGaussianLayer):
     ) -> NodeValues:
         untruncated = sum(
             (
-                self.untruncated_gaussians.probability_of_boxes(
-                    self.boxes.intersection_with(box)
+                self.untruncated_gaussians.probability_of_hyperrectangles(
+                    self.hyperrectangles.intersection_with(hyperrectangle)
                 )
-                for box in self.boxes_of(event, variables)
+                for hyperrectangle in self.hyperrectangles_of(event, variables)
             ),
             np.zeros(self.number_of_nodes),
         )
@@ -300,10 +272,11 @@ class TruncatedMultivariateGaussianLayer(AbstractMultivariateGaussianLayer):
     def samples_of_nodes(self, nodes: NodeIndices) -> SampleScopeValues:
         # Gibbs sampling, all chains at once: every sweep draws each variable from its
         # Gaussian given the others, confined to its interval (scipy's truncnorm). Every
-        # chain starts at the mean of its node moved into the box. The samples follow the
-        # distribution only approximately, closer the more sweeps each chain makes.
-        lower = self.boxes.lower[nodes]
-        upper = self.boxes.upper[nodes]
+        # chain starts at the mean of its node moved into the hyperrectangle. The samples
+        # follow the distribution only approximately, closer the more sweeps each chain
+        # makes.
+        lower = self.hyperrectangles.lower[nodes]
+        upper = self.hyperrectangles.upper[nodes]
         mean = self.mean[nodes]
         precision = np.linalg.inv(self.covariance.matrices)[nodes]
         precision_of_itself = np.diagonal(precision, axis1=1, axis2=2)
@@ -333,30 +306,43 @@ class TruncatedMultivariateGaussianLayer(AbstractMultivariateGaussianLayer):
 
     # %% structural
 
-    def type_of_layer_truncated_to_box(self, box: HyperrectangleArray) -> Type[Layer]:
+    def type_of_layer_truncated_to_hyperrectangle(
+        self, hyperrectangle: HyperrectangleArray
+    ) -> Type[Layer]:
         return TruncatedMultivariateGaussianLayer
 
-    def log_truncated_of_box(
-        self, box: HyperrectangleArray
+    def log_truncated_of_hyperrectangle(
+        self, hyperrectangle: HyperrectangleArray
     ) -> LayerWithLogProbabilities:
-        # every node keeps its Gaussian, confined to the intersection of the two boxes
-        intersection = self.boxes.intersection_with(box)
-        probability = self.untruncated_gaussians.probability_of_boxes(intersection)
+        # every node keeps its Gaussian, confined to the intersection of the two
+        # hyperrectangles
+        intersection = self.hyperrectangles.intersection_with(hyperrectangle)
+        probability = self.untruncated_gaussians.probability_of_hyperrectangles(
+            intersection
+        )
         alive = probability > 0
         log_normalizing_constant = np.where(
             alive, np.log(np.where(alive, probability, 1.0)), -np.inf
         )
 
         # impossible nodes keep their parameters and are dropped by the prune pass
-        interval = np.where(alive[:, None, None], intersection.interval, self.interval)
-        bounds = np.where(alive[:, None, None], intersection.bounds, self.bounds)
         truncated = dataclasses.replace(
             self,
             scope=self.scope.copy(),
             mean=self.mean.copy(),
             covariance=self.covariance.copy(),
-            interval=interval,
-            bounds=bounds,
+            hyperrectangles=HyperrectangleArray(
+                np.where(
+                    alive[:, None, None],
+                    intersection.interval,
+                    self.hyperrectangles.interval,
+                ),
+                np.where(
+                    alive[:, None, None],
+                    intersection.bounds,
+                    self.hyperrectangles.bounds,
+                ),
+            ),
             log_normalizing_constant=np.where(
                 alive, log_normalizing_constant, self.log_normalizing_constant
             ),
@@ -368,9 +354,9 @@ class TruncatedMultivariateGaussianLayer(AbstractMultivariateGaussianLayer):
     def log_conditional_of_values(
         self, fixed: NodeIndices, free: NodeIndices, values: np.ndarray
     ) -> LayerWithLogProbabilities:
-        # the Gaussian conditional of every node, confined to the slice its box makes
-        # at the values
-        inside = self.boxes.select((slice(None), fixed)).contains(values[None, :])[0]
+        # the Gaussian conditional of every node, confined to the slice its
+        # hyperrectangle makes at the values
+        inside = self.hyperrectangles.over(fixed).contains(values[None, :])[0]
         gaussians = self.untruncated_gaussians
         log_density = gaussians.marginal(fixed).log_density(values[None, :])[0]
         if len(free) == 0:
@@ -380,8 +366,8 @@ class TruncatedMultivariateGaussianLayer(AbstractMultivariateGaussianLayer):
             )
 
         conditionals = gaussians.conditional(fixed, free, values)
-        slices = self.boxes.select((slice(None), free))
-        probability = conditionals.probability_of_boxes(slices)
+        slices = self.hyperrectangles.over(free)
+        probability = conditionals.probability_of_hyperrectangles(slices)
         alive = inside & (probability > 0)
         log_probability_of_slice = np.log(np.where(alive, probability, 1.0))
         conditioned = dataclasses.replace(
@@ -389,8 +375,7 @@ class TruncatedMultivariateGaussianLayer(AbstractMultivariateGaussianLayer):
             scope=self.scope[free],
             mean=conditionals.mean,
             covariance=conditionals.covariance,
-            interval=slices.interval,
-            bounds=slices.bounds,
+            hyperrectangles=slices,
             log_normalizing_constant=log_probability_of_slice,
         )
         return LayerWithLogProbabilities(
@@ -403,23 +388,22 @@ class TruncatedMultivariateGaussianLayer(AbstractMultivariateGaussianLayer):
         )
 
     def marginal_over(self, positions: NodeIndices) -> Layer:
-        # the marginal of a Gaussian confined to a box is not a Gaussian confined to a
-        # box
+        # the marginal of a Gaussian confined to a hyperrectangle is not a Gaussian
+        # confined to a hyperrectangle
         raise NoClosedFormError(type(self), type(self).marginal)
 
     def reorder_scope(self, order: NodeIndices):
         super().reorder_scope(order)
-        self.interval = self.interval[:, order]
-        self.bounds = self.bounds[:, order]
+        self.hyperrectangles = self.hyperrectangles.over(order)
 
     def apply_translation_own(self, translation: VariableValues):
         super().apply_translation_own(translation)
-        self.interval = self.interval + translation[self.scope][None, :, None]
+        self.hyperrectangles = self.hyperrectangles.translated(translation[self.scope])
 
     def apply_scaling_own(self, scaling: VariableValues):
         super().apply_scaling_own(scaling)
-        self.interval = self.interval * scaling[self.scope][None, :, None]
-        # the box scales with the Gaussian, so its probability stays the same
+        self.hyperrectangles = self.hyperrectangles.scaled(scaling[self.scope])
+        # the hyperrectangle scales with the Gaussian, so its probability stays the same
 
     def __deepcopy__(self, memo=None) -> TruncatedMultivariateGaussianLayer:
         if memo is None:

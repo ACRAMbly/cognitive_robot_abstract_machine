@@ -187,3 +187,22 @@ class NoClosedFormError(DataclassException, NotImplementedError):
 
     def suggest_correction(self) -> str:
         return "Ask the query before truncating, or approximate it by sampling."
+
+
+@dataclass
+class InvalidMomentOrderError(DataclassException, ValueError):
+    """
+    Exception raised when a moment is asked for an order that is not a whole number or
+    is negative.
+    """
+
+    order: Any
+    """
+    The order that was asked for.
+    """
+
+    def error_message(self) -> str:
+        return f"There is no moment of order {self.order}."
+
+    def suggest_correction(self) -> str:
+        return "Ask for an order that is a whole number and not negative."

@@ -25,6 +25,7 @@ from typing_extensions import (
 
 from probabilistic_model.exceptions import (
     EventIsNotABoxError,
+    InvalidMomentOrderError,
     NoClosedFormError,
 )
 from probabilistic_model.probabilistic_model import (
@@ -38,6 +39,64 @@ if TYPE_CHECKING:
     from probabilistic_model.distributions.multivariate_gaussian import (
         MultivariateGaussianDistribution,
     )
+
+
+# %% how moments are integrated numerically
+
+
+@dataclasses.dataclass
+class QuadraturePoints:
+    """
+    Where an integrand is evaluated and what each evaluation is weighted with.
+    """
+
+    values: npt.NDArray
+    """
+    The points to evaluate the integrand at.
+    """
+
+    weights: npt.NDArray
+    """
+    The weight of the integrand at every point.
+    """
+
+
+@dataclasses.dataclass
+class MomentIntegration:
+    """
+    How the moments of a Gaussian confined to a box are integrated numerically: by
+    Gauss-Legendre quadrature over panels of equal width.
+    """
+
+    deviations_integrated_over: float = 10.0
+    """
+    How many standard deviations around its mean an unbounded variable is integrated
+    over.
+    """
+
+    panels: int = 16
+    """
+    How many panels the interval of a variable is split into.
+    """
+
+    nodes_per_panel: int = 16
+    """
+    How many Gauss-Legendre nodes every panel is integrated with.
+    """
+
+    def points_between(self, lower: float, upper: float) -> QuadraturePoints:
+        """
+        :param lower: The lower end of the interval to integrate over.
+        :param upper: The upper end of the interval to integrate over.
+        :return: The points and weights that integrate a function over the interval.
+        """
+        edges = np.linspace(lower, upper, self.panels + 1)
+        half_widths = np.diff(edges)[:, None] / 2
+        nodes, node_weights = np.polynomial.legendre.leggauss(self.nodes_per_panel)
+        return QuadraturePoints(
+            values=(edges[:-1, None] + half_widths + half_widths * nodes).ravel(),
+            weights=(half_widths * node_weights).ravel(),
+        )
 
 
 # %% a Gaussian that has been confined to a box
@@ -74,25 +133,11 @@ class TruncatedMultivariateGaussianDistribution(ProbabilisticModel):
     sample.
     """
 
-    highest_order_of_moment: int = 2
+    moment_integration: MomentIntegration = dataclasses.field(
+        default_factory=MomentIntegration
+    )
     """
-    The highest order of a moment that is answered.
-    """
-
-    deviations_integrated_over: float = 10.0
-    """
-    How many standard deviations around its mean an unbounded variable is integrated
-    over to answer a moment.
-    """
-
-    quadrature_panels: int = 16
-    """
-    How many panels the interval of a variable is split into to integrate over it.
-    """
-
-    quadrature_nodes_per_panel: int = 16
-    """
-    How many Gauss-Legendre nodes every panel is integrated with.
+    How the moments are integrated numerically.
     """
 
     @property
@@ -316,23 +361,22 @@ class TruncatedMultivariateGaussianDistribution(ProbabilisticModel):
 
     def moment(self, order: OrderType, center: CenterType) -> MomentType:
         """
-        Every moment asked for here is of one variable on its own, and is answered up to
-        :attr:`highest_order_of_moment` by integrating the density of that variable
-        numerically.
+        Every moment asked for here is of one variable on its own, and is answered by
+        integrating the density of that variable numerically.
 
         :param order: The order of the moment of each variable to answer for.
         :param center: What to take each of those moments about.
         :return: The moment of each variable asked for.
-        :raises NoClosedFormError: If a moment above :attr:`highest_order_of_moment`
-            is asked for.
+        :raises InvalidMomentOrderError: If an order is not a whole number or is
+            negative.
         """
         moments = VariableMap()
         for variable in order:
+            if order[variable] < 0 or order[variable] != int(order[variable]):
+                raise InvalidMomentOrderError(order[variable])
             requested_order = int(order[variable])
-            if requested_order > self.highest_order_of_moment:
-                raise NoClosedFormError(type(self), type(self).moment)
             moments_about_zero = self.moments_about_zero_of(
-                self.untruncated.index_of(variable)
+                self.untruncated.index_of(variable), requested_order
             )
             # the binomial expansion of (x - center) ** order
             moments[variable] = float(
@@ -345,41 +389,35 @@ class TruncatedMultivariateGaussianDistribution(ProbabilisticModel):
             )
         return moments
 
-    def moments_about_zero_of(self, index: int) -> npt.NDArray:
+    def moments_about_zero_of(self, index: int, highest_order: int) -> npt.NDArray:
         """
         The density of one variable on its own is its Gaussian density times the
         probability that the other variables stay inside the box given its value
-        (Cartinhour, 1990). It is integrated over the interval of the variable by Gauss-
-        Legendre quadrature.
+        (Cartinhour, 1990). It is integrated over the interval of the variable as
+        :attr:`moment_integration` says.
 
         :param index: The index of a variable.
+        :param highest_order: The highest order to answer.
         :return: The moments of that variable about zero, the entry at ``k`` being the
-            moment of order ``k``, up to :attr:`highest_order_of_moment`.
+            moment of order ``k``.
         """
         interval = self.interval_of(self.variables[index])
         mean = self.untruncated.mean[index]
         deviation = math.sqrt(self.untruncated.covariance.between(index, index))
-        reach = self.deviations_integrated_over * deviation
-        lower = max(interval.lower, min(mean - reach, interval.upper - reach))
-        upper = min(interval.upper, max(mean + reach, interval.lower + reach))
-
-        edges = np.linspace(lower, upper, self.quadrature_panels + 1)
-        half_widths = np.diff(edges)[:, None] / 2
-        nodes, node_weights = np.polynomial.legendre.leggauss(
-            self.quadrature_nodes_per_panel
+        reach = self.moment_integration.deviations_integrated_over * deviation
+        points = self.moment_integration.points_between(
+            max(interval.lower, min(mean - reach, interval.upper - reach)),
+            min(interval.upper, max(mean + reach, interval.lower + reach)),
         )
-        values = (edges[:-1, None] + half_widths + half_widths * nodes).ravel()
-        weights = (half_widths * node_weights).ravel()
-
         density = (
-            weights
-            * norm.pdf(values, loc=mean, scale=deviation)
-            * self.probability_of_the_other_variables_given(index, values)
+            points.weights
+            * norm.pdf(points.values, loc=mean, scale=deviation)
+            * self.probability_of_the_other_variables_given(index, points.values)
         )
         return np.array(
             [
-                np.sum(density * values**power)
-                for power in range(self.highest_order_of_moment + 1)
+                np.sum(density * points.values**power)
+                for power in range(highest_order + 1)
             ]
         ) / np.sum(density)
 

@@ -2297,13 +2297,6 @@ class MultivariateLeaf(LeafUnit):
                 result[variable_to_index_map[variable]] = moment[variable]
         self.result_of_current_query = result
 
-    def marginal(self, variables: Iterable[Variable]) -> Optional[Self]:
-        # a leaf that keeps all of its variables stays as it is, which also serves
-        # distributions without a marginal, like a truncated Gaussian
-        if set(self.distribution.variables).issubset(set(variables)):
-            return self
-        return super().marginal(variables)
-
     def replace_by_dirac_product(self, point: Dict[Variable, Any]) -> ProductUnit:
         """
         Replace this leaf by the product of one Dirac leaf per variable.

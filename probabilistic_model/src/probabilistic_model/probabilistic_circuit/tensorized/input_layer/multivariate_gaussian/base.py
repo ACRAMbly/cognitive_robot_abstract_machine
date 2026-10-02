@@ -149,18 +149,19 @@ class AbstractMultivariateGaussianLayer(Layer, ABC):
     @property
     def untruncated_gaussians(self) -> MultivariateGaussianArray:
         """
-        :return: The Gaussian of every node, without any box that confines it.
+        :return: The Gaussian of every node, without any hyperrectangle that confines
+            it.
         """
         return MultivariateGaussianArray(self.mean, self.covariance)
 
-    def boxes_of(
+    def hyperrectangles_of(
         self, event: SimpleEvent, variables: SortedSet
     ) -> List[HyperrectangleArray]:
         """
         :param event: A simple event.
         :param variables: The variables of the circuit.
-        :return: The boxes the event makes of the variables of this layer, one per
-            combination of their simple intervals.
+        :return: The hyperrectangles the event makes of the variables of this layer,
+            one per combination of their simple intervals.
         """
         return [
             HyperrectangleArray.of_simple_intervals(intervals)
@@ -267,41 +268,47 @@ class AbstractMultivariateGaussianLayer(Layer, ABC):
     # %% structural
 
     @abstractmethod
-    def type_of_layer_truncated_to_box(self, box: HyperrectangleArray) -> Type[Layer]:
+    def type_of_layer_truncated_to_hyperrectangle(
+        self, hyperrectangle: HyperrectangleArray
+    ) -> Type[Layer]:
         """
-        :param box: A single box.
-        :return: The type of the layer :meth:`log_truncated_of_box` returns for it.
+        :param hyperrectangle: A single hyperrectangle.
+        :return: The type of the layer :meth:`log_truncated_of_hyperrectangle` returns
+            for it.
         """
         raise NotImplementedError
 
     @abstractmethod
-    def log_truncated_of_box(
-        self, box: HyperrectangleArray
+    def log_truncated_of_hyperrectangle(
+        self, hyperrectangle: HyperrectangleArray
     ) -> LayerWithLogProbabilities:
         """
-        Truncate every node to the same box.
+        Truncate every node to the same hyperrectangle.
 
-        :param box: A single box.
+        :param hyperrectangle: A single hyperrectangle.
         :return: The truncated layer, with as many nodes as this one, and the log-
-            probability of the box under every node.
+            probability of the hyperrectangle under every node.
         """
         raise NotImplementedError
 
-    def log_truncated_of_boxes(
-        self, boxes: List[HyperrectangleArray]
+    def log_truncated_of_hyperrectangles(
+        self, hyperrectangles: List[HyperrectangleArray]
     ) -> LayerWithLogProbabilities:
         """
-        Truncate every node to the union of disjoint boxes.
+        Truncate every node to the union of disjoint hyperrectangles.
 
-        :param boxes: The boxes.
+        :param hyperrectangles: The hyperrectangles.
         :return: The truncated layer and the log-probabilities of its nodes. A node
-            truncated to several boxes becomes a mixture of its truncations.
+            truncated to several hyperrectangles becomes a mixture of its truncations.
         """
-        if not boxes:
+        if not hyperrectangles:
             return LayerWithLogProbabilities(
                 self.__deepcopy__(), np.full(self.number_of_nodes, -np.inf)
             )
-        pieces = [self.log_truncated_of_box(box) for box in boxes]
+        pieces = [
+            self.log_truncated_of_hyperrectangle(hyperrectangle)
+            for hyperrectangle in hyperrectangles
+        ]
         if len(pieces) == 1:
             return pieces[0]
         return SumLayer.mixture_of_pieces(pieces)
@@ -314,12 +321,12 @@ class AbstractMultivariateGaussianLayer(Layer, ABC):
         :param variables: The variables of the circuit.
         :return: The type of the layer truncating to the event creates.
         """
-        boxes = self.boxes_of(event, variables)
-        if len(boxes) > 1:
+        hyperrectangles = self.hyperrectangles_of(event, variables)
+        if len(hyperrectangles) > 1:
             return SumLayer
-        if not boxes:
+        if not hyperrectangles:
             return self.__class__
-        return self.type_of_layer_truncated_to_box(boxes[0])
+        return self.type_of_layer_truncated_to_hyperrectangle(hyperrectangles[0])
 
     @memoized
     def log_truncated_of_simple_event(
@@ -331,7 +338,9 @@ class AbstractMultivariateGaussianLayer(Layer, ABC):
         # a Gaussian gives every single point probability zero, so a singleton makes a
         # node impossible whether singletons are allowed or not
         return query.log_probabilities.record(
-            self.log_truncated_of_boxes(self.boxes_of(event, query.variables))
+            self.log_truncated_of_hyperrectangles(
+                self.hyperrectangles_of(event, query.variables)
+            )
         )
 
     def can_truncate_in_one_batch(
@@ -354,7 +363,9 @@ class AbstractMultivariateGaussianLayer(Layer, ABC):
         cache: Optional[QueryCache] = None,
     ) -> LayerWithLogProbabilities:
         truncated = [
-            self.log_truncated_of_boxes(self.boxes_of(event, query.variables))
+            self.log_truncated_of_hyperrectangles(
+                self.hyperrectangles_of(event, query.variables)
+            )
             for event in events
         ]
         layers = [piece.layer for piece in truncated]

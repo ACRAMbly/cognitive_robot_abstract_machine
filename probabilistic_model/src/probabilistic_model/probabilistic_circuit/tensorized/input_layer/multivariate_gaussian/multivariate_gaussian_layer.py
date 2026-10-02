@@ -79,19 +79,23 @@ class MultivariateGaussianLayer(AbstractMultivariateGaussianLayer):
         gaussians = MultivariateGaussianArray.from_distributions(
             distributions, [variables[index] for index in scope]
         )
-        return cls(scope, gaussians.mean, gaussians.covariance)
+        return cls(scope=scope, mean=gaussians.mean, covariance=gaussians.covariance)
 
     def select_nodes(self, mask: NodeMask) -> Self:
         return self.__class__(
-            self.scope.copy(), self.mean[mask], self.covariance.select(mask)
+            scope=self.scope.copy(),
+            mean=self.mean[mask],
+            covariance=self.covariance.select(mask),
         )
 
     @classmethod
     def concatenate(cls, layers: List[Self]) -> Self:
         return cls(
-            layers[0].scope.copy(),
-            np.concatenate([layer.mean for layer in layers]),
-            CovarianceArray.concatenate([layer.covariance for layer in layers]),
+            scope=layers[0].scope.copy(),
+            mean=np.concatenate([layer.mean for layer in layers]),
+            covariance=CovarianceArray.concatenate(
+                [layer.covariance for layer in layers]
+            ),
         )
 
     # %% queries
@@ -128,10 +132,10 @@ class MultivariateGaussianLayer(AbstractMultivariateGaussianLayer):
     ) -> NodeValues:
         return sum(
             (
-                self.untruncated_gaussians.probability_of_boxes(
-                    box.broadcast_to(self.number_of_nodes)
+                self.untruncated_gaussians.probability_of_hyperrectangles(
+                    hyperrectangle.broadcast_to(self.number_of_nodes)
                 )
-                for box in self.boxes_of(event, variables)
+                for hyperrectangle in self.hyperrectangles_of(event, variables)
             ),
             np.zeros(self.number_of_nodes),
         )
@@ -187,33 +191,40 @@ class MultivariateGaussianLayer(AbstractMultivariateGaussianLayer):
 
     # %% structural
 
-    def type_of_layer_truncated_to_box(self, box: HyperrectangleArray) -> Type[Layer]:
-        if box.is_whole_space:
+    def type_of_layer_truncated_to_hyperrectangle(
+        self, hyperrectangle: HyperrectangleArray
+    ) -> Type[Layer]:
+        if hyperrectangle.is_whole_space:
             return MultivariateGaussianLayer
         return TruncatedMultivariateGaussianLayer
 
-    def log_truncated_of_box(
-        self, box: HyperrectangleArray
+    def log_truncated_of_hyperrectangle(
+        self, hyperrectangle: HyperrectangleArray
     ) -> LayerWithLogProbabilities:
-        # the whole space leaves every node a Gaussian, any other box confines it
-        if self.type_of_layer_truncated_to_box(box) is MultivariateGaussianLayer:
+        # the whole space leaves every node a Gaussian, any other hyperrectangle
+        # confines it
+        if (
+            self.type_of_layer_truncated_to_hyperrectangle(hyperrectangle)
+            is MultivariateGaussianLayer
+        ):
             return LayerWithLogProbabilities(
                 self.__deepcopy__(), np.zeros(self.number_of_nodes)
             )
-        boxes = box.broadcast_to(self.number_of_nodes)
-        probability = self.untruncated_gaussians.probability_of_boxes(boxes)
+        hyperrectangles = hyperrectangle.broadcast_to(self.number_of_nodes)
+        probability = self.untruncated_gaussians.probability_of_hyperrectangles(
+            hyperrectangles
+        )
         alive = probability > 0
         log_probabilities = np.where(
             alive, np.log(np.where(alive, probability, 1.0)), -np.inf
         )
         return LayerWithLogProbabilities(
             TruncatedMultivariateGaussianLayer(
-                self.scope.copy(),
-                self.mean.copy(),
-                self.covariance.copy(),
-                boxes.interval,
-                boxes.bounds,
-                log_probabilities.copy(),
+                scope=self.scope.copy(),
+                mean=self.mean.copy(),
+                covariance=self.covariance.copy(),
+                hyperrectangles=hyperrectangles,
+                log_normalizing_constant=log_probabilities.copy(),
             ),
             log_probabilities,
         )
@@ -242,7 +253,9 @@ class MultivariateGaussianLayer(AbstractMultivariateGaussianLayer):
         :return: The layer of those Gaussians.
         """
         return self.__class__(
-            self.scope[positions], gaussians.mean, gaussians.covariance
+            scope=self.scope[positions],
+            mean=gaussians.mean,
+            covariance=gaussians.covariance,
         )
 
     def __deepcopy__(self, memo=None) -> MultivariateGaussianLayer:
@@ -251,7 +264,9 @@ class MultivariateGaussianLayer(AbstractMultivariateGaussianLayer):
         if id(self) in memo:
             return memo[id(self)]
         result = self.__class__(
-            self.scope.copy(), self.mean.copy(), self.covariance.copy()
+            scope=self.scope.copy(),
+            mean=self.mean.copy(),
+            covariance=self.covariance.copy(),
         )
         memo[id(self)] = result
         return result

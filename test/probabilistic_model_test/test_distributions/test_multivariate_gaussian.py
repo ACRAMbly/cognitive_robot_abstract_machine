@@ -16,10 +16,12 @@ from probabilistic_model.distributions.multivariate_gaussian import (
     MultivariateGaussianDistribution,
 )
 from probabilistic_model.distributions.truncated_multivariate_gaussian import (
+    MomentIntegration,
     TruncatedMultivariateGaussianDistribution,
 )
 from probabilistic_model.exceptions import (
     EventIsNotABoxError,
+    InvalidMomentOrderError,
     NoClosedFormError,
     ProbabilisticCircuitRequiredError,
     ShapeMismatchError,
@@ -1268,29 +1270,29 @@ class TestMomentsOfATruncatedDistribution:
             + (mean_of(truncated, horizontal) - center) ** 2
         )
 
-    def test_a_moment_above_the_second_has_no_closed_form(
-        self, correlated, horizontal, vertical
-    ):
-        box = box_over(horizontal, vertical, 0.0, 1.0).as_composite_set()
-        truncated, _ = correlated.truncated(box)
-        with pytest.raises(NoClosedFormError):
-            truncated.moment(
-                VariableMap({horizontal: 3}), VariableMap({horizontal: 0.0})
-            )
-
-    def test_the_highest_order_of_moment_can_be_raised(
+    def test_a_higher_moment_matches_the_truncated_normal(
         self, independent, horizontal, vertical
     ):
         box = SimpleEvent.from_data(
             {horizontal: closed(0.0, 3.0), vertical: closed(-4.0, 1.0)}
         ).as_composite_set()
         truncated, _ = independent.truncated(box)
-        truncated = dataclasses.replace(truncated, highest_order_of_moment=3)
         expected = truncnorm((0.0 - 1.0) / 2.0, (3.0 - 1.0) / 2.0, loc=1.0, scale=2.0)
         moment = truncated.moment(
             VariableMap({horizontal: 3}), VariableMap({horizontal: 0.0})
         )[horizontal]
         assert moment == pytest.approx(expected.moment(3))
+
+    @pytest.mark.parametrize("order", [-1, 1.5])
+    def test_an_order_that_is_negative_or_not_a_whole_number_is_rejected(
+        self, correlated, horizontal, vertical, order
+    ):
+        box = box_over(horizontal, vertical, 0.0, 1.0).as_composite_set()
+        truncated, _ = correlated.truncated(box)
+        with pytest.raises(InvalidMomentOrderError):
+            truncated.moment(
+                VariableMap({horizontal: order}), VariableMap({horizontal: 0.0})
+            )
 
     def test_a_coarser_integration_answers_less_exactly(
         self, correlated, horizontal, vertical
@@ -1300,24 +1302,23 @@ class TestMomentsOfATruncatedDistribution:
         ).as_composite_set()
         truncated, _ = correlated.truncated(box)
         coarse = dataclasses.replace(
-            truncated, quadrature_panels=1, quadrature_nodes_per_panel=2
+            truncated, moment_integration=MomentIntegration(panels=1, nodes_per_panel=2)
         )
         exact = 0.6 * norm.pdf(1.0) / norm.sf(1.0)
         assert abs(mean_of(coarse, horizontal) - exact) > abs(
             mean_of(truncated, horizontal) - exact
         )
 
-    def test_the_settings_of_the_moments_survive_what_the_distribution_becomes(
+    def test_the_way_to_integrate_survives_what_the_distribution_becomes(
         self, correlated, horizontal, vertical
     ):
         box = box_over(horizontal, vertical, 0.0, 1.0).as_composite_set()
         truncated, _ = correlated.truncated(box)
+        moment_integration = MomentIntegration(
+            deviations_integrated_over=6.0, panels=8, nodes_per_panel=12
+        )
         configured = dataclasses.replace(
-            truncated,
-            highest_order_of_moment=4,
-            deviations_integrated_over=6.0,
-            quadrature_panels=8,
-            quadrature_nodes_per_panel=12,
+            truncated, moment_integration=moment_integration
         )
         further, _ = configured.truncated(
             box_over(horizontal, vertical, 0.2, 0.8).as_composite_set()
@@ -1329,7 +1330,12 @@ class TestMomentsOfATruncatedDistribution:
             copy.copy(configured),
             copy.deepcopy(configured),
         ):
-            assert descendant.highest_order_of_moment == 4
-            assert descendant.deviations_integrated_over == 6.0
-            assert descendant.quadrature_panels == 8
-            assert descendant.quadrature_nodes_per_panel == 12
+            assert descendant.moment_integration == moment_integration
+
+
+class TestMomentIntegration:
+    def test_the_points_integrate_a_polynomial_exactly(self):
+        points = MomentIntegration(panels=2, nodes_per_panel=3).points_between(0.0, 2.0)
+        assert len(points.values) == 6
+        assert np.sum(points.weights) == pytest.approx(2.0)
+        assert np.sum(points.weights * points.values**3) == pytest.approx(4.0)
