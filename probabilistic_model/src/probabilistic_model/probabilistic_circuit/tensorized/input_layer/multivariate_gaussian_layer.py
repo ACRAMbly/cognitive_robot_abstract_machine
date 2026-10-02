@@ -75,7 +75,7 @@ from probabilistic_model.probabilistic_circuit.tensorized.structural_query impor
 
 
 @dataclass
-class Boxes:
+class HyperrectangleArray:
     """
     Axis-aligned boxes over the variables in the scope of a layer, one simple interval
     per variable and box.
@@ -126,9 +126,9 @@ class Boxes:
         """
         return bool(np.all(self.lower == -np.inf) and np.all(self.upper == np.inf))
 
-    def intersection_with(self, other: Boxes) -> Boxes:
+    def intersection_with(self, other: HyperrectangleArray) -> HyperrectangleArray:
         """
-        :param other: Boxes whose shape broadcasts against these.
+        :param other: Hyperrectangles whose shape broadcasts against these.
         :return: The intersection of every box with the matching box of ``other``.
             Where two bounds coincide the result is open if either of them is.
             :attr:`Bound.OPEN` is the larger value, so that is a maximum.
@@ -157,7 +157,7 @@ class Boxes:
                 np.maximum(own_right, other_right),
             ),
         )
-        return Boxes(
+        return HyperrectangleArray(
             np.stack(
                 [
                     np.maximum(own_lower, other_lower),
@@ -200,19 +200,19 @@ class Boxes:
             }
         )
 
-    def select(self, indices: Any) -> Boxes:
+    def select(self, indices: Any) -> HyperrectangleArray:
         """
         :param indices: A mask or index array over the first axis.
         :return: The selected boxes.
         """
-        return Boxes(self.interval[indices], self.bounds[indices])
+        return HyperrectangleArray(self.interval[indices], self.bounds[indices])
 
-    def broadcast_to(self, number_of_boxes: int) -> Boxes:
+    def broadcast_to(self, number_of_boxes: int) -> HyperrectangleArray:
         """
         :param number_of_boxes: How many copies to make of this single box.
         :return: The copies, one per entry of the first axis.
         """
-        return Boxes(
+        return HyperrectangleArray(
             np.tile(self.interval, (number_of_boxes, 1, 1)),
             np.tile(self.bounds, (number_of_boxes, 1, 1)),
         )
@@ -324,7 +324,9 @@ class AbstractMultivariateGaussianLayer(Layer, ABC):
             + log_determinant
         )
 
-    def untruncated_probability_of_boxes(self, boxes: Boxes) -> NodeValues:
+    def untruncated_probability_of_boxes(
+        self, boxes: HyperrectangleArray
+    ) -> NodeValues:
         """
         The probability of an axis-aligned box under a correlated Gaussian has no closed
         form, so it is integrated numerically by :mod:`scipy.stats.multivariate_normal`
@@ -362,7 +364,9 @@ class AbstractMultivariateGaussianLayer(Layer, ABC):
                     )
         return np.clip(result, 0.0, 1.0)
 
-    def boxes_of(self, event: SimpleEvent, variables: SortedSet) -> List[Boxes]:
+    def boxes_of(
+        self, event: SimpleEvent, variables: SortedSet
+    ) -> List[HyperrectangleArray]:
         """
         :param event: A simple event.
         :param variables: The variables of the circuit.
@@ -370,7 +374,7 @@ class AbstractMultivariateGaussianLayer(Layer, ABC):
             combination of their simple intervals.
         """
         return [
-            Boxes.of_simple_intervals(intervals)
+            HyperrectangleArray.of_simple_intervals(intervals)
             for intervals in itertools.product(
                 *(
                     event[variable].simple_sets
@@ -512,7 +516,7 @@ class AbstractMultivariateGaussianLayer(Layer, ABC):
     # %% structural
 
     @abstractmethod
-    def type_of_layer_truncated_to_box(self, box: Boxes) -> Type[Layer]:
+    def type_of_layer_truncated_to_box(self, box: HyperrectangleArray) -> Type[Layer]:
         """
         :param box: A single box.
         :return: The type of the layer :meth:`log_truncated_of_box` returns for it.
@@ -520,7 +524,9 @@ class AbstractMultivariateGaussianLayer(Layer, ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def log_truncated_of_box(self, box: Boxes) -> LayerWithLogProbabilities:
+    def log_truncated_of_box(
+        self, box: HyperrectangleArray
+    ) -> LayerWithLogProbabilities:
         """
         Truncate every node to the same box.
 
@@ -530,7 +536,9 @@ class AbstractMultivariateGaussianLayer(Layer, ABC):
         """
         raise NotImplementedError
 
-    def log_truncated_of_boxes(self, boxes: List[Boxes]) -> LayerWithLogProbabilities:
+    def log_truncated_of_boxes(
+        self, boxes: List[HyperrectangleArray]
+    ) -> LayerWithLogProbabilities:
         """
         Truncate every node to the union of disjoint boxes.
 
@@ -859,12 +867,14 @@ class MultivariateGaussianLayer(AbstractMultivariateGaussianLayer):
 
     # %% structural
 
-    def type_of_layer_truncated_to_box(self, box: Boxes) -> Type[Layer]:
+    def type_of_layer_truncated_to_box(self, box: HyperrectangleArray) -> Type[Layer]:
         if box.is_whole_space:
             return MultivariateGaussianLayer
         return TruncatedMultivariateGaussianLayer
 
-    def log_truncated_of_box(self, box: Boxes) -> LayerWithLogProbabilities:
+    def log_truncated_of_box(
+        self, box: HyperrectangleArray
+    ) -> LayerWithLogProbabilities:
         # the whole space leaves every node a Gaussian, any other box confines it
         if self.type_of_layer_truncated_to_box(box) is MultivariateGaussianLayer:
             return LayerWithLogProbabilities(
@@ -949,11 +959,11 @@ class TruncatedMultivariateGaussianLayer(AbstractMultivariateGaussianLayer):
     """
 
     @property
-    def boxes(self) -> Boxes:
+    def boxes(self) -> HyperrectangleArray:
         """
         :return: The box of every node.
         """
-        return Boxes(self.interval, self.bounds)
+        return HyperrectangleArray(self.interval, self.bounds)
 
     @property
     def number_of_own_parameters(self) -> int:
@@ -999,7 +1009,7 @@ class TruncatedMultivariateGaussianLayer(AbstractMultivariateGaussianLayer):
         )
         scope_variables = untruncated.scope_variables(variables)
         boxes = [
-            Boxes.of_simple_intervals(
+            HyperrectangleArray.of_simple_intervals(
                 [distribution.interval_of(variable) for variable in scope_variables]
             )
             for distribution in distributions
@@ -1157,10 +1167,12 @@ class TruncatedMultivariateGaussianLayer(AbstractMultivariateGaussianLayer):
 
     # %% structural
 
-    def type_of_layer_truncated_to_box(self, box: Boxes) -> Type[Layer]:
+    def type_of_layer_truncated_to_box(self, box: HyperrectangleArray) -> Type[Layer]:
         return TruncatedMultivariateGaussianLayer
 
-    def log_truncated_of_box(self, box: Boxes) -> LayerWithLogProbabilities:
+    def log_truncated_of_box(
+        self, box: HyperrectangleArray
+    ) -> LayerWithLogProbabilities:
         # every node keeps its Gaussian, confined to the intersection of the two boxes
         intersection = self.boxes.intersection_with(box)
         probability = self.untruncated_probability_of_boxes(intersection)
