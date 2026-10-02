@@ -54,8 +54,10 @@ from probabilistic_model.probabilistic_circuit.tensorized.input_layer.gaussian_l
     GaussianLayer,
     TruncatedGaussianLayer,
 )
-from probabilistic_model.probabilistic_circuit.tensorized.input_layer.multivariate_gaussian_layer import (
+from probabilistic_model.probabilistic_circuit.tensorized.input_layer.multivariate_gaussian.multivariate_gaussian_layer import (
     MultivariateGaussianLayer,
+)
+from probabilistic_model.probabilistic_circuit.tensorized.input_layer.multivariate_gaussian.truncated_multivariate_gaussian_layer import (
     TruncatedMultivariateGaussianLayer,
 )
 from probabilistic_model.probabilistic_circuit.tensorized.input_layer.uniform_layer import (

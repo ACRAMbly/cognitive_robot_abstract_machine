@@ -44,8 +44,10 @@ from probabilistic_model.probabilistic_circuit.tensorized.exceptions import (
 from probabilistic_model.probabilistic_circuit.tensorized.inner_layer.sum_layer import (
     SumLayer,
 )
-from probabilistic_model.probabilistic_circuit.tensorized.input_layer.multivariate_gaussian_layer import (
+from probabilistic_model.probabilistic_circuit.tensorized.input_layer.multivariate_gaussian.multivariate_gaussian_layer import (
     MultivariateGaussianLayer,
+)
+from probabilistic_model.probabilistic_circuit.tensorized.input_layer.multivariate_gaussian.truncated_multivariate_gaussian_layer import (
     TruncatedMultivariateGaussianLayer,
 )
 
@@ -188,7 +190,7 @@ class MultivariateGaussianConversionTestCase(unittest.TestCase):
             gaussian_layer.mean[0], component.mean[in_circuit_order]
         )
         np.testing.assert_allclose(
-            gaussian_layer.covariance[0],
+            gaussian_layer.covariance.matrices[0],
             component.covariance.matrix[np.ix_(in_circuit_order, in_circuit_order)],
         )
 

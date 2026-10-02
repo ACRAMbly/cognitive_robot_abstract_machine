@@ -25,7 +25,7 @@ from probabilistic_model.probabilistic_circuit.tensorized.inner_layer.sum_layer 
 from probabilistic_model.probabilistic_circuit.tensorized.input_layer.base import (
     InputLayer,
 )
-from probabilistic_model.probabilistic_circuit.tensorized.input_layer.multivariate_gaussian_layer import (
+from probabilistic_model.probabilistic_circuit.tensorized.input_layer.multivariate_gaussian.base import (
     AbstractMultivariateGaussianLayer,
 )
 from probabilistic_model.probabilistic_circuit.tensorized.layered_probabilistic_circuit import (

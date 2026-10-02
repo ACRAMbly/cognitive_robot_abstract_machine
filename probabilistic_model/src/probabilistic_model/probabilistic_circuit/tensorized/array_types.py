@@ -85,6 +85,13 @@ One square matrix over the variables in the scope of a layer per node of the lay
 shape (#nodes, #variables of the layer, #variables of the layer).
 """
 
+NodeScopeLowerTriangles: TypeAlias = npt.NDArray[np.float64]
+"""
+The entries on and below the diagonal of one square matrix over the variables in the
+scope of a layer per node of the layer, row by row, shape (#nodes, n * (n + 1) // 2) for
+n variables of the layer.
+"""
+
 NodeScopeIntervals: TypeAlias = npt.NDArray[np.float64]
 """
 The lower and upper bound of one interval per node of a layer and variable in its scope,
