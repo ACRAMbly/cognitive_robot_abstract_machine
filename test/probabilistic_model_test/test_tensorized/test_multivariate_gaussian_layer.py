@@ -9,6 +9,7 @@ to call by about ``1e-5``, so every comparison that involves one allows for that
 
 from __future__ import annotations
 
+import dataclasses
 import unittest
 
 import numpy as np
@@ -578,6 +579,32 @@ class MultivariateGaussianTruncationTestCase(unittest.TestCase):
             truncated.sample(20000).mean(axis=0),
             atol=0.03,
         )
+
+    def test_the_settings_of_the_moments_follow_the_distributions_through_the_layer(
+        self,
+    ):
+        rx_circuit = single_gaussian()
+        event = box(x=closed(-1.0, 2.0), y=closed(0.0, 1.5)).as_composite_set()
+        rx_truncated, _ = rx_circuit.truncated(event)
+        [leaf] = rx_truncated.leaves
+        leaf.distribution = dataclasses.replace(
+            leaf.distribution,
+            highest_order_of_moment=3,
+            deviations_integrated_over=6.0,
+            quadrature_panels=8,
+            quadrature_nodes_per_panel=12,
+        )
+        layered = RustworkxCircuitToLayeredCircuitConverter.convert(rx_truncated)
+        further, _ = layered.truncated(
+            box(x=closed(-0.5, 1.0), y=closed(0.0, 1.5)).as_composite_set()
+        )
+        [restored] = LayeredCircuitToRustworkxCircuitConverter.convert(further).leaves
+        self.assertEqual(restored.distribution.highest_order_of_moment, 3)
+        self.assertEqual(restored.distribution.deviations_integrated_over, 6.0)
+        self.assertEqual(restored.distribution.quadrature_panels, 8)
+        self.assertEqual(restored.distribution.quadrature_nodes_per_panel, 12)
+        third_moment = further.moment(VariableMap({x: 3}), VariableMap({x: 0.0}))
+        self.assertTrue(np.isfinite(third_moment[x]))
 
     def test_a_truncated_gaussian_has_no_closed_form_moment_above_the_second(self):
         layered = RustworkxCircuitToLayeredCircuitConverter.convert(gaussian_mixture())

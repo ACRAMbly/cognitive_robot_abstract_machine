@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import copy
+import dataclasses
 import functools
 import math
-from dataclasses import dataclass
 
 import numpy as np
 import numpy.typing as npt
@@ -40,30 +40,10 @@ if TYPE_CHECKING:
     )
 
 
-HIGHEST_ORDER_OF_MOMENT = 2
-"""
-The highest order of a moment that a Gaussian confined to a box answers.
-"""
-
-DEVIATIONS_INTEGRATED_OVER = 10.0
-"""
-How many standard deviations around its mean an unbounded variable is integrated over.
-"""
-
-QUADRATURE_PANELS = 16
-"""
-How many panels the interval of a variable is split into to integrate over it.
-"""
-
-QUADRATURE_NODES_PER_PANEL = 16
-"""
-How many Gauss-Legendre nodes every panel is integrated with.
-"""
-
 # %% a Gaussian that has been confined to a box
 
 
-@dataclass
+@dataclasses.dataclass
 class TruncatedMultivariateGaussianDistribution(ProbabilisticModel):
     """
     A Gaussian confined to a box, which is what is left of one once part of the space is
@@ -92,6 +72,27 @@ class TruncatedMultivariateGaussianDistribution(ProbabilisticModel):
     """
     How many times each chain draws every variable before its last state becomes a
     sample.
+    """
+
+    highest_order_of_moment: int = 2
+    """
+    The highest order of a moment that is answered.
+    """
+
+    deviations_integrated_over: float = 10.0
+    """
+    How many standard deviations around its mean an unbounded variable is integrated
+    over to answer a moment.
+    """
+
+    quadrature_panels: int = 16
+    """
+    How many panels the interval of a variable is split into to integrate over it.
+    """
+
+    quadrature_nodes_per_panel: int = 16
+    """
+    How many Gauss-Legendre nodes every panel is integrated with.
     """
 
     @property
@@ -250,11 +251,7 @@ class TruncatedMultivariateGaussianDistribution(ProbabilisticModel):
         if probability == 0.0:
             return None, -np.inf
         return (
-            type(self)(
-                untruncated=self.untruncated,
-                box=surviving,
-                burn_in_period_length=self.burn_in_period_length,
-            ),
+            dataclasses.replace(self, box=surviving),
             math.log(probability),
         )
 
@@ -292,10 +289,8 @@ class TruncatedMultivariateGaussianDistribution(ProbabilisticModel):
         if log_likelihood == -np.inf:
             return None, -np.inf
         return (
-            type(self)(
-                untruncated=confined.untruncated,
-                box=confined.box,
-                burn_in_period_length=self.burn_in_period_length,
+            dataclasses.replace(
+                self, untruncated=confined.untruncated, box=confined.box
             ),
             log_likelihood,
         )
@@ -322,17 +317,19 @@ class TruncatedMultivariateGaussianDistribution(ProbabilisticModel):
     def moment(self, order: OrderType, center: CenterType) -> MomentType:
         """
         Every moment asked for here is of one variable on its own, and is answered up to
-        the second order by integrating the density of that variable numerically.
+        :attr:`highest_order_of_moment` by integrating the density of that variable
+        numerically.
 
         :param order: The order of the moment of each variable to answer for.
         :param center: What to take each of those moments about.
         :return: The moment of each variable asked for.
-        :raises NoClosedFormError: If a moment above the second order is asked for.
+        :raises NoClosedFormError: If a moment above :attr:`highest_order_of_moment`
+            is asked for.
         """
         moments = VariableMap()
         for variable in order:
             requested_order = int(order[variable])
-            if requested_order > HIGHEST_ORDER_OF_MOMENT:
+            if requested_order > self.highest_order_of_moment:
                 raise NoClosedFormError(type(self), type(self).moment)
             moments_about_zero = self.moments_about_zero_of(
                 self.untruncated.index_of(variable)
@@ -357,19 +354,19 @@ class TruncatedMultivariateGaussianDistribution(ProbabilisticModel):
 
         :param index: The index of a variable.
         :return: The moments of that variable about zero, the entry at ``k`` being the
-            moment of order ``k``, up to the second order.
+            moment of order ``k``, up to :attr:`highest_order_of_moment`.
         """
         interval = self.interval_of(self.variables[index])
         mean = self.untruncated.mean[index]
         deviation = math.sqrt(self.untruncated.covariance.between(index, index))
-        reach = DEVIATIONS_INTEGRATED_OVER * deviation
+        reach = self.deviations_integrated_over * deviation
         lower = max(interval.lower, min(mean - reach, interval.upper - reach))
         upper = min(interval.upper, max(mean + reach, interval.lower + reach))
 
-        edges = np.linspace(lower, upper, QUADRATURE_PANELS + 1)
+        edges = np.linspace(lower, upper, self.quadrature_panels + 1)
         half_widths = np.diff(edges)[:, None] / 2
         nodes, node_weights = np.polynomial.legendre.leggauss(
-            QUADRATURE_NODES_PER_PANEL
+            self.quadrature_nodes_per_panel
         )
         values = (edges[:-1, None] + half_widths + half_widths * nodes).ravel()
         weights = (half_widths * node_weights).ravel()
@@ -382,7 +379,7 @@ class TruncatedMultivariateGaussianDistribution(ProbabilisticModel):
         return np.array(
             [
                 np.sum(density * values**power)
-                for power in range(HIGHEST_ORDER_OF_MOMENT + 1)
+                for power in range(self.highest_order_of_moment + 1)
             ]
         ) / np.sum(density)
 
@@ -467,11 +464,7 @@ class TruncatedMultivariateGaussianDistribution(ProbabilisticModel):
         return samples
 
     def __copy__(self) -> Self:
-        return type(self)(
-            untruncated=copy.copy(self.untruncated),
-            box=self.box,
-            burn_in_period_length=self.burn_in_period_length,
-        )
+        return dataclasses.replace(self, untruncated=copy.copy(self.untruncated))
 
     def __deepcopy__(self, memo=None) -> Self:
         if memo is None:
@@ -479,10 +472,10 @@ class TruncatedMultivariateGaussianDistribution(ProbabilisticModel):
         id_self = id(self)
         if id_self in memo:
             return memo[id_self]
-        result = type(self)(
+        result = dataclasses.replace(
+            self,
             untruncated=copy.deepcopy(self.untruncated, memo),
             box=self.box.__deepcopy__(),
-            burn_in_period_length=self.burn_in_period_length,
         )
         memo[id_self] = result
         return result

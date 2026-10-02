@@ -1,4 +1,5 @@
 import copy
+import dataclasses
 import math
 
 import numpy as np
@@ -1276,3 +1277,59 @@ class TestMomentsOfATruncatedDistribution:
             truncated.moment(
                 VariableMap({horizontal: 3}), VariableMap({horizontal: 0.0})
             )
+
+    def test_the_highest_order_of_moment_can_be_raised(
+        self, independent, horizontal, vertical
+    ):
+        box = SimpleEvent.from_data(
+            {horizontal: closed(0.0, 3.0), vertical: closed(-4.0, 1.0)}
+        ).as_composite_set()
+        truncated, _ = independent.truncated(box)
+        truncated = dataclasses.replace(truncated, highest_order_of_moment=3)
+        expected = truncnorm((0.0 - 1.0) / 2.0, (3.0 - 1.0) / 2.0, loc=1.0, scale=2.0)
+        moment = truncated.moment(
+            VariableMap({horizontal: 3}), VariableMap({horizontal: 0.0})
+        )[horizontal]
+        assert moment == pytest.approx(expected.moment(3))
+
+    def test_a_coarser_integration_answers_less_exactly(
+        self, correlated, horizontal, vertical
+    ):
+        box = SimpleEvent.from_data(
+            {vertical: closed(1.0, math.inf)}
+        ).as_composite_set()
+        truncated, _ = correlated.truncated(box)
+        coarse = dataclasses.replace(
+            truncated, quadrature_panels=1, quadrature_nodes_per_panel=2
+        )
+        exact = 0.6 * norm.pdf(1.0) / norm.sf(1.0)
+        assert abs(mean_of(coarse, horizontal) - exact) > abs(
+            mean_of(truncated, horizontal) - exact
+        )
+
+    def test_the_settings_of_the_moments_survive_what_the_distribution_becomes(
+        self, correlated, horizontal, vertical
+    ):
+        box = box_over(horizontal, vertical, 0.0, 1.0).as_composite_set()
+        truncated, _ = correlated.truncated(box)
+        configured = dataclasses.replace(
+            truncated,
+            highest_order_of_moment=4,
+            deviations_integrated_over=6.0,
+            quadrature_panels=8,
+            quadrature_nodes_per_panel=12,
+        )
+        further, _ = configured.truncated(
+            box_over(horizontal, vertical, 0.2, 0.8).as_composite_set()
+        )
+        conditioned, _ = configured.log_conditional({horizontal: 0.5})
+        for descendant in (
+            further,
+            conditioned,
+            copy.copy(configured),
+            copy.deepcopy(configured),
+        ):
+            assert descendant.highest_order_of_moment == 4
+            assert descendant.deviations_integrated_over == 6.0
+            assert descendant.quadrature_panels == 8
+            assert descendant.quadrature_nodes_per_panel == 12

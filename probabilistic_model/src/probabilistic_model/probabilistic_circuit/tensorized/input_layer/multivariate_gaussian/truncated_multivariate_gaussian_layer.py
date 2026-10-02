@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+import dataclasses
 
 import numpy as np
 from random_events.product_algebra import Event, SimpleEvent
@@ -50,7 +50,7 @@ from probabilistic_model.probabilistic_circuit.tensorized.structural_query impor
 )
 
 
-@dataclass(eq=False, repr=False)
+@dataclasses.dataclass(eq=False, repr=False)
 class TruncatedMultivariateGaussianLayer(AbstractMultivariateGaussianLayer):
     """
     A layer of Gaussians over several continuous variables, each confined to a box.
@@ -78,6 +78,27 @@ class TruncatedMultivariateGaussianLayer(AbstractMultivariateGaussianLayer):
     """
     How many times each chain of the sampler draws every variable before its last state
     becomes a sample.
+    """
+
+    highest_order_of_moment: int = 2
+    """
+    The highest order of a moment that every node answers.
+    """
+
+    deviations_integrated_over: float = 10.0
+    """
+    How many standard deviations around its mean an unbounded variable is integrated
+    over to answer a moment.
+    """
+
+    quadrature_panels: int = 16
+    """
+    How many panels the interval of a variable is split into to integrate over it.
+    """
+
+    quadrature_nodes_per_panel: int = 16
+    """
+    How many Gauss-Legendre nodes every panel is integrated with.
     """
 
     @property
@@ -113,6 +134,10 @@ class TruncatedMultivariateGaussianLayer(AbstractMultivariateGaussianLayer):
             untruncated=self.untruncated_distribution(index, variables),
             box=self.boxes.simple_event_of(index, self.scope_variables(variables)),
             burn_in_period_length=self.burn_in_period_length,
+            highest_order_of_moment=self.highest_order_of_moment,
+            deviations_integrated_over=self.deviations_integrated_over,
+            quadrature_panels=self.quadrature_panels,
+            quadrature_nodes_per_panel=self.quadrature_nodes_per_panel,
         )
 
     @classmethod
@@ -148,6 +173,10 @@ class TruncatedMultivariateGaussianLayer(AbstractMultivariateGaussianLayer):
                 [distribution.normalizing_constant for distribution in distributions]
             ),
             distributions[0].burn_in_period_length,
+            distributions[0].highest_order_of_moment,
+            distributions[0].deviations_integrated_over,
+            distributions[0].quadrature_panels,
+            distributions[0].quadrature_nodes_per_panel,
         )
 
     def with_nodes(self, indices: Any) -> Self:
@@ -155,14 +184,14 @@ class TruncatedMultivariateGaussianLayer(AbstractMultivariateGaussianLayer):
         :param indices: A mask or index array over the nodes.
         :return: A layer of only those nodes.
         """
-        return self.__class__(
-            self.scope.copy(),
-            self.mean[indices],
-            self.covariance.select(indices),
-            self.interval[indices],
-            self.bounds[indices],
-            self.log_normalizing_constant[indices],
-            self.burn_in_period_length,
+        return dataclasses.replace(
+            self,
+            scope=self.scope.copy(),
+            mean=self.mean[indices],
+            covariance=self.covariance.select(indices),
+            interval=self.interval[indices],
+            bounds=self.bounds[indices],
+            log_normalizing_constant=self.log_normalizing_constant[indices],
         )
 
     def select_nodes(self, mask: NodeMask) -> Self:
@@ -170,14 +199,18 @@ class TruncatedMultivariateGaussianLayer(AbstractMultivariateGaussianLayer):
 
     @classmethod
     def concatenate(cls, layers: List[Self]) -> Self:
-        return cls(
-            layers[0].scope.copy(),
-            np.concatenate([layer.mean for layer in layers]),
-            CovarianceArray.concatenate([layer.covariance for layer in layers]),
-            np.concatenate([layer.interval for layer in layers]),
-            np.concatenate([layer.bounds for layer in layers]),
-            np.concatenate([layer.log_normalizing_constant for layer in layers]),
-            layers[0].burn_in_period_length,
+        return dataclasses.replace(
+            layers[0],
+            scope=layers[0].scope.copy(),
+            mean=np.concatenate([layer.mean for layer in layers]),
+            covariance=CovarianceArray.concatenate(
+                [layer.covariance for layer in layers]
+            ),
+            interval=np.concatenate([layer.interval for layer in layers]),
+            bounds=np.concatenate([layer.bounds for layer in layers]),
+            log_normalizing_constant=np.concatenate(
+                [layer.log_normalizing_constant for layer in layers]
+            ),
         )
 
     # %% queries
@@ -317,14 +350,16 @@ class TruncatedMultivariateGaussianLayer(AbstractMultivariateGaussianLayer):
         # impossible nodes keep their parameters and are dropped by the prune pass
         interval = np.where(alive[:, None, None], intersection.interval, self.interval)
         bounds = np.where(alive[:, None, None], intersection.bounds, self.bounds)
-        truncated = self.__class__(
-            self.scope.copy(),
-            self.mean.copy(),
-            self.covariance.copy(),
-            interval,
-            bounds,
-            np.where(alive, log_normalizing_constant, self.log_normalizing_constant),
-            self.burn_in_period_length,
+        truncated = dataclasses.replace(
+            self,
+            scope=self.scope.copy(),
+            mean=self.mean.copy(),
+            covariance=self.covariance.copy(),
+            interval=interval,
+            bounds=bounds,
+            log_normalizing_constant=np.where(
+                alive, log_normalizing_constant, self.log_normalizing_constant
+            ),
         )
         return LayerWithLogProbabilities(
             truncated, log_normalizing_constant - self.log_normalizing_constant
@@ -349,14 +384,14 @@ class TruncatedMultivariateGaussianLayer(AbstractMultivariateGaussianLayer):
         probability = conditionals.probability_of_boxes(slices)
         alive = inside & (probability > 0)
         log_probability_of_slice = np.log(np.where(alive, probability, 1.0))
-        conditioned = self.__class__(
-            self.scope[free],
-            conditionals.mean,
-            conditionals.covariance,
-            slices.interval,
-            slices.bounds,
-            log_probability_of_slice,
-            self.burn_in_period_length,
+        conditioned = dataclasses.replace(
+            self,
+            scope=self.scope[free],
+            mean=conditionals.mean,
+            covariance=conditionals.covariance,
+            interval=slices.interval,
+            bounds=slices.bounds,
+            log_normalizing_constant=log_probability_of_slice,
         )
         return LayerWithLogProbabilities(
             conditioned,
