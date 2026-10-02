@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import numpy as np
-from typing_extensions import Callable, Type
+from typing_extensions import Type
 
 from krrood.exceptions import DataclassException
 
@@ -72,27 +72,3 @@ class NonPositiveScaleError(DataclassException, ValueError):
 
     def suggest_correction(self) -> str:
         return "Give every node a positive scale."
-
-
-@dataclass
-class NoClosedFormError(DataclassException, NotImplementedError):
-    """
-    Exception raised when a query of a layer has no answer that the layers can represent
-    in closed form.
-    """
-
-    layer_type: Type
-    """
-    The type of the layer.
-    """
-
-    query: Callable
-    """
-    The method of the layer that was queried.
-    """
-
-    def error_message(self) -> str:
-        return f"{self.layer_type.__name__}.{self.query.__name__} has no closed form."
-
-    def suggest_correction(self) -> str:
-        return "Ask the query before the layer is truncated, or approximate it by sampling."

@@ -1,6 +1,6 @@
 from __future__ import annotations
 from dataclasses import dataclass
-from typing import Any, List, TYPE_CHECKING
+from typing import Any, Callable, List, Type, TYPE_CHECKING
 
 from krrood.exceptions import DataclassException
 from random_events.variable import Variable
@@ -163,3 +163,27 @@ class NonContinuousVariableError(DataclassException, ValueError):
 
     def suggest_correction(self) -> str:
         return "Fit them with a model that supports discrete variables."
+
+
+@dataclass
+class NoClosedFormError(DataclassException, NotImplementedError):
+    """
+    Exception raised when a query has no answer that the model or layer that was asked
+    can represent in closed form.
+    """
+
+    asked_type: Type
+    """
+    The type of the model or layer that was asked.
+    """
+
+    query: Callable
+    """
+    The method that was queried.
+    """
+
+    def error_message(self) -> str:
+        return f"{self.asked_type.__name__}.{self.query.__name__} has no closed form."
+
+    def suggest_correction(self) -> str:
+        return "Ask the query before truncating, or approximate it by sampling."

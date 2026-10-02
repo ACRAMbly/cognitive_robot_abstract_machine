@@ -38,9 +38,7 @@ from probabilistic_model.probabilistic_circuit.rx.probabilistic_circuit import (
     SumUnit,
     leaf,
 )
-from probabilistic_model.probabilistic_circuit.tensorized.exceptions import (
-    NoClosedFormError,
-)
+from probabilistic_model.exceptions import NoClosedFormError
 from probabilistic_model.probabilistic_circuit.tensorized.inner_layer.sum_layer import (
     SumLayer,
 )
@@ -552,13 +550,42 @@ class MultivariateGaussianTruncationTestCase(unittest.TestCase):
         with self.assertRaises(NoClosedFormError):
             truncated.marginal([x])
 
-    def test_a_truncated_gaussian_has_no_closed_form_moment(self):
+    def test_moments_of_a_truncated_gaussian_agree_with_rustworkx(self):
+        rx_circuit = gaussian_mixture()
+        layered = RustworkxCircuitToLayeredCircuitConverter.convert(rx_circuit)
+        event = box(x=closed(-1.0, 2.0), y=closed(0.0, 1.5)).as_composite_set()
+        rx_truncated, _ = rx_circuit.truncated(event.__deepcopy__())
+        truncated, _ = layered.truncated(event.__deepcopy__())
+
+        expectation = truncated.expectation([x, y])
+        variance = truncated.variance([x, y])
+        expected_expectation = rx_truncated.expectation([x, y])
+        expected_variance = rx_truncated.variance([x, y])
+        for variable in (x, y):
+            self.assertAlmostEqual(
+                expectation[variable], expected_expectation[variable]
+            )
+            self.assertAlmostEqual(variance[variable], expected_variance[variable])
+
+    def test_the_expectation_of_a_truncated_gaussian_is_the_mean_of_its_samples(self):
+        layered = RustworkxCircuitToLayeredCircuitConverter.convert(gaussian_mixture())
+        truncated, _ = layered.truncated(
+            box(x=closed(-1.0, 2.0), y=closed(0.0, 1.5)).as_composite_set()
+        )
+        expectation = truncated.expectation([x, y])
+        np.testing.assert_allclose(
+            [expectation[x], expectation[y]],
+            truncated.sample(20000).mean(axis=0),
+            atol=0.03,
+        )
+
+    def test_a_truncated_gaussian_has_no_closed_form_moment_above_the_second(self):
         layered = RustworkxCircuitToLayeredCircuitConverter.convert(gaussian_mixture())
         truncated, _ = layered.truncated(
             box(x=closed(-1.0, 2.0), y=closed(0.0, 1.5)).as_composite_set()
         )
         with self.assertRaises(NoClosedFormError):
-            truncated.expectation([x])
+            truncated.moment(VariableMap({x: 3}), VariableMap({x: 0.0}))
 
 
 # %% conditioning

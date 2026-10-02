@@ -24,9 +24,7 @@ from probabilistic_model.probabilistic_circuit.tensorized.array_types import (
     SampleScopeValues,
     VariableValues,
 )
-from probabilistic_model.probabilistic_circuit.tensorized.exceptions import (
-    NoClosedFormError,
-)
+from probabilistic_model.exceptions import NoClosedFormError
 from probabilistic_model.probabilistic_circuit.tensorized.inner_layer.base import Layer
 from probabilistic_model.probabilistic_circuit.tensorized.input_layer.multivariate_gaussian.base import (
     AbstractMultivariateGaussianLayer,
@@ -254,10 +252,17 @@ class TruncatedMultivariateGaussianLayer(AbstractMultivariateGaussianLayer):
         variables: SortedSet,
         cache: Optional[QueryCache] = None,
     ) -> NodeVariableValues:
-        # a Gaussian confined to a box has no closed-form moment
-        if query.requested[self.scope].any():
-            raise NoClosedFormError(type(self), type(self).moment_of_nodes)
-        return np.zeros((self.number_of_nodes, query.number_of_variables))
+        result = np.zeros((self.number_of_nodes, query.number_of_variables))
+        requested = self.scope[query.requested[self.scope]]
+        if len(requested) == 0:
+            return result
+        order = {variables[index]: int(query.order[index]) for index in requested}
+        center = {variables[index]: float(query.center[index]) for index in requested}
+        for node, distribution in enumerate(self.node_distributions(variables)):
+            moments = distribution.moment(order, center)
+            for index in requested:
+                result[node, index] = moments[variables[index]]
+        return result
 
     def samples_of_nodes(self, nodes: NodeIndices) -> SampleScopeValues:
         # Gibbs sampling, all chains at once: every sweep draws each variable from its
