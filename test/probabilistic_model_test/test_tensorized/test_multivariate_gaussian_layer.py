@@ -418,7 +418,7 @@ class MultivariateGaussianTruncationTestCase(unittest.TestCase):
         truncated, probability = layered.truncated(
             box(x=reals(), y=reals()).as_composite_set()
         )
-        self.assertEqual(probability, 1.0)
+        np.testing.assert_allclose(probability, 1.0)
         self.assertTrue(
             any(
                 isinstance(layer, MultivariateGaussianLayer)
