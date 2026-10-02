@@ -338,17 +338,17 @@ def occluding_bodies(camera: Camera, body: Body) -> List[Body]:
     # create a world only containing the target body
     world_without_occlusion = deepcopy(body._world)
     root = Body(name=PrefixedName("root"))
+    copied_body = Body.from_json(body.to_json())
+    root_T_body = body.global_transform
+    root_T_body.reference_frame = root
+    root_to_copied_body = FixedConnection(
+        parent=root,
+        child=copied_body,
+        parent_T_connection_expression=root_T_body,
+    )
     with world_without_occlusion.modify_world():
         world_without_occlusion.clear()
         world_without_occlusion.add_body(root)
-        copied_body = Body.from_json(body.to_json())
-        root_T_body = body.global_transform
-        root_T_body.reference_frame = root
-        root_to_copied_body = FixedConnection(
-            parent=root,
-            child=copied_body,
-            parent_T_connection_expression=root_T_body,
-        )
         world_without_occlusion.add_connection(root_to_copied_body)
 
     # get segmentation mask without occlusion
