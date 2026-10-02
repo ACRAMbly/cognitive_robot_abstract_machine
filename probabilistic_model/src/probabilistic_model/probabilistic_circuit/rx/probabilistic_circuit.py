@@ -2283,6 +2283,27 @@ class MultivariateLeaf(LeafUnit):
             self.distribution.log_conditional(own_point)
         )
 
+    def moment(self, order, center, variable_to_index_map):
+        result = np.zeros(len(variable_to_index_map))
+        requested = [
+            variable for variable in self.distribution.variables if variable in order
+        ]
+        if requested:
+            moment = self.distribution.moment(
+                {variable: order[variable] for variable in requested},
+                {variable: center[variable] for variable in requested},
+            )
+            for variable in requested:
+                result[variable_to_index_map[variable]] = moment[variable]
+        self.result_of_current_query = result
+
+    def marginal(self, variables: Iterable[Variable]) -> Optional[Self]:
+        # a leaf that keeps all of its variables stays as it is, which also serves
+        # distributions without a marginal, like a truncated Gaussian
+        if set(self.distribution.variables).issubset(set(variables)):
+            return self
+        return super().marginal(variables)
+
     def replace_by_dirac_product(self, point: Dict[Variable, Any]) -> ProductUnit:
         """
         Replace this leaf by the product of one Dirac leaf per variable.

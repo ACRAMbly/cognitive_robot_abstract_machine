@@ -1043,6 +1043,26 @@ class TestTruncation:
 # %% fixing a variable of a distribution that has already been confined
 
 
+class TestNormalizingConstant:
+    def test_the_probability_of_the_box_is_computed_once(
+        self, correlated, horizontal, vertical, monkeypatch
+    ):
+        box = box_over(horizontal, vertical, 0.0, 1.0).as_composite_set()
+        truncated, _ = correlated.truncated(box)
+        calls = []
+        probability_of_simple_event = type(correlated).probability_of_simple_event
+
+        def counted(distribution, event):
+            calls.append(event)
+            return probability_of_simple_event(distribution, event)
+
+        monkeypatch.setattr(type(correlated), "probability_of_simple_event", counted)
+        points = np.array([[0.5, 0.5], [0.2, 0.7]])
+        first_answer = truncated.log_likelihood(points)
+        np.testing.assert_array_equal(truncated.log_likelihood(points), first_answer)
+        assert len(calls) <= 1
+
+
 class TestConditioningATruncatedDistribution:
     def test_it_answers_with_the_slice_the_box_makes_at_that_value(
         self, correlated, horizontal, vertical

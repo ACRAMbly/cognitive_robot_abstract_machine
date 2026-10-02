@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import functools
 import math
 from dataclasses import dataclass
 
@@ -75,11 +76,12 @@ class TruncatedMultivariateGaussianDistribution(ProbabilisticModel):
     def support(self) -> Event:
         return self.box.as_composite_set()
 
-    @property
+    @functools.cached_property
     def normalizing_constant(self) -> float:
         """
         :return: How probable the box was before it was the only thing left, which is
-            what every density here is scaled up by.
+            what every density here is scaled up by. It is a numerical integral, so it
+            is computed once.
         """
         return self.untruncated.probability_of_simple_event(self.box)
 
