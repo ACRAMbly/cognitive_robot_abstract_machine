@@ -165,21 +165,28 @@ class QuaternionMapping(AlternativeMapping[Quaternion]):
 
 @dataclass(eq=False)
 class RotationMatrixMapping(AlternativeMapping[RotationMatrix]):
-    rotation: Quaternion
+    roll: float
+    pitch: float
+    yaw: float
     reference_frame: Optional[KinematicStructureEntity]
 
     @classmethod
     def from_domain_object(cls, obj: RotationMatrix):
-        result = cls(rotation=obj.rotation, reference_frame=obj.reference_frame)
-        return result
+        roll, pitch, yaw = obj.to_rpy()
+        return cls(
+            roll=float(roll),
+            pitch=float(pitch),
+            yaw=float(yaw),
+            reference_frame=obj.reference_frame,
+        )
 
     def to_domain_object(self) -> RotationMatrix:
-        result = RotationMatrix.from_quaternion(self.rotation)
-        return result
-
-    @classmethod
-    def required_pre_build_classes(cls) -> List[Type]:
-        return [Quaternion]
+        return RotationMatrix.from_rpy(
+            roll=self.roll,
+            pitch=self.pitch,
+            yaw=self.yaw,
+            reference_frame=self.reference_frame,
+        )
 
 
 @dataclass(eq=False)
@@ -187,33 +194,38 @@ class HomogeneousTransformationMatrixMapping(
     AlternativeMapping[HomogeneousTransformationMatrix]
 ):
     position: Point3
-    rotation: Quaternion
+    roll: float
+    pitch: float
+    yaw: float
 
     reference_frame: Optional[KinematicStructureEntity]
     child_frame: Optional[KinematicStructureEntity]
 
     @classmethod
     def from_domain_object(cls, obj: HomogeneousTransformationMatrix):
-        result = cls(
+        roll, pitch, yaw = obj.to_rotation_matrix().to_rpy()
+        return cls(
             position=obj.position,
-            rotation=obj.rotation,
+            roll=float(roll),
+            pitch=float(pitch),
+            yaw=float(yaw),
             reference_frame=obj.reference_frame,
             child_frame=obj.child_frame,
         )
 
-        return result
-
     def to_domain_object(self) -> HomogeneousTransformationMatrix:
         return HomogeneousTransformationMatrix.from_point_rotation_matrix(
             point=self.position,
-            rotation_matrix=self.rotation.to_rotation_matrix(),
+            rotation_matrix=RotationMatrix.from_rpy(
+                roll=self.roll, pitch=self.pitch, yaw=self.yaw
+            ),
             reference_frame=self.reference_frame,
             child_frame=self.child_frame,
         )
 
     @classmethod
     def required_pre_build_classes(cls) -> List[Type]:
-        return [Quaternion, Point3]
+        return [Point3]
 
 
 @dataclass(eq=False)
@@ -294,21 +306,21 @@ class Point2Mapping(AlternativeMapping[Point2]):
 @dataclass(eq=False)
 class Pose2DMapping(AlternativeMapping[Pose2D]):
     position: Point2
-    bearing: float
+    yaw: float
     reference_frame: Optional[KinematicStructureEntity] = field(
         default=None, kw_only=True
     )
 
     @classmethod
     def from_domain_object(cls, obj: Pose2D):
-        result = cls(position=obj.position, bearing=float(obj.bearing))
+        result = cls(position=obj.position, yaw=float(obj.yaw))
         result.reference_frame = obj.reference_frame
         return result
 
     def to_domain_object(self) -> Pose2D:
         return Pose2D.from_position_and_yaw(
             self.position,
-            yaw=self.bearing,
+            yaw=self.yaw,
             reference_frame=self.reference_frame,
         )
 

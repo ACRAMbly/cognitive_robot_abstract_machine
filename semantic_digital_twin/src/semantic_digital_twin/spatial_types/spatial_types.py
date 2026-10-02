@@ -366,8 +366,8 @@ class HomogeneousTransformationMatrix(
 
     def _constant_to_json(self) -> Dict[str, Any]:
         return {
-            "position": self.to_position().to_np().tolist(),
-            "rotation": self.to_quaternion().to_np().tolist(),
+            "position": self.position.to_np().tolist(),
+            "rotation": self.quaternion.to_np().tolist(),
         }
 
     @classmethod
@@ -562,7 +562,7 @@ class HomogeneousTransformationMatrix(
             transformation multiplies.
         """
         if isinstance(other, Quaternion):
-            result = self.to_quaternion().multiply(other)
+            result = self.quaternion.multiply(other)
             result.reference_frame = self.reference_frame
             return result
         if isinstance(
@@ -588,11 +588,40 @@ class HomogeneousTransformationMatrix(
         inv[:3, 3] = (-inv[:3, :3]).dot(self[:3, 3])
         return inv
 
-    def to_position(self) -> Point3:
-        result = Point3.from_iterable(
-            self[:4, 3:], reference_frame=self.reference_frame
-        )
-        return result
+    @property
+    def position(self) -> Point3:
+        """
+        :return: The translation this transformation is composed of.
+        """
+        return Point3.from_iterable(self[:4, 3:], reference_frame=self.reference_frame)
+
+    @property
+    def quaternion(self) -> Quaternion:
+        """
+        :return: The rotation this transformation is composed of.
+        """
+        return self.to_rotation_matrix().quaternion
+
+    @property
+    def roll(self) -> sm.Scalar:
+        """
+        :return: The rotation of this transformation around the x-axis.
+        """
+        return self.to_rotation_matrix().roll
+
+    @property
+    def pitch(self) -> sm.Scalar:
+        """
+        :return: The rotation of this transformation around the y-axis.
+        """
+        return self.to_rotation_matrix().pitch
+
+    @property
+    def yaw(self) -> sm.Scalar:
+        """
+        :return: The rotation of this transformation around the z-axis.
+        """
+        return self.to_rotation_matrix().yaw
 
     def to_translation_matrix(self) -> HomogeneousTransformationMatrix:
         """
@@ -608,23 +637,6 @@ class HomogeneousTransformationMatrix(
 
     def to_rotation_matrix(self) -> RotationMatrix:
         return RotationMatrix(data=self, reference_frame=self.reference_frame)
-
-    def to_quaternion(self) -> Quaternion:
-        return self.to_rotation_matrix().to_quaternion()
-
-    @property
-    def position(self) -> Point3:
-        """
-        :return: The translation this transformation is composed of.
-        """
-        return self.to_position()
-
-    @property
-    def rotation(self) -> Quaternion:
-        """
-        :return: The rotation this transformation is composed of.
-        """
-        return self.to_quaternion()
 
     def to_pose(self) -> Pose:
         result = Pose.from_casadi_sx(casadi_sx=copy(self.casadi_sx))
@@ -654,8 +666,8 @@ class HomogeneousTransformationMatrix(
         if self.is_constant():
             return hash(
                 (
-                    *self.to_position().to_np().tolist(),
-                    *self.to_quaternion().to_np().tolist(),
+                    *self.position.to_np().tolist(),
+                    *self.quaternion.to_np().tolist(),
                     self.reference_frame,
                 )
             )
@@ -713,7 +725,7 @@ class RotationMatrix(sm.SymbolicMathType, SpatialType, SubclassJSONSerializer):
 
     def _constant_to_json(self) -> Dict[str, Any]:
         return {
-            "quaternion": self.to_quaternion().to_np().tolist(),
+            "quaternion": self.quaternion.to_np().tolist(),
         }
 
     @classmethod
@@ -854,7 +866,7 @@ class RotationMatrix(sm.SymbolicMathType, SpatialType, SubclassJSONSerializer):
             rotation multiplies.
         """
         if isinstance(other, Quaternion):
-            result = self.to_quaternion().multiply(other)
+            result = self.quaternion.multiply(other)
             result.reference_frame = self.reference_frame
             return result
         if isinstance(
@@ -872,7 +884,7 @@ class RotationMatrix(sm.SymbolicMathType, SpatialType, SubclassJSONSerializer):
         return self.dot(other)
 
     def to_axis_angle(self) -> Tuple[Vector3, sm.Scalar]:
-        return self.to_quaternion().to_axis_angle()
+        return self.quaternion.to_axis_angle()
 
     def to_angle(self, hint: Optional[Callable] = None) -> sm.Scalar:
         """
@@ -1030,15 +1042,33 @@ class RotationMatrix(sm.SymbolicMathType, SpatialType, SubclassJSONSerializer):
         az = sm.if_greater_zero(if0, sm.atan2(self[j, i], self[i, i]), sm.Scalar(0))
         return ax, ay, az
 
-    def to_quaternion(self) -> Quaternion:
-        return Quaternion.from_rotation_matrix(self)
-
     @property
-    def rotation(self) -> Quaternion:
+    def quaternion(self) -> Quaternion:
         """
         :return: The rotation this matrix describes.
         """
-        return self.to_quaternion()
+        return Quaternion.from_rotation_matrix(self)
+
+    @property
+    def roll(self) -> sm.Scalar:
+        """
+        :return: The rotation around the x-axis.
+        """
+        return self.to_rpy()[0]
+
+    @property
+    def pitch(self) -> sm.Scalar:
+        """
+        :return: The rotation around the y-axis.
+        """
+        return self.to_rpy()[1]
+
+    @property
+    def yaw(self) -> sm.Scalar:
+        """
+        :return: The rotation around the z-axis.
+        """
+        return self.to_rpy()[2]
 
     def normalize(self) -> None:
         """
@@ -2212,8 +2242,8 @@ class Pose(sm.SymbolicMathType, SpatialType, SubclassJSONSerializer):
 
     def _constant_to_json(self) -> Dict[str, Any]:
         return {
-            "position": self.to_position().to_np().tolist(),
-            "rotation": self.to_quaternion().to_np().tolist(),
+            "position": self.position.to_np().tolist(),
+            "rotation": self.quaternion.to_np().tolist(),
         }
 
     @classmethod
@@ -2353,23 +2383,18 @@ class Pose(sm.SymbolicMathType, SpatialType, SubclassJSONSerializer):
 
     @property
     def position(self) -> Point3:
-        return self.to_position()
+        return Point3.from_iterable(self[:4, 3:], reference_frame=self.reference_frame)
 
     @property
     def orientation(self) -> Quaternion:
-        return self.to_quaternion()
+        return self.quaternion
 
-    def to_position(self) -> Point3:
-        result = Point3.from_iterable(
-            self[:4, 3:], reference_frame=self.reference_frame
-        )
-        return result
+    @property
+    def quaternion(self) -> Quaternion:
+        return self.to_rotation_matrix().quaternion
 
     def to_rotation_matrix(self) -> RotationMatrix:
         return RotationMatrix(data=self, reference_frame=self.reference_frame)
-
-    def to_quaternion(self) -> Quaternion:
-        return self.to_rotation_matrix().to_quaternion()
 
     def to_homogeneous_matrix(self) -> HomogeneousTransformationMatrix:
         return HomogeneousTransformationMatrix(
@@ -2380,8 +2405,8 @@ class Pose(sm.SymbolicMathType, SpatialType, SubclassJSONSerializer):
         if self.is_constant():
             return hash(
                 (
-                    *self.to_position().to_np().tolist(),
-                    *self.to_quaternion().to_np().tolist(),
+                    *self.position.to_np().tolist(),
+                    *self.quaternion.to_np().tolist(),
                     self.reference_frame,
                 )
             )
@@ -2445,13 +2470,6 @@ class Pose2D(sm.SymbolicMathType, SpatialType, SubclassJSONSerializer):
         self[2] = value
 
     @property
-    def bearing(self) -> sm.Scalar:
-        """
-        :return: The direction this pose faces in the plane, which is its yaw.
-        """
-        return self.yaw
-
-    @property
     def z(self) -> float:
         return 0
 
@@ -2494,13 +2512,11 @@ class Pose2D(sm.SymbolicMathType, SpatialType, SubclassJSONSerializer):
 
     @property
     def orientation(self) -> Quaternion:
-        return self.to_pose().to_quaternion()
+        return self.quaternion
 
-    def to_position(self) -> Point3:
-        return self.to_pose().to_position()
-
-    def to_quaternion(self) -> Quaternion:
-        return self.to_pose().to_quaternion()
+    @property
+    def quaternion(self) -> Quaternion:
+        return self.to_pose().quaternion
 
     def to_rotation_matrix(self) -> RotationMatrix:
         return self.to_pose().to_rotation_matrix()

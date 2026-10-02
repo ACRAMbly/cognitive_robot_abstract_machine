@@ -38,7 +38,7 @@ def test_features_of_a_pose_are_read_from_the_pose_itself():
     values = extractor.apply_mapping(pose)
     assert all(type(value) is float for value in values)
     assert values[:3] == [1.0, 2.0, 3.0]
-    assert values[3:] == pytest.approx(pose.to_quaternion().to_np().tolist())
+    assert values[3:] == pytest.approx(pose.quaternion.to_np().tolist())
 
 
 @pytest.mark.parametrize(
