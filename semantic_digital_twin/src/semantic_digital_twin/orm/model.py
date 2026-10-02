@@ -21,6 +21,7 @@ from semantic_digital_twin.spatial_types.spatial_types import (
     Pose,
     Point2,
     Pose2D,
+    RollPitchYaw,
     SpatialType,
 )
 from semantic_digital_twin.world import World
@@ -165,28 +166,26 @@ class QuaternionMapping(AlternativeMapping[Quaternion]):
 
 @dataclass(eq=False)
 class RotationMatrixMapping(AlternativeMapping[RotationMatrix]):
-    roll: float
-    pitch: float
-    yaw: float
+    roll_pitch_yaw: RollPitchYaw
     reference_frame: Optional[KinematicStructureEntity]
 
     @classmethod
     def from_domain_object(cls, obj: RotationMatrix):
-        roll, pitch, yaw = obj.to_rpy()
         return cls(
-            roll=float(roll),
-            pitch=float(pitch),
-            yaw=float(yaw),
-            reference_frame=obj.reference_frame,
+            roll_pitch_yaw=obj.roll_pitch_yaw, reference_frame=obj.reference_frame
         )
 
     def to_domain_object(self) -> RotationMatrix:
         return RotationMatrix.from_rpy(
-            roll=self.roll,
-            pitch=self.pitch,
-            yaw=self.yaw,
+            roll=self.roll_pitch_yaw.roll,
+            pitch=self.roll_pitch_yaw.pitch,
+            yaw=self.roll_pitch_yaw.yaw,
             reference_frame=self.reference_frame,
         )
+
+    @classmethod
+    def required_pre_build_classes(cls) -> List[Type]:
+        return [RollPitchYaw]
 
 
 @dataclass(eq=False)
@@ -194,21 +193,16 @@ class HomogeneousTransformationMatrixMapping(
     AlternativeMapping[HomogeneousTransformationMatrix]
 ):
     position: Point3
-    roll: float
-    pitch: float
-    yaw: float
+    roll_pitch_yaw: RollPitchYaw
 
     reference_frame: Optional[KinematicStructureEntity]
     child_frame: Optional[KinematicStructureEntity]
 
     @classmethod
     def from_domain_object(cls, obj: HomogeneousTransformationMatrix):
-        roll, pitch, yaw = obj.to_rotation_matrix().to_rpy()
         return cls(
             position=obj.position,
-            roll=float(roll),
-            pitch=float(pitch),
-            yaw=float(yaw),
+            roll_pitch_yaw=obj.roll_pitch_yaw,
             reference_frame=obj.reference_frame,
             child_frame=obj.child_frame,
         )
@@ -217,7 +211,9 @@ class HomogeneousTransformationMatrixMapping(
         return HomogeneousTransformationMatrix.from_point_rotation_matrix(
             point=self.position,
             rotation_matrix=RotationMatrix.from_rpy(
-                roll=self.roll, pitch=self.pitch, yaw=self.yaw
+                roll=self.roll_pitch_yaw.roll,
+                pitch=self.roll_pitch_yaw.pitch,
+                yaw=self.roll_pitch_yaw.yaw,
             ),
             reference_frame=self.reference_frame,
             child_frame=self.child_frame,
@@ -225,7 +221,7 @@ class HomogeneousTransformationMatrixMapping(
 
     @classmethod
     def required_pre_build_classes(cls) -> List[Type]:
-        return [Point3]
+        return [Point3, RollPitchYaw]
 
 
 @dataclass(eq=False)

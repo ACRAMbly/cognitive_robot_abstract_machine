@@ -67,9 +67,9 @@ def test_every_field_of_an_alternative_mapping_is_reachable_on_its_domain_class(
 
 def test_rotation_matrix_exposes_roll_pitch_and_yaw():
     rotation_matrix = RotationMatrix.from_rpy(roll=0.1, pitch=0.2, yaw=0.3)
-    assert float(rotation_matrix.roll) == pytest.approx(0.1)
-    assert float(rotation_matrix.pitch) == pytest.approx(0.2)
-    assert float(rotation_matrix.yaw) == pytest.approx(0.3)
+    roll_pitch_yaw = rotation_matrix.roll_pitch_yaw
+    assert dataclasses.astuple(roll_pitch_yaw) == pytest.approx((0.1, 0.2, 0.3))
+    assert all(type(angle) is float for angle in dataclasses.astuple(roll_pitch_yaw))
 
 
 def test_homogeneous_transformation_matrix_exposes_position_roll_pitch_and_yaw():
@@ -77,9 +77,9 @@ def test_homogeneous_transformation_matrix_exposes_position_roll_pitch_and_yaw()
         x=1.0, y=2.0, z=3.0, roll=0.1, pitch=0.2, yaw=0.3
     )
     assert np.allclose(transformation.position.to_np()[:3], [1.0, 2.0, 3.0])
-    assert float(transformation.roll) == pytest.approx(0.1)
-    assert float(transformation.pitch) == pytest.approx(0.2)
-    assert float(transformation.yaw) == pytest.approx(0.3)
+    assert dataclasses.astuple(transformation.roll_pitch_yaw) == pytest.approx(
+        (0.1, 0.2, 0.3)
+    )
 
 
 @pytest.mark.parametrize(

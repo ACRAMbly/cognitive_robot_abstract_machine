@@ -78,6 +78,29 @@ class SpatialFrameKey(StrEnum):
     """The entity a transformation points at."""
 
 
+@dataclass
+class RollPitchYaw:
+    """
+    A rotation given as three angles in radians, applied around the fixed x-, y- and
+    z-axis in that order.
+    """
+
+    roll: float
+    """
+    The rotation around the x-axis.
+    """
+
+    pitch: float
+    """
+    The rotation around the y-axis.
+    """
+
+    yaw: float
+    """
+    The rotation around the z-axis.
+    """
+
+
 @dataclass(eq=False, repr=False)
 class SpatialType(ABC):
     """
@@ -603,25 +626,14 @@ class HomogeneousTransformationMatrix(
         return self.to_rotation_matrix().quaternion
 
     @property
-    def roll(self) -> sm.Scalar:
+    def roll_pitch_yaw(self) -> RollPitchYaw:
         """
-        :return: The rotation of this transformation around the x-axis.
-        """
-        return self.to_rotation_matrix().roll
+        Only works if the transformation has no free variables.
 
-    @property
-    def pitch(self) -> sm.Scalar:
+        :return: The rotation this transformation is composed of as roll, pitch and
+            yaw.
         """
-        :return: The rotation of this transformation around the y-axis.
-        """
-        return self.to_rotation_matrix().pitch
-
-    @property
-    def yaw(self) -> sm.Scalar:
-        """
-        :return: The rotation of this transformation around the z-axis.
-        """
-        return self.to_rotation_matrix().yaw
+        return self.to_rotation_matrix().roll_pitch_yaw
 
     def to_translation_matrix(self) -> HomogeneousTransformationMatrix:
         """
@@ -1050,25 +1062,14 @@ class RotationMatrix(sm.SymbolicMathType, SpatialType, SubclassJSONSerializer):
         return Quaternion.from_rotation_matrix(self)
 
     @property
-    def roll(self) -> sm.Scalar:
+    def roll_pitch_yaw(self) -> RollPitchYaw:
         """
-        :return: The rotation around the x-axis.
-        """
-        return self.to_rpy()[0]
+        Only works if the matrix has no free variables.
 
-    @property
-    def pitch(self) -> sm.Scalar:
+        :return: The rotation this matrix describes as roll, pitch and yaw.
         """
-        :return: The rotation around the y-axis.
-        """
-        return self.to_rpy()[1]
-
-    @property
-    def yaw(self) -> sm.Scalar:
-        """
-        :return: The rotation around the z-axis.
-        """
-        return self.to_rpy()[2]
+        roll, pitch, yaw = self.to_rpy()
+        return RollPitchYaw(roll=float(roll), pitch=float(pitch), yaw=float(yaw))
 
     def normalize(self) -> None:
         """
