@@ -54,7 +54,7 @@ from ..dataset.example_classes import (
     EnumAction,
 )
 from ..dataset.ormatic_interface import *  # type: ignore
-from ..dataset.value_comparison import IsGreaterThan
+from ..dataset.value_comparisons import IsGreaterThan
 
 
 def test_nested_action():
@@ -240,6 +240,7 @@ def test_generative_eql_backend():
         assert isinstance(result.element, Element)
         assert result.type > result.charge
 
+
 def test_generative_backend_grounds_a_predicate_over_two_attributes_of_the_match():
     """
     A predicate in a match's where condition can take several attributes of the match,
@@ -256,6 +257,39 @@ def test_generative_backend_grounds_a_predicate_over_two_attributes_of_the_match
     assert {(result.x, result.y) for result in results} == {
         (x, y) for x in values for y in values if x > y
     }
+
+
+def test_generative_backend_grounds_a_predicate_taking_one_attribute_of_the_match_twice():
+    """
+    An attribute of the match filling two arguments of a predicate stands for that
+    attribute of the instance being checked in both of them.
+    """
+    values = [0.0, 1.0, 2.0]
+    position = a(KRROODPosition)(
+        x=variable_from(values), y=variable_from(values), z=0.0
+    )
+    position.where(IsGreaterThan(position.x, position.x))
+
+    results = list(position.evaluate(backend=EntityQueryLanguageGenerativeBackend()))
+
+    assert results == []
+
+
+def test_generative_backend_grounds_a_comparison_of_an_attribute_of_the_match_with_itself():
+    """
+    An attribute of the match on both sides of a comparison stands for that attribute of
+    the instance being checked on both sides.
+    """
+    values = [0.0, 1.0, 2.0]
+    position = a(KRROODPosition)(
+        x=variable_from(values), y=variable_from(values), z=0.0
+    )
+    position.where(position.x > position.x)
+
+    results = list(position.evaluate(backend=EntityQueryLanguageGenerativeBackend()))
+
+    assert results == []
+
 
 def test_selective_backend_rejects_match_with_ellipsis_attribute():
     q = a(KRROODPosition)(x=..., y=1.0, z=2.0)

@@ -8,7 +8,6 @@ variables that are instantiated from other expressions.
 
 from __future__ import annotations
 
-import uuid
 import inspect
 from abc import ABC
 from dataclasses import dataclass, field
@@ -224,13 +223,6 @@ class InstantiatedVariable(
     _kwargs_ dictionary.
     """
 
-    _child_var_id_name_map_: Dict[uuid.UUID, str] = field(
-        default_factory=dict, init=False, repr=False
-    )
-    """
-    A dictionary mapping child variable ids to their names.
-    """
-
     _domain_source_: DomainSource = field(init=False, default=DomainSource.DEDUCTION)
     """
     The source of the domain for InstantiatedVariable is always DEDUCED.
@@ -248,7 +240,6 @@ class InstantiatedVariable(
         """
         for k, v in self._kwargs_.items():
             self._child_vars_[k] = SymbolicExpression._as_operand_(v, k)
-            self._child_var_id_name_map_[self._child_vars_[k]._id_] = k
 
     def _evaluate__(
         self,
@@ -264,11 +255,11 @@ class InstantiatedVariable(
         arguments the child variables values.
         """
         for child_result in self._evaluate_product_(sources):
-            # Build once: unwrapped hashed kwargs for already provided child vars
+            # An argument without a binding is left out, so its default applies.
             kwargs = {
-                self._child_var_id_name_map_[id_]: v
-                for id_, v in child_result.bindings.items()
-                if id_ in self._child_var_id_name_map_
+                name: child_result.bindings[child._id_]
+                for name, child in self._child_vars_.items()
+                if child._id_ in child_result.bindings
             }
             # A callable class (Predicate / SymbolicFunction) implements HasBoundValue -- it binds the
             # constructed instance, or, for a value operation, its constructed-and-called value -- the
@@ -296,8 +287,6 @@ class InstantiatedVariable(
         for k, v in self._child_vars_.items():
             if v is old_child:
                 self._child_vars_[k] = new_child
-                self._child_var_id_name_map_[self._child_vars_[k]._id_] = k
-                break
 
     @cached_property
     def _name_(self):
