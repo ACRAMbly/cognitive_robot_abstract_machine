@@ -23,6 +23,12 @@ from probabilistic_model.distributions.gaussian import (
     GaussianDistribution,
     TruncatedGaussianDistribution,
 )
+from probabilistic_model.distributions.multivariate_gaussian import (
+    MultivariateGaussianDistribution,
+)
+from probabilistic_model.distributions.truncated_multivariate_gaussian import (
+    TruncatedMultivariateGaussianDistribution,
+)
 from probabilistic_model.distributions.uniform import UniformDistribution
 from probabilistic_model.probabilistic_circuit.rx.probabilistic_circuit import (
     ProbabilisticCircuit,
@@ -47,6 +53,10 @@ from probabilistic_model.probabilistic_circuit.tensorized.input_layer.discrete_l
 from probabilistic_model.probabilistic_circuit.tensorized.input_layer.gaussian_layer import (
     GaussianLayer,
     TruncatedGaussianLayer,
+)
+from probabilistic_model.probabilistic_circuit.tensorized.input_layer.multivariate_gaussian_layer import (
+    MultivariateGaussianLayer,
+    TruncatedMultivariateGaussianLayer,
 )
 from probabilistic_model.probabilistic_circuit.tensorized.input_layer.uniform_layer import (
     UniformLayer,
@@ -234,6 +244,37 @@ class SymbolicLeavesToSymbolicLayerConverter(
 
 class IntegerLeavesToIntegerLayerConverter(
     LeavesToInputLayerConverter[IntegerDistribution, IntegerLayer]
+): ...
+
+
+class MultivariateLeavesToLayerConverter(UnitsToLayerConverter[InputType, OutputType]):
+    """
+    Base class for converters of leaves whose distributions are over several variables
+    at once into the layer that holds their class.
+    """
+
+    @classmethod
+    def convert(
+        cls, data: List[Unit], converted_layers: List[ConvertedLayer]
+    ) -> ConvertedLayer:
+        layer = cls.output_type().from_distributions(
+            data[0].probabilistic_circuit.variables,
+            [unit.distribution for unit in data],
+        )
+        return ConvertedLayer.of_units(layer, data)
+
+
+class MultivariateGaussianLeavesToMultivariateGaussianLayerConverter(
+    MultivariateLeavesToLayerConverter[
+        MultivariateGaussianDistribution, MultivariateGaussianLayer
+    ]
+): ...
+
+
+class TruncatedMultivariateGaussianLeavesToTruncatedMultivariateGaussianLayerConverter(
+    MultivariateLeavesToLayerConverter[
+        TruncatedMultivariateGaussianDistribution, TruncatedMultivariateGaussianLayer
+    ]
 ): ...
 
 
