@@ -249,7 +249,7 @@ def test_underspecified_language(apartment_world_pr2_copy_with_context):
     """
     world, robot, context = apartment_world_pr2_copy_with_context
     milk = world.get_semantic_annotations_by_type(Milk)[0]
-    plan_generator = an(sequential, target_type=SequentialNode)(
+    plan_generator = a(sequential, target_type=SequentialNode)(
         children=[
             a(NavigateAction)(
                 target_location=(
