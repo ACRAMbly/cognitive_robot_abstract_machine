@@ -272,9 +272,9 @@ class TruncatedMultivariateGaussianLayer(AbstractMultivariateGaussianLayer):
     def samples_of_nodes(self, nodes: NodeIndices) -> SampleScopeValues:
         # Gibbs sampling, all chains at once: every sweep draws each variable from its
         # Gaussian given the others, confined to its interval (scipy's truncnorm). Every
-        # chain starts at the mean of its node moved into the hyperrectangle. The samples
-        # follow the distribution only approximately, closer the more sweeps each chain
-        # makes.
+        # chain starts at the mean of its node moved into the hyperrectangle. The
+        # samples follow the distribution only approximately, closer the more sweeps
+        # each chain makes.
         lower = self.hyperrectangles.lower[nodes]
         upper = self.hyperrectangles.upper[nodes]
         mean = self.mean[nodes]

@@ -101,7 +101,8 @@ class HyperrectangleArray:
         """
         :param other: Hyperrectangles whose shape broadcasts against these.
         :return: The intersection of every hyperrectangle with the matching one of
-            ``other``. Where two bounds coincide the result is open if either of them is.
+            ``other``. Where two bounds coincide the result is open if either of them
+            is.
             :attr:`Bound.OPEN` is the larger value, so that is a maximum.
         """
         own_lower, other_lower = np.broadcast_arrays(self.lower, other.lower)
