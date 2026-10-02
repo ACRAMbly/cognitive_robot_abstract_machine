@@ -612,6 +612,20 @@ class HomogeneousTransformationMatrix(
     def to_quaternion(self) -> Quaternion:
         return self.to_rotation_matrix().to_quaternion()
 
+    @property
+    def position(self) -> Point3:
+        """
+        :return: The translation this transformation is composed of.
+        """
+        return self.to_position()
+
+    @property
+    def rotation(self) -> Quaternion:
+        """
+        :return: The rotation this transformation is composed of.
+        """
+        return self.to_quaternion()
+
     def to_pose(self) -> Pose:
         result = Pose.from_casadi_sx(casadi_sx=copy(self.casadi_sx))
         result.reference_frame = self.reference_frame
@@ -1018,6 +1032,13 @@ class RotationMatrix(sm.SymbolicMathType, SpatialType, SubclassJSONSerializer):
 
     def to_quaternion(self) -> Quaternion:
         return Quaternion.from_rotation_matrix(self)
+
+    @property
+    def rotation(self) -> Quaternion:
+        """
+        :return: The rotation this matrix describes.
+        """
+        return self.to_quaternion()
 
     def normalize(self) -> None:
         """
@@ -2422,6 +2443,13 @@ class Pose2D(sm.SymbolicMathType, SpatialType, SubclassJSONSerializer):
     @yaw.setter
     def yaw(self, value: sm.ScalarData):
         self[2] = value
+
+    @property
+    def bearing(self) -> sm.Scalar:
+        """
+        :return: The direction this pose faces in the plane, which is its yaw.
+        """
+        return self.yaw
 
     @property
     def z(self) -> float:

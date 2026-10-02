@@ -57,7 +57,7 @@ class WorldMapping(HasSimulatorProperties, AlternativeMapping[World]):
             state=obj.state,
             name=obj.name,
             simulator_additional_properties=obj.simulator_additional_properties,
-            modification_history=obj._model_manager.model_modification_blocks,
+            modification_history=obj.modification_history,
         )
 
     def to_domain_object(self) -> World:
@@ -86,8 +86,8 @@ class WorldStateMapping(AlternativeMapping[WorldState]):
     @classmethod
     def from_domain_object(cls, obj: WorldState):
         return cls(
-            data=obj._data.ravel().tolist(),
-            ids=obj._ids,
+            data=obj.data,
+            ids=obj.ids,
         )
 
     def to_domain_object(self) -> WorldState:
@@ -170,7 +170,7 @@ class RotationMatrixMapping(AlternativeMapping[RotationMatrix]):
 
     @classmethod
     def from_domain_object(cls, obj: RotationMatrix):
-        result = cls(rotation=obj.to_quaternion(), reference_frame=obj.reference_frame)
+        result = cls(rotation=obj.rotation, reference_frame=obj.reference_frame)
         return result
 
     def to_domain_object(self) -> RotationMatrix:
@@ -194,11 +194,9 @@ class HomogeneousTransformationMatrixMapping(
 
     @classmethod
     def from_domain_object(cls, obj: HomogeneousTransformationMatrix):
-        position = obj.to_position()
-        rotation = obj.to_quaternion()
         result = cls(
-            position=position,
-            rotation=rotation,
+            position=obj.position,
+            rotation=obj.rotation,
             reference_frame=obj.reference_frame,
             child_frame=obj.child_frame,
         )
@@ -303,7 +301,7 @@ class Pose2DMapping(AlternativeMapping[Pose2D]):
 
     @classmethod
     def from_domain_object(cls, obj: Pose2D):
-        result = cls(position=obj.position, bearing=float(obj.yaw))
+        result = cls(position=obj.position, bearing=float(obj.bearing))
         result.reference_frame = obj.reference_frame
         return result
 
