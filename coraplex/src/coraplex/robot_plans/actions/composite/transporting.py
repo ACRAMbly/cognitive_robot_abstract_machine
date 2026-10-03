@@ -76,6 +76,36 @@ class TransportAction(ActionDescription, LimitsItsCandidates):
     The step that puts down what :attr:`pick_up` picked up.
     """
 
+    @property
+    def transported_object(self) -> HasGraspCandidates:
+        """
+        :return: The object this transport carries, as its placing step states it,
+            whether that step is grounded already or still to be grounded.
+        """
+        place = (
+            self.place._kwargs_["place"]
+            if isinstance(self.place, Match)
+            else self.place.place
+        )
+        if isinstance(place, Match):
+            return place._kwargs_["object_designator"]
+        return place.object_designator
+
+    @property
+    def carrying_arm(self) -> Arm:
+        """
+        :return: The arm this transport carries its object with, as its picking-up step
+            states it, whether that step is grounded already or still to be grounded.
+        """
+        pick_up = (
+            self.pick_up._kwargs_["pick_up"]
+            if isinstance(self.pick_up, Match)
+            else self.pick_up.pick_up
+        )
+        if isinstance(pick_up, Match):
+            return pick_up._kwargs_["arm"]
+        return pick_up.arm
+
     @classmethod
     def from_graspable_by_closest_grasps(
         cls,

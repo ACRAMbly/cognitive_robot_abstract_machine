@@ -22,6 +22,7 @@ from coraplex.robot_plans.actions.composite.transporting import (
     LimitsItsCandidates,
     MoveAndOpenAction,
     MoveAndPickUpAction,
+    TransportAction,
 )
 from coraplex.robot_plans.actions.core.container import OpenAction
 from coraplex.robot_plans.actions.core.misc import DetectAction
@@ -236,6 +237,36 @@ class OpenDrawerBeforeMoveAndPickUp(DrawerOpening[MoveAndPickUpAction]):
         ):
             nodes.extend(
                 self.opening_nodes(drawer, pick_up.arm, move_and_pick_up.context)
+            )
+        return nodes
+
+
+@dataclass
+class OpenDrawerBeforeTransport(DrawerOpening[TransportAction]):
+    """
+    Opens the drawers the transported object lies in before the transport starts.
+
+    Every candidate of the transport's pick-up is tried against the world as it stands
+    when the pick-up is grounded. Opened before the transport, the drawer stands open
+    for all of them, rather than each candidate searching for an opening of its own.
+    """
+
+    def is_applicable(self, plan_node: ActionNode) -> bool:
+        transport = cast(TransportAction, plan_node.action)
+        return bool(
+            self._closed_drawers_containing(
+                transport.transported_object, transport.world
+            )
+        )
+
+    def nodes_to_insert(self, plan_node: ActionNode) -> List[ActionLike]:
+        transport = cast(TransportAction, plan_node.action)
+        nodes = []
+        for drawer in self._closed_drawers_containing(
+            transport.transported_object, transport.world
+        ):
+            nodes.extend(
+                self.opening_nodes(drawer, transport.carrying_arm, transport.context)
             )
         return nodes
 

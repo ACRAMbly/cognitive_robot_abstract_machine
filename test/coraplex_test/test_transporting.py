@@ -206,6 +206,57 @@ def test_a_transport_of_a_graspable_stands_around_the_object_then_the_target(
     assert place_location.target_pose is target
 
 
+def test_a_transport_of_a_graspable_carries_it_with_the_arm_it_was_given(
+    pr2_apartment_context,
+):
+    """
+    A transport whose steps are still to be grounded tells what it carries, and with
+    which arm, from the values its steps state.
+    """
+    world, robot, context = pr2_apartment_context
+    milk = world.get_semantic_annotations_by_type(Milk)[0]
+
+    transport = TransportAction.from_graspable_by_closest_grasps(
+        milk,
+        Pose.from_xyz_rpy(4.0, 1.5, 0.9, reference_frame=world.root),
+        context.robot.right_arm,
+        context,
+    )
+
+    assert transport.transported_object is milk
+    assert transport.carrying_arm is context.robot.right_arm
+
+
+def test_a_transport_of_grounded_steps_carries_what_they_pick_up_and_place(
+    pr2_apartment_context,
+):
+    """
+    A transport whose steps are already grounded tells what it carries, and with which
+    arm, from the steps themselves.
+    """
+    world, robot, context = pr2_apartment_context
+    milk = world.get_semantic_annotations_by_type(Milk)[0]
+    standing_position = Pose(reference_frame=world.root)
+
+    transport = TransportAction(
+        pick_up=MoveAndPickUpAction.from_standing_position(
+            standing_position=standing_position,
+            grasp=milk.grasp_candidates()[0],
+            arm=context.robot.right_arm,
+        ),
+        place=MoveAndPlaceAction.from_standing_position(
+            standing_position=standing_position,
+            target_location=Pose.from_xyz_rpy(
+                4.0, 1.5, 0.9, reference_frame=world.root
+            ),
+            object_designator=milk,
+        ),
+    )
+
+    assert transport.transported_object is milk
+    assert transport.carrying_arm is context.robot.right_arm
+
+
 # %% picking up and placing without moving
 
 

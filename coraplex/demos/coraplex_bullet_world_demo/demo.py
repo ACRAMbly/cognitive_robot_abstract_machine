@@ -22,21 +22,9 @@ from coraplex.datastructures.enums import ExecutionType
 from coraplex.demonstrations import RobotDemonstration
 from coraplex.plans.factories import sequential
 from coraplex.plans.plan_node import PlanNode
-from coraplex.locations.locations import ReachabilityLocation
-from coraplex.robot_plans.actions.composite.transporting import (
-    MoveAndPickUpAction,
-    MoveAndPlaceAction,
-    TransportAction,
-)
-from coraplex.robot_plans.actions.composite.facing import FaceAndLookAtAction
-from coraplex.robot_plans.actions.core.navigation import (
-    FaceAtAction,
-    LookAtAction,
-    NavigateAction,
-)
-from coraplex.robot_plans.actions.core.pick_up import PickUpAction
-from coraplex.robot_plans.actions.core.placing import PlaceAction
+from coraplex.robot_plans.actions.composite.transporting import TransportAction
 from coraplex.robot_plans.actions.core.robot_body import ParkArmsAction, MoveTorsoAction
+from coraplex.robot_plans.plan_transformations import OpenDrawerBeforeTransport
 from krrood.entity_query_language.factories import (
     a,
     an,
@@ -63,7 +51,6 @@ from semantic_digital_twin.reasoning.world_reasoner import WorldReasoner
 from semantic_digital_twin.robots.pr2 import PR2
 from semantic_digital_twin.robots.robot_parts import AbstractRobot
 from semantic_digital_twin.semantic_annotations.mixins import (
-    GraspCandidate,
     HasRootBody,
     HasRootKinematicStructureEntity,
 )
@@ -418,7 +405,7 @@ class BulletWorldDemonstration(RobotDemonstration):
         )
     )
     """
-    The bowl, which starts on the counter and is the one whose grasp the plan chooses.
+    The bowl, which starts on the counter.
     """
 
     spoon: PlaceSettingObject = field(
@@ -490,6 +477,7 @@ class BulletWorldDemonstration(RobotDemonstration):
             _debug=True,
             sampling_seed=0,
             alternative_motion_mappings=self.alternative_motion_mappings,
+            plan_transformations=[OpenDrawerBeforeTransport()],
         )
 
     def build_plan(self, context: Context) -> PlanNode:
@@ -497,9 +485,6 @@ class BulletWorldDemonstration(RobotDemonstration):
         Carry each object to its place on the table.
         """
         world = context.world
-        bowl = self.bowl.annotation_in(world)
-        bowl_target = self.bowl.target_location(world)
-        bowl_pose = bowl.root.global_pose
         left_arm = context.robot.left_arm
         return sequential(
             [
@@ -511,46 +496,11 @@ class BulletWorldDemonstration(RobotDemonstration):
                     left_arm,
                     context,
                 ),
-                TransportAction(
-                    pick_up=a(MoveAndPickUpAction)(
-                        navigate=a(NavigateAction)(
-                            target_location=variable(
-                                Pose,
-                                domain=ReachabilityLocation(
-                                    Pose(reference_frame=bowl.root),
-                                    left_arm,
-                                    context=context,
-                                ),
-                            )
-                        ),
-                        face_and_look_at=a(FaceAndLookAtAction)(
-                            face_at=a(FaceAtAction)(target=bowl_pose),
-                            look_at=a(LookAtAction)(target=bowl_pose),
-                        ),
-                        pick_up=a(PickUpAction)(
-                            grasp=variable(
-                                GraspCandidate, domain=bowl.grasp_candidates()
-                            ),
-                            arm=left_arm,
-                        ),
-                    ),
-                    place=a(MoveAndPlaceAction)(
-                        navigate=a(NavigateAction)(
-                            target_location=variable(
-                                Pose,
-                                domain=ReachabilityLocation(
-                                    bowl_target, left_arm, context=context
-                                ),
-                            )
-                        ),
-                        face_and_look_at=a(FaceAndLookAtAction)(
-                            face_at=a(FaceAtAction)(target=bowl_target),
-                            look_at=a(LookAtAction)(target=bowl_target),
-                        ),
-                        place=a(PlaceAction)(
-                            object_designator=bowl, target_location=bowl_target
-                        ),
-                    ),
+                TransportAction.from_graspable_by_closest_grasps(
+                    self.bowl.annotation_in(world),
+                    self.bowl.target_location(world),
+                    left_arm,
+                    context,
                 ),
                 TransportAction.from_graspable_by_closest_grasps(
                     self.spoon.annotation_in(world),

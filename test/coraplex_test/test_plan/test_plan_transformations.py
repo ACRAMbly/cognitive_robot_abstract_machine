@@ -29,11 +29,13 @@ from coraplex.robot_plans.motions.robot_body import MoveJointsMotion
 from coraplex.robot_plans.actions.composite.transporting import (
     MoveAndOpenAction,
     MoveAndPickUpAction,
+    TransportAction,
 )
 from coraplex.robot_plans.plan_transformations import (
     DetectBeforeGrasp,
     OpenDrawerBeforeMoveAndPickUp,
     OpenDrawerBeforePickUp,
+    OpenDrawerBeforeTransport,
     ParkArmsBeforeFirstAction,
 )
 from krrood.entity_query_language.factories import a
@@ -956,6 +958,32 @@ def test_the_opening_joins_the_sequence_an_underspecified_pick_up_runs(
     assert handle_opened_by(opening.underspecified_action) is drawer.handle
     assert isinstance(parking_again.designator, ParkArmsAction)
     assert drive_to_the_spoon.designator_type is NavigateAction
+
+
+def test_the_drawer_is_opened_before_a_transport_rather_than_inside_its_pick_up(
+    pr2_apartment_context,
+):
+    """
+    Every candidate of a transport's pick-up is tried against the world as it stands, so
+    the drawer is opened once before the transport instead of with each candidate.
+    """
+    world, view, context = pr2_apartment_context
+    spoon = world.get_semantic_annotations_by_type(Spoon)[0]
+    drawer = drawer_holding(spoon, world)
+    context.plan_transformations.append(OpenDrawerBeforeTransport())
+
+    transport = TransportAction.from_graspable_by_closest_grasps(
+        spoon, Pose(reference_frame=world.root), view.right_arm, context
+    )
+    plan = sequential([transport], context)
+    plan.notify()
+
+    [opening, transported] = plan.children
+    assert isinstance(opening, UnderspecifiedNode)
+    assert opening.designator_type is MoveAndOpenAction
+    assert handle_opened_by(opening.underspecified_action) is drawer.handle
+    assert arm_opening_with(opening.underspecified_action) is view.right_arm
+    assert transported.designator is transport
 
 
 # %% transformations that collide on one node

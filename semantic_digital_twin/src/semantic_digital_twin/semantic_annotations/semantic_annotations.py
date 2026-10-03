@@ -669,7 +669,10 @@ class Drawer(Furniture, HasCaseAsRootBody, HasHandle, HasMechanicalJoint):
         """
         :return: How far this drawer stands pulled out, as a fraction of its travel.
         """
-        connection = self.root.parent_connection
+        moving_body = (
+            self.root if self.mechanical_joint is None else self.mechanical_joint.root
+        )
+        connection = moving_body.parent_connection
         limits = connection.dof.limits
         return (connection.position - limits.lower.position) / (
             limits.upper.position - limits.lower.position

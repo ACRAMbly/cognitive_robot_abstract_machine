@@ -24,7 +24,7 @@ from coraplex.exceptions import NoFloorBelowRobot
 from coraplex.robot_plans.mixins import HasApproachesGraspPoses
 from coraplex.execution_environment import simulated_robot
 from coraplex.plans.factories import sequential, execute_single
-from coraplex.robot_plans.plan_transformations import OpenDrawerBeforeMoveAndPickUp
+from coraplex.robot_plans.plan_transformations import OpenDrawerBeforeTransport
 from coraplex.robot_plans.actions.composite.transporting import TransportAction
 from coraplex.robot_plans.actions.core.container import OpenAction, CloseAction
 from coraplex.robot_plans.actions.core.misc import DetectAction, MoveToReach
@@ -799,7 +799,7 @@ def test_transport_open_container(multiple_robot_apartment_context, rclpy_node):
     target_pose = Pose.from_xyz_rpy(
         5.1, 3.25, 0.75, yaw=1.57, reference_frame=world.root
     )
-    context.plan_transformations.append(OpenDrawerBeforeMoveAndPickUp())
+    context.plan_transformations.append(OpenDrawerBeforeTransport())
     description = TransportAction.from_graspable_by_closest_grasps(
         world.get_semantic_annotations_by_type(Spoon)[0],
         target_pose,
