@@ -20,7 +20,6 @@ from typing_extensions import (
 )
 
 from coraplex.locations.base import Location
-from coraplex.locations.sampling import Sampling
 from semantic_digital_twin.datastructures.camera_resolution import CameraResolution
 from semantic_digital_twin.robots.robot_parts import AbstractRobot, Arm
 from semantic_digital_twin.semantic_annotations.semantic_annotations import Floor
@@ -229,7 +228,8 @@ class Costmap(Location):
             origin=self.origin,
             map=new_map,
             world=self.world,
-            sampling=self.sampling,
+            number_of_samples=self.number_of_samples,
+            seed=self.seed,
         )
 
     def __add__(self, other: Costmap) -> Costmap:
@@ -294,25 +294,29 @@ class Costmap(Location):
 
         return rectangles
 
-    def candidates(self, sampling: Sampling) -> Iterator[Pose]:
+    def candidates(self) -> Iterator[Pose]:
+        return self.sample(self.number_of_samples, self.seed)
+
+    def sample(self, number_of_samples: int, seed: Optional[int]) -> Iterator[Pose]:
         """
         Sample pose candidates from this map.
 
         The sample count is capped at the number of entries this map holds, and every
         candidate faces this map's origin.
 
-        :param sampling: How to sample the candidates.
+        :param number_of_samples: How many candidates to sample.
+        :param seed: Fixes the sampling, or ``None`` to sample afresh.
         :return: The candidate poses, in the order they should be tried.
         :raises NonPositiveNumberOfSamples: If asked for fewer than one candidate.
         """
-        if sampling.number_of_samples < 1:
-            raise NonPositiveNumberOfSamples(sampling.number_of_samples)
+        if number_of_samples < 1:
+            raise NonPositiveNumberOfSamples(number_of_samples)
 
         # An entry is only ever offered once, so the whole map is all there is to
         # sample.
         return self._sample(
-            min(sampling.number_of_samples, self.map.size),
-            np.random.default_rng(sampling.seed),
+            min(number_of_samples, self.map.size),
+            np.random.default_rng(seed),
         )
 
     def _orientation_facing_origin(self, position: Point3) -> Quaternion:

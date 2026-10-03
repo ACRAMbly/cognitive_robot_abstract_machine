@@ -4,12 +4,11 @@ from itertools import islice
 
 import numpy as np
 import pytest
-from typing_extensions import Iterator, List
+from typing_extensions import Iterator, List, Optional, Tuple
 
 from coraplex.datastructures.dataclasses import Context
 from coraplex.locations.base import Location
 from coraplex.locations.costmaps import RingCostmap
-from coraplex.locations.sampling import Sampling
 from coraplex.locations.locations import ReachabilityLocation, VisibilityLocation
 from semantic_digital_twin.api import RobotSpecification, WorldSpecification
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
@@ -30,7 +29,7 @@ from semantic_digital_twin.world_description.world_entity import Body
 @dataclass
 class RecordsHowItWasSampled(Location):
     """
-    Yields one candidate and records the sampling it was asked for.
+    Yields one candidate and records the terms it sampled with.
     """
 
     pose: Pose
@@ -38,13 +37,13 @@ class RecordsHowItWasSampled(Location):
     The single candidate to yield.
     """
 
-    asked_for: List[Sampling] = field(default_factory=list)
+    sampled_with: List[Tuple[int, Optional[int]]] = field(default_factory=list)
     """
-    One entry per call: the sampling it was asked for.
+    One entry per call: the number of samples and the seed it sampled with.
     """
 
-    def candidates(self, sampling: Sampling) -> Iterator[Pose]:
-        self.asked_for.append(sampling)
+    def candidates(self) -> Iterator[Pose]:
+        self.sampled_with.append((self.number_of_samples, self.seed))
         return iter([self.pose])
 
 
@@ -95,12 +94,13 @@ def _candidate(world: World) -> Pose:
 
 def test_a_location_samples_on_the_terms_it_was_given(single_robot_world):
     world, robot, context = single_robot_world
-    sampling = Sampling(number_of_samples=17, seed=3)
-    location = RecordsHowItWasSampled(pose=_candidate(world), sampling=sampling)
+    location = RecordsHowItWasSampled(
+        pose=_candidate(world), number_of_samples=17, seed=3
+    )
 
     list(islice(iter(location), 1))
 
-    assert location.asked_for == [sampling]
+    assert location.sampled_with == [(17, 3)]
 
 
 def test_a_location_samples_nothing_before_it_is_consumed(single_robot_world):
@@ -112,10 +112,10 @@ def test_a_location_samples_nothing_before_it_is_consumed(single_robot_world):
     location = RecordsHowItWasSampled(pose=_candidate(world))
 
     candidates = iter(location)
-    assert location.asked_for == []
+    assert location.sampled_with == []
 
     next(candidates)
-    assert location.asked_for == [location.sampling]
+    assert location.sampled_with == [(location.number_of_samples, location.seed)]
 
 
 def test_a_location_grounds_to_its_first_candidate(single_robot_world):
@@ -206,9 +206,9 @@ def test_a_reachability_location_offers_no_standing_pose_farther_than_the_arm_is
         *REACHABILITY_TARGET_POSITION, reference_frame=world.root
     )
     arm = context.robot.right_arm
-    location = ReachabilityLocation(target, arm, context=context)
+    location = ReachabilityLocation(target, arm, context=context, seed=0)
 
-    offered = islice(location.candidates(Sampling(seed=0)), POSES_CHECKED)
+    offered = islice(location.candidates(), POSES_CHECKED)
 
     assert max(_horizontal_distance(pose, target) for pose in offered) <= float(
         arm.approximate_length()
@@ -227,18 +227,19 @@ def test_a_reachability_location_offers_the_poses_in_reach_in_the_order_sampled(
         *REACHABILITY_TARGET_POSITION, reference_frame=world.root
     )
     arm = context.robot.right_arm
-    location = ReachabilityLocation(target, arm, context=context)
+    location = ReachabilityLocation(target, arm, context=context, seed=0)
     in_reach = [
         pose.to_position().to_np()[:2]
         for pose in islice(
-            location.costmap().candidates(Sampling(seed=0)), POSES_CHECKED
+            location.costmap().sample(location.number_of_samples, location.seed),
+            POSES_CHECKED,
         )
         if _horizontal_distance(pose, target) <= float(arm.approximate_length())
     ]
 
     offered = [
         pose.to_position().to_np()[:2]
-        for pose in islice(location.candidates(Sampling(seed=0)), len(in_reach))
+        for pose in islice(location.candidates(), len(in_reach))
     ]
 
     np.testing.assert_allclose(offered, in_reach)
@@ -298,7 +299,7 @@ def test_a_reachability_location_takes_its_seed_from_the_context(single_robot_wo
         context=context,
     )
 
-    assert location.sampling.seed == context.sampling_seed
+    assert location.seed == context.sampling_seed
 
 
 def test_a_reachability_location_samples_afresh_without_one(single_robot_world):
@@ -314,7 +315,7 @@ def test_a_reachability_location_samples_afresh_without_one(single_robot_world):
         context=context,
     )
 
-    assert location.sampling.seed is None
+    assert location.seed is None
 
 
 # %% a location reflects the world when it is sampled from
@@ -383,4 +384,4 @@ def test_a_visibility_location_takes_its_seed_from_the_context(single_robot_worl
         context=context,
     )
 
-    assert location.sampling.seed == context.sampling_seed
+    assert location.seed == context.sampling_seed

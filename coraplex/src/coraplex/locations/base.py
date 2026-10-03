@@ -3,9 +3,8 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 
-from typing_extensions import Iterator, Iterable
+from typing_extensions import Iterator, Iterable, Optional
 
-from coraplex.locations.sampling import Sampling
 from semantic_digital_twin.spatial_types.spatial_types import Pose
 
 
@@ -16,20 +15,28 @@ class Location(Iterable[Pose], ABC):
     from it.
     """
 
-    sampling: Sampling = field(default_factory=Sampling, kw_only=True)
+    number_of_samples: int = field(default=2000, kw_only=True)
     """
-    How this location's candidates are sampled.
+    How many candidates to sample.
+
+    Far more than a caller judges properly, since a standing pose inside the furniture
+    costs nothing to refuse.
+    """
+
+    seed: Optional[int] = field(default=None, kw_only=True)
+    """
+    Fixes the sampling, so a run can be repeated exactly.
+
+    ``None`` samples afresh every time, which is what sampling from a map buys over
+    reading it off in the order the map rates it.
     """
 
     @abstractmethod
-    def candidates(self, sampling: Sampling) -> Iterator[Pose]:
+    def candidates(self) -> Iterator[Pose]:
         """
-        Sample pose candidates from this location.
+        Sample pose candidates from this location, :attr:`number_of_samples` of them
+        from :attr:`seed`.
 
-        Every location says what it does with the terms it is given, so none of them is
-        chosen on a caller's behalf.
-
-        :param sampling: How to sample the candidates.
         :return: The pose candidates, in the order they should be tried.
         """
 
@@ -41,10 +48,10 @@ class Location(Iterable[Pose], ABC):
 
     def __iter__(self) -> Iterator[Pose]:
         """
-        :return: The candidates, sampled as :attr:`sampling` says.
+        :return: The candidates of this location.
 
         .. warning::
             Must stay a generator, so nothing is sampled before the first ``next``.
             EQL's ``variable`` calls :func:`iter` on its domain while the plan is built.
         """
-        yield from self.candidates(self.sampling)
+        yield from self.candidates()

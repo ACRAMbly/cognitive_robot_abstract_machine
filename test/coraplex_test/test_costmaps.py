@@ -13,7 +13,6 @@ from coraplex.locations.costmaps import (
     RingCostmap,
 )
 from coraplex.exceptions import NonPositiveNumberOfSamples
-from coraplex.locations.sampling import Sampling
 from semantic_digital_twin.spatial_types import (
     HomogeneousTransformationMatrix,
     RotationMatrix,
@@ -95,7 +94,6 @@ def test_a_merged_map_samples_on_the_terms_of_the_map_it_was_merged_into(
 ):
     world, robot_view, context = pr2_apartment_context
     origin = Pose.from_xyz_quaternion(0, 0, 0, 0, 0, 0, 1, world.root)
-    sampling = Sampling(number_of_samples=17, seed=3)
     first = GaussianCostmap(
         resolution=0.02,
         height=200,
@@ -104,7 +102,8 @@ def test_a_merged_map_samples_on_the_terms_of_the_map_it_was_merged_into(
         sigma=15,
         origin=origin,
         world=world,
-        sampling=sampling,
+        number_of_samples=17,
+        seed=3,
     )
     second = GaussianCostmap(
         resolution=0.02,
@@ -116,7 +115,10 @@ def test_a_merged_map_samples_on_the_terms_of_the_map_it_was_merged_into(
         world=world,
     )
 
-    assert (first & second).sampling == sampling
+    merged = first & second
+
+    assert merged.number_of_samples == first.number_of_samples
+    assert merged.seed == first.seed
 
 
 def test_occupancy_robot_exclusion(pr2_apartment_context):
@@ -221,7 +223,7 @@ def test_position_generation(pr2_apartment_context):
     )
     gaussian_map.map = np_map
 
-    for pose in gaussian_map.candidates(Sampling()):
+    for pose in gaussian_map.candidates():
         assert 0.8 <= pose.to_position().x <= 1.2
         assert 0.8 <= pose.to_position().y <= 1.2
 
@@ -265,7 +267,7 @@ def test_sample_x_axis(pr2_apartment_context):
 
     gaussian_map.map = np_map
 
-    for pose in gaussian_map.candidates(Sampling()):
+    for pose in gaussian_map.candidates():
         assert -0.05 < pose.to_position().y < 0.05
 
 
@@ -284,7 +286,7 @@ def test_sample_x_axis_offset(pr2_apartment_context):
 
     gaussian_map.map = np_map
 
-    for pose in gaussian_map.candidates(Sampling()):
+    for pose in gaussian_map.candidates():
         assert -0.2 <= pose.to_position().y <= 0.2
         assert 0.4 <= pose.to_position().x <= 0.8
 
@@ -304,7 +306,7 @@ def test_sample_x_axis_offset_non_id(pr2_apartment_context):
     gaussian_map.map = np_map
 
     tolerance = 0.01
-    for pose in gaussian_map.candidates(Sampling()):
+    for pose in gaussian_map.candidates():
         assert 1.8 <= pose.to_position().y <= 2.2 + tolerance
         assert 3.4 <= pose.to_position().x <= 3.8 + tolerance
 
@@ -335,7 +337,7 @@ def test_sample_to_pose_gau(pr2_apartment_context):
     # The merge keeps only the cells both maps cover, which is the box the first one was
     # given: rows 120:140 and columns 90:110 of a 0.02 m grid centred on the origin.
     tolerance = 0.01
-    for pose in final_map.candidates(Sampling()):
+    for pose in final_map.candidates():
         assert 1.8 <= pose.to_position().y <= 2.2 + tolerance
         assert 3.4 <= pose.to_position().x <= 3.8 + tolerance
 
@@ -353,7 +355,7 @@ def test_sample_y_axis(pr2_apartment_context):
     )
 
     gaussian_map.map = np_map
-    for pose in gaussian_map.candidates(Sampling()):
+    for pose in gaussian_map.candidates():
         assert -0.05 < pose.to_position().x < 0.05
 
 
@@ -369,17 +371,17 @@ def test_sample_rotated(pr2_apartment_context):
         world=world,
     )
     gaussian_map.map = np_map
-    assert len(list(gaussian_map.candidates(Sampling()))) == 2
+    assert len(list(gaussian_map.candidates())) == 2
 
-    for pose in gaussian_map.candidates(Sampling()):
+    for pose in gaussian_map.candidates():
         assert -0.05 < pose.to_position().y < 0.05
         assert 0.4 <= pose.to_position().x <= 0.45
 
     gaussian_map.origin = Pose.from_xyz_quaternion(0, 0, 0, 0, 0, 1, 1, world.root)
 
-    assert len(list(gaussian_map.candidates(Sampling()))) == 2
+    assert len(list(gaussian_map.candidates())) == 2
 
-    for pose in gaussian_map.candidates(Sampling()):
+    for pose in gaussian_map.candidates():
         assert -0.05 < pose.to_position().y < 0.05
         assert 0.4 <= pose.to_position().x <= 0.45
 
@@ -399,7 +401,7 @@ def test_sample_to_pose(pr2_apartment_context):
 
     gaussian_map.map = np_map
 
-    pose = list(gaussian_map.candidates(Sampling()))[0]
+    pose = list(gaussian_map.candidates())[0]
 
     assert pose.to_position().x == 1.6
     assert pose.to_position().y == 2.2
@@ -422,7 +424,7 @@ def test_sample_highest_first(pr2_apartment_context):
 
     gaussian_map.map = np_map
 
-    poses = list(gaussian_map.candidates(Sampling()))
+    poses = list(gaussian_map.candidates())
 
     assert len(poses) == 3
 
@@ -516,7 +518,7 @@ def _stand_off_distances(
         [
             float(np.linalg.norm(pose.to_position().to_np()[:3] - origin))
             for pose in islice(
-                costmap.candidates(Sampling(seed=seed)),
+                costmap.sample(costmap.number_of_samples, seed),
                 count,
             )
         ]
@@ -598,8 +600,8 @@ def test_how_many_candidates_to_sample_is_the_callers_to_say(pr2_apartment_conte
     world, _, _ = pr2_apartment_context
     ring = _ring_map(world)
 
-    few = list(ring.candidates(Sampling(number_of_samples=12)))
-    many = list(ring.candidates(Sampling(number_of_samples=300)))
+    few = list(ring.sample(12, None))
+    many = list(ring.sample(300, None))
 
     assert len(few) == 12
     assert len(many) == 300
@@ -615,7 +617,7 @@ def test_a_sampled_candidate_faces_the_maps_origin(pr2_apartment_context):
 
     sampled = list(
         islice(
-            ring.candidates(Sampling(number_of_samples=10)),
+            ring.sample(10, None),
             5,
         )
     )
@@ -649,7 +651,7 @@ def test_a_sparsely_rated_map_is_sampled_from_within_its_rated_entries(
     world, _, _ = pr2_apartment_context
     costmap = _sparsely_rated_map(world)
 
-    poses = list(costmap.candidates(Sampling(seed=0)))
+    poses = list(costmap.sample(costmap.number_of_samples, 0))
 
     assert len(poses) == int(np.count_nonzero(costmap.map))
 
@@ -671,7 +673,7 @@ def test_a_budget_smaller_than_the_segment_count_still_offers_candidates(
     costmap = _sparsely_rated_map(world)
     asked_for = len(costmap.segment_map()) - 1
 
-    poses = list(costmap.candidates(Sampling(number_of_samples=asked_for)))
+    poses = list(costmap.sample(asked_for, None))
 
     assert len(poses) == asked_for
 
@@ -688,7 +690,7 @@ def test_a_segment_is_sampled_from_as_much_as_it_is_rated(pr2_apartment_context)
     costmap.map[120:140, 120:140] = 0.25
     budget = 100
 
-    poses = list(costmap.candidates(Sampling(number_of_samples=budget, seed=0)))
+    poses = list(costmap.sample(budget, 0))
 
     preferred_share = costmap.map[20:40, 20:40].sum() / costmap.map.sum()
     sampled_from_preferred = sum(
@@ -706,7 +708,7 @@ def test_a_map_offers_no_more_candidates_than_it_holds(pr2_apartment_context):
     costmap = _ring_map(world)
     costmap.map = np.ones((3, 3))
 
-    poses = list(costmap.candidates(Sampling(number_of_samples=100 * costmap.map.size)))
+    poses = list(costmap.sample(100 * costmap.map.size, None))
 
     assert len(poses) == costmap.map.size
 
@@ -724,4 +726,4 @@ def test_a_map_asked_for_no_candidates_says_so(pr2_apartment_context, asked_for)
     costmap = _ring_map(world)
 
     with pytest.raises(NonPositiveNumberOfSamples):
-        costmap.candidates(Sampling(number_of_samples=asked_for))
+        costmap.sample(asked_for, None)

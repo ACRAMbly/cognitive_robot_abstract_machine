@@ -114,6 +114,8 @@ class IsAmongTheClosestGraspsTo(Predicate):
     grasps: List[GraspCandidate]
     """
     The grasps on the same object that :attr:`grasp` is ranked among.
+
+    A grasp not among them ranks after those as close as it.
     """
 
     number_of_grasps: int = 3
@@ -130,30 +132,15 @@ class IsAmongTheClosestGraspsTo(Predicate):
         ]
         world_T_object = self.grasp.graspable.root.global_transform.to_np()
 
-        # Grasps exactly as close as one another rank in the order they are listed, so
-        # no more of them count as the closest than were asked for.
-        position = next(
-            (
-                position
-                for position, grasp in enumerate(self.grasps)
-                if grasp is self.grasp
-            ),
-            len(self.grasps),
-        )
-        rank = (
-            *self._closeness(self.grasp, world_T_object, world_P_standing),
-            position,
-        )
-        ranked_before = [
-            grasp
-            for other_position, grasp in enumerate(self.grasps)
-            if (
-                *self._closeness(grasp, world_T_object, world_P_standing),
-                other_position,
-            )
-            < rank
-        ]
-        return len(ranked_before) < self.number_of_grasps
+        listed = any(grasp is self.grasp for grasp in self.grasps)
+        ranked = self.grasps if listed else [*self.grasps, self.grasp]
+        # Sorting is stable, so grasps exactly as close as one another keep the order
+        # they are listed in, and no more of them count as the closest than were asked for.
+        closest = sorted(
+            ranked,
+            key=lambda grasp: self._closeness(grasp, world_T_object, world_P_standing),
+        )[: self.number_of_grasps]
+        return any(grasp is self.grasp for grasp in closest)
 
     @staticmethod
     def _closeness(

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 
 import numpy as np
 from typing_extensions import Iterator
@@ -15,7 +15,6 @@ from coraplex.locations.costmaps import (
     RingCostmap,
     VisibilityCostmap,
 )
-from coraplex.locations.sampling import Sampling
 from semantic_digital_twin.robots.robot_parts import Arm
 from semantic_digital_twin.spatial_types.spatial_types import Pose
 
@@ -37,12 +36,12 @@ class CostmapLocation(Location, ABC):
         Fix this location's sampling to the plan it belongs to.
 
         A plan that pins its seed is asking every location inside it to repeat, so a
-        location whose sampling names no seed of its own takes the plan's. One whose
-        sampling names a seed already keeps it.
+        location with no seed of its own takes the plan's. One with a seed already keeps
+        it.
         """
-        if self.sampling.seed is not None:
+        if self.seed is not None:
             return
-        self.sampling = replace(self.sampling, seed=self.context.sampling_seed)
+        self.seed = self.context.sampling_seed
 
     @abstractmethod
     def costmap(self) -> Costmap:
@@ -51,8 +50,8 @@ class CostmapLocation(Location, ABC):
             is now.
         """
 
-    def candidates(self, sampling: Sampling) -> Iterator[Pose]:
-        return self.costmap().candidates(sampling)
+    def candidates(self) -> Iterator[Pose]:
+        return self.costmap().sample(self.number_of_samples, self.seed)
 
     def _in_world(self, pose: Pose) -> Pose:
         """
@@ -103,7 +102,7 @@ class ReachabilityLocation(CostmapLocation):
         )
         return occupancy & ring
 
-    def candidates(self, sampling: Sampling) -> Iterator[Pose]:
+    def candidates(self) -> Iterator[Pose]:
         """
         :return: The poses sampled from the costmap, in the order they were sampled,
             leaving out those farther from the target along the floor than the arm is
@@ -111,7 +110,7 @@ class ReachabilityLocation(CostmapLocation):
         """
         target = self._in_world(self.target_pose).to_position()
         arm_length = float(self.arm.approximate_length())
-        for candidate in super().candidates(sampling):
+        for candidate in super().candidates():
             offset = candidate.to_position().to_np()[:2] - target.to_np()[:2]
             if np.linalg.norm(offset) <= arm_length:
                 yield candidate
