@@ -55,7 +55,7 @@ class LimitsItsCandidates:
         """
         for step in steps:
             if isinstance(step, Match):
-                step.expression.limit(self.candidates_to_try)
+                step.limit(self.candidates_to_try)
 
 
 @dataclass
@@ -307,8 +307,8 @@ class MoveAndPickUpAction(ActionDescription, LimitsItsCandidates):
         )
         return step.where(
             IsAmongTheClosestGraspsTo(
-                step.variable.pick_up.grasp,
-                step.variable.navigate.target_location,
+                step.pick_up.grasp,
+                step.navigate.target_location,
                 grasps,
                 number_of_grasps,
             )

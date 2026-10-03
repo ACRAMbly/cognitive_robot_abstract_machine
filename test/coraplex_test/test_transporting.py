@@ -124,7 +124,7 @@ def _standing_positions(step: Match) -> ReachabilityLocation:
     """
     :return: The location the standing pose of `step` is sampled from.
     """
-    return step.kwargs["navigate"].kwargs["target_location"]._domain_.domain
+    return step._kwargs_["navigate"]._kwargs_["target_location"]._domain_.domain
 
 
 def _transport_of_the_milk(world: World, context: Context) -> TransportAction:
@@ -163,7 +163,7 @@ def test_a_transport_tries_a_bounded_number_of_candidates(pr2_apartment_context)
     sequential([transport], context)
 
     limits = [
-        child.underspecified_action.expression._limit_
+        child.underspecified_action._get_expression_()._limit_
         for child in transport._action_plan.children
         if isinstance(child, UnderspecifiedNode)
     ]
@@ -244,7 +244,7 @@ def test_a_pick_and_place_tries_a_bounded_number_of_candidates(pr2_apartment_con
     sequential([pick_and_place], context)
 
     limits = [
-        child.underspecified_action.expression._limit_
+        child.underspecified_action._get_expression_()._limit_
         for child in pick_and_place._action_plan.children
         if isinstance(child, UnderspecifiedNode)
     ]
@@ -603,8 +603,8 @@ def test_the_closest_grasps_can_be_required_of_a_pick_up_from_a_fixed_standing_p
     )
     step.where(
         IsAmongTheClosestGraspsTo(
-            step.variable.pick_up.grasp,
-            step.variable.navigate.target_location,
+            step.pick_up.grasp,
+            step.navigate.target_location,
             grasps,
             number_of_grasps=NON_DEFAULT_NUMBER_OF_GRASPS,
         )
@@ -664,9 +664,9 @@ def test_a_transport_of_a_graspable_faces_it_where_it_is_when_it_picks_it_up(
 
     _move_the_milk(world)
 
-    facing = transport.pick_up.kwargs["face_and_look_at"].kwargs
+    facing = transport.pick_up._kwargs_["face_and_look_at"]._kwargs_
     _assert_every_target_is_at(
-        [facing["face_at"].kwargs["target"], facing["look_at"].kwargs["target"]],
+        [facing["face_at"]._kwargs_["target"], facing["look_at"]._kwargs_["target"]],
         milk.root,
         world,
     )

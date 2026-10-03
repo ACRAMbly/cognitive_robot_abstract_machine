@@ -669,7 +669,7 @@ def handle_opened_by(opening: Match) -> Handle:
     :param opening: The step that opens a drawer.
     :return: The handle it opens the drawer by.
     """
-    return opening.kwargs["open_container"].kwargs["handle"]
+    return opening._kwargs_["open_container"]._kwargs_["handle"]
 
 
 def arm_opening_with(opening: Match) -> Arm:
@@ -677,7 +677,7 @@ def arm_opening_with(opening: Match) -> Arm:
     :param opening: The step that opens a drawer.
     :return: The arm it opens the drawer with.
     """
-    return opening.kwargs["open_container"].kwargs["arm"]
+    return opening._kwargs_["open_container"]._kwargs_["arm"]
 
 
 def test_the_drawer_is_only_opened_for_an_object_that_lies_in_one(
@@ -754,7 +754,7 @@ def test_opening_a_drawer_tries_its_standing_pose_with_the_opening(
         drawer, view.right_arm, context
     )
 
-    assert opening.type is MoveAndOpenAction
+    assert opening._type_ is MoveAndOpenAction
     assert handle_opened_by(opening) is drawer.handle
 
 
@@ -769,7 +769,9 @@ def test_opening_a_drawer_stands_where_it_is_opened_from(pr2_apartment_context):
     [opening] = OpenDrawerBeforeMoveAndPickUp().opening_nodes(
         drawer, view.right_arm, context
     )
-    standing_positions = opening.kwargs["navigate"].kwargs["target_location"]._domain_
+    standing_positions = (
+        opening._kwargs_["navigate"]._kwargs_["target_location"]._domain_
+    )
     location = standing_positions.domain
 
     assert location.reach_fraction == ReachFraction.ACCESSING
@@ -791,10 +793,10 @@ def test_opening_a_drawer_faces_the_handle_where_it_is_when_it_opens_it(
     drawer.root.parent_connection.position = OPENED_DRAWER_POSITION
     world.notify_state_change()
 
-    facing = opening.kwargs["face_and_look_at"].kwargs
+    facing = opening._kwargs_["face_and_look_at"]._kwargs_
     for target in [
-        facing["face_at"].kwargs["target"],
-        facing["look_at"].kwargs["target"],
+        facing["face_at"]._kwargs_["target"],
+        facing["look_at"]._kwargs_["target"],
     ]:
         np.testing.assert_allclose(
             world.transform(target, world.root).to_position().to_np(),
