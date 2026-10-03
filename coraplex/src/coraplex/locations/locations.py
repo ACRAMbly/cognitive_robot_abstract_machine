@@ -3,6 +3,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field, replace
 
+import numpy as np
 from typing_extensions import Iterator
 
 from coraplex.datastructures.dataclasses import Context
@@ -101,6 +102,19 @@ class ReachabilityLocation(CostmapLocation):
             reach_fraction=self.reach_fraction,
         )
         return occupancy & ring
+
+    def candidates(self, sampling: Sampling) -> Iterator[Pose]:
+        """
+        :return: The poses sampled from the costmap, in the order they were sampled,
+            leaving out those farther from the target along the floor than the arm is
+            long, since the target cannot be reached from there.
+        """
+        target = self._in_world(self.target_pose).to_position()
+        arm_length = float(self.arm.approximate_length())
+        for candidate in super().candidates(sampling):
+            offset = candidate.to_position().to_np()[:2] - target.to_np()[:2]
+            if np.linalg.norm(offset) <= arm_length:
+                yield candidate
 
 
 @dataclass

@@ -519,6 +519,30 @@ def test_a_nearer_grasp_is_the_closest_however_it_is_approached(pr2_apartment_co
     )()
 
 
+def test_grasps_tied_for_the_closest_are_still_only_as_many_as_asked_for(
+    pr2_apartment_context,
+):
+    """
+    Grasps can be exactly as close as one another, for example mirror images of each
+    other seen from a standing pose on the object's axis, and no more of them count as
+    the closest than were asked for.
+    """
+    world, robot, context = pr2_apartment_context
+    grasp = world.get_semantic_annotations_by_type(Milk)[0].grasp_candidates()[0]
+    tied = [grasp, _raised(grasp, 0.0)]
+    standing_position = _standing_in_front_of(grasp, world)
+
+    closest = [
+        candidate
+        for candidate in tied
+        if IsAmongTheClosestGraspsTo(
+            candidate, standing_position, tied, number_of_grasps=1
+        )()
+    ]
+
+    assert closest == [grasp]
+
+
 def test_a_grasp_higher_up_is_as_close_as_one_below_it(pr2_apartment_context):
     """
     Only the horizontal distance counts, so between a grasp and one at the same spot

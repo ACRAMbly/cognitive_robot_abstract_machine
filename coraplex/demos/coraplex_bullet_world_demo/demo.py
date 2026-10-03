@@ -474,7 +474,6 @@ class BulletWorldDemonstration(RobotDemonstration):
             world=world,
             robot=world.get_semantic_annotations_by_type(self.used_robot)[0],
             ros_node=self.ros_node,
-            _debug=True,
             sampling_seed=0,
             alternative_motion_mappings=self.alternative_motion_mappings,
             plan_transformations=[OpenDrawerBeforeTransport()],
@@ -516,17 +515,21 @@ class BulletWorldDemonstration(RobotDemonstration):
 def main(
     execution_type: ExecutionType = ExecutionType.SIMULATED,
     collision_avoidance: bool = True,
+    debug: bool = False,
 ) -> None:
     """
     Run the demonstration.
 
     :param execution_type: Whether to drive the real robot or simulate it.
     :param collision_avoidance: Whether every motion state chart avoids collisions.
+    :param debug: Whether to run in debug mode, publishing every copy of the world a
+        candidate is tried in.
     """
     BulletWorldDemonstration(
         used_robot=PR2,
         execution_type=execution_type,
         collision_avoidance=collision_avoidance,
+        debug=debug,
     ).run()
 
 

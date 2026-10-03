@@ -92,9 +92,10 @@ class IsAmongTheClosestGraspsTo(Predicate):
     """
     Whether a grasp is among the grasps closest to where the robot stands.
 
-    Grasps are ranked by their horizontal distance from the standing pose, and grasps
-    at the same distance by the angle between the direction they are approached along
-    and the direction from the standing pose to them.
+    Grasps are ranked by their horizontal distance from the standing pose, grasps at
+    the same distance by the angle between the direction they are approached along and
+    the direction from the standing pose to them, and grasps tied on both by the order
+    of :attr:`grasps`.
 
     .. note:: With the grasp fixed and the standing pose left open, it chooses the
         standing poses that suit that grasp instead.
@@ -124,16 +125,35 @@ class IsAmongTheClosestGraspsTo(Predicate):
         world = self.grasp.graspable.root._world
 
         # Transform to np for speed, as this is called a lot
-        world_P_standing = world.transform(self.standing_position, world.root).to_np()[:, 3]
+        world_P_standing = world.transform(self.standing_position, world.root).to_np()[
+            :, 3
+        ]
         world_T_object = self.grasp.graspable.root.global_transform.to_np()
 
-        closeness = self._closeness(self.grasp, world_T_object, world_P_standing)
-        closer = [
+        # Grasps exactly as close as one another rank in the order they are listed, so
+        # no more of them count as the closest than were asked for.
+        position = next(
+            (
+                position
+                for position, grasp in enumerate(self.grasps)
+                if grasp is self.grasp
+            ),
+            len(self.grasps),
+        )
+        rank = (
+            *self._closeness(self.grasp, world_T_object, world_P_standing),
+            position,
+        )
+        ranked_before = [
             grasp
-            for grasp in self.grasps
-            if self._closeness(grasp, world_T_object, world_P_standing) < closeness
+            for other_position, grasp in enumerate(self.grasps)
+            if (
+                *self._closeness(grasp, world_T_object, world_P_standing),
+                other_position,
+            )
+            < rank
         ]
-        return len(closer) < self.number_of_grasps
+        return len(ranked_before) < self.number_of_grasps
 
     @staticmethod
     def _closeness(
@@ -142,8 +162,10 @@ class IsAmongTheClosestGraspsTo(Predicate):
         world_P_standing: NDArray[np.float64],
     ) -> Tuple[float, float]:
         """
-        Computes a tuple of the horizontal distance from the standing pose to `grasp`, and the angle
-         between the direction `grasp` is approached along and the direction from the standing pose to it.
+        Computes a tuple of the horizontal distance from the standing pose to `grasp`,
+        and the angle between the direction `grasp` is approached along and the
+        direction from the standing pose to it.
+
         :param grasp: A grasp on the object.
         :param world_T_object: The object's root frame in the world frame.
         :param world_P_standing: Where the robot stands, as a homogeneous point in the
@@ -154,7 +176,9 @@ class IsAmongTheClosestGraspsTo(Predicate):
         world_V_standing_to_grasp = world_T_grasp[:, 3] - world_P_standing
         horizontal_distance = np.linalg.norm(world_V_standing_to_grasp[:2])
         cosine = (
-            world_T_grasp[:, 0] @ world_V_standing_to_grasp / np.linalg.norm(world_V_standing_to_grasp)
+            world_T_grasp[:, 0]
+            @ world_V_standing_to_grasp
+            / np.linalg.norm(world_V_standing_to_grasp)
         )
         return float(horizontal_distance), float(np.arccos(np.clip(cosine, -1.0, 1.0)))
 

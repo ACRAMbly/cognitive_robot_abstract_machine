@@ -28,7 +28,10 @@ from coraplex.robot_plans.actions.core.navigation import NavigateAction
 from coraplex.robot_plans.actions.core.pick_up import PickUpAction
 from semantic_digital_twin.robots.robot_parts import AbstractRobot, Arm
 from semantic_digital_twin.spatial_types.spatial_types import Pose
+from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 from semantic_digital_twin.world import World
+from semantic_digital_twin.world_description.connections import FixedConnection
+from semantic_digital_twin.world_description.world_entity import Body
 
 # %% mimics for testing candidate trials without depending on real motion physics
 
@@ -407,6 +410,60 @@ def test_real_failure_keeps_state_and_next_trial_reflects_it(
     assert world.state[dof.id].position == 4
 
 
+def test_the_underspecified_steps_of_one_plan_are_tried_against_one_copy(
+    apartment_world_pr2_copy_with_context,
+):
+    """
+    The real world moves on between the steps of a plan, and the copy is caught up with
+    it rather than taken anew, so every step is tried in the same copy, which already
+    carries what the steps before it did for real.
+    """
+    world, robot, context = apartment_world_pr2_copy_with_context
+    dof = world.degrees_of_freedom[0]
+    probe_key = register_probe()
+    steps = [
+        a(RecordingAction)(
+            probe_key=probe_key,
+            dof_id=dof.id,
+            fail_on_attempt_number=variable_from([None]),
+        )
+        for _ in range(2)
+    ]
+
+    plan = sequential(steps, context).plan
+    with simulated_robot:
+        plan.perform()
+
+    probe = _registered_probes[probe_key]
+    first_trial, first_real_attempt, second_trial, second_real_attempt = probe.calls
+    assert first_trial.world is not world
+    assert second_trial.world is first_trial.world
+    assert second_trial.position_at_entry == second_real_attempt.position_at_entry
+    assert second_trial.position_at_entry != first_trial.position_at_entry
+
+
+def test_a_trial_catches_its_copy_up_with_what_the_world_gained(
+    apartment_world_pr2_copy_with_context,
+):
+    """
+    A body added to the world after the copy was taken is in the copy the next candidate
+    is tried in, without the world being copied again.
+    """
+    world, robot, context = apartment_world_pr2_copy_with_context
+    trial = ActionTrial(context=context)
+    copied = trial._copy().world
+    body = Body(name=PrefixedName("added_after_the_copy"))
+    with world.modify_world():
+        world.add_kinematic_structure_entity(body)
+        world.add_connection(FixedConnection(parent=world.root, child=body))
+
+    caught_up = trial._copy().world
+
+    assert caught_up is copied
+    assert caught_up.get_kinematic_structure_entity_by_id(body.id).name == body.name
+    trial.discard()
+
+
 # %% a trial copy is published while debugging
 
 
@@ -489,10 +546,10 @@ def test_a_discarded_trial_stops_publishing_its_copy(debugging_context):
     assert trial._visualization is None
 
 
-def test_a_replaced_copy_stops_being_published(debugging_context):
+def test_a_caught_up_copy_keeps_being_published(debugging_context):
     """
-    A copy that no longer matches the world is replaced, and only the one candidates are
-    tried in is shown.
+    A copy caught up with the world is still the one candidates are tried in, so it
+    keeps being shown rather than being drawn anew.
     """
     world, robot, context = debugging_context
     trial = ActionTrial(context=context)
@@ -504,9 +561,29 @@ def test_a_replaced_copy_stops_being_published(debugging_context):
 
     copied = trial._copy()
 
-    assert not first.is_rendering
-    assert trial._visualization.world is copied.world
+    assert trial._visualization is first
+    assert first.is_rendering
+    assert first.world is copied.world
     trial.discard()
+
+
+def test_a_plan_stops_publishing_its_trial_copy_once_it_has_run(debugging_context):
+    world, robot, context = debugging_context
+    dof = world.degrees_of_freedom[0]
+    probe_key = register_probe()
+    plan = execute_single(
+        a(RecordingAction)(
+            probe_key=probe_key,
+            dof_id=dof.id,
+            fail_on_attempt_number=variable_from([None]),
+        ),
+        context=context,
+    ).plan
+
+    with simulated_robot:
+        plan.perform()
+
+    assert plan.action_trial._visualization is None
 
 
 def test_a_trial_tries_an_action_that_already_belongs_to_a_plan(debugging_context):

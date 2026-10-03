@@ -177,6 +177,73 @@ def test_a_ring_from_the_arm_reach_distance_stands_off_by_the_reach_fraction(
     assert float(ring.distance) == pytest.approx(expected_distance)
 
 
+POSES_CHECKED = 400
+"""
+How many of the standing poses a reachability location offers are checked.
+"""
+
+
+def _horizontal_distance(pose: Pose, target: Pose) -> float:
+    """
+    :return: How far `pose` stands from `target` along the floor.
+    """
+    return float(
+        np.linalg.norm(
+            pose.to_position().to_np()[:2] - target.to_position().to_np()[:2]
+        )
+    )
+
+
+def test_a_reachability_location_offers_no_standing_pose_farther_than_the_arm_is_long(
+    single_robot_world,
+):
+    """
+    A target farther from where the robot stands than its arm is long cannot be reached
+    from there, so such a standing pose is not worth trying.
+    """
+    world, robot, context = single_robot_world
+    target = Pose.from_xyz_rpy(
+        *REACHABILITY_TARGET_POSITION, reference_frame=world.root
+    )
+    arm = context.robot.right_arm
+    location = ReachabilityLocation(target, arm, context=context)
+
+    offered = islice(location.candidates(Sampling(seed=0)), POSES_CHECKED)
+
+    assert max(_horizontal_distance(pose, target) for pose in offered) <= float(
+        arm.approximate_length()
+    )
+
+
+def test_a_reachability_location_offers_the_poses_in_reach_in_the_order_sampled(
+    single_robot_world,
+):
+    """
+    Leaving out what is out of reach does not change which of the remaining poses come
+    first, so a plan that found a standing pose before still finds the same one.
+    """
+    world, robot, context = single_robot_world
+    target = Pose.from_xyz_rpy(
+        *REACHABILITY_TARGET_POSITION, reference_frame=world.root
+    )
+    arm = context.robot.right_arm
+    location = ReachabilityLocation(target, arm, context=context)
+    in_reach = [
+        pose.to_position().to_np()[:2]
+        for pose in islice(
+            location.costmap().candidates(Sampling(seed=0)), POSES_CHECKED
+        )
+        if _horizontal_distance(pose, target) <= float(arm.approximate_length())
+    ]
+
+    offered = [
+        pose.to_position().to_np()[:2]
+        for pose in islice(location.candidates(Sampling(seed=0)), len(in_reach))
+    ]
+
+    np.testing.assert_allclose(offered, in_reach)
+
+
 # %% a reachability location stands around the target it is given
 
 

@@ -160,6 +160,12 @@ class RobotDemonstration(ABC):
     Whether collision avoidance is added to every motion state chart of this run.
     """
 
+    debug: bool = False
+    """
+    Whether the plan runs in debug mode, logging debug messages and publishing every
+    copy of the world a candidate is tried in.
+    """
+
     repetitions: int = 1
     """
     How often the plan is performed against the scene.
@@ -262,7 +268,9 @@ class RobotDemonstration(ABC):
             if not self.is_scene_populated(world):
                 self.populate_scene(world)
             for _ in range(self.repetitions):
-                plan = self.build_plan(self.build_context(world))
+                context = self.build_context(world)
+                context.debug = self.debug
+                plan = self.build_plan(context)
                 if self.visualization is not None:
                     self.visualization.attach_plan(plan)
                 with ExecutionEnvironment(

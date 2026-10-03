@@ -34,9 +34,9 @@ class ActionTrial:
 
     One copy serves every candidate: after an attempt the copy is rolled back to the
     model version it was at and its state is restored, so the next candidate starts from
-    the same point without another copy having to be made. A fresh copy is taken
-    whenever `context.world` has itself moved on, so a trial always reflects the state
-    and model changes actually in it.
+    the same point without another copy having to be made. Whenever `context.world` has
+    itself moved on, the copy is caught up with it instead of being taken anew, so a
+    trial always reflects the state and model changes actually in it.
 
     The copy is never connected to a synchronizer, so nothing a trial does is published,
     and a trial always runs under a forced
@@ -69,8 +69,13 @@ class ActionTrial:
         default=None, init=False, repr=False
     )
     """
-    The model and state versions `context.world` had when the copy was taken, used to
-    notice that it has moved on and the copy has to be replaced.
+    The model and state versions `context.world` had when the copy last matched it, used
+    to notice that it has moved on and the copy has to be caught up.
+    """
+
+    _replayed_modification_blocks: int = field(default=0, init=False, repr=False)
+    """
+    How many of the modification blocks of `context.world` the copy already holds.
     """
 
     copy_marker_alpha: float = field(default=0.9, kw_only=True)
@@ -126,39 +131,70 @@ class ActionTrial:
             except PlanFailure:
                 return False
             finally:
+                if plan.action_trial is not None:
+                    plan.action_trial.discard()
                 # Undo the model changes before leaving the reset context restores the
                 # state, which needs the degrees of freedom it was snapshotted with.
                 world.rollback_to_version(version)
 
     def _copy(self) -> Context:
         """
-        :return: The context pointing at the copy to try candidates against, taken again
-            if `context.world` has changed since the current one was made.
+        :return: The context pointing at the copy to try candidates against, caught up
+            with `context.world` if that has changed since the copy last matched it.
         """
         versions = (
             self.context.world.get_world_model_manager().version,
             self.context.world.state.version,
         )
-        if self._copied_context is None or self._source_versions != versions:
-            self._stop_visualization()
-            world = deepcopy(self.context.world)
-            self._copied_context = replace(
-                self.context,
-                world=world,
-                robot=world.get_semantic_annotation_by_id(self.context.robot.id),
-                evaluate_conditions=True,
-            )
-            self._source_versions = versions
-            if self.context.debug:
-                self._visualization = RvizVisualization(
-                    world,
-                    ros_node=self.context.ros_node,
-                    collision_visualization=True,
-                    frame_prefix=ActionTrialVisualization.FRAME_PREFIX,
-                    marker_topic=ActionTrialVisualization.MARKER_TOPIC,
-                    marker_alpha=self.copy_marker_alpha,
-                ).start()
+        if self._copied_context is None:
+            self._take_copy()
+        elif self._source_versions != versions:
+            self._catch_up()
+        self._source_versions = versions
         return self._copied_context
+
+    def _take_copy(self) -> None:
+        """
+        Copy `context.world` and, while the context is debugging, start publishing the
+        copy.
+        """
+        world = deepcopy(self.context.world)
+        self._replayed_modification_blocks = len(
+            self.context.world.get_world_model_manager().model_modification_blocks
+        )
+        self._copied_context = replace(
+            self.context,
+            world=world,
+            robot=world.get_semantic_annotation_by_id(self.context.robot.id),
+            evaluate_conditions=True,
+        )
+        if self.context.debug:
+            self._visualization = RvizVisualization(
+                world,
+                ros_node=self.context.ros_node,
+                collision_visualization=True,
+                frame_prefix=ActionTrialVisualization.FRAME_PREFIX,
+                marker_topic=ActionTrialVisualization.MARKER_TOPIC,
+                marker_alpha=self.copy_marker_alpha,
+            ).start()
+
+    def _catch_up(self) -> None:
+        """
+        Bring the copy up to date with `context.world`: replay the modifications made to
+        it since, the way copying it replays all of them, and take over its state.
+
+        The copy's own modifications are all rolled back by then, so it still matches
+        the world as it was when it last caught up.
+        """
+        modification_blocks = (
+            self.context.world.get_world_model_manager().model_modification_blocks
+        )
+        world = self._copied_context.world
+        with world.modify_world():
+            for block in modification_blocks[self._replayed_modification_blocks :]:
+                block.update_references_for_world_and_apply(world=world)
+            world.state.merge_state(self.context.world.state)
+        self._replayed_modification_blocks = len(modification_blocks)
 
     def discard(self) -> None:
         """
@@ -226,17 +262,22 @@ class UnderspecifiedNode(ExecutionBoundaryNode):
     those nodes are part of what this node runs rather than being skipped.
     """
 
-    _trial: Optional[ActionTrial] = field(default=None, init=False, repr=False)
-    """
-    The trial every candidate of this node is tried against.
-
-    Held across candidates so they share one copy of the world, rather than each paying
-    for its own.
-    """
-
     @property
     def designator_type(self) -> Type:
         return self.underspecified_action._type_
+
+    @property
+    def trial(self) -> ActionTrial:
+        """
+        The trial every candidate of this node is tried against.
+
+        It is the trial of this node's plan, shared with every other underspecified node
+        of the plan, so they all try their candidates in one copy of the world rather
+        than each paying for its own.
+        """
+        if self.plan.action_trial is None:
+            self.plan.action_trial = ActionTrial(context=self.context)
+        return self.plan.action_trial
 
     def _pull_next_action(self) -> Optional[ActionDescription]:
         """
@@ -281,13 +322,12 @@ class UnderspecifiedNode(ExecutionBoundaryNode):
         deep-copied test world). Once a candidate is accepted and no retry will happen,
         closing the iterator here releases those resources immediately instead of
         retaining them for this node's whole lifetime. The trial's copy of the world is
-        released for the same reason.
+        kept, since the plan's other underspecified nodes try their candidates in it
+        too.
         """
         if self._action_iterator is not None:
             self._action_iterator.close()
             self._action_iterator = None
-        if self._trial is not None:
-            self._trial.discard()
 
     def notify(self):
         # Resolution is deferred to execution time: the underspecified statement can
@@ -314,12 +354,9 @@ class UnderspecifiedNode(ExecutionBoundaryNode):
         :return: True if a new candidate was generated, False if the iterator is
             exhausted without any candidate surviving its trial.
         """
-        if self._trial is None:
-            self._trial = ActionTrial(context=self.context)
-
         action = self._pull_next_action()
         while action is not None:
-            if self._trial.succeeds(action):
+            if self.trial.succeeds(action):
                 self._attach(action)
                 self.current_candidate_sequence.notify()
                 return True
