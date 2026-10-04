@@ -141,12 +141,12 @@ class QPController:
         :param qp_data: The problem the solver failed on.
         """
         if not isinstance(qp_data, QPDataExplicit):
-            logger.info(
+            logger.warning(
                 f"The QP solver failed on a {type(qp_data).__name__}, which cannot be "
                 f"printed."
             )
             return
-        logger.info(qp_data.pretty_print_problem())
+        logger.warning(qp_data.pretty_print_problem())
         qp_data.analyze_well_posedness()
 
     def xdot_to_control_commands(self, xdot: np.ndarray) -> np.ndarray:
