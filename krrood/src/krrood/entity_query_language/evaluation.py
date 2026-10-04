@@ -7,8 +7,11 @@ pipeline without polluting the core evaluation methods.
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
+from uuid import UUID
+
 from ordered_set import OrderedSet
-from typing_extensions import Any, Optional
+from typing_extensions import Any, Dict, List, Optional, Set
 
 from krrood.entity_query_language._monitoring import monitored
 from krrood.entity_query_language.core.base_expressions import (
@@ -27,6 +30,8 @@ from krrood.entity_query_language.evaluation_context import (
 from krrood.entity_query_language.exceptions import NoExpressionFoundForGivenID
 from krrood.entity_query_language.operators.comparator import Comparator
 from krrood.entity_query_language.operators.core_logical_operators import (
+    AND,
+    OR,
     LogicalOperator,
 )
 from krrood.entity_query_language.predicate import Predicate
@@ -194,6 +199,91 @@ class InferenceRecorder(EvaluationObserver):
         )
 
         register_inference(result.bindings[expression._id_], expression, result)
+
+
+@dataclass
+class StatementTruthRecorder(EvaluationObserver):
+    """
+    Observer that records which statements of a condition held during one evaluation of
+    it.
+
+    A statement is any condition the evaluation reaches, at any depth, except the
+    conjunctions and disjunctions joining statements, since their truth follows from the
+    statements they join. A statement is judged only on the values its operator lets
+    through, for example only where the conjuncts before it hold.
+    """
+
+    condition: SymbolicExpression
+    """
+    The condition whose evaluation is recorded.
+    """
+
+    statements: Dict[UUID, SymbolicExpression] = field(default_factory=dict, init=False)
+    """
+    The statements the evaluation reached, by id, in the order it first reached them.
+    """
+
+    held_statement_ids: Set[UUID] = field(default_factory=set, init=False)
+    """
+    The ids of the statements that held for at least one of the values they were
+    evaluated on.
+    """
+
+    @classmethod
+    def from_evaluation_of(
+        cls, condition: SymbolicExpression
+    ) -> StatementTruthRecorder:
+        """
+        :param condition: The condition to evaluate.
+        :return: A recorder of one complete evaluation of *condition*.
+        """
+        recorder = cls(condition)
+        evaluation_context = create_default_evaluation_context()
+        evaluation_context.observers.append(recorder)
+        for _ in condition._evaluate_in_new_context_(evaluation_context):
+            pass
+        return recorder
+
+    def on_result_yielded(self, expression, result):
+        if not self._is_statement_(expression):
+            return
+        self.statements.setdefault(expression._id_, expression)
+        if result.is_true:
+            self.held_statement_ids.add(expression._id_)
+
+    def _is_statement_(self, expression: SymbolicExpression) -> bool:
+        """
+        :param expression: An expression the evaluation reached.
+        :return: Whether *expression* is a statement of the recorded condition.
+        """
+        if isinstance(expression, (AND, OR)):
+            return False
+        return expression._id_ == self.condition._id_ or is_condition_participant(
+            expression
+        )
+
+    @property
+    def statements_that_held(self) -> List[SymbolicExpression]:
+        """
+        :return: The statements that held for at least one of the values they were
+            evaluated on.
+        """
+        return [
+            statement
+            for statement_id, statement in self.statements.items()
+            if statement_id in self.held_statement_ids
+        ]
+
+    @property
+    def statements_that_never_held(self) -> List[SymbolicExpression]:
+        """
+        :return: The statements that held for none of the values they were evaluated on.
+        """
+        return [
+            statement
+            for statement_id, statement in self.statements.items()
+            if statement_id not in self.held_statement_ids
+        ]
 
 
 def create_default_evaluation_context() -> EvaluationContext:

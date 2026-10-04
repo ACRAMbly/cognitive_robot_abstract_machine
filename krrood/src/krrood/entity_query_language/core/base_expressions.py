@@ -557,7 +557,23 @@ class SymbolicExpression(
             create_default_evaluation_context,
         )
 
-        evaluation_context = create_default_evaluation_context()
+        yield from self._evaluate_in_new_context_(
+            create_default_evaluation_context(), sources
+        )
+
+    def _evaluate_in_new_context_(
+        self,
+        evaluation_context: EvaluationContext,
+        sources: Optional[OperationResult] = None,
+    ) -> Iterator[OperationResult]:
+        """
+        Start an evaluation of this expression in a context no evaluation has used yet.
+
+        :param evaluation_context: The new context the evaluation runs in.
+        :param sources: The current OperationResult carrying bindings of variables, or
+            None.
+        :return: An iterator of OperationResult instances.
+        """
         evaluation_context.active_conditions_root.set_active_root_if_not_set(
             self._conditions_root_, has_condition=self._has_condition_
         )

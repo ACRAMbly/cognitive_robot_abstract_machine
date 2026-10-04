@@ -6,31 +6,87 @@ from krrood.entity_query_language.factories import (
     and_,
     get_false_statements,
     get_true_statements,
+    not_,
+    or_,
     variable,
 )
 
 from ...dataset.example_classes import KRROODPosition
 from ...dataset.value_comparisons import IsGreaterThan
 
-# %% which children are statements
+# %% which expressions are statements
+
+
+def test_a_statement_on_its_own_is_a_statement_of_itself():
+    position = variable(KRROODPosition, [KRROODPosition(0.0, 1.0, 0.0)])
+    comparison = IsGreaterThan(position.x, position.y)
+
+    statements = get_false_statements(comparison)
+
+    assert [statement._id_ for statement in statements] == [comparison._id_]
 
 
 def test_attributes_a_statement_takes_are_not_statements_of_it():
-    position = variable(KRROODPosition, [KRROODPosition(0.0, 1.0, 0.0)])
+    position = variable(KRROODPosition, [KRROODPosition(1.0, 2.0, 0.0)])
 
-    statement = IsGreaterThan(position.x, position.y)
+    statements = get_true_statements(IsGreaterThan(position.x, position.y))
 
-    assert get_false_statements(statement) == []
-    assert get_true_statements(statement) == []
+    assert statements == []
 
 
 def test_calculated_operands_of_a_statement_are_not_statements_of_it():
     position = variable(KRROODPosition, [KRROODPosition(0.0, 1.0, 0.0)])
 
-    statement = IsGreaterThan(position.x + 1, position.y + 1)
+    statements = get_true_statements(IsGreaterThan(position.x + 1, position.y + 1))
 
-    assert get_false_statements(statement) == []
-    assert get_true_statements(statement) == []
+    assert statements == []
+
+
+def test_statements_of_nested_conjunctions_are_the_conjuncts():
+    position = variable(KRROODPosition, [KRROODPosition(2.0, 2.0, 0.0)])
+    large_x = IsGreaterThan(position.x, 1.0)
+    large_y = IsGreaterThan(position.y, 1.0)
+    large_z = IsGreaterThan(position.z, 1.0)
+
+    statements = get_true_statements(and_(large_x, large_y, large_z))
+
+    assert [statement._id_ for statement in statements] == [
+        large_x._id_,
+        large_y._id_,
+    ]
+
+
+def test_a_false_first_conjunct_of_nested_conjunctions_is_a_false_statement():
+    position = variable(KRROODPosition, [KRROODPosition(0.0, 2.0, 2.0)])
+    large_x = IsGreaterThan(position.x, 1.0)
+    large_y = IsGreaterThan(position.y, 1.0)
+    large_z = IsGreaterThan(position.z, 1.0)
+
+    statements = get_false_statements(and_(large_x, large_y, large_z))
+
+    assert [statement._id_ for statement in statements] == [large_x._id_]
+
+
+def test_a_negation_that_does_not_hold_is_a_false_statement():
+    position = variable(KRROODPosition, [KRROODPosition(2.0, 0.0, 0.0)])
+    negation = not_(IsGreaterThan(position.x, 1.0))
+
+    statements = get_false_statements(negation)
+
+    assert [statement._id_ for statement in statements] == [negation._id_]
+
+
+def test_every_alternative_that_does_not_hold_is_a_false_statement():
+    position = variable(KRROODPosition, [KRROODPosition(0.0, 0.0, 0.0)])
+    large_x = IsGreaterThan(position.x, 1.0)
+    large_y = IsGreaterThan(position.y, 1.0)
+
+    statements = get_false_statements(or_(large_x, large_y))
+
+    assert [statement._id_ for statement in statements] == [
+        large_x._id_,
+        large_y._id_,
+    ]
 
 
 # %% selecting statements by truth

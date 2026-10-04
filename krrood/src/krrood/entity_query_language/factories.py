@@ -11,7 +11,6 @@ from uuid import UUID
 
 from typing_extensions import (
     Any,
-    Dict,
     Iterable,
     List,
     Optional,
@@ -38,7 +37,7 @@ from krrood.entity_query_language.core.mapped_variable import (
     HasSymbolicOperations,
     Attribute,
 )
-from krrood.entity_query_language.evaluation import is_condition_participant
+from krrood.entity_query_language.evaluation import StatementTruthRecorder
 from krrood.entity_query_language.core.variable import (
     DomainType,
     Literal,
@@ -882,59 +881,25 @@ def distinct(
             raise UnsupportedExpressionTypeForDistinct(type(expression))
 
 
-def _statements_that_held_(
-    statement: SymbolicExpression, held: bool
-) -> List[SymbolicExpression]:
-    """
-    Evaluate the statement once and select those of its conditions that held, or that
-    never held, for the values the other conditions allow.
-
-    A condition is only evaluated on the values its operator lets through, for example
-    only where the conditions before it in a conjunction hold. A condition that was
-    never evaluated is selected by neither choice.
-
-    :param statement: The statement whose conditions are selected.
-    :param held: Whether to select the conditions that held for at least one value,
-        rather than those that held for none.
-    :return: The selected conditions, in the order the statement holds them.
-    """
-    conditions = [
-        child
-        for child in statement._children_
-        if is_condition_participant(child, parent=statement)
-    ]
-    held_by_condition_id: Dict[UUID, bool] = {}
-    for result in statement._evaluate_():
-        for condition in conditions:
-            if condition._id_ not in result.bindings:
-                continue
-            held_by_condition_id[condition._id_] = held_by_condition_id.get(
-                condition._id_, False
-            ) or not condition._result_is_false_(result)
-    return [
-        condition
-        for condition in conditions
-        if condition._id_ in held_by_condition_id
-        and held_by_condition_id[condition._id_] == held
-    ]
-
-
 def get_false_statements(statement: SymbolicExpression) -> List[SymbolicExpression]:
     """
-    :param statement: The statement whose conditions are checked.
-    :return: The conditions of the statement that hold for none of the values the other
-        conditions allow.
+    :param statement: The condition whose statements are checked.
+    :return: The statements of the condition that held for none of the values they were
+        evaluated on, see :class:`StatementTruthRecorder`. In a conjunction that is the
+        first conjunct that could not hold together with the conjuncts before it.
     """
-    return _statements_that_held_(statement, held=False)
+    return StatementTruthRecorder.from_evaluation_of(
+        statement
+    ).statements_that_never_held
 
 
 def get_true_statements(statement: SymbolicExpression) -> List[SymbolicExpression]:
     """
-    :param statement: The statement whose conditions are checked.
-    :return: The conditions of the statement that hold for at least one of the values
-        the other conditions allow.
+    :param statement: The condition whose statements are checked.
+    :return: The statements of the condition that held for at least one of the values
+        they were evaluated on, see :class:`StatementTruthRecorder`.
     """
-    return _statements_that_held_(statement, held=True)
+    return StatementTruthRecorder.from_evaluation_of(statement).statements_that_held
 
 
 def evaluate_condition(condition: ConditionType) -> bool:
