@@ -4,7 +4,6 @@ Selecting the statements of a condition by whether they hold.
 
 from krrood.entity_query_language.factories import (
     and_,
-    get_conditioned_statements,
     get_false_statements,
     get_true_statements,
     variable,
@@ -13,36 +12,25 @@ from krrood.entity_query_language.factories import (
 from ...dataset.example_classes import KRROODPosition
 from ...dataset.value_comparisons import IsGreaterThan
 
-
-def accept_every_result(truths) -> bool:
-    """
-    :param truths: The truth of every result a statement yielded.
-    :return: Always true, so every statement is selected.
-    """
-    return True
-
-
 # %% which children are statements
 
 
 def test_attributes_a_statement_takes_are_not_statements_of_it():
     position = variable(KRROODPosition, [KRROODPosition(0.0, 1.0, 0.0)])
 
-    statements = get_conditioned_statements(
-        IsGreaterThan(position.x, position.y), accept_every_result
-    )
+    statement = IsGreaterThan(position.x, position.y)
 
-    assert statements == []
+    assert get_false_statements(statement) == []
+    assert get_true_statements(statement) == []
 
 
 def test_calculated_operands_of_a_statement_are_not_statements_of_it():
     position = variable(KRROODPosition, [KRROODPosition(0.0, 1.0, 0.0)])
 
-    statements = get_conditioned_statements(
-        IsGreaterThan(position.x + 1, position.y + 1), accept_every_result
-    )
+    statement = IsGreaterThan(position.x + 1, position.y + 1)
 
-    assert statements == []
+    assert get_false_statements(statement) == []
+    assert get_true_statements(statement) == []
 
 
 # %% selecting statements by truth

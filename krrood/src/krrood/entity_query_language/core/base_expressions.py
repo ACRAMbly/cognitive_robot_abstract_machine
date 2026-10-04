@@ -360,6 +360,10 @@ class SymbolicExpression(
         """
         Replace a child expression with a new child expression.
 
+        Every reference this expression holds to *old_child* is replaced, since an
+        expression filling several operands is one and the same operand in each of them.
+        Other parents of *old_child* keep it.
+
         :param old_child: The old child expression.
         :param new_child: The new child expression.
         """
@@ -377,7 +381,7 @@ class SymbolicExpression(
         self, old_child: SymbolicExpression, new_child: SymbolicExpression
     ):
         """
-        Replace a child field with a new child expression.
+        Replace every child field that holds *old_child* with *new_child*.
 
         :param old_child: The old child expression.
         :param new_child: The new child expression.
