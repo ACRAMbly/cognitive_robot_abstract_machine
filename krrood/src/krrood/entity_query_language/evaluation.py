@@ -7,8 +7,11 @@ pipeline without polluting the core evaluation methods.
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
+from uuid import UUID
+
 from ordered_set import OrderedSet
-from typing_extensions import Any, Optional
+from typing_extensions import Any, Dict, List, Optional
 
 from krrood.entity_query_language._monitoring import monitored
 from krrood.entity_query_language.core.base_expressions import (
@@ -194,6 +197,48 @@ class InferenceRecorder(EvaluationObserver):
         )
 
         register_inference(result.bindings[expression._id_], expression, result)
+
+
+@dataclass
+class ConditionTruthRecorder(EvaluationObserver):
+    """
+    Observer that records the truth of every result the conditions it watches yield
+    during an evaluation.
+    """
+
+    conditions: List[SymbolicExpression]
+    """
+    The conditions whose results are recorded.
+    """
+
+    truths: Dict[UUID, List[bool]] = field(default_factory=dict, init=False)
+    """
+    The truth of every result each condition yielded, by the condition's id.
+
+    A condition that yielded no result, such as one skipped after an earlier condition
+    ruled out every value, has no entry.
+    """
+
+    def on_result_yielded(self, expression, result):
+        if not any(expression is condition for condition in self.conditions):
+            return
+        self.truths.setdefault(expression._id_, []).append(result.is_true)
+
+    def record_evaluation_of(self, statement: SymbolicExpression) -> None:
+        """
+        Evaluate *statement* once, recording the truth of every result its watched
+        conditions yield.
+
+        :param statement: The statement to evaluate.
+        """
+        evaluation_context = create_default_evaluation_context()
+        evaluation_context.observers.append(self)
+        evaluation_context.active_conditions_root.set_active_root_if_not_set(
+            statement._conditions_root_, has_condition=statement._has_condition_
+        )
+        with evaluation_context.as_current():
+            for _ in statement._evaluate_():
+                pass
 
 
 def create_default_evaluation_context() -> EvaluationContext:

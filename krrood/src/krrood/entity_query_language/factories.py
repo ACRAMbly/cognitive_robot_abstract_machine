@@ -37,6 +37,10 @@ from krrood.entity_query_language.core.mapped_variable import (
     HasSymbolicOperations,
     Attribute,
 )
+from krrood.entity_query_language.evaluation import (
+    ConditionTruthRecorder,
+    is_condition_participant,
+)
 from krrood.entity_query_language.core.variable import (
     DomainType,
     Literal,
@@ -881,43 +885,50 @@ def distinct(
 
 
 def get_conditioned_statements(
-    statement, condition: Callable[[Iterable[Any]], bool]
+    statement: SymbolicExpression, is_selected: Callable[[List[bool]], bool]
 ) -> List[SymbolicExpression]:
     """
-    Iterates over all sub-statements of the statement and returns all statements that
-    satisfy the condition.
+    Evaluate the statement once and select those of its conditions whose results satisfy
+    *is_selected*.
 
-    :param statement: The statement to iterate over.
-    :param condition: The condition to evaluate each sub-statement's results against.
-    :return: A list of sub-statements that satisfy the condition.
+    Each condition is judged by the results it yields within that one evaluation, so only
+    for the values the other conditions allow. A condition that yields no result, such as
+    one skipped after an earlier condition ruled out every value, is not selected.
+
+    :param statement: The statement whose conditions are selected.
+    :param is_selected: Whether a condition is selected, given the truth of every result
+        it yielded.
+    :return: The selected conditions, in the order the statement holds them.
     """
-    condition_results = []
-    for node in [
+    conditions = [
         child
         for child in statement._children_
-        if child._id_ != statement._id_ and not isinstance(child, (Variable, Attribute))
-    ]:
-        node_result = node.evaluate()
-        if condition(node_result):
-            condition_results.append(node)
-
-    return condition_results
+        if is_condition_participant(child, parent=statement)
+    ]
+    recorder = ConditionTruthRecorder(conditions)
+    recorder.record_evaluation_of(statement)
+    return [
+        condition
+        for condition in conditions
+        if condition._id_ in recorder.truths
+        and is_selected(recorder.truths[condition._id_])
+    ]
 
 
 def get_false_statements(statement: SymbolicExpression) -> List[SymbolicExpression]:
     """
-    The false statements of all statements of this condition.
-
-    :return: The false statements of all statements of this condition.
+    :param statement: The statement whose conditions are checked.
+    :return: The conditions of the statement that hold for none of the values the other
+        conditions allow.
     """
-    return get_conditioned_statements(statement, lambda results: not any(results))
+    return get_conditioned_statements(statement, lambda truths: not any(truths))
 
 
 def get_true_statements(statement: SymbolicExpression) -> List[SymbolicExpression]:
     """
-    The true statements of all statements of this condition.
-
-    :return: The true statements of this condition.
+    :param statement: The statement whose conditions are checked.
+    :return: The conditions of the statement that hold for at least one of the values
+        the other conditions allow.
     """
     return get_conditioned_statements(statement, any)
 
