@@ -369,9 +369,10 @@ class SymbolicExpression(
         """
         if old_child is new_child:
             return
-        _children_ids_ = [v._id_ for v in self._children_]
-        child_idx = _children_ids_.index(old_child._id_)
-        self._children_[child_idx] = new_child
+        children_ids = [child._id_ for child in self._children_]
+        old_child_index = children_ids.index(old_child._id_)
+        if new_child._id_ not in children_ids:
+            self._children_[old_child_index] = new_child
         new_child._parent_ = self
         old_child._remove_parent_(self)
         self._replace_child_field_(old_child, new_child)
@@ -1093,7 +1094,7 @@ class UnaryExpression(SymbolicExpression, ABC):
     def _replace_child_field_(
         self, old_child: SymbolicExpression, new_child: SymbolicExpression
     ):
-        if self._child_ is old_child:
+        if self._child_._id_ == old_child._id_:
             self._child_ = new_child
 
     @property
@@ -1156,9 +1157,9 @@ class BinaryExpression(SymbolicExpression, ABC):
     def _replace_child_field_(
         self, old_child: SymbolicExpression, new_child: SymbolicExpression
     ):
-        if self.left is old_child:
+        if self.left._id_ == old_child._id_:
             self.left = new_child
-        if self.right is old_child:
+        if self.right._id_ == old_child._id_:
             self.right = new_child
 
     def _is_equality_literal_comparator_or_conjunction_(self) -> bool:
