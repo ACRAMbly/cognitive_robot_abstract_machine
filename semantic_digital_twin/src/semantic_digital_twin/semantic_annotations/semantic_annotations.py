@@ -15,6 +15,7 @@ from semantic_digital_twin.datastructures.alignment import AlignmentPair
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 from semantic_digital_twin.datastructures.variables import SpatialVariables
 from semantic_digital_twin.exceptions import (
+    NoGraspGeometry,
     InvalidPlaneDimensions,
     InvalidHingeActiveAxis,
     MissingSemanticAnnotationError,
@@ -1121,8 +1122,11 @@ class Bowl(HasSupportingSurface, HasGraspCandidates, IsPerceivable):
 
         A bowl offers nothing to grip at its own origin, which is inside it, so the wall
         of its rim is grasped instead.
+
+        :raises NoGraspGeometry: If the root body has no mesh, or no wall where the rim
+            is traced, to grasp.
         """
-        return [
+        grasps = [
             GraspCandidate(
                 self,
                 Pose(
@@ -1135,16 +1139,22 @@ class Bowl(HasSupportingSurface, HasGraspCandidates, IsPerceivable):
             )
             for section in self._rim_wall_sections()
         ]
+        if not grasps:
+            raise NoGraspGeometry(self)
+        return grasps
 
     def _rim_wall_sections(self) -> Iterator[RimWallSection]:
         """
-        Trace the bowl's wall outward from its axis, once per grasp direction.
+        Cast one ray per grasp direction outward from the bowl's axis, just below the
+        rim, and take the middle between its hits as the wall.
 
-        A ray outward from the axis enters and leaves the wall, so the wall lies between
-        its two hits. Read that way, each section follows the wall wherever it actually
-        runs, rather than a circle fitted through an irregular rim.
+        :return: The wall section hit in each direction; directions that miss the mesh
+            are skipped.
+        :raises NoGraspGeometry: If the root body has no mesh.
         """
         mesh = self.root.combined_mesh
+        if mesh is None:
+            raise NoGraspGeometry(self)
         yaws = np.linspace(0, 2 * np.pi, self.grasp_candidate_count, endpoint=False)
         directions = np.column_stack([np.cos(yaws), np.sin(yaws), np.zeros(len(yaws))])
         bowl_center = mesh.bounds.mean(axis=0)
@@ -1537,12 +1547,12 @@ class Cutlery(HasGraspCandidates):
 
     def grasp_candidates(self) -> List[GraspCandidate]:
         """
-        The grasp that reaches down onto the piece and closes across it.
-
-        Cutlery lies flat, so there is nothing to take hold of from the side. The
-        fingers have to come from above and close across the piece rather than along
-        it, or they close on nothing.
+        :return: The grasp from above that closes across the piece, which lies flat.
+        :raises NoGraspGeometry: If the root body has no collision geometry to tell
+            which way the piece lies.
         """
+        if not self.root.has_collision():
+            raise NoGraspGeometry(self)
         bounding_box = self.root.collision.as_bounding_box_collection_in_frame(
             self.root
         ).bounding_box()
@@ -1635,7 +1645,7 @@ class Human(Agent):
 @dataclass(eq=False)
 class Parcel(HasGraspCandidates):
     """
-    Represents a Parcel one may find in a amazon warehouse.
+    A parcel, as handled in a warehouse.
     """
 
 

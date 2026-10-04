@@ -29,25 +29,18 @@ if TYPE_CHECKING:
 @dataclass
 class ActionTrial:
     """
-    Tries grounded actions against a disposable copy of the world, to check that a
-    candidate can succeed before it is attempted for real.
+    Tries grounded actions against a copy of the world, to check that a candidate can
+    succeed before it is attempted for real.
 
-    One copy serves every candidate: after an attempt the copy is rolled back to the
-    model version it was at and its state is restored, so the next candidate starts from
-    the same point without another copy having to be made. Whenever `context.world` has
-    itself moved on, the copy is caught up with it instead of being taken anew, so a
-    trial always reflects the state and model changes actually in it.
+    One copy serves every candidate: after each attempt its model is rolled back and its
+    state restored, and when `context.world` has changed since, the copy replays those
+    model and state changes instead of being taken anew. Collision rules changed after
+    the copy was taken are not carried over.
 
-    The copy is never connected to a synchronizer, so nothing a trial does is published,
-    and a trial always runs under a forced
-    :attr:`~coraplex.datastructures.enums.ExecutionType.SIMULATED` execution regardless
-    of the execution type the real attempt will use. Conditions are always evaluated
-    too: whether a candidate is worth attempting for real is exactly what its pre- and
-    postconditions decide, so a plan that skips them elsewhere does not skip them here.
-
-    While the context is debugging, the copy is published to RViz under its own frame
-    prefix and marker topic, so the candidates being tried can be watched next to the
-    world they were grounded in.
+    Trials never publish to a synchronizer, always run as
+    :attr:`~coraplex.datastructures.enums.ExecutionType.SIMULATED`, and always evaluate
+    pre- and postconditions. While the context is debugging, the copy is shown in RViz
+    under its own frame prefix and marker topic.
     """
 
     context: Context
@@ -121,9 +114,12 @@ class ActionTrial:
         candidate_sequence.add_child(candidate)
         version = world.get_world_model_manager().version
 
-        with world.reset_state_context(), ExecutionEnvironment(
-            ExecutionType.SIMULATED,
-            collision_avoidance=GiskardExecutable.collision_avoidance,
+        with (
+            world.reset_state_context(),
+            ExecutionEnvironment(
+                ExecutionType.SIMULATED,
+                collision_avoidance=GiskardExecutable.collision_avoidance,
+            ),
         ):
             try:
                 candidate_sequence.perform()

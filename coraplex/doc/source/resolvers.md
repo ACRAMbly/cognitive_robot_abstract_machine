@@ -24,5 +24,6 @@ it; whether the robot can do its task from one of them is found out by trying th
 ## Customising resolution
 
 To change how a particular kind of location is generated, provide or extend a
-{class}`~coraplex.locations.base.Location` in {mod}`coraplex.locations` rather than adding a separate resolver module. Custom resolution logic should keep the same
+{class}`~coraplex.locations.base.Location` in {mod}`coraplex.locations` rather than
+adding a separate resolver module. Custom resolution logic should keep the same
 interface as the designator it grounds so it stays a drop-in replacement.

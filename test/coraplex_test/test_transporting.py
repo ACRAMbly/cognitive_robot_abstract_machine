@@ -24,6 +24,7 @@ from coraplex.robot_plans.actions.core.navigation import (
 )
 from coraplex.robot_plans.actions.composite.facing import FaceAndLookAtAction
 from coraplex.robot_plans.actions.composite.transporting import (
+    LimitsItsCandidates,
     MoveAndOpenAction,
     MoveAndPickUpAction,
     MoveAndPlaceAction,
@@ -153,25 +154,6 @@ def test_a_transport_grounds_the_steps_it_is_given(pr2_apartment_context):
     ]
 
 
-def test_a_transport_tries_a_bounded_number_of_candidates(pr2_apartment_context):
-    """
-    Each standing pose is tried by running the step from it, so a step that can succeed
-    from nowhere has to give up after a fixed number of them.
-    """
-    world, robot, context = pr2_apartment_context
-    transport = _transport_of_the_milk(world, context)
-    sequential([transport], context)
-
-    limits = [
-        child.underspecified_action._get_expression_()._limit_
-        for child in transport._action_plan.children
-        if isinstance(child, UnderspecifiedNode)
-    ]
-
-    assert limits == [transport.candidates_to_try] * len(limits)
-    assert limits
-
-
 def test_a_transport_leaves_the_torso_where_it_is(pr2_apartment_context):
     world, robot, context = pr2_apartment_context
     transport = _transport_of_the_milk(world, context)
@@ -289,19 +271,67 @@ def test_a_pick_and_place_grounds_the_steps_it_is_given(pr2_apartment_context):
     ] == [PickUpAction, PlaceAction]
 
 
-def test_a_pick_and_place_tries_a_bounded_number_of_candidates(pr2_apartment_context):
-    world, robot, context = pr2_apartment_context
-    pick_and_place = _pick_and_place_of_the_milk(world, robot.right_arm)
-    sequential([pick_and_place], context)
-
-    limits = [
+def _candidate_limits(action: LimitsItsCandidates) -> List[int]:
+    """
+    :return: How many candidates each step of `action` that tries candidates is limited
+        to, read off the queries the steps are grounded from.
+    """
+    return [
         child.underspecified_action._get_expression_()._limit_
-        for child in pick_and_place._action_plan.children
+        for child in action._action_plan.children
         if isinstance(child, UnderspecifiedNode)
     ]
 
-    assert limits == [pick_and_place.candidates_to_try] * len(limits)
+
+@pytest.mark.parametrize(
+    "build",
+    [
+        lambda world, robot, context: _transport_of_the_milk(world, context),
+        lambda world, robot, context: _pick_and_place_of_the_milk(
+            world, robot.right_arm
+        ),
+    ],
+    ids=["transport", "pick-and-place"],
+)
+def test_an_action_tries_a_bounded_number_of_candidates(pr2_apartment_context, build):
+    """
+    Each candidate is tried by running the step with it, so a step that can succeed with
+    none has to give up after a fixed number of them.
+    """
+    world, robot, context = pr2_apartment_context
+    action = build(world, robot, context)
+    sequential([action], context)
+
+    limits = _candidate_limits(action)
+
     assert limits
+    assert limits == [action.candidates_to_try] * len(limits)
+
+
+def test_a_transport_of_grounded_steps_limits_nothing(pr2_apartment_context):
+    """
+    A step that is already grounded tries no candidates, so there is nothing to limit.
+    """
+    world, robot, context = pr2_apartment_context
+    milk = world.get_semantic_annotations_by_type(Milk)[0]
+    standing_position = Pose(reference_frame=world.root)
+    transport = TransportAction(
+        pick_up=MoveAndPickUpAction.from_standing_position(
+            standing_position=standing_position,
+            grasp=milk.grasp_candidates()[0],
+            arm=context.robot.right_arm,
+        ),
+        place=MoveAndPlaceAction.from_standing_position(
+            standing_position=standing_position,
+            target_location=Pose.from_xyz_rpy(
+                4.0, 1.5, 0.9, reference_frame=world.root
+            ),
+            object_designator=milk,
+        ),
+    )
+    sequential([transport], context)
+
+    assert _candidate_limits(transport) == []
 
 
 # %% moving to an object and picking it up
@@ -324,7 +354,7 @@ def test_move_and_pick_up_takes_the_grasp_it_was_given(pr2_apartment_context):
     pick_ups = [
         child
         for child in move_and_pick_up._action_plan.children
-        if isinstance(getattr(child, "designator", None), PickUpAction)
+        if isinstance(child, ActionNode) and isinstance(child.designator, PickUpAction)
     ]
 
     assert [pick_up.designator.grasp for pick_up in pick_ups] == [grasp]
@@ -347,7 +377,7 @@ def test_move_and_pick_up_approaches_with_the_clearances_it_was_given(
     [pick_up] = [
         child.designator
         for child in move_and_pick_up._action_plan.children
-        if isinstance(getattr(child, "designator", None), PickUpAction)
+        if isinstance(child, ActionNode) and isinstance(child.designator, PickUpAction)
     ]
 
     assert (pick_up.approach_clearance, pick_up.retreat_distance) == (
@@ -460,8 +490,9 @@ def _assert_each_standing_pose_keeps_the_closest_grasps(
     """
     pick_ups_by_standing_pose = {}
     for pick_up in pick_ups:
+        standing_position = pick_up.navigate.target_location
         pick_ups_by_standing_pose.setdefault(
-            id(pick_up.navigate.target_location), []
+            tuple(np.round(standing_position.to_np(), 6).ravel()), []
         ).append(pick_up)
     grasps = graspable.grasp_candidates()
     for pick_ups_from_one_pose in pick_ups_by_standing_pose.values():
@@ -531,6 +562,28 @@ def test_grasps_tied_for_the_closest_are_still_only_as_many_as_asked_for(
     grasp = world.get_semantic_annotations_by_type(Milk)[0].grasp_candidates()[0]
     tied = [grasp, _raised(grasp, 0.0)]
     standing_position = _standing_in_front_of(grasp, world)
+
+    closest = [
+        candidate
+        for candidate in tied
+        if IsAmongTheClosestGraspsTo(
+            candidate, standing_position, tied, number_of_grasps=1
+        )()
+    ]
+
+    assert closest == [grasp]
+
+
+def test_grasps_at_the_standing_position_itself_still_rank(pr2_apartment_context):
+    """
+    A grasp right where the robot stands has no direction it is approached from, and
+    grasps tied there still count no more of themselves as the closest than were asked
+    for.
+    """
+    world, robot, context = pr2_apartment_context
+    grasp = world.get_semantic_annotations_by_type(Milk)[0].grasp_candidates()[0]
+    tied = [grasp, _raised(grasp, 0.0)]
+    standing_position = world.transform(grasp.root_T_grasp, world.root)
 
     closest = [
         candidate

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from contextlib import AbstractContextManager, ExitStack, nullcontext
-from datetime import datetime
+from datetime import datetime, timedelta
 from dataclasses import dataclass, field
 
 from typing_extensions import Callable, List, Dict, ClassVar, Optional, TYPE_CHECKING
@@ -13,6 +13,7 @@ from coraplex.exceptions import (
 )
 from coraplex.plans.failures import (
     EmptyUnderspecified,
+    MotionExceededSimulationTimeLimit,
     MotionMadeNoProgress,
     MotionViolatedCollisionAvoidance,
     PlanFailure,
@@ -235,6 +236,15 @@ class GiskardExecutable(Executable):
     :py:class:`pycram.motion_executor.ExecutionEnvironment`.
     """
 
+    simulation_time_limit: ClassVar[timedelta] = timedelta(minutes=2)
+    """
+    The simulated time after which a simulated motion is given up on, however it is
+    progressing.
+
+    Far longer than any motion takes, so it only ends a run that would otherwise tick
+    forever.
+    """
+
     collision_avoidance: ClassVar[bool] = False
     """
     Whether the robot avoids colliding with its surroundings and with itself, managed by
@@ -349,6 +359,8 @@ class GiskardExecutable(Executable):
         type.
 
         :raises MotionMadeNoProgress: When the motion stops approaching its goal.
+        :raises MotionExceededSimulationTimeLimit: When a simulated motion runs for
+            longer than :attr:`simulation_time_limit`.
         :raises MotionViolatedCollisionAvoidance: When the motion brings bodies closer
             to each other than collision avoidance allows.
         """
@@ -379,24 +391,28 @@ class GiskardExecutable(Executable):
         The chart's own stall monitor decides when a motion is hopeless, so a motion
         that keeps converging is never cut off for taking many ticks.
 
+        The recorded motion states are projected onto the motion nodes of the plan
+        while the chart runs.
+
         :raises NoProgressError: When the motion stops approaching its goal. The error
             names the tasks that stalled, and :meth:`execute` turns it into a
             :class:`~coraplex.plans.failures.MotionMadeNoProgress`.
-
-        The recorded motion states are projected onto the motion nodes of the plan
-        while the chart runs.
+        :raises MotionExceededSimulationTimeLimit: When the motion runs for longer than
+            :attr:`simulation_time_limit`.
         """
+        qp_controller_config = QPControllerConfig(
+            target_frequency=50, prediction_horizon=4, verbose=False
+        )
         executor = Ros2Executor(
             context=MotionStatechartContext(
                 world=self.context.world,
-                qp_controller_config=QPControllerConfig(
-                    target_frequency=50, prediction_horizon=4, verbose=False
-                ),
+                qp_controller_config=qp_controller_config,
             ),
             ros_node=self.context.ros_node,
         )
-        # A chart that gives up cancels itself, which raises out of the tick doing it.
-        # The robot is stopped and the chart torn down either way.
+        time_limit = GiskardExecutable.simulation_time_limit
+        maximum_ticks = time_limit.total_seconds() / qp_controller_config.control_dt
+        # Stop the robot and tear the chart down even when a tick raises.
         with ExitStack() as cleanup:
             history = MotionPlanHistory(self.motion_state_chart, self.motion_mappings)
             cleanup.callback(history.stop)
@@ -407,8 +423,12 @@ class GiskardExecutable(Executable):
             cleanup.callback(executor.set_velocity_acceleration_jerk_to_zero)
             try:
                 executor.compile(self.motion_state_chart)
+                ticks = 0
                 while not executor.motion_statechart.is_end_motion():
+                    if ticks >= maximum_ticks:
+                        raise MotionExceededSimulationTimeLimit(time_limit)
                     executor.tick()
+                    ticks += 1
                 history.end_active_motions()
             except BaseException as error:
                 history.end_active_motions(

@@ -8,6 +8,7 @@ nodes that terminate the chart, which depend on the execution type.
 """
 
 from copy import deepcopy
+from datetime import timedelta
 
 import pytest
 from typing_extensions import List
@@ -17,6 +18,7 @@ from giskardpy.motion_statechart.goals.collision_avoidance import (
     SelfCollisionAvoidance,
 )
 from coraplex.plans.failures import (
+    MotionExceededSimulationTimeLimit,
     MotionMadeNoProgress,
     MotionViolatedCollisionAvoidance,
 )
@@ -28,7 +30,6 @@ from giskardpy.motion_statechart.graph_node import (
     EndMotion,
     Goal,
     MotionStatechartNode,
-    Task,
 )
 from giskardpy.motion_statechart.monitors.payload_monitors import (
     ThreadedPredicateMonitor,
@@ -40,7 +41,6 @@ from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 from semantic_digital_twin.robots.tiago import Tiago
 from semantic_digital_twin.semantic_annotations.mixins import GraspCandidate
 from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix
-from semantic_digital_twin.spatial_types.spatial_types import Pose
 from semantic_digital_twin.world_description.connections import FixedConnection
 from semantic_digital_twin.world_description.geometry import Sphere
 from semantic_digital_twin.world_description.shape_collection import ShapeCollection
@@ -54,6 +54,7 @@ from coraplex.execution_environment import (
     simulated_robot,
 )
 from coraplex.exceptions import ConditionNotSatisfied
+from coraplex.plans.executables import GiskardExecutable
 from coraplex.plans.factories import execute_single
 from coraplex.robot_plans.actions.core.pick_up import ReachAction
 from coraplex.robot_plans.actions.core.robot_body import MoveTorsoAction
@@ -187,11 +188,9 @@ def test_execution_does_not_add_condition_monitors(
 
     chart = reach_action_executable.motion_state_chart
     assert chart.get_nodes_by_type(ThreadedPredicateMonitor) == []
-    assert [
-        cancel
-        for cancel in chart.get_nodes_by_type(CancelMotion)
-        if isinstance(cancel.exception, ConditionNotSatisfied)
-    ] == []
+    # The only way out of the chart is giving up on a motion that stopped converging.
+    [progress_cancel] = chart.get_nodes_by_type(CancelMotion)
+    assert not isinstance(progress_cancel.exception, ConditionNotSatisfied)
 
 
 # %% wiring conditions into a chart
@@ -340,6 +339,19 @@ def test_a_motion_that_stops_approaching_its_goal_is_given_up_on(
     with simulated_robot:
         with pytest.raises(MotionMadeNoProgress):
             executable.execute()
+
+
+def test_a_motion_that_outlasts_the_simulation_time_limit_is_given_up_on(
+    reach_action_executable, monkeypatch
+):
+    """
+    A simulated motion is given up on once it exceeds the simulation time limit.
+    """
+    monkeypatch.setattr(GiskardExecutable, "simulation_time_limit", timedelta(0))
+
+    with simulated_robot:
+        with pytest.raises(MotionExceededSimulationTimeLimit):
+            reach_action_executable.execute()
 
 
 def test_a_motion_that_violates_collision_avoidance_fails_as_a_plan_failure(

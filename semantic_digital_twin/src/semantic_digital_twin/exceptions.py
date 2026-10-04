@@ -26,6 +26,7 @@ from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 if TYPE_CHECKING:
     from semantic_digital_twin.adapters.ros.messages import MetaData
     from semantic_digital_twin.semantic_annotations.mixins import (
+        HasGraspCandidates,
         HasRootBody,
         HasSupportingSurface,
     )
@@ -1881,6 +1882,31 @@ class NothingHeld(UsageError):
         return (
             "check that a body is attached below the end effector's tool frame before "
             "reading the grasp it is held by."
+        )
+
+
+@dataclass
+class NoGraspGeometry(UsageError):
+    """
+    Raised when an object's grasps are derived from its shape, but its root body has no
+    shape to derive them from.
+    """
+
+    graspable: HasGraspCandidates
+    """
+    The annotation whose grasps were asked for.
+    """
+
+    def error_message(self) -> str:
+        return (
+            f"The grasps of '{self.graspable.name}' follow its shape, but its root body "
+            f"'{self.graspable.root.name}' offers none to follow."
+        )
+
+    def suggest_correction(self) -> str:
+        return (
+            "give the root body collision geometry, or annotate the object with a type "
+            "whose grasps do not depend on its shape."
         )
 
 

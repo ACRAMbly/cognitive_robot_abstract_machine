@@ -360,10 +360,14 @@ class Plan:
 
         :param node: The completed node.
         """
-        for callback in self.node_callbacks:
-            callback.on_end(node)
-        if node is self.root and self.action_trial is not None:
-            self.action_trial.discard()
+        try:
+            for callback in self.node_callbacks:
+                callback.on_end(node)
+        finally:
+            # Released even when an observer fails, so the trial's copy of the world
+            # and its publishing do not outlive the plan.
+            if node.parent is None and self.action_trial is not None:
+                self.action_trial.discard()
 
     def re_perform(self):
         for child in self.root.descendants:

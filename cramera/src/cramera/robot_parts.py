@@ -31,7 +31,7 @@ from semantic_digital_twin.robots.tracy import (
 
 class ArmSide(StrEnum):
     """
-    Which arm of a robot that names a left and a right one a part belongs to.
+    The side of a robot an arm is on, for robots that name a left and a right arm.
     """
 
     LEFT = "left"
@@ -151,7 +151,7 @@ class RobotPartAnnotation:
         return {
             "name": self.name,
             "role": self.role.value,
-            "side": self.side.name.lower() if self.side is not None else None,
+            "side": self.side.value if self.side is not None else None,
             "links": list(self.links),
             "attachedTo": self.attached_to,
         }
@@ -228,13 +228,9 @@ class RobotPartAnnotation:
     @staticmethod
     def _arm_sides(robot: AbstractRobot) -> Dict[int, ArmSide]:
         """
-        The side of every arm the robot names as its left or its right one, keyed by arm
-        identity.
-
-        Robots that do not specify a left and a right arm contribute nothing, which is
-        what leaves a one-armed robot's arm sideless.
-
         :param robot: The robot whose arm annotations are read.
+        :return: The side of each arm the robot names as left or right, keyed by arm
+            identity; arms it does not name are left out.
         """
         sides = {}
         left_arm = robot.get_left_arm_if_specified()

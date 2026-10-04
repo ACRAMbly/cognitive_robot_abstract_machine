@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from dataclasses import dataclass, field
 from typing import Tuple
 
@@ -29,7 +29,6 @@ from random_events.variable import Symbolic
 from typing_extensions import (
     TYPE_CHECKING,
     Generic,
-    Iterator,
     List,
     Optional,
     Self,

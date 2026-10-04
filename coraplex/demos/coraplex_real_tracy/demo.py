@@ -7,7 +7,6 @@ import time
 import rclpy
 from rclpy.executors import MultiThreadedExecutor
 
-
 from coraplex.datastructures.dataclasses import Context
 from coraplex.datastructures.enums import (
     ExecutionType,
@@ -97,8 +96,8 @@ with world.modify_world():
     world.add_kinematic_structure_entity(box2)
     world.add_kinematic_structure_entity(box3)
 
-    # The boxes stand in for any graspable object; the plan only needs an annotation to
-    # name them by, not a particular kind of object.
+    # The boxes are annotated as gelatin boxes only so that the plan has an annotation
+    # offering grasps to name them by; any graspable kind of object would do.
     box2_annotation = GelatinBox(root=box2)
     box3_annotation = GelatinBox(root=box3)
     world.add_semantic_annotations([box2_annotation, box3_annotation])

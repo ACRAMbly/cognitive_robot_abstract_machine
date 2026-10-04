@@ -6,12 +6,16 @@ import trimesh
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 from semantic_digital_twin.exceptions import (
     MissingReferenceFrameError,
+    NoGraspGeometry,
     ReferenceFrameMismatchError,
 )
 from semantic_digital_twin.semantic_annotations.mixins import (
     GraspCandidate,
     HasGraspCandidates,
     HasRootBody,
+)
+from semantic_digital_twin.semantic_annotations.natural_language import (
+    NaturalLanguageWithTypeDescription,
 )
 from semantic_digital_twin.semantic_annotations.semantic_annotations import (
     Bowl,
@@ -185,6 +189,61 @@ def test_bowl_grasp_fingers_close_across_the_rim_wall(bowl):
         assert abs(float(np.dot(finger_axis, radial))) == pytest.approx(1.0, abs=1e-6)
 
 
+# %% cutlery grasp poses
+
+
+def _spoon_lying_along(length_axis: int) -> Spoon:
+    """
+    :param length_axis: The axis of its own frame the spoon lies along, 0 for x and 1
+        for y.
+    :return: A spoon whose collision box is long along that axis.
+    """
+    extents = [0.02, 0.02, 0.01]
+    extents[length_axis] = 0.15
+    body = Body(
+        name=PrefixedName(f"spoon_along_{length_axis}", prefix="grasp_candidates"),
+        collision=ShapeCollection(
+            [Box(origin=HomogeneousTransformationMatrix(), scale=Scale(*extents))]
+        ),
+    )
+    annotation = Spoon(root=body)
+    world = World()
+    with world.modify_world():
+        world.add_kinematic_structure_entity(body)
+        world.add_semantic_annotation(annotation)
+    return annotation
+
+
+@pytest.mark.parametrize("length_axis", [0, 1], ids=["along-x", "along-y"])
+def test_cutlery_is_grasped_from_above_across_its_length(length_axis):
+    """
+    A piece of cutlery lies flat, so the fingers come down onto it and close across it,
+    never along it.
+    """
+    [grasp] = _spoon_lying_along(length_axis).grasp_candidates()
+    approach, closing = (
+        axes_of(grasp.root_T_grasp)[:, 0],
+        axes_of(grasp.root_T_grasp)[:, 1],
+    )
+    length_direction = np.eye(3)[length_axis]
+
+    np.testing.assert_allclose(approach, [0, 0, -1], atol=1e-9)
+    assert float(np.dot(closing, length_direction)) == pytest.approx(0, abs=1e-9)
+    assert closing[2] == pytest.approx(0, abs=1e-9)
+
+
+def test_cutlery_without_a_shape_offers_no_grasp():
+    body = Body(name=PrefixedName("shapeless_spoon", prefix="grasp_candidates"))
+    spoon = Spoon(root=body)
+    world = World()
+    with world.modify_world():
+        world.add_kinematic_structure_entity(body)
+        world.add_semantic_annotation(spoon)
+
+    with pytest.raises(NoGraspGeometry):
+        spoon.grasp_candidates()
+
+
 # %% the frame a grasp is expressed in
 
 
@@ -228,3 +287,17 @@ def test_only_annotations_that_can_be_held_offer_grasps():
     for fixed in (Dishwasher, Cabinet, Table, Floor):
         assert issubclass(fixed, HasRootBody)
         assert not issubclass(fixed, HasGraspCandidates)
+
+
+def test_an_object_described_with_its_type_can_be_grasped(milk):
+    """
+    A typed description stands for an object a robot is asked to pick up, so it offers
+    the default grasps of any graspable object.
+    """
+    described = NaturalLanguageWithTypeDescription(
+        root=milk.root, description="a carton of milk", type_description="milk"
+    )
+
+    assert [
+        grasp.root_T_grasp.to_np().tolist() for grasp in described.grasp_candidates()
+    ] == [grasp.root_T_grasp.to_np().tolist() for grasp in milk.grasp_candidates()]

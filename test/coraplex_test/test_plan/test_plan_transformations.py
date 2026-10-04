@@ -986,6 +986,60 @@ def test_the_drawer_is_opened_before_a_transport_rather_than_inside_its_pick_up(
     assert transported.designator is transport
 
 
+def test_a_move_and_pick_up_of_an_object_in_no_drawer_is_left_alone(
+    pr2_apartment_context,
+):
+    world, view, context = pr2_apartment_context
+    milk = world.get_semantic_annotations_by_type(Milk)[0]
+    context.plan_transformations.append(OpenDrawerBeforeMoveAndPickUp())
+    move_and_pick_up = MoveAndPickUpAction.from_standing_position(
+        standing_position=Pose(reference_frame=world.root),
+        grasp=milk.grasp_candidates()[0],
+        arm=view.right_arm,
+    )
+    plan = sequential([move_and_pick_up], context)
+    plan.notify()
+
+    [moved_and_picked_up] = plan.children
+    assert moved_and_picked_up.designator is move_and_pick_up
+
+
+def test_a_transport_of_an_object_in_no_drawer_is_left_alone(pr2_apartment_context):
+    world, view, context = pr2_apartment_context
+    milk = world.get_semantic_annotations_by_type(Milk)[0]
+    context.plan_transformations.append(OpenDrawerBeforeTransport())
+    transport = TransportAction.from_graspable_by_closest_grasps(
+        milk, Pose(reference_frame=world.root), view.right_arm, context
+    )
+    plan = sequential([transport], context)
+    plan.notify()
+
+    [transported] = plan.children
+    assert transported.designator is transport
+
+
+def test_opening_a_drawer_tries_a_bounded_number_of_candidates(pr2_apartment_context):
+    """
+    An opening is tried candidate by candidate, so it is limited like any other step
+    that tries candidates.
+    """
+    world, view, context = pr2_apartment_context
+    spoon = world.get_semantic_annotations_by_type(Spoon)[0]
+    transformation = OpenDrawerBeforeTransport()
+    context.plan_transformations.append(transformation)
+    transport = TransportAction.from_graspable_by_closest_grasps(
+        spoon, Pose(reference_frame=world.root), view.right_arm, context
+    )
+    plan = sequential([transport], context)
+    plan.notify()
+
+    [opening, _] = plan.children
+    assert (
+        opening.underspecified_action._get_expression_()._limit_
+        == transformation.candidates_to_try
+    )
+
+
 # %% transformations that collide on one node
 
 

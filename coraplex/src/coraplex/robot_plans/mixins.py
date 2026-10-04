@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 
 import numpy as np
-from typing_extensions import List, Optional
+from typing_extensions import Optional, Tuple
 
 from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix
 from semantic_digital_twin.spatial_types.spatial_types import Pose
@@ -262,15 +262,9 @@ class HasTcpGoalThresholds:
 @dataclass
 class HasApproachesGraspPoses:
     """
-    Turns a grasp frame into the tool center point goals that reach it and withdraw again.
-
-    A grasp pose is a grasp frame as
-    :meth:`~semantic_digital_twin.semantic_annotations.mixins.HasGraspCandidates.grasp_candidates`
-    defines it: its x-axis points the way the gripper travels toward the object. What
-    that frame means for a concrete gripper is the end effector's own business (see
-    :meth:`~semantic_digital_twin.robots.robot_parts.EndEffector.tool_frame_goal`); what
-    is left here is how far ahead of the grasp the approach begins and how far it
-    withdraws, which grasping, placing and reaching all share.
+    Turns a grasp frame (x-axis along the approach, see
+    :class:`~semantic_digital_twin.semantic_annotations.mixins.GraspCandidate`) into the
+    tool frame goals that approach it, reach it and withdraw from it.
     """
 
     approach_clearance: float = field(default=0.1, kw_only=True)
@@ -280,7 +274,7 @@ class HasApproachesGraspPoses:
 
     retreat_distance: float = field(default=0.1, kw_only=True)
     """
-    The height in meters the gripper rises by after closing on the object.
+    How far in meters the gripper rises when it leaves a grasp or a placed object.
     """
 
     def grasp_pose_sequence(
@@ -289,24 +283,16 @@ class HasApproachesGraspPoses:
         end_effector: EndEffector,
         grasp: Optional[GraspCandidate] = None,
         reverse: bool = False,
-    ) -> List[Pose]:
+    ) -> Tuple[Pose, Pose, Pose]:
         """
-        The tool frame goals that reach a grasp pose and withdraw from it.
-
-        The sequence holds three poses: one clear of the object along the approach
-        direction, one at the grasp itself, and one raised above it. Reversing it turns
-        a grasp into a release.
-
-        :param reference_T_grasp: The grasp frame the tool has to reach, which for a
-            release is where the object is going rather than where it stands.
+        :param reference_T_grasp: The grasp frame to reach; for a release, where the
+            object is to be put.
         :param end_effector: The end effector that is to reach it.
-        :param grasp: The grasp on the object, whose geometry the pre-grasp pose has to
-            stay outside of. It is passed rather than derived from
-            ``reference_T_grasp`` because an object being placed is still in the
-            gripper, nowhere near the pose being aimed at. ``None`` leaves only
-            :attr:`approach_clearance` between the two poses.
-        :param reverse: Whether to withdraw from the grasp rather than move onto it.
-        :return: The pre-grasp pose, the grasp pose and the retreat pose.
+        :param grasp: The grasp whose object the pre-grasp pose has to stay outside of;
+            ``None`` keeps only :attr:`approach_clearance`.
+        :param reverse: Whether to return the sequence of a release.
+        :return: The pre-grasp pose, the grasp pose and the retreat pose, in that order
+            unless reversed.
         """
         tool_goal = end_effector.tool_frame_goal(reference_T_grasp)
         grasp_T_pre_grasp = HomogeneousTransformationMatrix.from_xyz_rpy(
@@ -315,27 +301,17 @@ class HasApproachesGraspPoses:
         pre_grasp_pose = end_effector.tool_frame_goal(
             (reference_T_grasp.to_homogeneous_matrix() @ grasp_T_pre_grasp).to_pose()
         )
-        sequence = [
-            pre_grasp_pose,
-            tool_goal,
-            self._retreat_pose(reference_T_grasp, tool_goal),
-        ]
+        retreat_pose = self._retreat_pose(reference_T_grasp, tool_goal)
         if reverse:
-            sequence.reverse()
-        return sequence
+            return retreat_pose, tool_goal, pre_grasp_pose
+        return pre_grasp_pose, tool_goal, retreat_pose
 
     def _approach_distance(self, grasp: Optional[GraspCandidate]) -> float:
         """
-        How far ahead of the grasp the gripper waits before its final approach.
-
-        The pre-grasp pose has to sit outside the object, so the distance covers
-        whatever geometry lies between the grasp and the object's boundary along the
-        approach direction, plus :attr:`approach_clearance`. A grasp on the object's own
-        surface, such as one on the rim of a bowl, therefore needs barely more than the
-        clearance, while a grasp at the object's center needs to clear half of it.
-
         :param grasp: The grasp on the object, or ``None`` when there is no object.
-        :return: The distance in meters.
+        :return: The distance in meters from the grasp back to the pre-grasp pose: the
+            distance to the object's bounding box along the approach, plus
+            :attr:`approach_clearance`.
         """
         if grasp is None or not grasp.graspable.root.has_collision():
             return self.approach_clearance
@@ -380,7 +356,8 @@ class HasApproachesGraspPoses:
 
     def _retreat_pose(self, reference_T_grasp: Pose, tool_goal: Pose) -> Pose:
         """
-        The tool frame goal that lifts the object straight up off its support.
+        The tool frame goal :attr:`retreat_distance` above the grasp along the world's
+        z-axis (a grasp frame's own z-axis can lie flat).
 
         :param reference_T_grasp: The grasp frame that was reached.
         :param tool_goal: The tool frame goal at the grasp, whose orientation is kept.
@@ -391,11 +368,11 @@ class HasApproachesGraspPoses:
         world_T_grasp = world.transform(
             reference_T_grasp.to_homogeneous_matrix(), world.root
         )
-        grasp_T_retreat = HomogeneousTransformationMatrix.from_xyz_rpy(
-            z=self.retreat_distance
+        world_T_lift = HomogeneousTransformationMatrix.from_xyz_rpy(
+            z=self.retreat_distance, reference_frame=world.root
         )
         return Pose(
-            world.transform((world_T_grasp @ grasp_T_retreat).to_position(), target),
+            world.transform((world_T_lift @ world_T_grasp).to_position(), target),
             tool_goal.to_quaternion(),
             reference_frame=target,
         )

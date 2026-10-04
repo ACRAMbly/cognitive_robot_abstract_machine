@@ -232,7 +232,12 @@ class AvoidExternalCollisions(AvoidCollisionRule, SubclassJSONSerializer):
             **super().to_json(**kwargs),
             "robot": to_json(self.robot.id, **kwargs),
             "body_subset": to_json(
-                {b.id for b in self.body_subset} if self.body_subset else None, **kwargs
+                (
+                    {body.id for body in self.body_subset}
+                    if self.body_subset is not None
+                    else None
+                ),
+                **kwargs,
             ),
             "buffer_zone_distance": to_json(self.buffer_zone_distance, **kwargs),
             "violated_distance": to_json(self.violated_distance, **kwargs),

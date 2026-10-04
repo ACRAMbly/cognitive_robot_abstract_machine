@@ -54,17 +54,16 @@ class RecordsHowItWasSampled(Location):
 _ODOM = HomogeneousTransformationMatrix.from_xyz_rpy(0.5, 0.5, 0, yaw=np.pi / 2)
 
 
-def _world_with_robots_behind_displaced_odoms(
-    *world_T_odoms: HomogeneousTransformationMatrix,
+def _world_with_a_robot_behind_a_displaced_odom(
+    world_T_odom: HomogeneousTransformationMatrix,
 ) -> World:
     """
-    A world holding nothing but PR2s, each reached through its own displaced odom.
+    A world holding nothing but a PR2, reached through a displaced odom.
     """
     specification = WorldSpecification(
         world_parser=None,
         robots=[
             RobotSpecification(semantic_annotation_type=PR2, world_T_odom=world_T_odom)
-            for world_T_odom in world_T_odoms
         ],
     )
     try:
@@ -75,7 +74,7 @@ def _world_with_robots_behind_displaced_odoms(
 
 @pytest.fixture(scope="session")
 def _single_robot_world_setup() -> World:
-    return _world_with_robots_behind_displaced_odoms(_ODOM)
+    return _world_with_a_robot_behind_a_displaced_odom(_ODOM)
 
 
 @pytest.fixture
@@ -169,9 +168,16 @@ def test_a_ring_from_the_arm_reach_distance_stands_off_by_the_reach_fraction(
     # tolerance.
     arm = context.robot.right_arm
     expected_distance = float(arm.approximate_length()) * REACH_FRACTION
+    location = ReachabilityLocation(target, arm, context=context)
 
     ring = RingCostmap.from_arm_reach_distance(
-        context, arm, target, reach_fraction=REACH_FRACTION
+        context,
+        arm,
+        target,
+        reach_fraction=REACH_FRACTION,
+        resolution=location.map_resolution,
+        cells=location.map_cells,
+        standard_deviation=location.ring_standard_deviation,
     )
 
     assert float(ring.distance) == pytest.approx(expected_distance)
@@ -194,6 +200,41 @@ def _horizontal_distance(pose: Pose, target: Pose) -> float:
     )
 
 
+def test_a_reachability_location_stands_around_the_reach_fraction_of_the_arm(
+    single_robot_world,
+):
+    """
+    The ring the candidates are sampled from is centred on the stand-off distance, so
+    the poses offered stand that far off on the whole.
+    """
+    world, robot, context = single_robot_world
+    target = Pose.from_xyz_rpy(
+        *REACHABILITY_TARGET_POSITION, reference_frame=world.root
+    )
+    arm = context.robot.right_arm
+    location = ReachabilityLocation(
+        target, arm, context=context, seed=0, reach_fraction=REACH_FRACTION
+    )
+    ring = RingCostmap.from_arm_reach_distance(
+        context,
+        arm,
+        target,
+        reach_fraction=REACH_FRACTION,
+        resolution=location.map_resolution,
+        cells=location.map_cells,
+        standard_deviation=location.ring_standard_deviation,
+    )
+
+    stand_offs = [
+        _horizontal_distance(pose, target)
+        for pose in islice(location.candidates(), POSES_CHECKED)
+    ]
+
+    assert float(np.median(stand_offs)) == pytest.approx(
+        float(ring.distance), abs=ring.standard_deviation * ring.resolution
+    )
+
+
 def test_a_reachability_location_offers_no_standing_pose_farther_than_the_arm_is_long(
     single_robot_world,
 ):
@@ -207,6 +248,14 @@ def test_a_reachability_location_offers_no_standing_pose_farther_than_the_arm_is
     )
     arm = context.robot.right_arm
     location = ReachabilityLocation(target, arm, context=context, seed=0)
+    sampled = islice(
+        location.costmap().sample(location.number_of_samples, location.seed),
+        POSES_CHECKED,
+    )
+    assert any(
+        _horizontal_distance(pose, target) > float(arm.approximate_length())
+        for pose in sampled
+    ), "the map has to offer a pose out of reach for leaving it out to show"
 
     offered = islice(location.candidates(), POSES_CHECKED)
 
@@ -302,6 +351,20 @@ def test_a_reachability_location_takes_its_seed_from_the_context(single_robot_wo
     assert location.seed == context.sampling_seed
 
 
+def test_a_location_keeps_a_seed_of_its_own_over_the_contexts(single_robot_world):
+    world, robot, context = single_robot_world
+    context.sampling_seed = 5
+
+    location = ReachabilityLocation(
+        _box_in(world).root.global_pose,
+        context.robot.right_arm,
+        context=context,
+        seed=7,
+    )
+
+    assert location.seed == 7
+
+
 def test_a_reachability_location_samples_afresh_without_one(single_robot_world):
     """
     Left unseeded a plan explores the region differently each run, which is what makes
@@ -385,3 +448,19 @@ def test_a_visibility_location_takes_its_seed_from_the_context(single_robot_worl
     )
 
     assert location.seed == context.sampling_seed
+
+
+def test_a_visibility_location_offers_poses_facing_its_target(single_robot_world):
+    """
+    A pose to see a target from is only any use looking at it.
+    """
+    world, robot, context = single_robot_world
+    target = Pose.from_xyz_rpy(
+        *REACHABILITY_TARGET_POSITION, reference_frame=world.root
+    )
+    location = VisibilityLocation(target, context=context, seed=0)
+
+    for pose in islice(location.candidates(), POSES_CHECKED):
+        heading = pose.to_rotation_matrix().to_np()[:2, 0]
+        offset = target.to_position().to_np()[:2] - pose.to_position().to_np()[:2]
+        np.testing.assert_allclose(heading, offset / np.linalg.norm(offset), atol=1e-6)

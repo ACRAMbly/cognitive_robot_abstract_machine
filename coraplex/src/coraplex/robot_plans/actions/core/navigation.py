@@ -129,8 +129,8 @@ class PathPlanningNavigateAction(ActionDescription):
     The free space is decomposed into a graph of convex sets, so the robot drives around
     the furniture and walls between it and the target instead of straight at them.
 
-     This works for obstacles which are known in the environment beforehand not such
-    that are added during navigation.
+    This works for obstacles which are known in the environment beforehand, not for
+    those added during navigation.
     """
 
     target: Pose

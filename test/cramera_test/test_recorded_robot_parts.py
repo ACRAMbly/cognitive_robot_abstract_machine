@@ -14,7 +14,7 @@ from semantic_digital_twin.world import World
 
 
 # %% recorded annotation types
-def test_recorded_part_side_uses_the_native_arms_enum() -> None:
+def test_recorded_part_side_round_trips_through_the_payload() -> None:
     annotation = RobotPartAnnotation(
         name="Manipulator", role=RobotPartRole.ARM, side=ArmSide.LEFT
     )

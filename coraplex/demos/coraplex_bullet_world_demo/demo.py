@@ -5,17 +5,16 @@ Runs in simulation against the apartment, so nothing on the network is needed. T
 scaffolding in :mod:`coraplex.demonstrations` owns the ROS session and publishes the
 world to Rviz, so the run can be watched while it happens.
 
-The bowl is the interesting one. It offers a grasp all around its rim and only some of
-them can be reached from where the robot may stand, so its pick-up leaves both the grasp
-and the standing pose open. Each pair is tried out before it is executed, and the first
-that succeeds is taken.
+Every transport leaves the grasp and the standing pose open: each pair is tried out
+before it is executed, and the first that succeeds is taken. The bowl shows why, as only
+some of the grasps around its rim can be reached from where the robot may stand.
 """
 
 import os
 from dataclasses import dataclass, field
 from enum import StrEnum
 
-from typing_extensions import List, Optional, Tuple, Type
+from typing_extensions import Optional, Tuple, Type
 
 from coraplex.datastructures.dataclasses import Context
 from coraplex.datastructures.enums import ExecutionType
@@ -26,17 +25,10 @@ from coraplex.robot_plans.actions.composite.transporting import TransportAction
 from coraplex.robot_plans.actions.core.robot_body import ParkArmsAction, MoveTorsoAction
 from coraplex.robot_plans.plan_transformations import OpenDrawerBeforeTransport
 from krrood.entity_query_language.factories import (
-    a,
     an,
-    count,
     entity,
-    flat_variable,
-    min as minimum,
-    set_of,
-    the,
     variable,
 )
-from krrood.entity_query_language.predicate import symbolic_function
 from semantic_digital_twin.api import (
     BodySpecification,
     RobotSpecification,
@@ -44,25 +36,17 @@ from semantic_digital_twin.api import (
     WorldSpecification,
 )
 from semantic_digital_twin.datastructures.definitions import TorsoState
-from semantic_digital_twin.reasoning.predicates import (
-    compute_euclidean_planar_distance,
-)
 from semantic_digital_twin.reasoning.world_reasoner import WorldReasoner
 from semantic_digital_twin.robots.pr2 import PR2
-from semantic_digital_twin.robots.robot_parts import AbstractRobot
 from semantic_digital_twin.semantic_annotations.mixins import (
-    HasRootBody,
     HasRootKinematicStructureEntity,
 )
 from semantic_digital_twin.semantic_annotations.semantic_annotations import (
     Bowl,
-    Cabinet,
-    Drawer,
-    Handle,
     Milk,
     Spoon,
 )
-from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix, Vector3
+from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix
 from semantic_digital_twin.spatial_types.spatial_types import Pose
 from semantic_digital_twin.world import World
 
@@ -95,7 +79,6 @@ class ApartmentBody(StrEnum):
     """
 
     SPOON_DRAWER = "cabinet10_drawer_top"
-    SPOON_DRAWER_HANDLE = "handle_cab10_t"
 
 
 @dataclass
@@ -128,8 +111,8 @@ class PlaceSettingObject:
 
     height: float
     """
-    How high the object's origin is laid, which rests it on the table surface at z=0.723
-    rather than in it.
+    How high the object's origin is laid so that it rests on the table surface
+    (z=0.723).
     """
 
     starts_on: Optional[ApartmentBody] = None
@@ -203,160 +186,6 @@ class PlaceSettingObject:
         )
 
 
-# %% questions about the scene
-
-
-@symbolic_function
-def drawer_opening_travel(drawer: Drawer) -> float:
-    """
-    :param drawer: The drawer to measure.
-    :return: How far the drawer slides out between its joint limits, in meters.
-    """
-    limits = drawer.mechanical_joint.root.parent_connection.dof.limits
-    return limits.upper.position - limits.lower.position
-
-
-@dataclass
-class DrawerAccess:
-    """
-    Where a drawer is and what opening it takes.
-    """
-
-    cabinet: Cabinet
-    """
-    The cabinet the drawer belongs to.
-    """
-
-    drawer: Drawer
-    """
-    The drawer itself.
-    """
-
-    opening_travel: float
-    """
-    How far the drawer slides out, in meters.
-    """
-
-    handle_distance: float
-    """
-    How far the drawer's handle is from the robot on the floor plane, in meters.
-    """
-
-
-@dataclass
-class CabinetWithOpenableDrawers:
-    """
-    A cabinet together with how many of its drawers the robot could pull open.
-    """
-
-    cabinet: Cabinet
-    """
-    The cabinet.
-    """
-
-    openable_drawer_count: int
-    """
-    How many of its drawers have a handle and slide out far enough.
-    """
-
-    nearest_handle_distance: float
-    """
-    How far the nearest of those drawers' handles is from the robot on the floor plane,
-    in meters.
-    """
-
-
-@dataclass
-class SceneQuestions:
-    """
-    Entity queries asking the apartment where things are and how the robot gets at them.
-    """
-
-    world: World
-    """
-    The world the questions are asked about.
-    """
-
-    robot: AbstractRobot
-    """
-    The robot distances are measured from.
-    """
-
-    minimum_opening_travel: float = 0.3
-    """
-    How far a drawer has to slide out to count as openable, in meters.
-    """
-
-    minimum_openable_drawers: int = 2
-    """
-    How many openable drawers a cabinet needs to be listed.
-    """
-
-    def drawer_holding(self, held_object: HasRootBody) -> DrawerAccess:
-        """
-        Ask which drawer an object lies in, which cabinet it belongs to, how far it
-        opens and how far its handle is from the robot.
-
-        :param held_object: The object lying in the drawer.
-        :return: The one drawer holding the object.
-        """
-        cabinet = variable(Cabinet, domain=self.world.semantic_annotations)
-        drawer = flat_variable(cabinet.drawers)
-        opening_travel = drawer_opening_travel(drawer)
-        handle_distance = compute_euclidean_planar_distance(
-            self.robot.root, drawer.handle.root, Vector3.Z()
-        )
-
-        query = the(
-            set_of(cabinet, drawer, opening_travel, handle_distance).where(
-                drawer.root == held_object.root.parent_kinematic_structure_entity,
-                drawer.handle != None,
-            )
-        )
-        (answer,) = query.evaluate()
-        return DrawerAccess(
-            cabinet=answer[cabinet],
-            drawer=answer[drawer],
-            opening_travel=answer[opening_travel],
-            handle_distance=float(answer[handle_distance]),
-        )
-
-    def cabinets_with_openable_drawers(self) -> List[CabinetWithOpenableDrawers]:
-        """
-        Ask which cabinets have enough drawers the robot could pull open by a handle.
-
-        :return: The cabinets, the one whose nearest handle is closest to the robot
-            first.
-        """
-        cabinet = variable(Cabinet, domain=self.world.semantic_annotations)
-        drawer = flat_variable(cabinet.drawers)
-        openable_drawer_count = count(drawer)
-        nearest_handle_distance = minimum(
-            compute_euclidean_planar_distance(
-                self.robot.root, drawer.handle.root, Vector3.Z()
-            )
-        )
-
-        query = (
-            set_of(cabinet, openable_drawer_count, nearest_handle_distance)
-            .where(
-                drawer.handle != None,
-                drawer_opening_travel(drawer) >= self.minimum_opening_travel,
-            )
-            .grouped_by(cabinet)
-            .having(openable_drawer_count >= self.minimum_openable_drawers)
-            .ordered_by(nearest_handle_distance)
-        )
-        return [
-            CabinetWithOpenableDrawers(
-                cabinet=answer[cabinet],
-                openable_drawer_count=answer[openable_drawer_count],
-                nearest_handle_distance=float(answer[nearest_handle_distance]),
-            )
-            for answer in query.evaluate()
-        ]
-
-
 # %% the demonstration
 
 
@@ -374,12 +203,9 @@ class BulletWorldDemonstration(RobotDemonstration):
         )
     )
     """
-    Where the PR2 stands before the plan begins.
-
-    Far enough back that its parked grippers clear the counter: a meter and a half in,
-    they sit inside cabinet9 and cabinet10, which a run with collision avoidance refuses
-    to start from. Behind 1.0 m the torso meets the cabinet doors on the other side
-    instead.
+    Where the PR2 stands before the plan begins: far enough from the counter that its
+    parked grippers clear the cabinets, and not so far that the torso meets the doors
+    behind it.
     """
 
     milk: PlaceSettingObject = field(
@@ -426,22 +252,15 @@ class BulletWorldDemonstration(RobotDemonstration):
     @property
     def place_setting(self) -> Tuple[PlaceSettingObject, ...]:
         """
-        :return: The objects carried onto the table, in the order they are carried.
-
-        They are laid 20 cm apart along the table, which clears the widest footprint of
-        the set -- the bowl's 14 cm -- plus the clearance the arm keeps while it reaches
-        between them. Closer together, placing one object drives the gripper into the
-        buffer zone around the one already standing there.
+        :return: The objects carried onto the table, in the order they are carried. They
+            are laid 20 cm apart, so placing one keeps the gripper clear of the last.
         """
         return self.milk, self.bowl, self.spoon
 
     def build_simulated_world(self) -> World:
         """
-        The apartment with the PR2 in it, stood back from the counter.
-
-        The robot is placed by its localization frame rather than by editing its parent
-        connection afterwards, and comes out of :meth:`RobotSpecification.spawn` already
-        registered among the world's annotations.
+        The apartment with the PR2 in it, placed at :attr:`robot_start` through its
+        odom.
         """
         return WorldSpecification.from_urdf(
             SceneFile.APARTMENT.path,
@@ -458,10 +277,8 @@ class BulletWorldDemonstration(RobotDemonstration):
 
     def populate_scene(self, world: World) -> None:
         """
-        Put the place setting where it starts out, and name what the plan acts on.
-
-        The drawer and its handle are bodies the apartment already brought, so they are
-        annotated where they stand instead of being spawned.
+        Put the place setting where it starts out, and let the world reasoner annotate
+        the apartment's furniture, including the drawer the spoon lies in.
         """
         for placed_object in self.place_setting:
             placed_object.spawn(world)

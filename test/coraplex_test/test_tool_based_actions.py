@@ -1,3 +1,6 @@
+from dataclasses import dataclass
+from datetime import timedelta
+
 import numpy as np
 import pytest
 from giskardpy.motion_statechart.goals.collision_avoidance import (
@@ -7,6 +10,10 @@ from scipy.spatial.transform import Rotation
 
 from coraplex.datastructures.enums import CuttingTechnique, PouringSide
 from coraplex.exceptions import WipingTargetMissing
+from coraplex.plans.failures import MotionMadeNoProgress
+from giskardpy.motion_statechart.exceptions import NoProgressError
+from giskardpy.motion_statechart.graph_node import EndMotion
+from giskardpy.motion_statechart.monitors.progress_monitors import StillProgressing
 from coraplex.plans.factories import sequential
 from coraplex.plans.plan_node import MotionNode
 from coraplex.robot_plans.actions.composite.tool_based import (
@@ -215,6 +222,75 @@ def test_pouring_action_poses_tilt_and_mirror(tool_action_world):
         np.array([float(left_pre_pose.x), float(left_pre_pose.y)]) - container_position
     )
     np.testing.assert_allclose(left_offset, -right_offset, atol=1e-9)
+
+
+@pytest.mark.parametrize(
+    "arm_of, side",
+    [
+        (lambda robot: robot.right_arm, PouringSide.RIGHT),
+        (lambda robot: robot.left_arm, PouringSide.LEFT),
+    ],
+    ids=["right-arm", "left-arm"],
+)
+def test_pouring_pours_to_the_side_of_its_arm_unless_told_otherwise(
+    tool_action_world, arm_of, side
+):
+    world, robot, context, container, tool_body = tool_action_world
+    action = PouringAction(
+        target_container=container,
+        source_container=PouringCup(root=tool_body),
+        arm=arm_of(context.robot),
+    )
+    sequential([action], context)
+
+    assert action._effective_pour_side() is side
+
+
+@dataclass
+class _GivingUpSubplan:
+    """
+    A subplan whose motion stops approaching its goal.
+    """
+
+    def perform(self) -> None:
+        raise MotionMadeNoProgress(
+            NoProgressError(
+                progress_monitor=StillProgressing(
+                    monitored_node=EndMotion(), timeout=timedelta(seconds=3)
+                )
+            )
+        )
+
+
+@pytest.mark.parametrize("reached_final_waypoint", [True, False])
+def test_wiping_accepts_a_motion_that_gave_up_only_at_its_last_waypoint(
+    tool_action_world, monkeypatch, reached_final_waypoint
+):
+    """
+    A wipe that stops making progress once the sponge is at its last waypoint has done
+    its job; one that stops anywhere else has not.
+    """
+    world, robot, context, container, tool_body = tool_action_world
+    action = WipingAction(
+        arm=context.robot.right_arm,
+        tool=Sponge(root=tool_body),
+        target_pose=Pose.from_xyz_rpy(x=2.4, y=2.2, z=1.0, reference_frame=world.root),
+    )
+    sequential([action], context)
+    monkeypatch.setattr(
+        WipingAction, "add_subplan", lambda self, root: _GivingUpSubplan()
+    )
+    monkeypatch.setattr(
+        WipingAction,
+        "_tool_reached_final_waypoint",
+        lambda self: reached_final_waypoint,
+    )
+
+    if reached_final_waypoint:
+        action._perform_plan()
+    else:
+        with pytest.raises(MotionMadeNoProgress):
+            action._perform_plan()
 
 
 def _attach_box_to_gripper(world, robot, name, size, mount_z):

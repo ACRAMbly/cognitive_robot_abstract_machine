@@ -19,7 +19,6 @@ from semantic_digital_twin.world_description.geometry import Box, Color, Scale
 from semantic_digital_twin.world_description.shape_collection import ShapeCollection
 from semantic_digital_twin.world_description.world_entity import Body
 
-
 OBJECTS_DIRECTORY = os.path.join(
     os.path.dirname(coraplex.__file__), "..", "..", "resources", "objects"
 )

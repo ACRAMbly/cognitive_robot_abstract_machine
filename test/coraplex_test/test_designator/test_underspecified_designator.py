@@ -3,14 +3,13 @@ from dataclasses import dataclass, field
 import pytest
 from uuid import UUID, uuid4
 
-import pytest
 from typing_extensions import Dict, Iterator, List, Optional
 
 from krrood.entity_query_language.backends import (
     EntityQueryLanguageGenerativeBackend,
     ProbabilisticBackend,
 )
-from krrood.entity_query_language.factories import a, an, variable, variable_from
+from krrood.entity_query_language.factories import a, variable, variable_from
 from giskardpy.motion_statechart.data_types import LifeCycleValues
 
 from coraplex.datastructures.enums import ActionTrialVisualization
@@ -22,11 +21,13 @@ from coraplex.plans.executables import Executable
 from coraplex.plans.factories import sequential, execute_single
 from coraplex.plans.failures import PlanFailure
 from coraplex.plans.plan_node import ExecutionBoundaryNode, PlanNode
-from coraplex.plans.underspecified import ActionTrial
+from coraplex.plans.plan import Plan
+from coraplex.plans.plan_callbacks import PlanCallback
+from coraplex.plans.underspecified import ActionTrial, UnderspecifiedNode
 from coraplex.robot_plans.actions.base import ActionDescription
 from coraplex.robot_plans.actions.core.navigation import NavigateAction
 from coraplex.robot_plans.actions.core.pick_up import PickUpAction
-from semantic_digital_twin.robots.robot_parts import AbstractRobot, Arm
+from semantic_digital_twin.robots.robot_parts import Arm
 from semantic_digital_twin.spatial_types.spatial_types import Pose
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 from semantic_digital_twin.world import World
@@ -414,9 +415,8 @@ def test_the_underspecified_steps_of_one_plan_are_tried_against_one_copy(
     apartment_world_pr2_copy_with_context,
 ):
     """
-    The real world moves on between the steps of a plan, and the copy is caught up with
-    it rather than taken anew, so every step is tried in the same copy, which already
-    carries what the steps before it did for real.
+    Every step of a plan is tried in the same copy, caught up with what the steps before
+    it did for real.
     """
     world, robot, context = apartment_world_pr2_copy_with_context
     dof = world.degrees_of_freedom[0]
@@ -442,12 +442,88 @@ def test_the_underspecified_steps_of_one_plan_are_tried_against_one_copy(
     assert second_trial.position_at_entry != first_trial.position_at_entry
 
 
+@dataclass
+class _FailsWhenThePlanEnds(PlanCallback):
+    """
+    An observer that fails once the root of the plan it observes ends.
+    """
+
+    def on_end(self, node: PlanNode) -> None:
+        if node.parent is None:
+            raise RuntimeError("observer failed at the end of the plan")
+
+
+def _plan_of_two_underspecified_steps(world: World, context) -> Plan:
+    """
+    :return: A plan of two underspecified steps that both succeed.
+    """
+    dof = world.degrees_of_freedom[0]
+    probe_key = register_probe()
+    return sequential(
+        [
+            a(RecordingAction)(
+                probe_key=probe_key,
+                dof_id=dof.id,
+                fail_on_attempt_number=variable_from([None]),
+            )
+            for _ in range(2)
+        ],
+        context,
+    ).plan
+
+
+def test_the_underspecified_steps_of_one_plan_share_its_trial(
+    apartment_world_pr2_copy_with_context,
+):
+    """
+    The underspecified steps of a plan share the plan's trial.
+    """
+    world, robot, context = apartment_world_pr2_copy_with_context
+    plan = _plan_of_two_underspecified_steps(world, context)
+    first, second = [
+        node for node in plan.all_nodes if isinstance(node, UnderspecifiedNode)
+    ]
+
+    assert first.trial is second.trial is plan.action_trial
+
+
+def test_a_plan_releases_its_trial_copy_once_it_has_run(
+    apartment_world_pr2_copy_with_context,
+):
+    """
+    The copy of the world the steps were tried in is only needed while the plan runs.
+    """
+    world, robot, context = apartment_world_pr2_copy_with_context
+    plan = _plan_of_two_underspecified_steps(world, context)
+
+    with simulated_robot:
+        plan.perform()
+
+    assert plan.action_trial._copied_context is None
+
+
+def test_a_plan_releases_its_trial_copy_even_when_an_observer_fails(
+    apartment_world_pr2_copy_with_context,
+):
+    """
+    An observer failing as the plan ends must not keep the copy alive past the plan.
+    """
+    world, robot, context = apartment_world_pr2_copy_with_context
+    plan = _plan_of_two_underspecified_steps(world, context)
+    plan.node_callbacks.append(_FailsWhenThePlanEnds())
+
+    with simulated_robot:
+        with pytest.raises(RuntimeError):
+            plan.perform()
+
+    assert plan.action_trial._copied_context is None
+
+
 def test_a_trial_catches_its_copy_up_with_what_the_world_gained(
     apartment_world_pr2_copy_with_context,
 ):
     """
-    A body added to the world after the copy was taken is in the copy the next candidate
-    is tried in, without the world being copied again.
+    A body added after the copy was taken appears in the same copy once caught up.
     """
     world, robot, context = apartment_world_pr2_copy_with_context
     trial = ActionTrial(context=context)
@@ -514,6 +590,10 @@ def test_a_trial_publishes_its_copy_apart_from_the_world_it_copies(debugging_con
 
 
 def test_a_trial_copy_is_drawn_see_through(debugging_context):
+    """
+    The copy is drawn translucent so that it can be told apart from the world it copies
+    where the two overlap.
+    """
     world, robot, context = debugging_context
     trial = ActionTrial(context=context)
 
@@ -526,6 +606,10 @@ def test_a_trial_copy_is_drawn_see_through(debugging_context):
 def test_a_trial_publishes_nothing_without_debugging(
     apartment_world_pr2_copy_with_context,
 ):
+    """
+    Publishing the copy is a debugging aid, so a run that is not debugging publishes
+    nothing.
+    """
     world, robot, context = apartment_world_pr2_copy_with_context
     trial = ActionTrial(context=context)
 
@@ -535,6 +619,10 @@ def test_a_trial_publishes_nothing_without_debugging(
 
 
 def test_a_discarded_trial_stops_publishing_its_copy(debugging_context):
+    """
+    Releasing the copy also stops publishing it, so nothing keeps drawing a world that
+    is gone.
+    """
     world, robot, context = debugging_context
     trial = ActionTrial(context=context)
     trial._copy()
@@ -568,6 +656,9 @@ def test_a_caught_up_copy_keeps_being_published(debugging_context):
 
 
 def test_a_plan_stops_publishing_its_trial_copy_once_it_has_run(debugging_context):
+    """
+    The copy is only published while the plan that tries candidates in it runs.
+    """
     world, robot, context = debugging_context
     dof = world.degrees_of_freedom[0]
     probe_key = register_probe()

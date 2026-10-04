@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from typing_extensions import Any, Dict, List, Optional
+from typing_extensions import Any, Dict, List, Optional, Tuple
 
 from coraplex.plans.attachment_nodes import ReAttachNode
-from coraplex.plans.plan_node import PlanNode
+from coraplex.plans.plan_node import DesignatorNode, PlanNode
 from krrood.entity_query_language.core.variable import Variable
 from krrood.entity_query_language.factories import (
     or_,
@@ -16,6 +16,7 @@ from krrood.entity_query_language.factories import (
 )
 from coraplex.datastructures.dataclasses import Context
 from coraplex.exceptions import ObjectIsNotHeld
+from coraplex.querying.predicates import GripperHolds
 from coraplex.plans.factories import sequential
 from coraplex.robot_plans.actions.core.pick_up import PickUpAction
 from coraplex.robot_plans.actions.base import ActionDescription
@@ -70,8 +71,7 @@ class PlaceAction(
 
     @property
     def _action_plan(self) -> PlanNode:
-        arm = self._holding_arm()
-        grasp = self._grasp_on_the_held_object()
+        arm, grasp = self._holding_arm_and_grasp()
         transport_pose, placing_pose, retract_pose = self.grasp_pose_sequence(
             grasp.moved_to(self.target_location),
             arm.end_effector,
@@ -117,76 +117,70 @@ class PlaceAction(
             self.context,
         )
 
-    def _holding_arm(self) -> Arm:
+    def _holding_arm_and_grasp(self) -> Tuple[Arm, GraspCandidate]:
         """
-        The arm that holds :attr:`object_designator`.
+        The arm that holds :attr:`object_designator`, and the grasp it holds it by.
 
-        A plan is built before it runs, so the object is usually still on its shelf at
-        this point; then the arm is the one the preceding pick-up of it is going to take
-        it with.
+        Read off the gripper while it holds the object; while the plan is still being
+        built, taken from the latest pick-up of the object before this place.
 
-        :return: The arm holding the object, or about to hold it.
+        :return: The arm and its grasp on the object.
         :raises ObjectIsNotHeld: If no arm holds the object and no pick-up of it
             precedes this place.
         """
+        object_body = self.object_designator.root
         for arm in self.robot.get_arms():
-            if arm.end_effector.held_body is self.object_designator.root:
-                return arm
-        previous_pick = self._previous_pick_up_of_the_object()
-        if previous_pick is None:
+            end_effector = arm.end_effector
+            if GripperHolds(end_effector, object_body)():
+                return arm, GraspCandidate(
+                    self.object_designator, end_effector.held_body_T_grasp
+                )
+        pick_up = self._latest_pick_up_of_the_object()
+        if pick_up is None:
             raise ObjectIsNotHeld(self.object_designator)
-        return previous_pick.arm
+        return pick_up.arm, pick_up.grasp
 
-    def _previous_pick_up_of_the_object(self) -> Optional[PickUpAction]:
+    def _latest_pick_up_of_the_object(self) -> Optional[PickUpAction]:
         """
-        :return: The pick-up right before this place, if it picks up
-            :attr:`object_designator`.
+        :return: The latest pick-up of :attr:`object_designator` before this place, if
+            there is one.
         """
-        previous_pick = self.plan_node.get_previous_node_by_designator_type(
-            PickUpAction
-        )
-        if previous_pick is None:
-            return None
-        if (
-            previous_pick.designator.grasp.graspable.root
-            is not self.object_designator.root
-        ):
-            return None
-        return previous_pick.designator
+        for node in reversed(self.plan_node.previous_nodes):
+            if not isinstance(node, DesignatorNode):
+                continue
+            if not isinstance(node.designator, PickUpAction):
+                continue
+            if node.designator.grasp.graspable.root is self.object_designator.root:
+                return node.designator
+        return None
 
     def _grasp_on_the_held_object(self) -> GraspCandidate:
         """
-        The grasp the object is held by.
-
-        Read off the gripper itself while it holds the object, since the transform
-        between the two *is* the grasp, wherever on the object it sits. Before the
-        object is held, the grasp the preceding pick-up was told to take says the same
-        thing in advance.
-
-        :return: The grasp on :attr:`object_designator`.
-        :raises ObjectIsNotHeld: If no arm holds the object and no pick-up of it
-            precedes this place.
+        :return: The grasp :attr:`object_designator` is held by, as
+            :meth:`_holding_arm_and_grasp` finds it.
         """
-        for arm in self.robot.get_arms():
-            held = arm.end_effector.grasp_on(self.object_designator.root)
-            if held is not None:
-                return GraspCandidate(self.object_designator, held)
-        previous_pick = self._previous_pick_up_of_the_object()
-        if previous_pick is None:
-            raise ObjectIsNotHeld(self.object_designator)
-        return previous_pick.grasp
+        return self._holding_arm_and_grasp()[1]
 
     @staticmethod
     def pre_condition(
         variables: Dict[str, Variable], context: Context, kwargs: Dict[str, Any]
     ) -> ConditionType:
         """
-        An arm of the robot needs to hold the object.
+        An arm of the robot needs to hold the object, whether the object hangs off its
+        gripper or merely lies between the fingers.
+
+        A thin or rim grasp leaves too little of the object between the fingers for the
+        ray test alone to see it, so a gripper the object hangs off counts too.
         """
+        object_body = kwargs["object_designator"].root
         return or_(
+            *[
+                GripperHolds(arm.end_effector, object_body)
+                for arm in context.robot.get_arms()
+            ],
             *PlaceAction._grips_of_every_arm(
                 context, kwargs, kwargs["grasp_detection_threshold"]
-            )
+            ),
         )
 
     @staticmethod

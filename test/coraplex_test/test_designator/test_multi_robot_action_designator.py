@@ -21,7 +21,6 @@ from coraplex.datastructures.enums import (
 )
 from coraplex.datastructures.trajectory import PoseTrajectory
 from coraplex.exceptions import NoFloorBelowRobot
-from coraplex.robot_plans.mixins import HasApproachesGraspPoses
 from coraplex.execution_environment import simulated_robot
 from coraplex.plans.factories import sequential, execute_single
 from coraplex.robot_plans.plan_transformations import OpenDrawerBeforeTransport
@@ -74,6 +73,7 @@ from semantic_digital_twin.semantic_annotations.semantic_annotations import (
     Elevator,
     FirstFloor,
     Floor,
+    Handle,
     Level,
 )
 from semantic_digital_twin.semantic_annotations.semantic_annotations import (
@@ -131,8 +131,6 @@ def _handle_annotation(world, body_name: str):
     :return: The handle annotation of the named body, registering one when the world
         carries none for it.
     """
-    from semantic_digital_twin.semantic_annotations.semantic_annotations import Handle
-
     body = world.get_body_by_name(body_name)
     existing = [
         handle
@@ -580,8 +578,6 @@ def test_place_multi(multiple_robot_apartment_context):
 
     left_arm = left_or_only_arm(context.robot)
     milk_body = world.get_body_by_name("milk.stl")
-
-    milk_body = world.get_body_by_name("milk.stl")
     milk_body.parent_connection.origin = HomogeneousTransformationMatrix.from_xyz_rpy(
         1, -2, 0.6, reference_frame=world.root
     )
@@ -1021,8 +1017,13 @@ def test_elevator_navigation(multiple_robot_apartment_context, rclpy_node):
         1, -5, 0, reference_frame=world.root
     )
 
-    with simulated_robot:
-        plan.perform()
+    # The operator watches every model change of the shared world, so it has to stop
+    # before the next test runs on it, whether or not the ride succeeds.
+    try:
+        with simulated_robot:
+            plan.perform()
+    finally:
+        operator.stop()
 
     cabin_position = elevator.root.global_transform.to_position().to_np().flatten()
 

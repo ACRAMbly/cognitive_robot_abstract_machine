@@ -64,6 +64,9 @@ class TfFrameNames:
     """
     Put in front of every frame name, so a copy of a world can be published next to
     the world it copies without the two trees claiming the same frames.
+
+    It is prepended as it is, so it carries its own separator: ``"copy/"`` names a
+    body ``copy/milk``, while ``"copy"`` would name it ``copymilk``.
     """
 
     _frame_name_per_entity: Dict[UUID, str] = field(init=False, default_factory=dict)

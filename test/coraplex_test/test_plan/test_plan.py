@@ -10,14 +10,13 @@ from krrood.rustworkx_utils.graph_visualizer_base import (
 )
 
 from coraplex.datastructures.dataclasses import Context
-from coraplex.robot_plans.mixins import HasApproachesGraspPoses
 from coraplex.datastructures.enums import InsertionPosition, NodeDetail
 from coraplex.execution_environment import simulated_robot
 from coraplex.orm.ormatic_interface import *  # type: ignore
 from coraplex.plans.condition_nodes import ConditionNode
 from coraplex.plans.executables import GiskardExecutable
 from coraplex.plans.factories import code, sequential, parallel, execute_single
-from coraplex.exceptions import CannotInsertBesideRoot
+from coraplex.exceptions import CannotInsertBesideRoot, NodeNotInPlanTree
 from coraplex.plans.failures import EmptyUnderspecified, PlanFailure
 from coraplex.plans.plan import Plan
 from coraplex.plans.plan_node import PlanNode, ActionNode
@@ -31,8 +30,6 @@ from krrood.entity_query_language.backends import ProbabilisticBackend
 from krrood.entity_query_language.factories import (
     variable_from,
     a,
-    an,
-    variable,
 )
 from krrood.parametrization.model_registries import (
     FullyFactorizedRegistry,
@@ -44,9 +41,6 @@ from semantic_digital_twin.orm.model import (
     Point3Mapping,
     QuaternionMapping,
     PoseMapping,
-)
-from semantic_digital_twin.robots.robot_parts import (
-    EndEffector,
 )
 from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix, Pose
 from semantic_digital_twin.robots.pr2 import PR2Joint
@@ -490,6 +484,21 @@ def test_previous_nodes_follow_the_tree_not_the_order_nodes_were_added():
     plan.add_edge(first, child_of_first)
 
     assert second.previous_nodes == [root, first, child_of_first]
+
+
+def test_a_node_outside_the_tree_has_no_previous_nodes_to_name():
+    """
+    A node its plan's root does not lead to has no place in the tree's order, so asking
+    what comes before it is a mistake rather than a question about every node.
+    """
+    root = PlanNode()
+    plan = Plan()
+    plan.add_edge(root, PlanNode())
+    stray = PlanNode()
+    stray.plan = plan
+
+    with pytest.raises(NodeNotInPlanTree):
+        stray.previous_nodes
 
 
 # ---- Tests interacting with simulated robot/world ----

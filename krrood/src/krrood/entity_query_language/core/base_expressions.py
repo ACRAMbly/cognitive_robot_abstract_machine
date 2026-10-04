@@ -1136,9 +1136,9 @@ class BinaryExpression(SymbolicExpression, ABC):
     def _replace_child_field_(
         self, old_child: SymbolicExpression, new_child: SymbolicExpression
     ):
-        if self.left is old_child:
+        if self.left._id_ == old_child._id_:
             self.left = new_child
-        if self.right is old_child:
+        if self.right._id_ == old_child._id_:
             self.right = new_child
 
     def _is_equality_literal_comparator_or_conjunction_(self) -> bool:

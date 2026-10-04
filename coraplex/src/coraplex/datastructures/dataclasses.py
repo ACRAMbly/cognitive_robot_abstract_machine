@@ -121,12 +121,10 @@ class Context(PlanEntity):
     Should debug information be printed or visualized.
     """
 
-    sampling_seed: Optional[int] = field(default=None)
+    sampling_seed: Optional[int] = field(default=None, kw_only=True)
     """
-    Fixes the samples the locations of this plan make, so a run repeats exactly.
-
-    ``None`` explores differently every run, which is what sampling from a map buys over
-    ranking it. A demonstration kept as a regression test pins it instead.
+    Seed for the locations of this plan that have none of their own, so a run can be
+    repeated; ``None`` samples afresh each run.
     """
 
     motion_tolerances: MotionToleranceConfig = field(

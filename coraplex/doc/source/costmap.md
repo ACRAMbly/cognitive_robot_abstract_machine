@@ -45,7 +45,9 @@ For the common case of a costmap centered on a target pose with the inflation ra
 is the convenience classmethod {meth}`~coraplex.locations.costmaps.OccupancyCostmap.default_map`.
 
 ```python
-occupancy = OccupancyCostmap.default_map(context, target_pose)
+occupancy = OccupancyCostmap.default_map(
+    context, target_pose, resolution=0.02, cells=200
+)
 ```
 
 You can see an image of the final Occupancy costmap with an inflation radius of 0.2 m below.

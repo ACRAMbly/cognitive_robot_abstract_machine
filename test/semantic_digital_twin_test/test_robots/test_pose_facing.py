@@ -229,9 +229,8 @@ def test_the_heading_of_a_base_pose_is_the_heading_it_was_placed_at(
     robot_type: Type[AbstractRobot], heading_yaw: float
 ):
     """
-    A caller handed a base pose has to be able to say which heading it stands at, or
-    offering it back as one turns the robot by whatever its forward axis is. Turning it
-    back is :attr:`base_T_front` the other way round.
+    The heading recovered from a base pose is the one it was placed at, by undoing
+    :attr:`~semantic_digital_twin.robots.robot_parts.MobileBase.base_R_front`.
     """
     mobile_base = spawn(robot_type)
     heading = Pose.from_xyz_rpy(

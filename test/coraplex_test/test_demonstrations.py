@@ -76,6 +76,11 @@ class RecordingDemonstration(RobotDemonstration):
     The context this demonstration built for its plan.
     """
 
+    builds_a_debugging_context: bool = field(default=False)
+    """
+    Whether the context this demonstration builds debugs before the run decides.
+    """
+
     def build_simulated_world(self) -> World:
         return self.world
 
@@ -92,6 +97,7 @@ class RecordingDemonstration(RobotDemonstration):
             ros_node=self.ros_node,
             sampling_seed=SAMPLING_SEED,
         )
+        self.built_context.debug = self.builds_a_debugging_context
         return self.built_context
 
     def build_plan(self, context: Context) -> PlanNode:
@@ -201,13 +207,19 @@ def test_a_demonstration_runs_without_debugging_by_default(cylinder_bot_world):
     Debugging publishes every copy of the world a candidate is tried in, which a run
     only pays for when someone is watching it.
     """
+    coraplex_logger = logging.getLogger("coraplex")
+    previous_level = coraplex_logger.level
     demonstration = RecordingDemonstration(
-        world=cylinder_bot_world, used_robot=MinimalRobot
+        world=cylinder_bot_world,
+        used_robot=MinimalRobot,
+        builds_a_debugging_context=True,
     )
 
-    demonstration.run()
-
-    assert not demonstration.built_context.debug
+    try:
+        demonstration.run()
+        assert not demonstration.built_context.debug
+    finally:
+        coraplex_logger.setLevel(previous_level)
 
 
 def test_a_demonstration_debugs_its_plan_when_asked_to(cylinder_bot_world):

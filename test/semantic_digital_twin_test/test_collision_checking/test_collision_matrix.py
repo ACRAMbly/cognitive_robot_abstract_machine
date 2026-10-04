@@ -1274,6 +1274,27 @@ class TestCollisionRuleEquality:
 
         assert copied_rule == rule
 
+    def test_a_subset_of_bodies_without_collision_stays_empty_through_json(
+        self, cylinder_bot_world
+    ):
+        """
+        A subset of bodies none of which can collide covers no bodies at all, which is
+        not the same as no subset, covering every body of the robot.
+        """
+        robot = cylinder_bot_world.get_semantic_annotations_by_type(MinimalRobot)[0]
+        with cylinder_bot_world.modify_world():
+            without_collision = Body(name=PrefixedName("no_collision"))
+            cylinder_bot_world.add_connection(
+                FixedConnection(parent=robot.root, child=without_collision)
+            )
+        rule = AvoidExternalCollisions(robot=robot, body_subset={without_collision})
+        tracker = WorldEntityWithIDKwargsTracker.from_world(cylinder_bot_world)
+
+        copied_rule = from_json(to_json(rule), **tracker.create_kwargs())
+
+        assert rule.body_subset == set()
+        assert copied_rule.body_subset == set()
+
     @pytest.mark.parametrize(
         "create_rule",
         [

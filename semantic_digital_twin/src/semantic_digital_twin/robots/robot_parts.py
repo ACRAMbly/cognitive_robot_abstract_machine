@@ -601,7 +601,11 @@ class EndEffector(AbstractRobotPart, ABC):
 
     def __post_init__(self):
         super().__post_init__()
-        if not np.isclose(float(self.approach_axis.dot(self.closing_axis)), 0.0):
+        approach = self.approach_axis.to_np()[:3]
+        closing = self.closing_axis.to_np()[:3]
+        if not np.isclose(
+            float(approach @ closing), 0.0, atol=1e-6
+        ):
             raise GripperAxesNotPerpendicular(self)
 
     @property
@@ -661,8 +665,7 @@ class EndEffector(AbstractRobotPart, ABC):
     @property
     def held_body(self) -> Optional[Body]:
         """
-        The body hanging off the tool frame. If in the future we need this to return
-        the semantic annotation of the body, we should update it.
+        The body hanging off the tool frame.
 
         :raises MoreThanOneBodyHeld: If the tool frame has more than one child, since
             there is then no single body the gripper holds.
@@ -678,10 +681,8 @@ class EndEffector(AbstractRobotPart, ABC):
     @property
     def held_body_T_grasp(self) -> Pose:
         """
-        The grasp this gripper has on the body it is holding.
-
-        The body hangs off the tool frame, so the transform between the two *is* the
-        grasp that was achieved, whatever it was and wherever on the body it sits.
+        The grasp this gripper has on the body it holds, read off the transform between
+        the tool frame and that body.
 
         :return: The grasp frame, in :attr:`held_body`'s frame.
         """
@@ -917,14 +918,8 @@ class AbstractRobot(Agent, HasRobotParts, ABC):
     @property
     def is_in_collision(self) -> bool:
         """
-        :return: Whether any body of this robot has come closer to something than the
-            collision rules currently in force allow.
-
-        A pair is watched from further away than it may approach, so a contact being
-        reported at all says only that the two are being watched; what makes it a
-        collision is its distance falling to the rules' violated distance. The rules the
-        question is asked under are the caller's to set, so that the same robot can be
-        asked about the clearances of a plan or of a standing pose.
+        :return: Whether any body of this robot is at or below the violated distance the
+            active collision rules set for it.
         """
         own_bodies = set(self.bodies_with_collision)
         collision_manager = self._world.collision_manager

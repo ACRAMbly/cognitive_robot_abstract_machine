@@ -1,4 +1,5 @@
 from copy import deepcopy
+import operator
 from itertools import islice
 from typing_extensions import Optional
 
@@ -15,6 +16,7 @@ from coraplex.locations.costmaps import (
 from coraplex.exceptions import NonPositiveNumberOfSamples
 from semantic_digital_twin.spatial_types import (
     HomogeneousTransformationMatrix,
+    Point3,
     RotationMatrix,
     Vector3,
 )
@@ -89,8 +91,9 @@ def test_merge_costmap(pr2_apartment_context):
     assert np.all(o3.map == o2.map)
 
 
+@pytest.mark.parametrize("merge", [operator.and_, operator.add], ids=["&", "+"])
 def test_a_merged_map_samples_on_the_terms_of_the_map_it_was_merged_into(
-    pr2_apartment_context,
+    pr2_apartment_context, merge
 ):
     world, robot_view, context = pr2_apartment_context
     origin = Pose.from_xyz_quaternion(0, 0, 0, 0, 0, 0, 1, world.root)
@@ -115,7 +118,7 @@ def test_a_merged_map_samples_on_the_terms_of_the_map_it_was_merged_into(
         world=world,
     )
 
-    merged = first & second
+    merged = merge(first, second)
 
     assert merged.number_of_samples == first.number_of_samples
     assert merged.seed == first.seed
@@ -173,15 +176,18 @@ def test_gaussian_costmap(pr2_apartment_context):
     assert np.sum(gaussian_map.map == 0) == (400 * 0.05 * 2) ** 2
 
 
+STRAY_CANDIDATE_SHARE = 0.05
+"""
+The largest share of candidates a map may offer from a region it barely rates.
+"""
+
+
 def test_a_reachability_map_rates_only_the_side_the_robot_can_reach_from(
     pr2_apartment_context,
 ):
     """
-    Merging an occupancy map into a gaussian one is what keeps a target's standing poses
-    off the far side of whatever it rests against.
-
-    Which of the rated entries a sampling then offers is the sampling's business; a
-    stray candidate is what the collision and reachability checks on a location are for.
+    Merged with an occupancy map, the reachability map barely rates the far side of what
+    the target rests against, and few candidates come from there.
     """
     world, robot_view, context = pr2_apartment_context
     occupancy_map = OccupancyCostmap(
@@ -205,6 +211,9 @@ def test_a_reachability_map_rates_only_the_side_the_robot_can_reach_from(
     reach_map = occupancy_map + gaussian_map
 
     assert np.sum(reach_map.map[:200, :]) < 5
+    poses = list(reach_map.sample(reach_map.number_of_samples, context.sampling_seed))
+    from_the_far_side = sum(1 for pose in poses if pose.to_position().x < 3.0)
+    assert from_the_far_side < STRAY_CANDIDATE_SHARE * len(poses)
 
 
 # ----- Sampling test ---------------
@@ -223,7 +232,9 @@ def test_position_generation(pr2_apartment_context):
     )
     gaussian_map.map = np_map
 
-    for pose in gaussian_map.candidates():
+    poses = list(gaussian_map.candidates())
+    assert poses
+    for pose in poses:
         assert 0.8 <= pose.to_position().x <= 1.2
         assert 0.8 <= pose.to_position().y <= 1.2
 
@@ -267,7 +278,9 @@ def test_sample_x_axis(pr2_apartment_context):
 
     gaussian_map.map = np_map
 
-    for pose in gaussian_map.candidates():
+    poses = list(gaussian_map.candidates())
+    assert poses
+    for pose in poses:
         assert -0.05 < pose.to_position().y < 0.05
 
 
@@ -286,7 +299,9 @@ def test_sample_x_axis_offset(pr2_apartment_context):
 
     gaussian_map.map = np_map
 
-    for pose in gaussian_map.candidates():
+    poses = list(gaussian_map.candidates())
+    assert poses
+    for pose in poses:
         assert -0.2 <= pose.to_position().y <= 0.2
         assert 0.4 <= pose.to_position().x <= 0.8
 
@@ -306,7 +321,9 @@ def test_sample_x_axis_offset_non_id(pr2_apartment_context):
     gaussian_map.map = np_map
 
     tolerance = 0.01
-    for pose in gaussian_map.candidates():
+    poses = list(gaussian_map.candidates())
+    assert poses
+    for pose in poses:
         assert 1.8 <= pose.to_position().y <= 2.2 + tolerance
         assert 3.4 <= pose.to_position().x <= 3.8 + tolerance
 
@@ -337,7 +354,9 @@ def test_sample_to_pose_gau(pr2_apartment_context):
     # The merge keeps only the cells both maps cover, which is the box the first one was
     # given: rows 120:140 and columns 90:110 of a 0.02 m grid centred on the origin.
     tolerance = 0.01
-    for pose in final_map.candidates():
+    poses = list(final_map.candidates())
+    assert poses
+    for pose in poses:
         assert 1.8 <= pose.to_position().y <= 2.2 + tolerance
         assert 3.4 <= pose.to_position().x <= 3.8 + tolerance
 
@@ -355,7 +374,9 @@ def test_sample_y_axis(pr2_apartment_context):
     )
 
     gaussian_map.map = np_map
-    for pose in gaussian_map.candidates():
+    poses = list(gaussian_map.candidates())
+    assert poses
+    for pose in poses:
         assert -0.05 < pose.to_position().x < 0.05
 
 
@@ -527,9 +548,8 @@ def _stand_off_distances(
 
 def test_weighted_sampling_reaches_the_whole_ring(pr2_apartment_context):
     """
-    A ring says a stand-off distance is likely, not that it is the only one worth
-    trying, so a pose needing a few centimetres more has to come up inside the budget a
-    caller can afford to simulate.
+    Sampling reaches stand-off distances off the ring's peak within an affordable
+    budget.
     """
     world, _, _ = pr2_apartment_context
     budget = 50
@@ -543,12 +563,8 @@ def test_weighted_sampling_still_favours_what_the_map_rates_highest(
     pr2_apartment_context,
 ):
     """
-    Weighting has to follow the map rather than ignore it, or the ring stops meaning
-    anything and the robot is as likely to stand anywhere.
-
-    A ring in the plane holds more entries the further out they sit, so the sampling is
-    pulled outwards whatever the ratings say. What the rating buys is how much closer to
-    the ring the sampling stays than it would without one.
+    Weighted sampling stays closer to the ring's stand-off distance than sampling an
+    evenly rated map does.
     """
     world, _, _ = pr2_apartment_context
     ring = _ring_map(world)
@@ -629,6 +645,38 @@ def test_a_sampled_candidate_faces_the_maps_origin(pr2_apartment_context):
         assert float(facing.angle_between(to_origin)) == pytest.approx(0, abs=1e-6)
 
 
+@pytest.mark.parametrize(
+    "x, y", [(1, 0), (-1, 0), (0, 1), (0, -1)], ids=["front", "behind", "left", "right"]
+)
+def test_a_candidate_faces_the_maps_origin_from_every_side(pr2_apartment_context, x, y):
+    world, _, _ = pr2_apartment_context
+    ring = _ring_map(world)
+    position = Point3(x, y, 0, reference_frame=world.root)
+
+    facing = (
+        RotationMatrix.from_quaternion(ring._orientation_facing_origin(position))
+        @ Vector3.X()
+    )
+
+    to_origin = ring.origin.to_position() - position
+    assert float(facing.angle_between(to_origin)) == pytest.approx(0, abs=1e-6)
+
+
+def test_a_candidate_at_the_maps_origin_still_has_an_orientation(
+    pr2_apartment_context,
+):
+    """
+    There is no direction towards the origin from the origin itself, but a candidate
+    there still needs one to stand in.
+    """
+    world, _, _ = pr2_apartment_context
+    ring = _ring_map(world)
+
+    orientation = ring._orientation_facing_origin(ring.origin.to_position())
+
+    assert np.all(np.isfinite(orientation.to_np()))
+
+
 def _everywhere_map(world) -> RingCostmap:
     """
     :return: A map that rates everywhere alike, for merging without changing an order.
@@ -663,11 +711,7 @@ def test_a_budget_smaller_than_the_segment_count_still_offers_candidates(
     pr2_apartment_context,
 ):
     """
-    A budget is spread over the segments a map falls into, and a caller that can only
-    afford a handful still has to be offered that handful.
-
-    Sharing the budget out by rating leaves nothing for any segment once it is smaller
-    than the number of them, which would have the map offer nothing at all.
+    A budget smaller than the number of segments is still spent in full.
     """
     world, _, _ = pr2_apartment_context
     costmap = _sparsely_rated_map(world)
@@ -699,6 +743,23 @@ def test_a_segment_is_sampled_from_as_much_as_it_is_rated(pr2_apartment_context)
     assert sampled_from_preferred == round(budget * float(preferred_share))
 
 
+def test_what_a_full_segment_cannot_take_goes_to_the_next(pr2_apartment_context):
+    """
+    A segment rated far above its size cannot take its whole share, and what it leaves
+    over is spent on the next segment rather than lost.
+    """
+    world, _, _ = pr2_apartment_context
+    costmap = _ring_map(world)
+    small_and_highly_rated = np.full(4, 1.0)
+    large_and_barely_rated = np.full(100, 0.25)
+
+    budgets = costmap._budget_per_segment(
+        [small_and_highly_rated, large_and_barely_rated], 50
+    )
+
+    assert budgets == [small_and_highly_rated.size, 50 - small_and_highly_rated.size]
+
+
 def test_a_map_offers_no_more_candidates_than_it_holds(pr2_apartment_context):
     """
     An entry is offered once, so a budget beyond what the map holds is capped at its
@@ -711,6 +772,18 @@ def test_a_map_offers_no_more_candidates_than_it_holds(pr2_apartment_context):
     poses = list(costmap.sample(100 * costmap.map.size, None))
 
     assert len(poses) == costmap.map.size
+
+
+def test_a_map_that_rates_nothing_offers_nothing(pr2_apartment_context):
+    """
+    An entry rated zero is never a candidate, so a map that rates nothing, such as a
+    ring lying wholly inside the furniture, has no pose to offer at all.
+    """
+    world, _, _ = pr2_apartment_context
+    costmap = _ring_map(world)
+    costmap.map = np.zeros((200, 200))
+
+    assert list(costmap.sample(costmap.number_of_samples, 0)) == []
 
 
 @pytest.mark.parametrize("asked_for", [0, -1, -5])

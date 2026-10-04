@@ -1,16 +1,15 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
-from typing_extensions import Any, Dict, Optional
+from typing_extensions import Any, Dict
 
 from coraplex.plans.attachment_nodes import ReAttachNode
 from coraplex.plans.plan_node import PlanNode
 from krrood.entity_query_language.core.variable import Variable
 from krrood.entity_query_language.factories import (
     or_,
-    not_,
     variable_from,
     ConditionType,
 )
@@ -19,7 +18,11 @@ from coraplex.datastructures.enums import (
     MovementType,
 )
 from coraplex.plans.factories import sequential
-from coraplex.querying.predicates import GripperIsFree
+from coraplex.querying.predicates import (
+    GripperHolds,
+    GripperIsFree,
+    ToolFrameIsAtGrasp,
+)
 from coraplex.robot_plans.actions.base import ActionDescription
 from coraplex.robot_plans.mixins import (
     HasApproachesGraspPoses,
@@ -33,16 +36,11 @@ from coraplex.robot_plans.motions.gripper import (
     MoveToolCenterPointMotion,
 )
 from semantic_digital_twin.datastructures.definitions import GripperState
-from semantic_digital_twin.reasoning.predicates import allclose
 from semantic_digital_twin.reasoning.robot_predicates import is_body_gripped
-from semantic_digital_twin.robots.robot_part_mixins import HasMobileBase
 from semantic_digital_twin.robots.robot_parts import Arm
 from semantic_digital_twin.semantic_annotations.mixins import (
     GraspCandidate,
-    HasGraspCandidates,
 )
-from semantic_digital_twin.spatial_types.spatial_types import Pose
-from semantic_digital_twin.world_description.world_entity import Body
 
 logger = logging.getLogger(__name__)
 
@@ -166,18 +164,13 @@ class ReachAction(
         The end effector needs to be close to the target pose.
         """
         end_effector = kwargs["arm"].end_effector
-        object_body = kwargs["grasp"].graspable.root
         return or_(
             is_body_gripped(
-                variable_from(object_body),
+                variable_from(kwargs["grasp"].graspable.root),
                 end_effector,
                 threshold=kwargs["grasp_detection_threshold"],
             ),
-            allclose(
-                variable_from(object_body).global_pose.to_position(),
-                variable_from(end_effector.tool_frame).global_pose.to_position(),
-                atol=3e-2,
-            ),
+            ToolFrameIsAtGrasp(end_effector, kwargs["grasp"]),
         )
 
 
@@ -273,13 +266,14 @@ class PickUpAction(
         variables: Dict, context: Context, kwargs: Dict[str, Any]
     ) -> ConditionType:
         """
-        The object needs to be in the gripper frame.
+        The object itself needs to be in the gripper, not merely something.
         """
         end_effector = variables["arm"].end_effector
+        object_body = kwargs["grasp"].graspable.root
         return or_(
-            not_(GripperIsFree(end_effector)),
+            GripperHolds(end_effector, object_body),
             is_body_gripped(
-                variable_from(kwargs["grasp"].graspable.root),
+                variable_from(object_body),
                 end_effector,
                 threshold=kwargs["grasp_detection_threshold"],
             ),
@@ -351,10 +345,16 @@ class GraspingAction(
         variables: Dict[str, Any], context: Context, kwargs: Dict[str, Any]
     ) -> ConditionType:
         """
-        The object needs to be between the gripper's fingers.
+        The object needs to be between the gripper's fingers, or the gripper at the
+        grasp when a thin handle or rim leaves too little between them for the rays to
+        see.
         """
-        return is_body_gripped(
-            variable_from(kwargs["grasp"].graspable.root),
-            variables["arm"].end_effector,
-            threshold=kwargs["grasp_detection_threshold"],
+        end_effector = variables["arm"].end_effector
+        return or_(
+            is_body_gripped(
+                variable_from(kwargs["grasp"].graspable.root),
+                end_effector,
+                threshold=kwargs["grasp_detection_threshold"],
+            ),
+            ToolFrameIsAtGrasp(end_effector, kwargs["grasp"]),
         )

@@ -17,18 +17,12 @@ class Location(Iterable[Pose], ABC):
 
     number_of_samples: int = field(default=2000, kw_only=True)
     """
-    How many candidates to sample.
-
-    Far more than a caller judges properly, since a standing pose inside the furniture
-    costs nothing to refuse.
+    How many candidates to sample at most.
     """
 
     seed: Optional[int] = field(default=None, kw_only=True)
     """
-    Fixes the sampling, so a run can be repeated exactly.
-
-    ``None`` samples afresh every time, which is what sampling from a map buys over
-    reading it off in the order the map rates it.
+    Seed of the sampling, so a run can be repeated; ``None`` samples afresh each time.
     """
 
     @abstractmethod

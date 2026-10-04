@@ -169,9 +169,6 @@ for i, pose in enumerate(location):
 Opening a drawer needs the robot to stand closer to the handle than grasping an object does, so the reachability
 location is asked for the handle with the closer stand-off distance.
 
-At the moment this location designator only works in the apartment environment, so please remove the kitchen if you
-spawned it in a previous example. Furthermore, we need a robot, so we also spawn the PR2 if it isn't spawned already.
-
 ```python
 from coraplex.datastructures.enums import ReachFraction
 from semantic_digital_twin.semantic_annotations.semantic_annotations import Drawer, Handle

@@ -16,11 +16,9 @@ from coraplex.plans.executables import (
 from coraplex.plans.factories import execute_single, sequential
 from coraplex.plans.factories import (
     cancel_when,
-    execute_single,
     pause_until,
     pause_while,
     repeat,
-    sequential,
 )
 from coraplex.plans.plan_node import (
     ActionNode,
@@ -68,7 +66,7 @@ from semantic_digital_twin.datastructures.definitions import TorsoState
 from semantic_digital_twin.semantic_annotations.semantic_annotations import Milk
 from semantic_digital_twin.semantic_annotations.mixins import GraspCandidate
 from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix
-from semantic_digital_twin.spatial_types.spatial_types import Pose, Point3
+from semantic_digital_twin.spatial_types.spatial_types import Pose
 from semantic_digital_twin.world_description.geometry import VolumetricBoundingBox
 
 

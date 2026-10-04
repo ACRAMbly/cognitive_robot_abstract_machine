@@ -28,8 +28,7 @@ class NaturalLanguageWithTypeDescription(
     """
     A natural language description of a Sage10k object including the type information of the object.
 
-    Graspable, unlike its base: a description can name anything in a scene, walls
-    included, but the typed ones stand for the objects a robot is asked to pick up.
+    Graspable, since a typed description stands for an object a robot may pick up.
     """
 
     type_description: Optional[str] = field(default=None)

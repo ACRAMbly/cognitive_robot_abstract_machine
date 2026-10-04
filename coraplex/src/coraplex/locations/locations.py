@@ -31,13 +31,19 @@ class CostmapLocation(Location, ABC):
     The context holding the robot and the world the costmap is built from.
     """
 
+    map_resolution: float = field(default=0.02, kw_only=True)
+    """
+    Edge length, in meters, of a cell of the costmap the candidates are sampled from.
+    """
+
+    map_cells: int = field(default=200, kw_only=True)
+    """
+    Number of cells along each side of that costmap.
+    """
+
     def __post_init__(self) -> None:
         """
-        Fix this location's sampling to the plan it belongs to.
-
-        A plan that pins its seed is asking every location inside it to repeat, so a
-        location with no seed of its own takes the plan's. One with a seed already keeps
-        it.
+        Take the plan's sampling seed unless this location has its own.
         """
         if self.seed is not None:
             return
@@ -85,6 +91,11 @@ class ReachabilityLocation(CostmapLocation):
     The fraction of the arm's length the robot stands off the target by.
     """
 
+    ring_standard_deviation: int = field(default=15, kw_only=True)
+    """
+    How far, in cells, the standing poses spread around the stand-off distance.
+    """
+
     def costmap(self) -> Costmap:
         """
         :return: Standing poses clear of the surroundings, at the arm's reach distance
@@ -92,13 +103,19 @@ class ReachabilityLocation(CostmapLocation):
         """
         target_pose = self._in_world(self.target_pose)
         occupancy = OccupancyCostmap.default_map(
-            context=self.context, target=target_pose
+            context=self.context,
+            target=target_pose,
+            resolution=self.map_resolution,
+            cells=self.map_cells,
         )
         ring = RingCostmap.from_arm_reach_distance(
             context=self.context,
             arm=self.arm,
             origin=target_pose,
             reach_fraction=self.reach_fraction,
+            resolution=self.map_resolution,
+            cells=self.map_cells,
+            standard_deviation=self.ring_standard_deviation,
         )
         return occupancy & ring
 
@@ -137,15 +154,18 @@ class VisibilityLocation(CostmapLocation):
         target_pose = self._in_world(self.target_pose)
         camera = self.context.robot.get_default_camera()
         occupancy = OccupancyCostmap.default_map(
-            context=self.context, target=target_pose
+            context=self.context,
+            target=target_pose,
+            resolution=self.map_resolution,
+            cells=self.map_cells,
         )
         visibility = VisibilityCostmap(
             minimum_height=camera.minimal_height,
             maximum_height=camera.maximal_height,
             world=self.context.world,
-            width=200,
-            height=200,
-            resolution=0.02,
+            width=self.map_cells,
+            height=self.map_cells,
+            resolution=self.map_resolution,
             origin=target_pose,
         )
         return occupancy & visibility

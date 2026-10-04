@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-import sys
 from dataclasses import dataclass, field, Field
 from typing import TYPE_CHECKING, Dict
 
-from typing_extensions import Optional, List, Any, get_type_hints
+from typing_extensions import Optional, List, Any
 
 from krrood.class_diagrams.attribute_introspector import (
     DataclassOnlyIntrospector,
@@ -71,14 +70,3 @@ class Designator:
     @property
     def designator_parameter(self) -> Dict[str, Any]:
         return {f.name: getattr(self, f.name) for f in self.fields}
-
-    @classmethod
-    def get_type_hints(cls) -> Dict[str, Any]:
-        """
-        Returns the type hints of the __init__ method of this designator_description
-        description.
-
-        :return:
-        """
-        global_namespace = sys.modules[cls.__module__].__dict__
-        return get_type_hints(cls.__init__, globalns=global_namespace)

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from typing_extensions import Any, Dict
 
@@ -24,15 +24,12 @@ from coraplex.robot_plans.motions.gripper import MoveGripperMotion
 from semantic_digital_twin.datastructures.definitions import GripperState
 from semantic_digital_twin.reasoning.predicates import allclose
 from semantic_digital_twin.reasoning.robot_predicates import is_body_in_gripper
-from semantic_digital_twin.robots.robot_part_mixins import HasMobileBase
 from semantic_digital_twin.robots.robot_parts import Arm
 from semantic_digital_twin.semantic_annotations.mixins import GraspCandidate
 from semantic_digital_twin.semantic_annotations.semantic_annotations import (
     Handle,
 )
-from semantic_digital_twin.spatial_types.spatial_types import Pose
 from semantic_digital_twin.world_description.connections import ActiveConnection1DOF
-from semantic_digital_twin.world_description.world_entity import Body
 
 
 @dataclass
@@ -59,6 +56,8 @@ class OpenAction(ActionDescription):
     def _action_plan(self) -> PlanNode:
         return sequential(
             [
+                # Taken along the handle's own x-axis, the way a handle is gripped
+                # from the front, rather than by any of the handle's other candidates.
                 GraspingAction(
                     GraspCandidate.from_body_origin(self.handle),
                     self.arm,
@@ -133,6 +132,8 @@ class CloseAction(ActionDescription):
     def _action_plan(self) -> PlanNode:
         return sequential(
             [
+                # Taken along the handle's own x-axis, the way a handle is gripped
+                # from the front, rather than by any of the handle's other candidates.
                 GraspingAction(
                     GraspCandidate.from_body_origin(self.handle),
                     self.arm,

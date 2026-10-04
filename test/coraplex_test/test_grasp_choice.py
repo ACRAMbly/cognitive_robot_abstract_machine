@@ -11,6 +11,8 @@ from semantic_digital_twin.semantic_annotations.semantic_annotations import Milk
 from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix
 from semantic_digital_twin.spatial_types.spatial_types import Pose
 
+# %% helpers
+
 
 def _reach_of(pick_up: PickUpAction) -> ReachAction:
     """
@@ -22,6 +24,9 @@ def _reach_of(pick_up: PickUpAction) -> ReachAction:
     pick_up.plan_node.notify()
     [reach_node] = pick_up.plan_node.plan.get_nodes_by_designator_type(ReachAction)
     return reach_node.designator
+
+
+# %% the grasp a pick-up takes
 
 
 def test_pick_up_takes_the_grasp_it_is_given(pr2_apartment_context):
@@ -67,14 +72,19 @@ def test_pick_up_keeps_its_grasp_even_when_it_cannot_be_reached(pr2_apartment_co
     """
     world, view, context = pr2_apartment_context
     milk = world.get_semantic_annotations_by_type(Milk)[0]
+    arm = context.robot.left_arm
     view.root.parent_connection.origin = HomogeneousTransformationMatrix.from_xyz_rpy(
-        1.9, 1.4, 0
+        10, 10, 0
     )
+    world.notify_state_change()
+    out_of_reach = np.linalg.norm(
+        milk.root.global_pose.to_position().to_np()[:2]
+        - view.root.global_pose.to_position().to_np()[:2]
+    )
+    assert out_of_reach > float(arm.approximate_length())
+    grasp = milk.grasp_candidates()[0]
 
-    pick_up = PickUpAction(milk.grasp_candidates()[0], context.robot.left_arm)
+    pick_up = PickUpAction(grasp, arm)
     sequential([pick_up], context=context)
 
-    np.testing.assert_allclose(
-        _reach_of(pick_up).grasp.root_T_grasp.to_homogeneous_matrix().to_np(),
-        milk.grasp_candidates()[0].root_T_grasp.to_homogeneous_matrix().to_np(),
-    )
+    assert _reach_of(pick_up).grasp is grasp

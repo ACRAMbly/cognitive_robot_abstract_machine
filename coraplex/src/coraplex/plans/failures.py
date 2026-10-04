@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import timedelta
 
 from typing_extensions import TYPE_CHECKING
 
@@ -58,6 +59,35 @@ class MotionMadeNoProgress(PlanFailure):
 
     def suggest_correction(self) -> str:
         return self.no_progress.suggest_correction()
+
+
+@dataclass
+class MotionExceededSimulationTimeLimit(PlanFailure):
+    """
+    Raised when a simulated motion ran for longer than any motion is allowed to.
+
+    The chart's stall monitor ends a motion that stopped approaching its goal, but one
+    that keeps creeping towards it, or that is held and so never counts as stalled, would
+    tick forever without this limit.
+    """
+
+    time_limit: timedelta
+    """
+    The simulated time the motion was allowed.
+    """
+
+    def error_message(self) -> str:
+        return (
+            f"The motion did not end within {self.time_limit.total_seconds()} s of "
+            f"simulated time."
+        )
+
+    def suggest_correction(self) -> str:
+        return (
+            "Check that every goal of the motion can be reached and that nothing holds "
+            "the chart, or raise GiskardExecutable.simulation_time_limit for a motion "
+            "that is meant to take this long."
+        )
 
 
 @dataclass

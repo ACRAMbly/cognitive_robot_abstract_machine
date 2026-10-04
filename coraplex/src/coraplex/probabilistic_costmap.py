@@ -114,7 +114,8 @@ class ProbabilisticCostmap:
             self.costmap = OccupancyCostmap(
                 origin=self.origin,
                 distance_to_obstacle=distance_to_obstacle,
-                size=number_of_cells,
+                width=number_of_cells,
+                height=number_of_cells,
                 resolution=resolution.magnitude,
                 world=self.world,
                 robot_view=robot,
@@ -124,7 +125,8 @@ class ProbabilisticCostmap:
             self.costmap = VisibilityCostmap(
                 minimum_height=camera.minimal_height,
                 maximum_height=camera.maximal_height,
-                size=number_of_cells,
+                width=number_of_cells,
+                height=number_of_cells,
                 resolution=resolution.magnitude,
                 origin=self.origin,
                 world=self.world,

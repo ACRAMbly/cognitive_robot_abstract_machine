@@ -87,18 +87,86 @@ class GripperIsNotFree(GripperOccupancy, Predicate):
         return clause(Noun(fields["end_effector"]), Copula(), Adjective("occupied"))
 
 
+@dataclass
+class GripperHolds(GripperOccupancy, Predicate):
+    """
+    Checks if the gripper holds a particular body.
+
+    This is checked by looking at the kinematic structure below the tool frame, so a
+    gripper holding something else does not count.
+    """
+
+    body: Body
+    """
+    The body the gripper is asked to hold.
+    """
+
+    def __call__(self) -> bool:
+        return self.check_man_occupancy(lambda bodies: self.body in bodies)
+
+    @classmethod
+    def _verbalization_fragment_(cls, fields: RenderedFields) -> VerbalizationFragment:
+        """
+        :param fields: The rendered fragment for each field.
+        :return: The clause *"<end effector> holds <body>"*.
+        """
+        return predicate_clause(cls, Noun(fields["end_effector"]), Noun(fields["body"]))
+
+
+@dataclass(eq=False)
+class ToolFrameIsAtGrasp(Predicate):
+    """
+    Whether an end effector's tool frame stands where a grasp is, within a tolerance.
+
+    The tool frame reaches a grasp at the grasp's own position, which for a grasp on a
+    rim or a handle lies away from the object's origin.
+    """
+
+    end_effector: EndEffector
+    """
+    The end effector whose tool frame is asked about.
+    """
+
+    grasp: GraspCandidate
+    """
+    The grasp the tool frame is to stand at.
+    """
+
+    tolerance: float = 0.03
+    """
+    How far, in meters along each axis, the tool frame may stand from the grasp.
+    """
+
+    def __call__(self) -> bool:
+        world_T_grasp = (
+            self.grasp.graspable.root.global_transform.to_np()
+            @ self.grasp.root_T_grasp.to_np()
+        )
+        world_T_tool = self.end_effector.tool_frame.global_transform.to_np()
+        return bool(
+            np.allclose(world_T_tool[:3, 3], world_T_grasp[:3, 3], atol=self.tolerance)
+        )
+
+    @classmethod
+    def _verbalization_fragment_(cls, fields: RenderedFields) -> VerbalizationFragment:
+        """
+        :param fields: The rendered fragment for each field.
+        :return: The clause *"<end effector>'s tool frame is at <grasp>"*.
+        """
+        return predicate_clause(
+            cls, Noun(fields["end_effector"]), Noun(fields["grasp"])
+        )
+
+
 @dataclass(eq=False)
 class IsAmongTheClosestGraspsTo(Predicate):
     """
     Whether a grasp is among the grasps closest to where the robot stands.
 
-    Grasps are ranked by their horizontal distance from the standing pose, grasps at
-    the same distance by the angle between the direction they are approached along and
-    the direction from the standing pose to them, and grasps tied on both by the order
-    of :attr:`grasps`.
-
-    .. note:: With the grasp fixed and the standing pose left open, it chooses the
-        standing poses that suit that grasp instead.
+    Grasps are ranked by their horizontal distance from the standing pose, then by the
+    angle between their approach direction and the direction from the standing pose to
+    them, then by their order in :attr:`grasps`. Left open, :attr:`standing_position` is
+    grounded to the standing poses that suit a fixed grasp.
     """
 
     grasp: GraspCandidate
@@ -132,15 +200,24 @@ class IsAmongTheClosestGraspsTo(Predicate):
         ]
         world_T_object = self.grasp.graspable.root.global_transform.to_np()
 
-        listed = any(grasp is self.grasp for grasp in self.grasps)
-        ranked = self.grasps if listed else [*self.grasps, self.grasp]
-        # Sorting is stable, so grasps exactly as close as one another keep the order
-        # they are listed in, and no more of them count as the closest than were asked for.
-        closest = sorted(
-            ranked,
-            key=lambda grasp: self._closeness(grasp, world_T_object, world_P_standing),
-        )[: self.number_of_grasps]
-        return any(grasp is self.grasp for grasp in closest)
+        position = next(
+            (index for index, grasp in enumerate(self.grasps) if grasp is self.grasp),
+            len(self.grasps),
+        )
+        ranked = [*self.grasps[:position], self.grasp, *self.grasps[position + 1 :]]
+        closeness = self._closeness(self.grasp, world_T_object, world_P_standing)
+        # Grasps exactly as close as this one rank by the order they are listed in, so
+        # no more of them count as the closest than were asked for.
+        ranked_ahead = sum(
+            1
+            for index, other_closeness in enumerate(
+                self._closeness(grasp, world_T_object, world_P_standing)
+                for grasp in ranked
+            )
+            if other_closeness < closeness
+            or (other_closeness == closeness and index < position)
+        )
+        return ranked_ahead < self.number_of_grasps
 
     @staticmethod
     def _closeness(
@@ -162,11 +239,11 @@ class IsAmongTheClosestGraspsTo(Predicate):
         world_T_grasp = world_T_object @ grasp.root_T_grasp.to_np()
         world_V_standing_to_grasp = world_T_grasp[:, 3] - world_P_standing
         horizontal_distance = np.linalg.norm(world_V_standing_to_grasp[:2])
-        cosine = (
-            world_T_grasp[:, 0]
-            @ world_V_standing_to_grasp
-            / np.linalg.norm(world_V_standing_to_grasp)
-        )
+        distance = np.linalg.norm(world_V_standing_to_grasp)
+        if distance == 0:
+            # Standing exactly at the grasp leaves no direction to approach it from.
+            return float(horizontal_distance), 0.0
+        cosine = world_T_grasp[:, 0] @ world_V_standing_to_grasp / distance
         return float(horizontal_distance), float(np.arccos(np.clip(cosine, -1.0, 1.0)))
 
     @classmethod

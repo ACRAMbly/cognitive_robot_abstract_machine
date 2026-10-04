@@ -16,7 +16,6 @@ from typing_extensions import (
     Optional,
     Iterator,
     Set,
-    TYPE_CHECKING,
 )
 
 from coraplex.locations.base import Location
@@ -117,17 +116,6 @@ class Costmap(Location):
     """
     visualization_ids: List[int] = field(default_factory=list, init=False)
 
-    def _chunks(self, items: List, size: int) -> Iterator[List]:
-        """
-        Yield successive chunks of the given size.
-
-        :param items: The list from which chunks should be yielded
-        :param size: Size of the chunks
-        :return: A list of the given size taken from the items
-        """
-        for start in range(len(items), size):
-            yield items[start : start + size]
-
     def close_visualization(self) -> None:
         """
         Removes the visualization from the World.
@@ -190,8 +178,8 @@ class Costmap(Location):
         If any of these constrains is not fulfilled a ValueError will be raised.
 
         :param other: The other locations with which this locations should be merged.
-        :return: A new locations that contains the merged values, sampled as this
-            location's :attr:`sampling` says.
+        :return: A new locations that contains the merged values, carrying this map's
+            :attr:`number_of_samples` and :attr:`seed`.
         """
         if self.width != other.width or self.height != other.height:
             raise ValueError("You can only merge locations of the same size.")
@@ -297,7 +285,9 @@ class Costmap(Location):
     def candidates(self) -> Iterator[Pose]:
         return self.sample(self.number_of_samples, self.seed)
 
-    def sample(self, number_of_samples: int, seed: Optional[int]) -> Iterator[Pose]:
+    def sample(
+        self, number_of_samples: int, seed: Optional[int] = None
+    ) -> Iterator[Pose]:
         """
         Sample pose candidates from this map.
 
@@ -341,27 +331,17 @@ class Costmap(Location):
     @staticmethod
     def _offerable_entries(ratings: NDArray[np.float64]) -> int:
         """
-        How many of the given entries can be offered at all.
-
-        An entry rated zero stands no chance of being sampled, so only the rated ones
-        count -- unless nothing is rated, which is sampled from evenly.
-
         :param ratings: The flattened map, one rating per entry.
-        :return: How many entries are offerable.
+        :return: How many entries are rated above zero and can therefore be sampled.
         """
-        return int(np.count_nonzero(ratings)) or ratings.size
+        return int(np.count_nonzero(ratings))
 
     def _budget_per_segment(
         self, segments: List[np.ndarray], number_of_samples: int
     ) -> List[int]:
         """
-        Split a budget over this map's segments, each sampled from as much as it is
-        rated.
-
-        A segment the map barely rates is barely sampled from, which is what makes the
-        sampling follow the whole map rather than only the shape of each segment. What a
-        segment has no entries left for goes to the next best rated one instead, so a
-        budget is spent even when the best rated segment is a single entry.
+        Split a sample budget over this map's segments in proportion to their summed
+        ratings; what a segment cannot take goes to the best rated segments that can.
 
         :param segments: This map's segments, the best rated first.
         :param number_of_samples: How many candidates the whole map was asked for.
@@ -371,14 +351,11 @@ class Costmap(Location):
             self._offerable_entries(segment.flatten()) for segment in segments
         ]
         ratings = np.array([segment.sum() for segment in segments], dtype=float)
-        shares = (
-            number_of_samples * ratings / ratings.sum()
-            if ratings.any()
-            else np.full(len(segments), number_of_samples / len(segments))
-        )
+        if not ratings.any():
+            return [0] * len(segments)
+        shares = number_of_samples * ratings / ratings.sum()
         budgets = np.minimum(np.floor(shares).astype(int), capacities)
-        # segment_map offers its highest rated segments first, so whatever the shares
-        # left over is spent on the best rated segments that still hold entries.
+        # Spend the rest on the best rated segments first (segments are sorted that way).
         unspent = number_of_samples - int(budgets.sum())
         for index, capacity in enumerate(capacities):
             if unspent <= 0:
@@ -395,14 +372,8 @@ class Costmap(Location):
         random_generator: np.random.Generator,
     ) -> NDArray[np.intp]:
         """
-        Pick which of the given entries to offer, an entry's rating being its chance of
-        being sampled.
-
-        Read that way the map is the distribution its shape describes, so what it rates
-        highest is merely likeliest and the rest of the region still comes up. An entry
-        rated zero stands no chance, so only the rated ones can be offered -- unless the
-        map rates nothing at all, which is sampled from evenly. Fewer than asked for are
-        offered when that leaves too few, since an entry is only ever offered once.
+        Draw entries without repetition, each with a probability proportional to its
+        rating; entries rated zero are never drawn.
 
         :param ratings: The flattened map, one rating per entry.
         :param count: How many entries to pick at most.
@@ -412,8 +383,6 @@ class Costmap(Location):
         offerable = min(count, self._offerable_entries(ratings))
         if offerable <= 0:
             return np.empty(0, dtype=np.intp)
-        if not ratings.any():
-            return random_generator.choice(ratings.size, offerable, replace=False)
         return random_generator.choice(
             ratings.size, offerable, replace=False, p=ratings / ratings.sum()
         )
@@ -443,8 +412,6 @@ class Costmap(Location):
             width = segmented_map.shape[1]
             center = np.array([height // 2, width // 2])
             for index in indices:
-                if segmented_map[index[0]][index[1]] == 0:
-                    continue
                 # Compute world position independent of origin orientation:
                 # map indices increase with world axes; origin is at the center.
                 offset = (index - center) * self.resolution
@@ -630,22 +597,26 @@ class OccupancyCostmap(Costmap):
         return np.flip(map)
 
     @classmethod
-    def default_map(cls, context: Context, target: Pose) -> OccupancyCostmap:
+    def default_map(
+        cls, context: Context, target: Pose, *, resolution: float = 0.02, cells: int = 200
+    ) -> OccupancyCostmap:
         """
-        Creates an occupancy costmap with some default values, the most important one being that the distance_to_obstacle
-        is set to the radius of the robot base.
+        Creates an occupancy costmap around a target, keeping the robot base's radius
+        clear of obstacles.
 
         :param context: The context to create the occupancy cost map.
         :param target: The target pose for the occupancy cost map.
-        :returns: A occupancy cost map with default values.
+        :param resolution: Edge length of a cell, in meters.
+        :param cells: Number of cells along each side of the map.
+        :returns: The occupancy cost map.
         """
         ground_pose = deepcopy(target)
         ground_pose.z = 0
 
         return OccupancyCostmap(
-            resolution=0.02,
-            width=200,
-            height=200,
+            resolution=resolution,
+            width=cells,
+            height=cells,
             world=context.world,
             distance_to_obstacle=context.robot.mobile_base.base_radius,
             robot_view=context.robot,
@@ -959,6 +930,10 @@ class RingCostmap(Costmap):
         arm: Arm,
         origin: Pose,
         reach_fraction: float,
+        *,
+        resolution: float = 0.02,
+        cells: int = 200,
+        standard_deviation: int = 15,
     ) -> RingCostmap:
         """
         Creates a ring costmap around a target the robot is to reach with one arm.
@@ -967,15 +942,18 @@ class RingCostmap(Costmap):
         :param arm: The arm that will do the reaching.
         :param origin: The target the ring is drawn around.
         :param reach_fraction: The fraction of the arm's length the ring stands off
-            the target by. That needs to be replaced with an estimate of the
-            reachability space of the robot arms.
+            the target by.
+        :param resolution: Edge length of a cell, in meters.
+        :param cells: Number of cells along each side of the map.
+        :param standard_deviation: How far, in cells, the ring spreads around its
+            stand-off distance.
         :returns: The ring costmap.
         """
         return cls(
-            resolution=0.02,
-            width=200,
-            height=200,
-            standard_deviation=15,
+            resolution=resolution,
+            width=cells,
+            height=cells,
+            standard_deviation=standard_deviation,
             distance=arm.approximate_length() * reach_fraction,
             world=context.world,
             origin=origin,

@@ -1,5 +1,3 @@
-from copy import deepcopy
-
 import numpy as np
 import pytest
 from rustworkx import NoEdgeBetweenNodes
@@ -7,7 +5,6 @@ from rustworkx import NoEdgeBetweenNodes
 from giskardpy.utils.utils_for_tests import compare_axis_angle, compare_orientations
 from coraplex.datastructures.dataclasses import Context
 from coraplex.datastructures.trajectory import PoseTrajectory
-from coraplex.robot_plans.mixins import HasApproachesGraspPoses
 
 from coraplex.execution_environment import simulated_robot
 from coraplex.plans.factories import execute_single, sequential

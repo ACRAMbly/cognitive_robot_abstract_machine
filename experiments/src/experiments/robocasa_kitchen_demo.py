@@ -38,7 +38,6 @@ from semantic_digital_twin.adapters.robocasa_dataset.mujoco_compat import (
 with robocasa_version_assertions_relaxed():
     from robocasa.models.scenes.scene_registry import LayoutType, StyleType
 
-
 from coraplex.datastructures.dataclasses import Context
 from coraplex.execution_environment import simulated_robot
 from coraplex.plans.factories import sequential

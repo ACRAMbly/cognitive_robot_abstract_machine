@@ -1,4 +1,4 @@
-import os
+from pathlib import Path
 
 import numpy as np
 from numpy.typing import NDArray
@@ -17,14 +17,12 @@ from ..conftest import SAMPLING_SEED
 
 # %% fixtures
 
-BOWL_MESH = os.path.join(
-    os.path.dirname(__file__),
-    "..",
-    "..",
-    "coraplex",
-    "resources",
-    "objects",
-    "bowl.stl",
+BOWL_MESH = str(
+    Path(__file__).resolve().parents[2]
+    / "coraplex"
+    / "resources"
+    / "objects"
+    / "bowl.stl"
 )
 """
 The bowl the demos transport, an irregular scan rather than a turned shape.
@@ -127,7 +125,6 @@ def test_transporting_a_bowl_grasps_it_at_its_rim(pr2_and_bowl):
     )
 
     sequential([transport], context=context)
-    transport._action_plan
 
     first_pick_up = next(iter(context.query_backend.evaluate(transport.pick_up)))
     grasp_position = first_pick_up.pick_up.grasp.root_T_grasp.to_np()[:3, 3]

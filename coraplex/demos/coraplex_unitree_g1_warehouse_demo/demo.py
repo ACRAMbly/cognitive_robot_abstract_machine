@@ -20,14 +20,13 @@ from coraplex.robot_plans.actions.core.pick_up import PickUpAction
 from coraplex.robot_plans.actions.core.placing import PlaceAction
 from coraplex.robot_plans.actions.core.robot_body import ParkArmsAction
 from coraplex.testing import start_visualization
-from krrood.entity_query_language.factories import an, entity, variable
 from semantic_digital_twin.api import (
     BodySpecification,
     RobotSpecification,
     WorldSpecification,
 )
 from semantic_digital_twin.robots.unitree_g1 import UnitreeG1
-from semantic_digital_twin.semantic_annotations.mixins import HasGraspCandidates
+from semantic_digital_twin.semantic_annotations.mixins import GraspCandidate
 from semantic_digital_twin.semantic_annotations.semantic_annotations import Parcel
 from semantic_digital_twin.spatial_types.spatial_types import Pose
 from semantic_digital_twin.world import World
@@ -127,99 +126,52 @@ def standing_pose_in_front_of(pose: Pose, world: World) -> Pose:
     )
 
 
-def build_plan(world: World, robot: UnitreeG1) -> Plan:
+def straighten_torso(robot: UnitreeG1) -> MoveJointsMotion:
+    """
+    :param robot: The robot whose torso is to be straightened.
+    :return: The motion that brings every torso joint back to zero.
+    """
+    return MoveJointsMotion(
+        names=[connection.name for connection in robot.torso.active_connections],
+        positions=[0.0] * len(robot.torso.active_connections),
+    )
+
+
+def build_plan(
+    world: World, robot: UnitreeG1, source: Pose, destination: Pose, turn: float
+) -> Plan:
     """
     :param world: The world the plan acts in.
     :param robot: The robot carrying out the plan.
-    :return: The plan transporting the parcel from one pallet stack to the other.
+    :param source: Where the parcel stands when the plan starts.
+    :param destination: Where the parcel is to be put down.
+    :param turn: The yaw the robot turns by on the spot before it walks to the
+        destination, so it does not walk through the pallet stack it took the parcel
+        from.
+    :return: The plan carrying the parcel from one pallet stack to the other.
     """
-    parcel = world.get_body_by_name("parcel")
-    parcel_annotation = an(
-        entity(
-            semantic_annotation := variable(Parcel, domain=world.semantic_annotations)
-        ).where(semantic_annotation.root == parcel)
-    ).first()
-    grasp = Pose(reference_frame=parcel)
+    parcel = world.get_semantic_annotations_by_type(Parcel)[0]
     context = Context(world=world, robot=robot, evaluate_conditions=False)
-    place_pose = Pose(
-        PLACE_POSE.to_position(), PLACE_POSE.to_quaternion(), reference_frame=world.root
-    )
-    pick_pose = Pose(
-        PICK_POSE.to_position(), PICK_POSE.to_quaternion(), reference_frame=world.root
-    )
 
     return sequential(
         [
-            # %% bring to place pose
             ParkArmsAction(robot.get_arms()),
-            NavigateAction(standing_pose_in_front_of(PICK_POSE, world)),
-            PickUpAction(grasp, robot.torso.left_arm),
+            NavigateAction(standing_pose_in_front_of(source, world)),
+            PickUpAction(GraspCandidate.from_body_origin(parcel), robot.torso.left_arm),
             ParkArmsAction(robot.get_arms()),
-            MoveJointsMotion(
-                names=[
-                    connection.name for connection in robot.torso.active_connections
-                ],
-                positions=[0.0] * len(robot.torso.active_connections),
+            straighten_torso(robot),
+            NavigateAction(Pose.from_xyz_rpy(yaw=turn, reference_frame=robot.root)),
+            NavigateAction(standing_pose_in_front_of(destination, world)),
+            PlaceAction(
+                parcel,
+                Pose(
+                    destination.to_position(),
+                    destination.to_quaternion(),
+                    reference_frame=world.root,
+                ),
             ),
-            NavigateAction(Pose.from_xyz_rpy(yaw=-1.57, reference_frame=robot.root)),
-            NavigateAction(standing_pose_in_front_of(PLACE_POSE, world)),
-            PlaceAction(parcel_annotation, place_pose),
             ParkArmsAction(robot.get_arms()),
-            MoveJointsMotion(
-                names=[
-                    connection.name for connection in robot.torso.active_connections
-                ],
-                positions=[0.0] * len(robot.torso.active_connections),
-            ),
-        ],
-        context=context,
-    ).plan
-
-
-def build_plan2(world: World, robot: UnitreeG1) -> Plan:
-    """
-    :param world: The world the plan acts in.
-    :param robot: The robot carrying out the plan.
-    :return: The plan transporting the parcel from one pallet stack to the other.
-    """
-    parcel = world.get_body_by_name("parcel")
-    parcel_annotation = an(
-        entity(
-            semantic_annotation := variable(Parcel, domain=world.semantic_annotations)
-        ).where(semantic_annotation.root == parcel)
-    ).first()
-    grasp = Pose(reference_frame=parcel)
-    context = Context(world=world, robot=robot, evaluate_conditions=False)
-    place_pose = Pose(
-        PLACE_POSE.to_position(), PLACE_POSE.to_quaternion(), reference_frame=world.root
-    )
-    pick_pose = Pose(
-        PICK_POSE.to_position(), PICK_POSE.to_quaternion(), reference_frame=world.root
-    )
-
-    return sequential(
-        [
-            # %% bring to place pose
-            ParkArmsAction(robot.get_arms()),
-            NavigateAction(standing_pose_in_front_of(PLACE_POSE, world)),
-            PickUpAction(grasp, robot.torso.left_arm),
-            ParkArmsAction(robot.get_arms()),
-            MoveJointsMotion(
-                names=[
-                    connection.name for connection in robot.torso.active_connections
-                ],
-                positions=[0.0] * len(robot.torso.active_connections),
-            ),
-            NavigateAction(Pose.from_xyz_rpy(yaw=1.57, reference_frame=robot.root)),
-            NavigateAction(standing_pose_in_front_of(PICK_POSE, world)),
-            PlaceAction(parcel_annotation, pick_pose),
-            ParkArmsAction(robot.get_arms()),
-            MoveJointsMotion(
-                names=[
-                    connection.name for connection in robot.torso.active_connections
-                ],
-                positions=[0.0] * len(robot.torso.active_connections),
-            ),
+            straighten_torso(robot),
         ],
         context=context,
     ).plan
@@ -253,9 +205,9 @@ start_visualization(world)
 
 with simulated_robot:
     for _ in range(10):
-        build_plan(world, robot).perform()
-        build_plan2(world, robot).perform()
-    build_plan(world, robot).perform()
+        build_plan(world, robot, PICK_POSE, PLACE_POSE, turn=-1.57).perform()
+        build_plan(world, robot, PLACE_POSE, PICK_POSE, turn=1.57).perform()
+    build_plan(world, robot, PICK_POSE, PLACE_POSE, turn=-1.57).perform()
 
 parcel_position = world.get_body_by_name("parcel").global_pose
 print(f"parcel delivered to {np.round(parcel_position.to_position(), 3)}")

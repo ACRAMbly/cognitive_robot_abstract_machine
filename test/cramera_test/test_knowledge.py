@@ -9,7 +9,6 @@ import pytest
 
 krrood = pytest.importorskip("krrood", reason="EQL requires krrood")
 
-
 from semantic_digital_twin.datastructures.prefixed_name import (
     PrefixedName,
 )  # noqa: E402
@@ -267,6 +266,19 @@ class TestQueries:
             {"name": "milk", "kind": "object"},
             {"name": "place_area", "kind": "location"},
         ]
+
+    def test_a_query_naming_the_old_side_enum_still_runs(self, fixture_scene):
+        """
+        Queries stored before the side enum was renamed name it ``Arms`` and keep
+        answering the same.
+        """
+        session = EqlSession.of_active_scene()
+
+        old = session.run("an(entity(arm).where(arm.side == Arms.LEFT))")
+        new = session.run("an(entity(arm).where(arm.side == ArmSide.LEFT))")
+
+        assert old.ok and new.ok
+        assert old.rows == new.rows
 
     def test_only_a_real_entity_is_treated_as_one(self):
         """

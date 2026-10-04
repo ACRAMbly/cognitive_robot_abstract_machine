@@ -152,6 +152,25 @@ class CannotInsertBesideRoot(DataclassException):
 
 
 @dataclass
+class NodeNotInPlanTree(DataclassException):
+    """
+    Raised when the nodes before a node are asked for, but the node cannot be reached
+    from the root of its plan.
+    """
+
+    node: PlanNode
+    """
+    The node that is not part of its plan's tree.
+    """
+
+    def error_message(self) -> str:
+        return f"{self.node} cannot be reached from the root of its plan."
+
+    def suggest_correction(self) -> str:
+        return "add the node below the plan's root before asking what precedes it"
+
+
+@dataclass
 class MissingWaypoints(DataclassException):
     """
     Raised when a waypoint motion or tool action produced no waypoints to follow.

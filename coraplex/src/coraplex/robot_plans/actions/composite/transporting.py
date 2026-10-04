@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import timedelta
 from typing_extensions import Any, Self
 
 from krrood.entity_query_language.factories import a, variable
@@ -245,7 +244,7 @@ class MoveAndPlaceAction(ActionDescription):
 
 
 @dataclass
-class MoveAndPickUpAction(ActionDescription, LimitsItsCandidates):
+class MoveAndPickUpAction(ActionDescription):
     """
     Navigates to where the robot stands, faces the object and picks it up.
     """
