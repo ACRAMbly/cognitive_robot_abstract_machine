@@ -7,11 +7,8 @@ pipeline without polluting the core evaluation methods.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from uuid import UUID
-
 from ordered_set import OrderedSet
-from typing_extensions import Any, Dict, List, Optional, Set
+from typing_extensions import Any, List, Optional
 
 from krrood.entity_query_language._monitoring import monitored
 from krrood.entity_query_language.core.base_expressions import (
@@ -41,6 +38,7 @@ from krrood.entity_query_language.query.query import Query
 def is_condition_participant(
     expression: SymbolicExpression,
     parent: Optional[SymbolicExpression] = None,
+    evaluation_context: Optional[EvaluationContext] = None,
 ) -> bool:
     """
     Check whether the expression participates in condition evaluation.
@@ -49,6 +47,8 @@ def is_condition_participant(
     :param parent: The parent relevant to the caller's own traversal, when the caller
         already knows it (for example a graph walk that reached *expression* through one
         of its own children edges). Takes precedence over both of the fallbacks below.
+    :param evaluation_context: The context of the evaluation that reached *expression*,
+        when it is not the current one.
     :return: ``True`` if *expression* is a :class:`~krrood.entity_query_language.operators.comparator.Comparator`,
         :class:`~krrood.entity_query_language.predicate.Predicate`, or
         :class:`~krrood.entity_query_language.operators.core_logical_operators.LogicalOperator`,
@@ -59,7 +59,8 @@ def is_condition_participant(
         return True
     if parent is not None:
         return isinstance(parent, TruthValueOperator)
-    evaluation_context = get_evaluation_context()
+    if evaluation_context is None:
+        evaluation_context = get_evaluation_context()
     if evaluation_context is not None:
         return evaluation_context.is_child_of_truth_value_operator(expression)
     structural_parent = expression._parent_
@@ -201,90 +202,46 @@ class InferenceRecorder(EvaluationObserver):
         register_inference(result.bindings[expression._id_], expression, result)
 
 
-@dataclass
-class StatementTruths:
+def evaluate_statements_of(condition: SymbolicExpression) -> List[OperationResult]:
     """
-    The statements of a condition and whether each held, read from one evaluation of the
-    condition.
+    Evaluate *condition* and collect the results of its statements.
 
     A statement is any condition the evaluation reaches, at any depth, except the
     conjunctions and disjunctions joining statements, since their truth follows from the
-    statements they join. A statement is judged only on the values its operator lets
+    statements they join. A statement is evaluated only on the values its operator lets
     through, for example only where the conjuncts before it hold.
+
+    :param condition: The condition to evaluate.
+    :return: The results of the statements of *condition*, in the order they were
+        evaluated.
     """
-
-    reached: Dict[UUID, SymbolicExpression] = field(default_factory=dict)
-    """
-    The statements the evaluation reached, by id, in the order it reached them.
-    """
-
-    held_ids: Set[UUID] = field(default_factory=set)
-    """
-    The ids of the statements that held for at least one of the values they were
-    evaluated on.
-    """
-
-    @classmethod
-    def from_evaluation_of(cls, condition: SymbolicExpression) -> StatementTruths:
-        """
-        :param condition: The condition to evaluate.
-        :return: The truths of the statements of *condition*, read from the results of
-            one complete evaluation of it.
-        """
-        evaluation_context = create_default_evaluation_context()
-        results = list(condition._evaluate_in_new_context_(evaluation_context))
-        statement_truths = cls()
-        with evaluation_context.as_current():
-            for result in results:
-                for step in result.result_chain:
-                    if is_statement_of(step.operand, condition):
-                        statement_truths.record(step)
-        return statement_truths
-
-    def record(self, result: OperationResult) -> None:
-        """
-        :param result: A result whose operand is a statement.
-        """
-        self.reached.setdefault(result.operand._id_, result.operand)
-        if result.is_true:
-            self.held_ids.add(result.operand._id_)
-
-    @property
-    def held(self) -> List[SymbolicExpression]:
-        """
-        :return: The statements that held for at least one of the values they were
-            evaluated on.
-        """
-        return [
-            statement
-            for statement_id, statement in self.reached.items()
-            if statement_id in self.held_ids
-        ]
-
-    @property
-    def never_held(self) -> List[SymbolicExpression]:
-        """
-        :return: The statements that held for none of the values they were evaluated on.
-        """
-        return [
-            statement
-            for statement_id, statement in self.reached.items()
-            if statement_id not in self.held_ids
-        ]
+    evaluation_context = create_default_evaluation_context()
+    results = list(condition._evaluate_in_new_context_(evaluation_context))
+    return [
+        step
+        for result in results
+        for step in result.result_chain
+        if is_statement_of(step.operand, condition, evaluation_context)
+    ]
 
 
 def is_statement_of(
-    expression: Optional[SymbolicExpression], condition: SymbolicExpression
+    expression: Optional[SymbolicExpression],
+    condition: SymbolicExpression,
+    evaluation_context: EvaluationContext,
 ) -> bool:
     """
     :param expression: An expression the evaluation of *condition* reached.
     :param condition: The condition being evaluated.
+    :param evaluation_context: The context *condition* was evaluated in.
     :return: Whether *expression* is a statement of *condition*, see
-        :class:`StatementTruths`.
+        :func:`evaluate_statements_of`.
     """
     if expression is None or isinstance(expression, (AND, OR)):
         return False
-    return expression._id_ == condition._id_ or is_condition_participant(expression)
+    return expression._id_ == condition._id_ or is_condition_participant(
+        expression, evaluation_context=evaluation_context
+    )
 
 
 def create_default_evaluation_context() -> EvaluationContext:

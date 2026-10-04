@@ -37,7 +37,7 @@ from krrood.entity_query_language.core.mapped_variable import (
     HasSymbolicOperations,
     Attribute,
 )
-from krrood.entity_query_language.evaluation import StatementTruths
+from krrood.entity_query_language.evaluation import evaluate_statements_of
 from krrood.entity_query_language.core.variable import (
     DomainType,
     Literal,
@@ -885,19 +885,31 @@ def get_false_statements(statement: SymbolicExpression) -> List[SymbolicExpressi
     """
     :param statement: The condition whose statements are checked.
     :return: The statements of the condition that held for none of the values they were
-        evaluated on, see :class:`StatementTruths`. In a conjunction that is the
+        evaluated on, see :func:`evaluate_statements_of`. In a conjunction that is the
         first conjunct that could not hold together with the conjuncts before it.
     """
-    return StatementTruths.from_evaluation_of(statement).never_held
+    statement_results = evaluate_statements_of(statement)
+    held_ids = {result.operand._id_ for result in statement_results if result.is_true}
+    never_held = {
+        result.operand._id_: result.operand
+        for result in statement_results
+        if result.operand._id_ not in held_ids
+    }
+    return list(never_held.values())
 
 
 def get_true_statements(statement: SymbolicExpression) -> List[SymbolicExpression]:
     """
     :param statement: The condition whose statements are checked.
     :return: The statements of the condition that held for at least one of the values
-        they were evaluated on, see :class:`StatementTruths`.
+        they were evaluated on, see :func:`evaluate_statements_of`.
     """
-    return StatementTruths.from_evaluation_of(statement).held
+    held = {
+        result.operand._id_: result.operand
+        for result in evaluate_statements_of(statement)
+        if result.is_true
+    }
+    return list(held.values())
 
 
 def evaluate_condition(condition: ConditionType) -> bool:
