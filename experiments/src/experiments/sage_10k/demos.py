@@ -31,7 +31,7 @@ from semantic_digital_twin.semantic_annotations.natural_language import (
 )
 from semantic_digital_twin.reasoning.predicates import (
     compute_euclidean_planar_distance,
-    is_supported_by,
+    SupportedBy,
 )
 from semantic_digital_twin.robots.hsrb import HSRB
 from semantic_digital_twin.robots.robot_parts import Arm
@@ -264,7 +264,7 @@ class Sage10kTVStudioDemo(Sage10kAbstractDemoHSRB):
             entity(v)
             .where(
                 contains(v.type_description, "book"),
-                is_supported_by(v.root, couch_table.root),
+                SupportedBy(v.root, couch_table.root),
             )
             .ordered_by(
                 v,
@@ -340,7 +340,7 @@ class Sage10kCraftsmanLobbyDemo(Sage10kAbstractDemoHSRB):
             entity(v)
             .where(
                 contains(v.type_description, "book"),
-                is_supported_by(v.root, couch_table.root),
+                SupportedBy(v.root, couch_table.root),
             )
             .ordered_by(
                 v,
@@ -877,7 +877,7 @@ class Sage10kAmericanBuffetDemo(Sage10kAbstractDemoHSRB):
         cup = (
             an(entity(v_cup)).where(
                 contains(v_cup.type_description, "cup"),
-                is_supported_by(v_cup.root, table.root, 0.05),
+                SupportedBy(v_cup.root, table.root, 0.05),
             )
         ).first()
         return cup
