@@ -30,6 +30,7 @@ from krrood.entity_query_language.operators.core_logical_operators import (
     AND,
     OR,
     LogicalOperator,
+    Not,
 )
 from krrood.entity_query_language.predicate import Predicate
 from krrood.entity_query_language.query.query import Query
@@ -204,10 +205,12 @@ def evaluate_statements_of(condition: SymbolicExpression) -> List[OperationResul
 
     The statements are *condition* itself and every expression its evaluation evaluated
     as a condition, at any depth, except the conjunctions and disjunctions joining
-    statements, since their truth follows from the statements they join. The values the
-    statements are about, such as variables, attributes and literals, are not
-    statements. A statement is evaluated only on the values its operator lets through,
-    for example only where the conjuncts before it hold.
+    statements, since their truth follows from the statements they join. A negation is
+    one statement as a whole: what it negates holds exactly when the negation does not,
+    so nothing inside a negation is a statement of its own. The values the statements
+    are about, such as variables, attributes and literals, are not statements. A
+    statement is evaluated only on the values its operator lets through, for example
+    only where the conjuncts before it hold.
 
     :param condition: The condition to evaluate.
     :return: The results of the statements of *condition*, in the order they were
@@ -215,12 +218,23 @@ def evaluate_statements_of(condition: SymbolicExpression) -> List[OperationResul
     """
     evaluation_context = create_default_evaluation_context()
     results = list(condition._evaluate_in_new_context_(evaluation_context))
-    return [
+    steps = [
         step
         for result in results
         for step in result.result_chain
         if step.operand is not None
-        and not isinstance(step.operand, (AND, OR))
+    ]
+    negated_ids = {
+        negated._id_
+        for step in steps
+        if isinstance(step.operand, Not)
+        for negated in step.operand._descendants_
+    }
+    return [
+        step
+        for step in steps
+        if not isinstance(step.operand, (AND, OR))
+        and step.operand._id_ not in negated_ids
         and (
             step.operand._id_ == condition._id_
             or evaluation_context.is_child_of_truth_value_operator(step.operand)

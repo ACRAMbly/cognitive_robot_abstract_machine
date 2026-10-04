@@ -85,6 +85,40 @@ def test_a_negation_that_does_not_hold_is_a_false_statement():
     assert [statement._id_ for statement in statements] == [negation._id_]
 
 
+def test_what_a_holding_negation_negates_is_not_a_false_statement():
+    """
+    A negation that holds is satisfied by what it negates being false, so that is not
+    reported as a statement that could not be satisfied.
+    """
+    position = variable(KRROODPosition, [KRROODPosition(2.0, 0.0, 0.0)])
+    large_x = IsGreaterThan(position.x, 1.0)
+    large_y = IsGreaterThan(position.y, 1.0)
+    large_z = IsGreaterThan(position.z, 1.0)
+
+    statements = get_false_statements(and_(large_x, not_(large_y), large_z))
+
+    assert [statement._id_ for statement in statements] == [large_z._id_]
+
+
+def test_what_a_negation_negates_is_not_a_true_statement():
+    position = variable(KRROODPosition, [KRROODPosition(2.0, 2.0, 0.0)])
+    large_x = IsGreaterThan(position.x, 1.0)
+    large_y = IsGreaterThan(position.y, 1.0)
+
+    statements = get_true_statements(and_(large_y, not_(large_x)))
+
+    assert [statement._id_ for statement in statements] == [large_y._id_]
+
+
+def test_nothing_inside_a_negation_is_a_statement():
+    position = variable(KRROODPosition, [KRROODPosition(0.0, 2.0, 0.0)])
+    negation = not_(or_(IsGreaterThan(position.x, 1.0), IsGreaterThan(position.y, 1.0)))
+
+    statements = get_false_statements(negation)
+
+    assert [statement._id_ for statement in statements] == [negation._id_]
+
+
 def test_every_alternative_that_does_not_hold_is_a_false_statement():
     position = variable(KRROODPosition, [KRROODPosition(0.0, 0.0, 0.0)])
     large_x = IsGreaterThan(position.x, 1.0)
