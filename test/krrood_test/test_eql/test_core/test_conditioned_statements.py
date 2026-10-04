@@ -42,6 +42,15 @@ def test_calculated_operands_of_a_statement_are_not_statements_of_it():
     assert statements == []
 
 
+def test_comparisons_a_statement_takes_as_values_are_not_statements_of_it():
+    position = variable(KRROODPosition, [KRROODPosition(2.0, 0.0, 0.0)])
+    comparison = IsGreaterThan(position.x > 1.0, position.y > 1.0)
+
+    statements = get_true_statements(comparison)
+
+    assert [statement._id_ for statement in statements] == [comparison._id_]
+
+
 def test_statements_of_nested_conjunctions_are_the_conjuncts():
     position = variable(KRROODPosition, [KRROODPosition(2.0, 2.0, 0.0)])
     large_x = IsGreaterThan(position.x, 1.0)

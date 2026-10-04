@@ -38,7 +38,6 @@ from krrood.entity_query_language.query.query import Query
 def is_condition_participant(
     expression: SymbolicExpression,
     parent: Optional[SymbolicExpression] = None,
-    evaluation_context: Optional[EvaluationContext] = None,
 ) -> bool:
     """
     Check whether the expression participates in condition evaluation.
@@ -47,8 +46,6 @@ def is_condition_participant(
     :param parent: The parent relevant to the caller's own traversal, when the caller
         already knows it (for example a graph walk that reached *expression* through one
         of its own children edges). Takes precedence over both of the fallbacks below.
-    :param evaluation_context: The context of the evaluation that reached *expression*,
-        when it is not the current one.
     :return: ``True`` if *expression* is a :class:`~krrood.entity_query_language.operators.comparator.Comparator`,
         :class:`~krrood.entity_query_language.predicate.Predicate`, or
         :class:`~krrood.entity_query_language.operators.core_logical_operators.LogicalOperator`,
@@ -59,8 +56,7 @@ def is_condition_participant(
         return True
     if parent is not None:
         return isinstance(parent, TruthValueOperator)
-    if evaluation_context is None:
-        evaluation_context = get_evaluation_context()
+    evaluation_context = get_evaluation_context()
     if evaluation_context is not None:
         return evaluation_context.is_child_of_truth_value_operator(expression)
     structural_parent = expression._parent_
@@ -206,10 +202,12 @@ def evaluate_statements_of(condition: SymbolicExpression) -> List[OperationResul
     """
     Evaluate *condition* and collect the results of its statements.
 
-    A statement is any condition the evaluation reaches, at any depth, except the
-    conjunctions and disjunctions joining statements, since their truth follows from the
-    statements they join. A statement is evaluated only on the values its operator lets
-    through, for example only where the conjuncts before it hold.
+    The statements are *condition* itself and every expression its evaluation evaluated
+    as a condition, at any depth, except the conjunctions and disjunctions joining
+    statements, since their truth follows from the statements they join. The values the
+    statements are about, such as variables, attributes and literals, are not
+    statements. A statement is evaluated only on the values its operator lets through,
+    for example only where the conjuncts before it hold.
 
     :param condition: The condition to evaluate.
     :return: The results of the statements of *condition*, in the order they were
@@ -221,26 +219,26 @@ def evaluate_statements_of(condition: SymbolicExpression) -> List[OperationResul
         step
         for result in results
         for step in result.result_chain
-        if is_statement_of(step.operand, condition, evaluation_context)
+        if is_statement(step.operand, condition, evaluation_context)
     ]
 
 
-def is_statement_of(
+def is_statement(
     expression: Optional[SymbolicExpression],
     condition: SymbolicExpression,
     evaluation_context: EvaluationContext,
 ) -> bool:
     """
     :param expression: An expression the evaluation of *condition* reached.
-    :param condition: The condition being evaluated.
+    :param condition: The condition that was evaluated.
     :param evaluation_context: The context *condition* was evaluated in.
-    :return: Whether *expression* is a statement of *condition*, see
+    :return: Whether *expression* is one of the statements, see
         :func:`evaluate_statements_of`.
     """
     if expression is None or isinstance(expression, (AND, OR)):
         return False
-    return expression._id_ == condition._id_ or is_condition_participant(
-        expression, evaluation_context=evaluation_context
+    return expression._id_ == condition._id_ or (
+        evaluation_context.is_child_of_truth_value_operator(expression)
     )
 
 
