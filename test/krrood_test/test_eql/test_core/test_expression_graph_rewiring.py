@@ -1,11 +1,14 @@
 """
-Rewiring the expression graph finds expressions by identity, since ``==`` on symbolic
-expressions builds a comparison.
+Rewiring the expression graph must find an expression by identity.
 
-The private graph methods are driven directly because no public operation reaches them.
+Comparing symbolic expressions with ``==`` builds a comparison instead of comparing
+them, so a lookup that relies on it picks whichever expression comes first. The parent-
+removal tests drive the private graph methods directly, because no public operation
+reaches the parent-removal step while the removed expression is still recorded on both
+sides.
 """
 
-from krrood.entity_query_language.factories import variable
+from krrood.entity_query_language.factories import case_when, variable
 
 from ...dataset.example_classes import KRROODPosition
 from ...dataset.value_comparisons import IsGreaterThan
@@ -42,30 +45,24 @@ def test_detaching_a_parent_keeps_the_other_parents():
     assert identifiers(position._parents_) == identifiers([x])
 
 
-# %% replacing a child that occurs more than once
+# %% replacing a child
 
 
-def test_replacing_a_child_replaces_it_on_both_sides_of_a_comparison():
+def test_replacing_a_child_with_its_sibling_leaves_the_sibling_once():
     position = variable(KRROODPosition, [])
-    other_position = variable(KRROODPosition, [])
-    x, other_x = position.x, other_position.x
-    comparison = x > x
+    x, y = position.x, position.y
+    predicate = IsGreaterThan(x, y)
 
-    comparison._replace_child_field_(x, other_x)
+    predicate._replace_child_(x, y)
 
-    assert identifiers([comparison.left, comparison.right]) == identifiers(
-        [other_x, other_x]
-    )
+    assert identifiers(predicate._children_) == identifiers([y])
 
 
-def test_replacing_a_child_replaces_every_argument_it_is_given_as():
+def test_replacing_a_child_replaces_every_branch_of_a_case_holding_it():
     position = variable(KRROODPosition, [])
-    other_position = variable(KRROODPosition, [])
-    x, other_x = position.x, other_position.x
-    predicate = IsGreaterThan(x, x)
+    y, z = position.y, position.z
+    case = case_when(position.x > 0, y, y)
 
-    predicate._replace_child_field_(x, other_x)
+    case._replace_child_(y, z)
 
-    assert identifiers(predicate._child_variables_.values()) == identifiers(
-        [other_x, other_x]
-    )
+    assert identifiers([case.then_value, case.else_value]) == identifiers([z, z])
