@@ -219,27 +219,13 @@ def evaluate_statements_of(condition: SymbolicExpression) -> List[OperationResul
         step
         for result in results
         for step in result.result_chain
-        if is_statement(step.operand, condition, evaluation_context)
+        if step.operand is not None
+        and not isinstance(step.operand, (AND, OR))
+        and (
+            step.operand._id_ == condition._id_
+            or evaluation_context.is_child_of_truth_value_operator(step.operand)
+        )
     ]
-
-
-def is_statement(
-    expression: Optional[SymbolicExpression],
-    condition: SymbolicExpression,
-    evaluation_context: EvaluationContext,
-) -> bool:
-    """
-    :param expression: An expression the evaluation of *condition* reached.
-    :param condition: The condition that was evaluated.
-    :param evaluation_context: The context *condition* was evaluated in.
-    :return: Whether *expression* is one of the statements, see
-        :func:`evaluate_statements_of`.
-    """
-    if expression is None or isinstance(expression, (AND, OR)):
-        return False
-    return expression._id_ == condition._id_ or (
-        evaluation_context.is_child_of_truth_value_operator(expression)
-    )
 
 
 def create_default_evaluation_context() -> EvaluationContext:
