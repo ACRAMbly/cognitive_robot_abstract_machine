@@ -301,8 +301,6 @@ class GraspingAction(
     def _action_plan(self) -> PlanNode:
         return sequential(
             children=[
-                # The grasp is defined relative to the object, so it stays correct even
-                # if the object's pose is updated after the goal was defined.
                 ReachAction(
                     grasp=self.grasp,
                     arm=self.arm,

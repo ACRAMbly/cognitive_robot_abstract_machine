@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing_extensions import Any, Self
+from typing_extensions import Self
 
 from krrood.entity_query_language.factories import a, variable
 from coraplex.datastructures.dataclasses import Context
@@ -9,7 +9,7 @@ from coraplex.locations.locations import ReachabilityLocation
 from coraplex.plans.factories import sequential
 from coraplex.plans.plan_node import PlanNode
 from coraplex.robot_plans.actions.base import ActionDescription
-from coraplex.robot_plans.mixins import HasApproachesGraspPoses
+from coraplex.robot_plans.mixins import HasApproachesGraspPoses, LimitsItsCandidates
 from coraplex.robot_plans.actions.composite.facing import FaceAndLookAtAction
 from coraplex.robot_plans.actions.core.container import OpenAction
 from coraplex.robot_plans.actions.core.navigation import (
@@ -30,31 +30,6 @@ from semantic_digital_twin.semantic_annotations.mixins import (
 )
 from semantic_digital_twin.semantic_annotations.semantic_annotations import Handle
 from semantic_digital_twin.spatial_types.spatial_types import Pose
-
-
-@dataclass
-class LimitsItsCandidates:
-    """
-    Adds a limit on how many candidates a step tries.
-
-    A candidate is tried by running the step with it, so a step that succeeds with none
-    would otherwise try every one it is offered.
-    """
-
-    candidates_to_try: int = field(default=50, kw_only=True)
-    """
-    How many candidates a step tries before giving up.
-    """
-
-    def _bound_candidates(self, *steps: Any) -> None:
-        """
-        Limit every step that tries candidates to :attr:`candidates_to_try` of them.
-
-        :param steps: The steps.
-        """
-        for step in steps:
-            if isinstance(step, Match):
-                step.limit(self.candidates_to_try)
 
 
 @dataclass

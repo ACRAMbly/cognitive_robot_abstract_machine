@@ -24,7 +24,6 @@ from coraplex.robot_plans.actions.core.navigation import (
 )
 from coraplex.robot_plans.actions.composite.facing import FaceAndLookAtAction
 from coraplex.robot_plans.actions.composite.transporting import (
-    LimitsItsCandidates,
     MoveAndOpenAction,
     MoveAndPickUpAction,
     MoveAndPlaceAction,
@@ -35,6 +34,7 @@ from coraplex.robot_plans.actions.core.pick_up import PickUpAction
 from coraplex.querying.predicates import IsAmongTheClosestGraspsTo
 from coraplex.robot_plans.actions.core.placing import PlaceAction
 from coraplex.robot_plans.actions.core.robot_body import MoveTorsoAction
+from coraplex.robot_plans.mixins import LimitsItsCandidates
 from semantic_digital_twin.semantic_annotations.semantic_annotations import (
     Handle,
     Milk,

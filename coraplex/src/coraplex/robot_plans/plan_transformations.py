@@ -20,7 +20,6 @@ from coraplex.plans.plan_transformation import (
 from coraplex.robot_plans import MoveToolCenterPointMotion
 from coraplex.robot_plans.actions.composite.facing import FaceAndLookAtAction
 from coraplex.robot_plans.actions.composite.transporting import (
-    LimitsItsCandidates,
     MoveAndOpenAction,
     MoveAndPickUpAction,
     TransportAction,
@@ -33,6 +32,7 @@ from coraplex.robot_plans.actions.core.navigation import (
     NavigateAction,
 )
 from coraplex.robot_plans.actions.core.pick_up import PickUpAction, ReachAction
+from coraplex.robot_plans.mixins import LimitsItsCandidates
 from coraplex.robot_plans.actions.core.robot_body import ParkArmsAction
 from krrood.entity_query_language.factories import a, variable
 from krrood.patterns.subclass_safe_generic import SubClassSafeGeneric

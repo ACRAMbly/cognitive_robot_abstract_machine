@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field, fields, replace
 from typing import Optional, Tuple, Type, TYPE_CHECKING, Iterator
 
 from coraplex.datastructures.enums import ActionTrialVisualization, ExecutionType
@@ -21,6 +21,7 @@ from krrood.entity_query_language.query.match import Match
 if TYPE_CHECKING:
     from coraplex.datastructures.dataclasses import Context
     from coraplex.robot_plans.actions.base import ActionDescription
+    from semantic_digital_twin.world import World
 
 
 # %% trying a grounded action out before it is executed for real
@@ -88,10 +89,10 @@ class ActionTrial:
         """
         Run `action` against the copy and restore the copy afterwards.
 
-        The action is copied onto the copy first: reading through a reference to the
-        world it was grounded in would be harmless, but an action that modifies the
-        model (attaching a grasped body, say) requires the entities it is given to
-        belong to the world being modified.
+        The action is copied onto the copy first (see :meth:`_on_the_copy`): reading
+        through a reference to the world it was grounded in would be harmless, but an
+        action that modifies the model (attaching a grasped body, say) requires the
+        entities it is given to belong to the world being modified.
 
         The version to roll back to is read here rather than when the copy is taken, so
         each attempt undoes only its own modifications. Reverting is itself recorded, so
@@ -109,7 +110,7 @@ class ActionTrial:
         world = context.world
         plan = Plan(context=context)
         candidate_sequence = SequentialNode()
-        candidate = ActionNode(designator=world.rebind_world_entities(action))
+        candidate = ActionNode(designator=self._on_the_copy(action, world))
         plan.add_node(candidate_sequence)
         candidate_sequence.add_child(candidate)
         version = world.get_world_model_manager().version
@@ -132,6 +133,26 @@ class ActionTrial:
                 # Undo the model changes before leaving the reset context restores the
                 # state, which needs the degrees of freedom it was snapshotted with.
                 world.rollback_to_version(version)
+
+    @staticmethod
+    def _on_the_copy(action: ActionDescription, world: World) -> ActionDescription:
+        """
+        :param action: The grounded action to try out.
+        :param world: The copy to try it against.
+        :return: A new action with the parameters of `action`, referring to `world`.
+            Only the parameters are carried over: the plan node of `action` belongs to
+            the plan it was grounded in, not to the trial.
+        """
+        return replace(
+            action,
+            **{
+                parameter.name: world.rebind_world_entities(
+                    getattr(action, parameter.name)
+                )
+                for parameter in fields(action)
+                if parameter.init
+            },
+        )
 
     def _copy(self) -> Context:
         """

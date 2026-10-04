@@ -38,6 +38,7 @@ from giskardpy.motion_statechart.motion_statechart import (
 from giskardpy.qp.qp_controller_config import QPControllerConfig
 from giskardpy.ros_executor import Ros2Executor
 from krrood.entity_query_language.factories import evaluate_condition
+from krrood.ormatic.utils import classproperty
 from krrood.symbolic_math.symbolic_math import Scalar, trinary_logic_not
 from semantic_digital_twin.world_description.world_entity import Body
 
@@ -236,15 +237,6 @@ class GiskardExecutable(Executable):
     :py:class:`pycram.motion_executor.ExecutionEnvironment`.
     """
 
-    simulation_time_limit: ClassVar[timedelta] = timedelta(minutes=2)
-    """
-    The simulated time after which a simulated motion is given up on, however it is
-    progressing.
-
-    Far longer than any motion takes, so it only ends a run that would otherwise tick
-    forever.
-    """
-
     collision_avoidance: ClassVar[bool] = False
     """
     Whether the robot avoids colliding with its surroundings and with itself, managed by
@@ -256,6 +248,14 @@ class GiskardExecutable(Executable):
     :class:`~giskardpy.motion_statechart.goals.collision_avoidance.SelfCollisionAvoidance`
     to the motion state chart.
     """
+
+    @classproperty
+    def simulation_time_limit(self) -> timedelta:
+        """
+        :return: The simulated time after which a simulated motion is given up on, however it is
+        progressing.
+        """
+        return timedelta(minutes=2)
 
     @property
     def giskard_executables(self) -> List[GiskardExecutable]:

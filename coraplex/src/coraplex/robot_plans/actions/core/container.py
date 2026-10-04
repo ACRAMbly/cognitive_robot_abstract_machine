@@ -56,8 +56,6 @@ class OpenAction(ActionDescription):
     def _action_plan(self) -> PlanNode:
         return sequential(
             [
-                # Taken along the handle's own x-axis, the way a handle is gripped
-                # from the front, rather than by any of the handle's other candidates.
                 GraspingAction(
                     GraspCandidate.from_body_origin(self.handle),
                     self.arm,
@@ -132,8 +130,6 @@ class CloseAction(ActionDescription):
     def _action_plan(self) -> PlanNode:
         return sequential(
             [
-                # Taken along the handle's own x-axis, the way a handle is gripped
-                # from the front, rather than by any of the handle's other candidates.
                 GraspingAction(
                     GraspCandidate.from_body_origin(self.handle),
                     self.arm,

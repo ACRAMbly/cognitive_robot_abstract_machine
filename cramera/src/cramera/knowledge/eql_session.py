@@ -89,7 +89,6 @@ class EqlSession:
                 "Gripper": Gripper,
                 "Arm": RecordedArm,
                 "ArmSide": ArmSide,
-                # The name the side enum had before; kept so stored queries still run.
                 "Arms": ArmSide,
                 "objects": self.knowledge_base.objects,
                 "episodes": self.knowledge_base.episodes,
