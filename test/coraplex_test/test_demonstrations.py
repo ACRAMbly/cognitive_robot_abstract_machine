@@ -76,11 +76,6 @@ class RecordingDemonstration(RobotDemonstration):
     The context this demonstration built for its plan.
     """
 
-    builds_a_debugging_context: bool = field(default=False)
-    """
-    Whether the context this demonstration builds debugs before the run decides.
-    """
-
     def build_simulated_world(self) -> World:
         return self.world
 
@@ -96,8 +91,8 @@ class RecordingDemonstration(RobotDemonstration):
             world.get_semantic_annotations_by_type(MinimalRobot)[0],
             ros_node=self.ros_node,
             sampling_seed=SAMPLING_SEED,
+            _debug=self.debug,
         )
-        self.built_context.debug = self.builds_a_debugging_context
         return self.built_context
 
     def build_plan(self, context: Context) -> PlanNode:
@@ -210,9 +205,7 @@ def test_a_demonstration_runs_without_debugging_by_default(cylinder_bot_world):
     coraplex_logger = logging.getLogger("coraplex")
     previous_level = coraplex_logger.level
     demonstration = RecordingDemonstration(
-        world=cylinder_bot_world,
-        used_robot=MinimalRobot,
-        builds_a_debugging_context=True,
+        world=cylinder_bot_world, used_robot=MinimalRobot
     )
 
     try:

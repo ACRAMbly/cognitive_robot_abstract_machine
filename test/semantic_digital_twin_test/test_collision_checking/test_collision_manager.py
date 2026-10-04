@@ -327,23 +327,6 @@ def test_an_avoid_rule_leaves_out_subset_bodies_that_cannot_collide(pr2_world_co
     assert rule.body_subset == {with_geometry}
 
 
-def test_no_collision_rule_names_a_body_that_cannot_collide(pr2_world_copy):
-    """
-    Every rule the robot installs is built from bodies that carry geometry, and stays
-    that way whichever rule is added next.
-    """
-    for rule in pr2_world_copy.collision_manager.rules:
-        rule.update(pr2_world_copy)
-
-    named = {
-        body
-        for rule in pr2_world_copy.collision_manager.rules
-        for body in rule.referenced_bodies
-    }
-
-    assert sorted(str(body.name) for body in named if not body.has_collision()) == []
-
-
 # %% whether a robot touches anything
 
 

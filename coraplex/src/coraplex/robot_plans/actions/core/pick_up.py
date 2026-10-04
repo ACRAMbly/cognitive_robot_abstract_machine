@@ -108,7 +108,8 @@ class ReachAction(
 
     reverse_reach_order: bool = False
     """
-    Whether the grasp pose sequence should be approached in reverse order.
+    Whether to come down onto the grasp from the retreat pose above it, as a release
+    does, instead of from the pre-grasp pose.
     """
 
     open_gripper_at_pre_pose: bool = False
@@ -119,15 +120,13 @@ class ReachAction(
 
     @property
     def _action_plan(self) -> PlanNode:
-        pre_grasp_pose, tool_goal, _ = self.grasp_pose_sequence(
-            self.grasp.root_T_grasp,
-            self.arm.end_effector,
-            self.grasp,
-            reverse=self.reverse_reach_order,
+        poses = self.grasp_pose_sequence(
+            self.grasp.root_T_grasp, self.arm.end_effector, self.grasp
         )
+        pre_pose = poses.retreat if self.reverse_reach_order else poses.pre_grasp
         children = [
             MoveToolCenterPointMotion(
-                pre_grasp_pose,
+                pre_pose,
                 self.arm,
                 allow_gripper_collision=True,
                 max_linear_velocity=self.pre_approach_linear_velocity,
@@ -143,7 +142,7 @@ class ReachAction(
             )
         children.append(
             MoveToolCenterPointMotion(
-                tool_goal,
+                poses.grasp,
                 self.arm,
                 allow_gripper_collision=True,
                 max_linear_velocity=self.final_approach_linear_velocity,
@@ -198,19 +197,17 @@ class PickUpAction(
     one.
     """
 
-    def _grasp_attempt_plan(self, grasp: GraspCandidate) -> PlanNode:
+    def _grasp_attempt_plan(self) -> PlanNode:
         """
-        :param grasp: The grasp to attempt, so the attempt and the lift that
-            follows it are built around the same one.
-        :return: One attempt at taking :attr:`grasp`, without lifting the object.
-
         A pick-up is a grasp the world is then told about: the object hangs off the tool
         frame afterwards, which is what makes it move with the arm.
+
+        :return: One attempt at taking :attr:`grasp`, without lifting the object.
         """
         return sequential(
             children=[
                 GraspingAction(
-                    grasp=grasp,
+                    grasp=self.grasp,
                     arm=self.arm,
                     approach_clearance=self.approach_clearance,
                     retreat_distance=self.retreat_distance,
@@ -232,14 +229,12 @@ class PickUpAction(
 
     @property
     def _action_plan(self) -> PlanNode:
-        _, _, lift_to_pose = self.grasp_pose_sequence(
-            self.grasp.root_T_grasp,
-            self.arm.end_effector,
-            self.grasp,
-        )
+        lift_to_pose = self.grasp_pose_sequence(
+            self.grasp.root_T_grasp, self.arm.end_effector, self.grasp
+        ).retreat
         return sequential(
             children=[
-                self._grasp_attempt_plan(self.grasp),
+                self._grasp_attempt_plan(),
                 MoveToolCenterPointMotion(
                     lift_to_pose,
                     self.arm,

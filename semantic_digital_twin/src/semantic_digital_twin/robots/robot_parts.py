@@ -609,9 +609,7 @@ class EndEffector(AbstractRobotPart, ABC):
         super().__post_init__()
         approach = self.approach_axis.to_np()[:3]
         closing = self.closing_axis.to_np()[:3]
-        if not np.isclose(
-            float(approach @ closing), 0.0, atol=1e-6
-        ):
+        if not np.isclose(float(approach @ closing), 0.0, atol=1e-6):
             raise GripperAxesNotPerpendicular(self)
 
     @property
@@ -702,18 +700,6 @@ class EndEffector(AbstractRobotPart, ABC):
             rotation_matrix=body_R_grasp,
             reference_frame=body,
         ).to_pose()
-
-    def grasp_on(self, body: Body) -> Optional[Pose]:
-        """
-        The grasp this gripper has on ``body``.
-
-        :param body: The body asked about.
-        :return: :attr:`held_body_T_grasp`, or ``None`` when ``body`` is not the body
-            this gripper holds.
-        """
-        if self.held_body is not body:
-            return None
-        return self.held_body_T_grasp
 
     @property
     def held_bodies(self) -> list[Body]:

@@ -465,6 +465,13 @@ class GraspCandidate:
         """
         return cls(graspable, Pose(reference_frame=graspable.root))
 
+    @property
+    def world_T_grasp(self) -> Pose:
+        """
+        :return: The grasp frame in the world frame, where the object is now.
+        """
+        return self.graspable.root.global_transform @ self.root_T_grasp
+
     def moved_to(self, reference_T_object: Pose) -> Pose:
         """
         Transform this grasp candidate to where it would be, once the object is placed.

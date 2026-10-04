@@ -76,6 +76,35 @@ def test_place_derives_the_grasp_from_the_live_tool_frame_transform(pr2_holding_
     )
 
 
+def test_a_place_runs_the_grasp_backwards(pr2_holding_milk):
+    """
+    A release comes down onto the target from where a pick-up would lift the object to,
+    and leaves the way a pick-up would approach it.
+    """
+    world, robot, milk = pr2_holding_milk
+    target = Pose.from_xyz_rpy(1.2, 0.4, 0.9, reference_frame=world.root)
+    place = PlaceAction(milk, target)
+    sequential([place], context=Context(world, robot, sampling_seed=SAMPLING_SEED))
+    grasp = place._grasp_on_the_held_object()
+    poses = place.grasp_pose_sequence(
+        grasp.moved_to(target), robot.left_arm.end_effector, grasp
+    )
+
+    root = place._action_plan
+    tool_goals = [
+        node.designator.target
+        for node in root.descendants
+        if isinstance(node, MotionNode)
+        and isinstance(node.designator, MoveToolCenterPointMotion)
+    ]
+
+    assert len(tool_goals) == 3
+    for expected, actual in zip(
+        [poses.retreat, poses.grasp, poses.pre_grasp], tool_goals
+    ):
+        np.testing.assert_allclose(expected.to_np(), actual.to_np(), atol=1e-9)
+
+
 # %% releasing what has not been picked up yet
 
 

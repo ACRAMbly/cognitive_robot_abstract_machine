@@ -294,6 +294,7 @@ class BulletWorldDemonstration(RobotDemonstration):
             sampling_seed=0,
             alternative_motion_mappings=self.alternative_motion_mappings,
             plan_transformations=[OpenDrawerBeforeTransport()],
+            _debug=self.debug,
         )
 
     def build_plan(self, context: Context) -> PlanNode:

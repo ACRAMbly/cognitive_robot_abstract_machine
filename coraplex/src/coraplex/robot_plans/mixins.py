@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 
 import numpy as np
-from typing_extensions import Optional, Tuple
+from typing_extensions import NamedTuple, Optional
 
 from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix
 from semantic_digital_twin.spatial_types.spatial_types import Pose
@@ -259,6 +259,27 @@ class HasTcpGoalThresholds:
         return self.context.motion_tolerances.tool_orientation_threshold
 
 
+class GraspPoseSequence(NamedTuple):
+    """
+    The tool frame goals that approach a grasp, reach it and withdraw from it.
+    """
+
+    pre_grasp: Pose
+    """
+    Where the gripper waits before it moves onto the grasp, clear of the object.
+    """
+
+    grasp: Pose
+    """
+    The tool frame goal at the grasp itself.
+    """
+
+    retreat: Pose
+    """
+    Where the gripper rises to when it leaves the grasp.
+    """
+
+
 @dataclass
 class HasApproachesGraspPoses:
     """
@@ -282,17 +303,14 @@ class HasApproachesGraspPoses:
         reference_T_grasp: Pose,
         end_effector: EndEffector,
         grasp: Optional[GraspCandidate] = None,
-        reverse: bool = False,
-    ) -> Tuple[Pose, Pose, Pose]:
+    ) -> GraspPoseSequence:
         """
         :param reference_T_grasp: The grasp frame to reach; for a release, where the
             object is to be put.
         :param end_effector: The end effector that is to reach it.
         :param grasp: The grasp whose object the pre-grasp pose has to stay outside of;
             ``None`` keeps only :attr:`approach_clearance`.
-        :param reverse: Whether to return the sequence of a release.
-        :return: The pre-grasp pose, the grasp pose and the retreat pose, in that order
-            unless reversed.
+        :return: The tool frame goals around the grasp.
         """
         tool_goal = end_effector.tool_frame_goal(reference_T_grasp)
         grasp_T_pre_grasp = HomogeneousTransformationMatrix.from_xyz_rpy(
@@ -301,10 +319,11 @@ class HasApproachesGraspPoses:
         pre_grasp_pose = end_effector.tool_frame_goal(
             (reference_T_grasp.to_homogeneous_matrix() @ grasp_T_pre_grasp).to_pose()
         )
-        retreat_pose = self._retreat_pose(reference_T_grasp, tool_goal)
-        if reverse:
-            return retreat_pose, tool_goal, pre_grasp_pose
-        return pre_grasp_pose, tool_goal, retreat_pose
+        return GraspPoseSequence(
+            pre_grasp=pre_grasp_pose,
+            grasp=tool_goal,
+            retreat=self._retreat_pose(reference_T_grasp, tool_goal),
+        )
 
     def _approach_distance(self, grasp: Optional[GraspCandidate]) -> float:
         """

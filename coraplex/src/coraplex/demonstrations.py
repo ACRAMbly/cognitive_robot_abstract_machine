@@ -208,7 +208,8 @@ class RobotDemonstration(ABC):
     @abstractmethod
     def build_context(self, world: World) -> Context:
         """
-        Build the plan context, resolving the robot in ``world``.
+        Build the plan context, resolving the robot in ``world``, in debug mode when
+        :attr:`debug` is set.
         """
 
     @abstractmethod
@@ -269,7 +270,6 @@ class RobotDemonstration(ABC):
                 self.populate_scene(world)
             for _ in range(self.repetitions):
                 context = self.build_context(world)
-                context.debug = self.debug
                 plan = self.build_plan(context)
                 if self.visualization is not None:
                     self.visualization.attach_plan(plan)

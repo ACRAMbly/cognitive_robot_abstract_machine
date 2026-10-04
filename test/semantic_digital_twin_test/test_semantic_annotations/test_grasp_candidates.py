@@ -30,6 +30,7 @@ from semantic_digital_twin.semantic_annotations.semantic_annotations import (
 from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix
 from semantic_digital_twin.spatial_types.spatial_types import Pose
 from semantic_digital_twin.world import World
+from semantic_digital_twin.world_description.connections import FixedConnection
 from semantic_digital_twin.world_description.geometry import Box, Mesh, Scale
 from semantic_digital_twin.world_description.shape_collection import ShapeCollection
 from semantic_digital_twin.world_description.world_entity import Body
@@ -270,6 +271,33 @@ def test_a_grasp_from_the_body_origin_takes_the_object_at_its_own_origin(milk):
     assert grasp.graspable is milk
     assert grasp.root_T_grasp.reference_frame is milk.root
     np.testing.assert_allclose(grasp.root_T_grasp.to_np(), np.eye(4), atol=1e-9)
+
+
+def test_a_grasp_in_the_world_frame_follows_where_the_object_stands():
+    world = World()
+    world_root = Body(name=PrefixedName("map", prefix="grasp_candidates"))
+    body = Body(name=PrefixedName("milk", prefix="grasp_candidates"))
+    milk = Milk(root=body)
+    world_T_milk = HomogeneousTransformationMatrix.from_xyz_rpy(1.0, 2.0, 0.5, yaw=0.3)
+    with world.modify_world():
+        world.add_connection(
+            FixedConnection(
+                parent=world_root,
+                child=body,
+                parent_T_connection_expression=world_T_milk,
+            )
+        )
+        world.add_semantic_annotation(milk)
+    grasp = milk.grasp_candidates()[1]
+
+    world_T_grasp = grasp.world_T_grasp
+
+    assert world_T_grasp.reference_frame is world_root
+    np.testing.assert_allclose(
+        world_T_grasp.to_np(),
+        world_T_milk.to_np() @ grasp.root_T_grasp.to_np(),
+        atol=1e-9,
+    )
 
 
 # %% the contract itself

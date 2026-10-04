@@ -85,14 +85,6 @@ class AvoidCollisionRule(CollisionRule, ABC):
     def apply_to_collision_matrix(self, collision_matrix: CollisionMatrix):
         collision_matrix.add_collision_checks(self.added_collision_checks)
 
-    @property
-    def referenced_bodies(self) -> set[Body]:
-        return {
-            body
-            for check in self.added_collision_checks
-            for body in (check.body_a, check.body_b)
-        }
-
 
 @dataclass
 class AllowCollisionRule(CollisionRule, ABC):
@@ -112,14 +104,6 @@ class AllowCollisionRule(CollisionRule, ABC):
     """
     Set of bodies that are allowed to collide.
     """
-
-    @property
-    def referenced_bodies(self) -> set[Body]:
-        return self.allowed_collision_bodies | {
-            body
-            for check in self.allowed_collision_pairs
-            for body in (check.body_a, check.body_b)
-        }
 
     def apply_to_collision_matrix(self, collision_matrix: CollisionMatrix):
         collision_matrix.remove_collision_checks(self.allowed_collision_pairs)
@@ -204,10 +188,6 @@ class AvoidExternalCollisions(AvoidCollisionRule, SubclassJSONSerializer):
         if self.body_subset is None:
             return
         self.body_subset = {body for body in self.body_subset if body.has_collision()}
-
-    @property
-    def referenced_bodies(self) -> set[Body]:
-        return super().referenced_bodies | (self.body_subset or set())
 
     def _update(self, world: World):
         robot_bodies = set(self.robot.bodies_with_collision)

@@ -250,22 +250,6 @@ def test_retreat_pose_keeps_the_grasp_orientation(boxed_pr2_world):
     )
 
 
-def test_reversing_turns_the_grasp_into_a_release(boxed_pr2_world):
-    _, robot, graspable = boxed_pr2_world
-    action = HasApproachesGraspPoses()
-    grasp = grasp_at_origin(graspable)
-
-    forward = action.grasp_pose_sequence(
-        grasp.root_T_grasp, robot.left_arm.end_effector, grasp
-    )
-    backward = action.grasp_pose_sequence(
-        grasp.root_T_grasp, robot.left_arm.end_effector, grasp, reverse=True
-    )
-
-    for expected, actual in zip(reversed(forward), backward):
-        np.testing.assert_allclose(expected.to_np(), actual.to_np(), atol=1e-9)
-
-
 def test_sequence_without_a_body_stands_off_by_the_clearance_alone(boxed_pr2_world):
     _, robot, graspable = boxed_pr2_world
     action = HasApproachesGraspPoses()

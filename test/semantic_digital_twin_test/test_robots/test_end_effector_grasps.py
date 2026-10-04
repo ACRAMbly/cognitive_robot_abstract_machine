@@ -15,7 +15,7 @@ from semantic_digital_twin.exceptions import (
 from semantic_digital_twin.robots.pr2 import PR2
 from semantic_digital_twin.robots.robot_parts import Camera, EndEffector
 from semantic_digital_twin.robots.tracy import Tracy
-from semantic_digital_twin.semantic_annotations.mixins import HasGraspCandidates
+from semantic_digital_twin.semantic_annotations.semantic_annotations import Milk
 from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix
 from semantic_digital_twin.spatial_types.spatial_types import Vector3
 from semantic_digital_twin.world_description.connections import FixedConnection
@@ -42,21 +42,22 @@ Where the body a gripper holds sits relative to the tool frame.
 @pytest.fixture
 def pr2_gripper(pr2_world_copy) -> EndEffector:
     """
-    The left gripper of a PR2 standing in an otherwise empty world.
+    The left gripper of a PR2, in a world built from the robot's description alone.
     """
     return pr2_world_copy.get_semantic_annotations_by_type(PR2)[0].left_arm.end_effector
 
 
 @pytest.fixture
-def graspable_box(pr2_world_copy) -> HasGraspCandidates:
+def graspable_box(pr2_world_copy) -> Milk:
     """
-    A box within the PR2's reach that offers the default ring of grasps.
+    A box-shaped milk carton within the PR2's reach, offering the default ring of
+    grasps.
     """
     body = Body(
         name=PrefixedName("graspable_box"),
         collision=ShapeCollection([Box(scale=Scale(0.1, 0.1, 0.2))]),
     )
-    annotation = HasGraspCandidates(root=body)
+    annotation = Milk(root=body)
     with pr2_world_copy.modify_world():
         pr2_world_copy.add_connection(
             FixedConnection(
@@ -269,24 +270,4 @@ def test_the_held_grasp_is_the_offset_the_body_hangs_at(pr2_gripper):
         -HELD_BODY_OFFSET.to_np()[:3, 3],
         atol=1e-9,
     )
-
-
-def test_an_empty_gripper_has_no_grasp_on_a_body(pr2_gripper):
-    assert pr2_gripper.grasp_on(Body(name=PrefixedName("some_body"))) is None
-
-
-def test_the_grasp_on_the_held_body_is_the_held_grasp(pr2_gripper):
-    body = hold_body(pr2_gripper)
-
-    np.testing.assert_allclose(
-        pr2_gripper.grasp_on(body).to_np(),
-        pr2_gripper.held_body_T_grasp.to_np(),
-        atol=1e-9,
-    )
-    assert pr2_gripper.grasp_on(body).reference_frame is body
-
-
-def test_a_gripper_has_no_grasp_on_a_body_it_does_not_hold(pr2_gripper):
-    hold_body(pr2_gripper)
-
-    assert pr2_gripper.grasp_on(Body(name=PrefixedName("some_other_body"))) is None
+    assert pr2_gripper.held_body_T_grasp.reference_frame is body

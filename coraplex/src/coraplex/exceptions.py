@@ -171,6 +171,25 @@ class NodeNotInPlanTree(DataclassException):
 
 
 @dataclass
+class ReachHasNoFinalApproach(DataclassException):
+    """
+    Raised when the final approach of a reach is asked for, but no tool center point
+    motion lies below the reach's node.
+    """
+
+    plan_node: PlanNode
+    """
+    The node of the reach.
+    """
+
+    def error_message(self) -> str:
+        return f"{self.plan_node} has no tool center point motion below it."
+
+    def suggest_correction(self) -> str:
+        return "ask for the final approach only once the reach has been expanded"
+
+
+@dataclass
 class MissingWaypoints(DataclassException):
     """
     Raised when a waypoint motion or tool action produced no waypoints to follow.

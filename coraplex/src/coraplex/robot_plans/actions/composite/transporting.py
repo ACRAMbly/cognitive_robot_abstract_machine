@@ -130,14 +130,17 @@ class TransportAction(ActionDescription, LimitsItsCandidates):
         """
         return cls(
             pick_up=MoveAndPickUpAction.from_graspable_by_closest_grasps(
-                graspable, arm, context, number_of_grasps
+                graspable=graspable,
+                arm=arm,
+                context=context,
+                number_of_grasps=number_of_grasps,
             ),
             place=a(MoveAndPlaceAction)(
                 navigate=a(NavigateAction)(
                     target_location=variable(
                         Pose,
                         domain=ReachabilityLocation(
-                            target_location, arm, context=context
+                            target_pose=target_location, arm=arm, context=context
                         ),
                     )
                 ),
@@ -233,9 +236,12 @@ class MoveAndPlaceAction(ActionDescription):
         return cls(
             navigate=NavigateAction(standing_position),
             face_and_look_at=FaceAndLookAtAction(
-                FaceAtAction(target_location), LookAtAction(target_location)
+                face_at=FaceAtAction(target_location),
+                look_at=LookAtAction(target_location),
             ),
-            place=PlaceAction(object_designator, target_location),
+            place=PlaceAction(
+                object_designator=object_designator, target_location=target_location
+            ),
         )
 
     @property
@@ -285,11 +291,11 @@ class MoveAndPickUpAction(ActionDescription):
         return cls(
             navigate=NavigateAction(standing_position),
             face_and_look_at=FaceAndLookAtAction(
-                FaceAtAction(object_pose), LookAtAction(object_pose)
+                face_at=FaceAtAction(object_pose), look_at=LookAtAction(object_pose)
             ),
             pick_up=PickUpAction(
-                grasp,
-                arm,
+                grasp=grasp,
+                arm=arm,
                 approach_clearance=approach_clearance,
                 retreat_distance=retreat_distance,
             ),
@@ -323,7 +329,9 @@ class MoveAndPickUpAction(ActionDescription):
             navigate=a(NavigateAction)(
                 target_location=variable(
                     Pose,
-                    domain=ReachabilityLocation(object_pose, arm, context=context),
+                    domain=ReachabilityLocation(
+                        target_pose=object_pose, arm=arm, context=context
+                    ),
                 )
             ),
             face_and_look_at=a(FaceAndLookAtAction)(
@@ -383,9 +391,9 @@ class MoveAndOpenAction(ActionDescription):
         return cls(
             navigate=NavigateAction(standing_position),
             face_and_look_at=FaceAndLookAtAction(
-                FaceAtAction(handle_pose), LookAtAction(handle_pose)
+                face_at=FaceAtAction(handle_pose), look_at=LookAtAction(handle_pose)
             ),
-            open_container=OpenAction(handle, arm),
+            open_container=OpenAction(handle=handle, arm=arm),
         )
 
     @property

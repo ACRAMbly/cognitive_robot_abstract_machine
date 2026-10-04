@@ -154,6 +154,7 @@ class StretchApartmentDemonstration(RobotDemonstration):
             evaluate_conditions=False,
             alternative_motion_mappings=self.alternative_motion_mappings,
             plan_transformations=[DetectBeforeGrasp()],
+            _debug=self.debug,
         )
 
     def build_plan(self, context: Context) -> PlanNode:

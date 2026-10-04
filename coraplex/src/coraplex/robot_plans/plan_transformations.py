@@ -10,6 +10,7 @@ from coraplex.datastructures.enums import (
     InsertionPosition,
     ReachFraction,
 )
+from coraplex.exceptions import ReachHasNoFinalApproach
 from coraplex.locations.locations import ReachabilityLocation
 from coraplex.plans.plan_node import ActionLike, ActionNode, MotionNode, PlanNode
 from coraplex.plans.plan_transformation import (
@@ -66,6 +67,8 @@ class DetectBeforeGrasp(InsertionTransformation[ReachAction]):
     def final_approach(self, plan_node: ActionNode) -> MotionNode:
         """
         :param plan_node: The node of the reach
+        :raises ReachHasNoFinalApproach: If no tool center point motion lies below the
+            reach's node.
         :return: The reach's last tool center point motion, which brings the gripper
             onto the object.
         """
@@ -75,6 +78,8 @@ class DetectBeforeGrasp(InsertionTransformation[ReachAction]):
             if isinstance(node, MotionNode)
             and isinstance(node.motion, MoveToolCenterPointMotion)
         ]
+        if not motions:
+            raise ReachHasNoFinalApproach(plan_node)
         return motions[-1]
 
     def anchor(self, plan_node: ActionNode) -> PlanNode:

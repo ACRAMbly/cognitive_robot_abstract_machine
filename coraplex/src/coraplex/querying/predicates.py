@@ -138,10 +138,7 @@ class ToolFrameIsAtGrasp(Predicate):
     """
 
     def __call__(self) -> bool:
-        world_T_grasp = (
-            self.grasp.graspable.root.global_transform.to_np()
-            @ self.grasp.root_T_grasp.to_np()
-        )
+        world_T_grasp = self.grasp.world_T_grasp.to_np()
         world_T_tool = self.end_effector.tool_frame.global_transform.to_np()
         return bool(
             np.allclose(world_T_tool[:3, 3], world_T_grasp[:3, 3], atol=self.tolerance)

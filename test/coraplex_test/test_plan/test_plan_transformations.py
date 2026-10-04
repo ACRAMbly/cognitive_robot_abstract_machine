@@ -6,7 +6,7 @@ import pytest
 from typing_extensions import List
 
 from coraplex.datastructures.enums import InsertionPosition, ReachFraction
-from coraplex.exceptions import CannotMatchOnType
+from coraplex.exceptions import CannotMatchOnType, ReachHasNoFinalApproach
 from coraplex.orm.ormatic_interface import *  # type: ignore
 from coraplex.language import SequentialNode
 from coraplex.plans.factories import execute_single, sequential
@@ -602,6 +602,15 @@ def test_the_perception_precedes_the_final_approach(pr2_apartment_context):
         DetectAction,
         MoveToolCenterPointMotion,
     ]
+
+
+def test_a_reach_not_yet_expanded_has_no_final_approach(pr2_apartment_context):
+    world, view, context = pr2_apartment_context
+    milk = world.get_semantic_annotations_by_type(Milk)[0]
+    reach = execute_single(reach_action(milk, view), context=context)
+
+    with pytest.raises(ReachHasNoFinalApproach):
+        DetectBeforeGrasp().final_approach(reach)
 
 
 def test_a_transformation_on_reaches_also_fires_inside_a_pick_up(pr2_apartment_context):

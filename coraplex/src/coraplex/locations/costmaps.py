@@ -328,14 +328,6 @@ class Costmap(Location):
         )[0]
         return RotationMatrix.from_rpy(0, 0, angle).to_quaternion()
 
-    @staticmethod
-    def _offerable_entries(ratings: NDArray[np.float64]) -> int:
-        """
-        :param ratings: The flattened map, one rating per entry.
-        :return: How many entries are rated above zero and can therefore be sampled.
-        """
-        return int(np.count_nonzero(ratings))
-
     def _budget_per_segment(
         self, segments: List[np.ndarray], number_of_samples: int
     ) -> List[int]:
@@ -347,9 +339,8 @@ class Costmap(Location):
         :param number_of_samples: How many candidates the whole map was asked for.
         :return: How many to sample from each segment, in the order they were given.
         """
-        capacities = [
-            self._offerable_entries(segment.flatten()) for segment in segments
-        ]
+        # Only entries rated above zero can be sampled.
+        capacities = [int(np.count_nonzero(segment)) for segment in segments]
         ratings = np.array([segment.sum() for segment in segments], dtype=float)
         if not ratings.any():
             return [0] * len(segments)
@@ -380,7 +371,7 @@ class Costmap(Location):
         :param random_generator: The source of randomness to sample from.
         :return: The indices to offer, in the order they should be offered.
         """
-        offerable = min(count, self._offerable_entries(ratings))
+        offerable = min(count, int(np.count_nonzero(ratings)))
         if offerable <= 0:
             return np.empty(0, dtype=np.intp)
         return random_generator.choice(
@@ -598,7 +589,12 @@ class OccupancyCostmap(Costmap):
 
     @classmethod
     def default_map(
-        cls, context: Context, target: Pose, *, resolution: float = 0.02, cells: int = 200
+        cls,
+        context: Context,
+        target: Pose,
+        *,
+        resolution: float = 0.02,
+        cells: int = 200,
     ) -> OccupancyCostmap:
         """
         Creates an occupancy costmap around a target, keeping the robot base's radius

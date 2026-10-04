@@ -72,17 +72,16 @@ class PlaceAction(
     @property
     def _action_plan(self) -> PlanNode:
         arm, grasp = self._holding_arm_and_grasp()
-        transport_pose, placing_pose, retract_pose = self.grasp_pose_sequence(
-            grasp.moved_to(self.target_location),
-            arm.end_effector,
-            grasp,
-            reverse=True,
+        # A release runs the grasp backwards: down from above the target, then out
+        # along the way the grasp was approached.
+        poses = self.grasp_pose_sequence(
+            grasp.moved_to(self.target_location), arm.end_effector, grasp
         )
 
         return sequential(
             [
                 MoveToolCenterPointMotion(
-                    transport_pose,
+                    poses.retreat,
                     arm,
                     allow_gripper_collision=True,
                     max_linear_velocity=self.transport_linear_velocity,
@@ -90,7 +89,7 @@ class PlaceAction(
                     orientation_threshold=self.orientation_threshold,
                 ),
                 MoveToolCenterPointMotion(
-                    placing_pose,
+                    poses.grasp,
                     arm,
                     allow_gripper_collision=True,
                     max_linear_velocity=self.placing_linear_velocity,
@@ -107,7 +106,7 @@ class PlaceAction(
                     body=self.object_designator.root, new_parent=self.world.root
                 ),
                 MoveToolCenterPointMotion(
-                    retract_pose,
+                    poses.pre_grasp,
                     arm,
                     max_linear_velocity=self.retract_linear_velocity,
                     position_threshold=self.position_threshold,
