@@ -1377,22 +1377,28 @@ class OperationResult:
     """
 
     @property
+    def result_chain(self) -> List[OperationResult]:
+        """
+        :return: The results this one was derived from, earliest first, ending with this
+            one.
+        """
+        chain: List[OperationResult] = []
+        seen: Set[int] = set()
+        result: Optional[OperationResult] = self
+        while result is not None and id(result) not in seen:
+            seen.add(id(result))
+            chain.append(result)
+            result = result.previous_operation_result
+        return chain[::-1]
+
+    @property
     def all_bindings(self) -> Bindings:
         """
         :return: All the bindings from all the evaluated operations until this one, including this one.
-        Traverses the full previous_operation_result chain (linear traversal with cycle detection).
         """
         combined: Bindings = {}
-        seen: set = set()
-
-        def collect(node: Optional[OperationResult]) -> None:
-            if node is None or id(node) in seen:
-                return
-            seen.add(id(node))
-            collect(node.previous_operation_result)
-            combined.update(node.bindings)  # shallower nodes (closer to self) win
-
-        collect(self)
+        for result in self.result_chain:
+            combined.update(result.bindings)  # later results (closer to self) win
         return combined
 
     @property

@@ -37,7 +37,7 @@ from krrood.entity_query_language.core.mapped_variable import (
     HasSymbolicOperations,
     Attribute,
 )
-from krrood.entity_query_language.evaluation import StatementTruthRecorder
+from krrood.entity_query_language.evaluation import StatementTruths
 from krrood.entity_query_language.core.variable import (
     DomainType,
     Literal,
@@ -885,21 +885,19 @@ def get_false_statements(statement: SymbolicExpression) -> List[SymbolicExpressi
     """
     :param statement: The condition whose statements are checked.
     :return: The statements of the condition that held for none of the values they were
-        evaluated on, see :class:`StatementTruthRecorder`. In a conjunction that is the
+        evaluated on, see :class:`StatementTruths`. In a conjunction that is the
         first conjunct that could not hold together with the conjuncts before it.
     """
-    return StatementTruthRecorder.from_evaluation_of(
-        statement
-    ).statements_that_never_held
+    return StatementTruths.from_evaluation_of(statement).never_held
 
 
 def get_true_statements(statement: SymbolicExpression) -> List[SymbolicExpression]:
     """
     :param statement: The condition whose statements are checked.
     :return: The statements of the condition that held for at least one of the values
-        they were evaluated on, see :class:`StatementTruthRecorder`.
+        they were evaluated on, see :class:`StatementTruths`.
     """
-    return StatementTruthRecorder.from_evaluation_of(statement).statements_that_held
+    return StatementTruths.from_evaluation_of(statement).held
 
 
 def evaluate_condition(condition: ConditionType) -> bool:
