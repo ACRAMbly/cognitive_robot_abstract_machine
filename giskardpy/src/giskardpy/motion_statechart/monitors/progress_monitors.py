@@ -104,10 +104,6 @@ class NotApproachingGoal(MotionStatechartNode):
         return [self.monitored_task]
 
     def build_artifacts(self, context: MotionStatechartContext) -> NodeArtifacts:
-        """
-        Observe whether the monitored task's error lies far enough below its error at
-        the last progress, which :meth:`on_tick` keeps up to date.
-        """
         self._control_dt = context.qp_controller_config.control_dt
         self._error_at_last_progress = self._registered_variable(
             "error_at_last_progress", context
