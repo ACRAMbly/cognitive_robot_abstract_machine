@@ -18,6 +18,7 @@ from krrood.adapters.json_serializer import from_json, to_json
 from random_events.interval import closed, open as open_interval, reals, singleton
 from random_events.product_algebra import SimpleEvent, VariableMap
 from random_events.variable import Continuous
+from scipy.stats import norm
 
 from probabilistic_model.adapters.rustworkx_tensorized.rustworkx_to_tensorized import (
     RustworkxCircuitToLayeredCircuitConverter,
@@ -437,6 +438,22 @@ class MultivariateGaussianTruncationTestCase(unittest.TestCase):
         )
         self.assertIsNone(truncated)
         self.assertEqual(probability, 0.0)
+
+    def test_truncation_to_a_box_far_in_the_tail_keeps_its_probability(self):
+        component = first_component()
+        position = component.index_of(y)
+        mean = component.mean[position]
+        deviation = np.sqrt(component.covariance.matrix[position, position])
+        lower, upper = mean + 9 * deviation, mean + 10 * deviation
+        layered = RustworkxCircuitToLayeredCircuitConverter.convert(single_gaussian())
+        truncated, probability = layered.truncated(
+            box(x=reals(), y=closed(lower, upper)).as_composite_set()
+        )
+        self.assertIsNotNone(truncated)
+        self.assertAlmostEqual(
+            np.log(probability),
+            np.log(norm.sf(lower, mean, deviation) - norm.sf(upper, mean, deviation)),
+        )
 
     def test_truncation_to_several_intervals_of_one_variable(self):
         rx_circuit = gaussian_mixture()

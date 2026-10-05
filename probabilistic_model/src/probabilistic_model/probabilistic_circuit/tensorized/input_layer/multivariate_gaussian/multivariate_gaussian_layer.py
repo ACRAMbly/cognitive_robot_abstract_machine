@@ -212,12 +212,10 @@ class MultivariateGaussianLayer(AbstractMultivariateGaussianLayer):
                 self.__deepcopy__(), np.zeros(self.number_of_nodes)
             )
         hyperrectangles = hyperrectangle.broadcast_to(self.number_of_nodes)
-        probability = self.untruncated_gaussians.probability_of_hyperrectangles(
-            hyperrectangles
-        )
-        alive = probability > 0
-        log_probabilities = np.where(
-            alive, np.log(np.where(alive, probability, 1.0)), -np.inf
+        log_probabilities = (
+            self.untruncated_gaussians.log_probability_of_hyperrectangles(
+                hyperrectangles
+            )
         )
         return LayerWithLogProbabilities(
             TruncatedMultivariateGaussianLayer(

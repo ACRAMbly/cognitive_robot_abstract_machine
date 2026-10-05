@@ -319,13 +319,10 @@ class TruncatedMultivariateGaussianLayer(AbstractMultivariateGaussianLayer):
         # every node keeps its Gaussian, confined to the intersection of the two
         # hyperrectangles
         intersection = self.hyperrectangles.intersection_with(hyperrectangle)
-        probability = self.untruncated_gaussians.probability_of_hyperrectangles(
-            intersection
+        log_normalizing_constant = (
+            self.untruncated_gaussians.log_probability_of_hyperrectangles(intersection)
         )
-        alive = probability > 0
-        log_normalizing_constant = np.where(
-            alive, np.log(np.where(alive, probability, 1.0)), -np.inf
-        )
+        alive = np.isfinite(log_normalizing_constant)
 
         # impossible nodes keep their parameters and are dropped by the prune pass
         truncated = dataclasses.replace(
@@ -369,16 +366,17 @@ class TruncatedMultivariateGaussianLayer(AbstractMultivariateGaussianLayer):
 
         conditionals = gaussians.conditional(fixed, free, values)
         slices = self.hyperrectangles.over(free)
-        probability = conditionals.probability_of_hyperrectangles(slices)
-        alive = inside & (probability > 0)
-        log_probability_of_slice = np.log(np.where(alive, probability, 1.0))
+        log_probability_of_slice = conditionals.log_probability_of_hyperrectangles(
+            slices
+        )
+        alive = inside & np.isfinite(log_probability_of_slice)
         conditioned = dataclasses.replace(
             self,
             scope=self.scope[free],
             mean=conditionals.mean,
             covariance=conditionals.covariance,
             hyperrectangles=slices,
-            log_normalizing_constant=log_probability_of_slice,
+            log_normalizing_constant=np.where(alive, log_probability_of_slice, 0.0),
         )
         return LayerWithLogProbabilities(
             conditioned,

@@ -5,7 +5,7 @@ from dataclasses import dataclass
 
 import numpy as np
 from random_events.variable import Variable
-from scipy.special import ndtr
+from scipy.special import log_ndtr
 from scipy.stats import multivariate_normal
 from typing_extensions import Self, Sequence
 
@@ -105,16 +105,26 @@ class MultivariateGaussianArray:
         self, hyperrectangles: HyperrectangleArray
     ) -> NodeValues:
         """
+        :param hyperrectangles: One hyperrectangle per Gaussian.
+        :return: The probability of every hyperrectangle under its Gaussian.
+        """
+        return np.exp(self.log_probability_of_hyperrectangles(hyperrectangles))
+
+    def log_probability_of_hyperrectangles(
+        self, hyperrectangles: HyperrectangleArray
+    ) -> NodeValues:
+        """
         The probability of an axis-aligned hyperrectangle under a correlated Gaussian
         has no closed form, so it is integrated numerically by
         :mod:`scipy.stats.multivariate_normal` over the variables the hyperrectangle
         bounds. A hyperrectangle that bounds only one variable is answered in closed
-        form for all Gaussians at once.
+        form for all Gaussians at once, in log space so that hyperrectangles far in the
+        tails keep a probability above zero.
 
         :param hyperrectangles: One hyperrectangle per Gaussian.
-        :return: The probability of every hyperrectangle under its Gaussian.
+        :return: The log-probability of every hyperrectangle under its Gaussian.
         """
-        result = np.zeros(self.number_of_gaussians)
+        result = np.full(self.number_of_gaussians, -np.inf)
         possible = (hyperrectangles.lower < hyperrectangles.upper).all(axis=1)
         bounded = np.isfinite(hyperrectangles.lower) | np.isfinite(
             hyperrectangles.upper
@@ -124,24 +134,54 @@ class MultivariateGaussianArray:
             nodes = possible & (bounded == pattern).all(axis=1)
             positions = np.flatnonzero(pattern)
             if len(positions) == 0:
-                result[nodes] = 1.0
+                result[nodes] = 0.0
             elif len(positions) == 1:
                 [position] = positions
                 mean = self.mean[nodes, position]
                 deviation = np.sqrt(self.covariance.variances[nodes, position])
-                result[nodes] = ndtr(
-                    (hyperrectangles.upper[nodes, position] - mean) / deviation
-                ) - ndtr((hyperrectangles.lower[nodes, position] - mean) / deviation)
+                result[nodes] = self.log_standard_normal_probability_between(
+                    (hyperrectangles.lower[nodes, position] - mean) / deviation,
+                    (hyperrectangles.upper[nodes, position] - mean) / deviation,
+                )
             else:
                 for node in np.flatnonzero(nodes):
-                    result[node] = multivariate_normal(
+                    probability = multivariate_normal(
                         self.mean[node, positions],
                         self.covariance.matrices[node][np.ix_(positions, positions)],
                     ).cdf(
                         hyperrectangles.upper[node, positions],
                         lower_limit=hyperrectangles.lower[node, positions],
                     )
-        return np.clip(result, 0.0, 1.0)
+                    with np.errstate(divide="ignore"):
+                        result[node] = np.log(np.clip(probability, 0.0, 1.0))
+        return np.minimum(result, 0.0)
+
+    @staticmethod
+    def log_standard_normal_probability_between(
+        lower: NodeValues, upper: NodeValues
+    ) -> NodeValues:
+        """
+        :param lower: The lower end of one interval per Gaussian, in standard deviations
+            from its mean.
+        :param upper: The upper end of every interval, greater than its lower end.
+        :return: The log-probability of every interval under the standard normal.
+        """
+        # an interval in the upper tail is mirrored into the lower tail, where the
+        # log of the cumulative distribution is precise
+        mirrored = lower > 0
+        lower, upper = np.where(mirrored, -upper, lower), np.where(
+            mirrored, -lower, upper
+        )
+        log_upper = log_ndtr(upper)
+        difference = log_ndtr(lower) - log_upper
+        # log(1 - exp(difference)), precise both near zero and far below it
+        with np.errstate(divide="ignore"):
+            log_one_minus = np.where(
+                difference > -math.log(2),
+                np.log(-np.expm1(difference)),
+                np.log1p(-np.exp(difference)),
+            )
+        return log_upper + log_one_minus
 
     def marginal(self, positions: NodeIndices) -> Self:
         """

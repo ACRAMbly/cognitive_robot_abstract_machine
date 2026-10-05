@@ -3,7 +3,7 @@ import unittest
 import numpy as np
 from random_events.interval import closed, reals
 from random_events.variable import Continuous
-from scipy.stats import multivariate_normal
+from scipy.stats import multivariate_normal, norm
 
 from probabilistic_model.distributions.multivariate_gaussian import (
     Covariance,
@@ -87,6 +87,28 @@ class MultivariateGaussianArrayTestCase(unittest.TestCase):
             self.gaussians.probability_of_hyperrectangles(hyperrectangles),
             expected,
             atol=1e-4,
+        )
+
+    def test_log_probability_of_hyperrectangles_far_in_the_tail(self):
+        lower, upper = 9.0, 10.0
+        hyperrectangles = HyperrectangleArray.of_simple_intervals(
+            [
+                interval.simple_sets[0]
+                for interval in (closed(lower, upper), reals(), reals())
+            ]
+        ).broadcast_to(2)
+        expected = []
+        for distribution in self.distributions:
+            mean = distribution.mean[0]
+            deviation = np.sqrt(distribution.covariance.matrix[0, 0])
+            expected.append(
+                np.log(
+                    norm.sf(lower, mean, deviation) - norm.sf(upper, mean, deviation)
+                )
+            )
+        np.testing.assert_allclose(
+            self.gaussians.log_probability_of_hyperrectangles(hyperrectangles),
+            expected,
         )
 
     def test_marginal_is_the_marginal_of_every_distribution(self):
