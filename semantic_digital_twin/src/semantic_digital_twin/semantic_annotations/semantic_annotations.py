@@ -40,8 +40,11 @@ from semantic_digital_twin.semantic_annotations.mixins import (
     HasLegs,
     HasSink,
     HasShelfLayers,
+)
+from semantic_digital_twin.grasping.grasp_candidates import (
     GraspCandidate,
     HasGraspCandidates,
+    RimWallSection,
 )
 from semantic_digital_twin.spatial_types import (
     Point3,
@@ -1088,23 +1091,6 @@ class PotLid(Lid):
 class Plate(HasSupportingSurface, HasGraspCandidates):
     """
     A plate.
-    """
-
-
-@dataclass
-class RimWallSection:
-    """
-    Where a bowl's wall runs at one point of its rim, in the bowl's own frame.
-    """
-
-    center: Point3
-    """
-    The middle of the wall, halfway between its inner and its outer surface.
-    """
-
-    outward: Vector3
-    """
-    The direction from the bowl's axis to the wall.
     """
 
 

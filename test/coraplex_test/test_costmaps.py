@@ -13,7 +13,7 @@ from coraplex.locations.costmaps import (
     GaussianCostmap,
     RingCostmap,
 )
-from coraplex.exceptions import NonPositiveNumberOfSamples
+from krrood.entity_query_language.exceptions import NonPositiveLimitValue
 from semantic_digital_twin.spatial_types import (
     HomogeneousTransformationMatrix,
     Point3,
@@ -798,5 +798,5 @@ def test_a_map_asked_for_no_candidates_says_so(pr2_apartment_context, asked_for)
     world, _, _ = pr2_apartment_context
     costmap = _ring_map(world)
 
-    with pytest.raises(NonPositiveNumberOfSamples):
+    with pytest.raises(NonPositiveLimitValue):
         costmap.sample(asked_for, None)

@@ -26,10 +26,10 @@ from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 if TYPE_CHECKING:
     from semantic_digital_twin.adapters.ros.messages import MetaData
     from semantic_digital_twin.semantic_annotations.mixins import (
-        HasGraspCandidates,
         HasRootBody,
         HasSupportingSurface,
     )
+    from semantic_digital_twin.grasping.grasp_candidates import HasGraspCandidates
     from semantic_digital_twin.robots.robot_parts import (
         AbstractRobot,
         AbstractRobotPart,

@@ -127,7 +127,12 @@ def test_execution_data_of_complex_plan(coraplex_testing_session, complex_plan):
 
 
 def test_replay_complex_plan_from_db(coraplex_testing_session, complex_plan):
+    """
+    A performed plan holding a transport is persisted and recreated from the database.
 
+    The transport's steps are excluded from persistence, since a step can still hold the
+    unground query it was described by, which the ORM cannot store.
+    """
     with simulated_robot:
         complex_plan.perform()
 

@@ -19,6 +19,7 @@ from typing_extensions import (
 )
 
 from coraplex.locations.base import Location
+from krrood.entity_query_language.exceptions import NonPositiveLimitValue
 from semantic_digital_twin.datastructures.camera_resolution import CameraResolution
 from semantic_digital_twin.robots.robot_parts import AbstractRobot, Arm
 from semantic_digital_twin.semantic_annotations.semantic_annotations import Floor
@@ -32,7 +33,6 @@ from semantic_digital_twin.spatial_types.spatial_types import Pose, Point3, Vect
 from semantic_digital_twin.world import World
 from semantic_digital_twin.world_description.world_entity import Body
 
-from coraplex.exceptions import NonPositiveNumberOfSamples
 from coraplex.datastructures.dataclasses import Context
 
 logger = logging.getLogger("coraplex")
@@ -297,10 +297,10 @@ class Costmap(Location):
         :param number_of_samples: How many candidates to sample.
         :param seed: Fixes the sampling, or ``None`` to sample afresh.
         :return: The candidate poses, in the order they should be tried.
-        :raises NonPositiveNumberOfSamples: If asked for fewer than one candidate.
+        :raises NonPositiveLimitValue: If asked for fewer than one candidate.
         """
         if number_of_samples < 1:
-            raise NonPositiveNumberOfSamples(number_of_samples)
+            raise NonPositiveLimitValue(number_of_samples)
 
         # An entry is only ever offered once, so the whole map is all there is to
         # sample.

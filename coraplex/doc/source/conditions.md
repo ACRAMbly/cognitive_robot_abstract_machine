@@ -31,12 +31,9 @@ In general the pre -and postcondition can be anything that is an EQL predicate, 
 evaluates to bool. Conditions are defined as static methods that receive the EQL `variables`, the execution
 `context` and the action `kwargs`.
 
-Every action that closes a gripper on something asks the same question, so the condition itself lives on
-{class}`~coraplex.robot_plans.actions.core.pick_up.HasGraspChoice` and the action delegates to it.
-
 ```python
 @staticmethod
-def can_take_hold(variables, context, kwargs):
+def pre_condition(variables, context, kwargs):
     return GripperIsFree(variables["arm"].end_effector)
 ```
 

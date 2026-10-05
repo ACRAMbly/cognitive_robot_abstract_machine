@@ -9,10 +9,10 @@ from semantic_digital_twin.exceptions import (
     NoGraspGeometry,
     ReferenceFrameMismatchError,
 )
-from semantic_digital_twin.semantic_annotations.mixins import (
+from semantic_digital_twin.semantic_annotations.mixins import HasRootBody
+from semantic_digital_twin.grasping.grasp_candidates import (
     GraspCandidate,
     HasGraspCandidates,
-    HasRootBody,
 )
 from semantic_digital_twin.semantic_annotations.natural_language import (
     NaturalLanguageWithTypeDescription,

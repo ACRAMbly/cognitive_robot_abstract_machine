@@ -1,14 +1,14 @@
 from dataclasses import dataclass, field
 
 import numpy as np
-from typing_extensions import Any, NamedTuple, Optional
+from typing_extensions import Any, Optional
 
 from krrood.entity_query_language.query.match import Match
 
 from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix
 from semantic_digital_twin.spatial_types.spatial_types import Pose
 from semantic_digital_twin.robots.robot_parts import EndEffector
-from semantic_digital_twin.semantic_annotations.mixins import GraspCandidate
+from semantic_digital_twin.grasping.grasp_candidates import GraspCandidate
 
 
 @dataclass
@@ -261,7 +261,8 @@ class HasTcpGoalThresholds:
         return self.context.motion_tolerances.tool_orientation_threshold
 
 
-class GraspPoseSequence(NamedTuple):
+@dataclass
+class GraspPoseSequence:
     """
     The tool frame goals that approach a grasp, reach it and withdraw from it.
     """
@@ -286,7 +287,7 @@ class GraspPoseSequence(NamedTuple):
 class HasApproachesGraspPoses:
     """
     Turns a grasp frame (x-axis along the approach, see
-    :class:`~semantic_digital_twin.semantic_annotations.mixins.GraspCandidate`) into the
+    :class:`~semantic_digital_twin.grasping.grasp_candidates.GraspCandidate`) into the
     tool frame goals that approach it, reach it and withdraw from it.
     """
 
