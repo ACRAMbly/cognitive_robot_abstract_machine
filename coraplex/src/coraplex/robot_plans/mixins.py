@@ -1,9 +1,8 @@
 from dataclasses import dataclass, field
 
 import numpy as np
-from typing_extensions import Any, Optional
+from typing_extensions import Optional
 
-from krrood.entity_query_language.query.match import Match
 
 from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix
 from semantic_digital_twin.spatial_types.spatial_types import Pose
@@ -398,28 +397,3 @@ class HasApproachesGraspPoses:
             tool_goal.to_quaternion(),
             reference_frame=target,
         )
-
-
-@dataclass
-class LimitsItsCandidates:
-    """
-    Adds a limit on how many candidates a step tries.
-
-    A candidate is tried by running the step with it, so a step that succeeds with none
-    would otherwise try every one it is offered.
-    """
-
-    candidates_to_try: int = field(default=50, kw_only=True)
-    """
-    How many candidates a step tries before giving up.
-    """
-
-    def _bound_candidates(self, *steps: Any) -> None:
-        """
-        Limit every step that tries candidates to :attr:`candidates_to_try` of them.
-
-        :param steps: The steps.
-        """
-        for step in steps:
-            if isinstance(step, Match):
-                step.limit(self.candidates_to_try)

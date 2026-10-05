@@ -17,6 +17,7 @@ from semantic_digital_twin.world_description.world_entity import Body
 if TYPE_CHECKING:
     from coraplex.validation.goal_validator import MultiJointPositionGoalValidator
     from coraplex.language import LanguageNode
+    from coraplex.plans.underspecified import UnderspecifiedNode
     from semantic_digital_twin.datastructures.definitions import StaticJointState
 
 
@@ -118,6 +119,36 @@ class EmptyUnderspecified(PlanFailure):
     """
     Raised when a plan is empty.
     """
+
+
+@dataclass
+class CandidateLimitReached(EmptyUnderspecified):
+    """
+    Raised when an underspecified step has tried as many candidates as it may without
+    one of them succeeding.
+    """
+
+    node: UnderspecifiedNode
+    """
+    The step that gave up.
+    """
+
+    candidate_limit: int
+    """
+    How many candidates it was allowed to try.
+    """
+
+    def error_message(self) -> str:
+        return (
+            f"{self.node} tried {self.candidate_limit} candidates without one of them "
+            f"succeeding."
+        )
+
+    def suggest_correction(self) -> str:
+        return (
+            "Allow more candidates, through the step's own limit or the context's "
+            "candidates_to_try, or check whether any candidate can succeed at all."
+        )
 
 
 @dataclass

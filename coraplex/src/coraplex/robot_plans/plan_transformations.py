@@ -35,7 +35,6 @@ from coraplex.robot_plans.actions.core.navigation import (
     NavigateAction,
 )
 from coraplex.robot_plans.actions.core.pick_up import PickUpAction, ReachAction
-from coraplex.robot_plans.mixins import LimitsItsCandidates
 from coraplex.robot_plans.actions.core.robot_body import ParkArmsAction
 from krrood.entity_query_language.core.variable import Variable
 from krrood.entity_query_language.factories import a, variable
@@ -112,7 +111,6 @@ class DetectBeforeGrasp(InsertionTransformation[ReachAction]):
 @dataclass
 class DrawerOpening(
     InsertionTransformation[MatchedType],
-    LimitsItsCandidates,
     Generic[MatchedType],
     SubClassSafeGeneric,
     ABC,
@@ -177,7 +175,6 @@ class DrawerOpening(
             ),
             open_container=a(OpenAction)(handle=drawer.handle, arm=arm),
         )
-        self._bound_candidates(open_the_drawer)
         return [open_the_drawer]
 
     def anchor(self, plan_node: PlanNode) -> PlanNode:
@@ -219,7 +216,6 @@ class OpenDrawerBeforePickUp(DrawerOpening[PickUpAction]):
                 ),
             ),
         )
-        self._bound_candidates(drive_to_the_object)
         nodes.extend([ParkArmsAction(pick_up.robot.all_arms), drive_to_the_object])
         return nodes
 

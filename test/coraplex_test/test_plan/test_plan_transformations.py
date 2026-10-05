@@ -1145,28 +1145,6 @@ def test_a_transport_of_an_object_in_no_drawer_is_left_alone(pr2_apartment_conte
     )
 
 
-def test_opening_a_drawer_tries_a_bounded_number_of_candidates(pr2_apartment_context):
-    """
-    An opening is tried candidate by candidate, so it is limited like any other step
-    that tries candidates.
-    """
-    world, view, context = pr2_apartment_context
-    spoon = world.get_semantic_annotations_by_type(Spoon)[0]
-    transformation = OpenDrawerBeforeMoveAndPickUp()
-    context.plan_transformations.append(transformation)
-    move_and_pick_up = MoveAndPickUpAction.from_graspable_by_closest_grasps(
-        spoon, view.right_arm, context
-    )
-    plan = sequential([move_and_pick_up], context)
-    plan.notify()
-
-    [opening, _, _] = plan.children
-    assert (
-        opening.underspecified_action._get_expression_()._limit_
-        == transformation.candidates_to_try
-    )
-
-
 # %% parking around a pick-and-place
 
 

@@ -34,7 +34,6 @@ from coraplex.robot_plans.actions.core.pick_up import PickUpAction
 from coraplex.querying.predicates import IsAmongTheClosestGraspsTo
 from coraplex.robot_plans.actions.core.placing import PlaceAction
 from coraplex.robot_plans.actions.core.robot_body import MoveTorsoAction
-from coraplex.robot_plans.mixins import LimitsItsCandidates
 from semantic_digital_twin.semantic_annotations.semantic_annotations import (
     Handle,
     Milk,
@@ -218,69 +217,6 @@ def test_a_pick_and_place_grounds_the_steps_it_is_given(pr2_apartment_context):
         for child in pick_and_place._action_plan.children
         if isinstance(child, UnderspecifiedNode)
     ] == [PickUpAction, PlaceAction]
-
-
-def _candidate_limits(action: LimitsItsCandidates) -> List[int]:
-    """
-    :return: How many candidates each step of `action` that tries candidates is limited
-        to, read off the queries the steps are grounded from.
-    """
-    return [
-        child.underspecified_action._get_expression_()._limit_
-        for child in action._action_plan.children
-        if isinstance(child, UnderspecifiedNode)
-    ]
-
-
-@pytest.mark.parametrize(
-    "build",
-    [
-        lambda world, robot, context: _transport_of_the_milk(world, context),
-        lambda world, robot, context: pick_and_place_of_the_milk(
-            world, robot.right_arm
-        ),
-    ],
-    ids=["transport", "pick-and-place"],
-)
-def test_an_action_tries_a_bounded_number_of_candidates(pr2_apartment_context, build):
-    """
-    Each candidate is tried by running the step with it, so a step that can succeed with
-    none has to give up after a fixed number of them.
-    """
-    world, robot, context = pr2_apartment_context
-    action = build(world, robot, context)
-    sequential([action], context)
-
-    limits = _candidate_limits(action)
-
-    assert limits
-    assert limits == [action.candidates_to_try] * len(limits)
-
-
-def test_a_transport_of_grounded_steps_limits_nothing(pr2_apartment_context):
-    """
-    A step that is already grounded tries no candidates, so there is nothing to limit.
-    """
-    world, robot, context = pr2_apartment_context
-    milk = world.get_semantic_annotations_by_type(Milk)[0]
-    standing_position = Pose(reference_frame=world.root)
-    transport = TransportAction(
-        pick_up=MoveAndPickUpAction.from_standing_position(
-            standing_position=standing_position,
-            grasp=milk.grasp_candidates()[0],
-            arm=context.robot.right_arm,
-        ),
-        place=MoveAndPlaceAction.from_standing_position(
-            standing_position=standing_position,
-            target_location=Pose.from_xyz_rpy(
-                4.0, 1.5, 0.9, reference_frame=world.root
-            ),
-            object_designator=milk,
-        ),
-    )
-    sequential([transport], context)
-
-    assert _candidate_limits(transport) == []
 
 
 # %% moving to an object and picking it up
