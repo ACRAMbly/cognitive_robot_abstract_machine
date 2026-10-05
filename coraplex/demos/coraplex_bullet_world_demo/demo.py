@@ -23,7 +23,7 @@ from coraplex.plans.factories import sequential
 from coraplex.plans.plan_node import PlanNode
 from coraplex.robot_plans.actions.composite.transporting import TransportAction
 from coraplex.robot_plans.actions.core.robot_body import ParkArmsAction, MoveTorsoAction
-from coraplex.robot_plans.plan_transformations import OpenDrawerBeforeTransport
+from coraplex.robot_plans.plan_transformations import OpenDrawerBeforeMoveAndPickUp
 from krrood.entity_query_language.factories import (
     an,
     entity,
@@ -293,7 +293,7 @@ class BulletWorldDemonstration(RobotDemonstration):
             ros_node=self.ros_node,
             sampling_seed=0,
             alternative_motion_mappings=self.alternative_motion_mappings,
-            plan_transformations=[OpenDrawerBeforeTransport()],
+            plan_transformations=[OpenDrawerBeforeMoveAndPickUp()],
             _debug=self.debug,
         )
 

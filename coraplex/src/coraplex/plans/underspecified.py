@@ -279,6 +279,12 @@ class UnderspecifiedNode(ExecutionBoundaryNode):
     those nodes are part of what this node runs rather than being skipped.
     """
 
+    _transformations_applied: bool = field(default=False, init=False, repr=False)
+    """
+    Whether the plan transformations matching this node have rewritten the plan around
+    it already, so that expanding the plan again does not apply them a second time.
+    """
+
     @property
     def designator_type(self) -> Type:
         return self.underspecified_action._type_
@@ -350,8 +356,12 @@ class UnderspecifiedNode(ExecutionBoundaryNode):
         # Resolution is deferred to execution time: the underspecified statement can
         # only be grounded once the preceding actions have run and mutated the world
         # (e.g. the torso is raised, the object is in the gripper). The grounding
-        # happens in UnderspecifiedExecutable, so expansion does nothing here.
-        pass
+        # happens in UnderspecifiedExecutable, so expansion only lets the plan
+        # transformations matching this node rewrite the plan around it.
+        if self._transformations_applied:
+            return
+        self._transformations_applied = True
+        self.plan.apply_plan_transformations(self)
 
     def advance(self) -> bool:
         """
