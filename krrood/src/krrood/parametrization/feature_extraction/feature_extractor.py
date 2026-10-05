@@ -17,7 +17,7 @@ from krrood.ormatic.data_access_objects.dao import (
     DataAccessObject,
     get_dao_schema,
 )
-from krrood.ormatic.data_access_objects.helper import get_dao_class
+from krrood.ormatic.data_access_objects.helper import get_data_access_object_class
 from krrood.ormatic.exceptions import NoDAOFoundForTypeError
 from krrood.ormatic.utils import get_python_type_from_sqlalchemy_column
 from krrood.parametrization.feature_extraction.aggregations import get_aggregation_class
@@ -106,7 +106,7 @@ class FeatureExtractor:
         :return: The data access object class that describes the attributes of its type.
         :raises NoDAOFoundForTypeError: If the type of the instance is not mapped.
         """
-        data_access_object_class = get_dao_class(type(instance))
+        data_access_object_class = get_data_access_object_class(type(instance))
         if data_access_object_class is None:
             raise NoDAOFoundForTypeError(type(instance))
         return data_access_object_class

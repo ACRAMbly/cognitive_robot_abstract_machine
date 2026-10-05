@@ -38,7 +38,7 @@ from krrood.ormatic.data_access_objects.from_dao import (
     FromDataAccessObjectState,
 )
 from krrood.ormatic.data_access_objects.helper import (
-    get_dao_class,
+    get_data_access_object_class,
     to_dao,
     clear_dao_lookup_caches,
 )
@@ -809,7 +809,7 @@ class DataAccessObject(HasGeneric[T]):
         if existing is not None:
             return existing
 
-        dao_clazz = get_dao_class(type(source_object), expected_type)
+        dao_clazz = get_data_access_object_class(type(source_object), expected_type)
         if dao_clazz is None:
             raise NoDAOFoundDuringParsingError(source_object, type(self), None)
 

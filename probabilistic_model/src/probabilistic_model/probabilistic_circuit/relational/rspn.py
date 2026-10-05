@@ -25,7 +25,7 @@ from krrood.ormatic.data_access_objects.dao import (
     DataAccessObjectSchema,
     get_dao_schema,
 )
-from krrood.ormatic.data_access_objects.helper import get_dao_class
+from krrood.ormatic.data_access_objects.helper import get_data_access_object_class
 from krrood.parametrization.feature_extraction.aggregations import (
     compute_aggregation_statistics,
 )
@@ -670,7 +670,9 @@ class RelationalProbabilisticCircuit:
     part_learning_methods: dict[str, LearningMethod] = field(default_factory=dict)
     """
     Per exchangeable-part field name, what that part's template distribution is fitted
-    with. A part absent from the mapping is fitted with a plain
+    with.
+
+    A part absent from the mapping is fitted with a plain
     :class:`~probabilistic_model.learning.jpt.jpt.JointProbabilityTree`.
     """
 
@@ -843,7 +845,9 @@ class RelationalProbabilisticCircuit:
         self.class_probabilistic_circuit = self.learning_method.fit(
             class_dataframe, variables
         )
-        self.schema_information = get_dao_schema(get_dao_class(type(instances[0])))
+        self.schema_information = get_dao_schema(
+            get_data_access_object_class(type(instances[0]))
+        )
         for collection_relationship in self.schema_information.collection_relationships:
             exchangeable_part = collection_relationship.key
             if exchangeable_part not in self.feature_extractor.exchangeable_features:
