@@ -39,11 +39,11 @@ class NotApproachingGoal(MotionStatechartNode):
     """
     Turns ``True`` while :attr:`monitored_task` is not closing on its goal fast enough.
 
-    A task approaches its goal while its error keeps falling below the error it had when
-    it last made progress, by at least :attr:`minimum_convergence_rate` for every second
-    since. An error that only moves back and forth, as it does for an arm held off by a
-    collision, never falls far enough below that reference and so does not count as
-    approaching, however fast it moves.
+    The task counts as approaching its goal while its error lies below the error it had
+    when it last made progress, by at least :attr:`minimum_convergence_rate` times its
+    threshold for every second since. An error that moves without getting smaller, as
+    it does for an arm that collision avoidance keeps pushing back, therefore never
+    counts as approaching, however fast it moves.
 
     A task that is not running has no meaningful progress, so it is reported as not
     approaching. That makes this node safe to combine with others, but it means the
@@ -73,34 +73,25 @@ class NotApproachingGoal(MotionStatechartNode):
     every second, or the task counts as not approaching its goal.
     """
 
-    _error_variables: List[FloatVariable] = field(
-        default_factory=list, init=False, repr=False
-    )
+    _error_at_last_progress: FloatVariable = field(init=False, repr=False)
     """
-    The free variables of the monitored task's error, resolved against the live world.
-    """
-
-    _compiled_error: Optional[CompiledFunction] = field(
-        default=None, init=False, repr=False
-    )
-    """
-    The monitored task's error, compiled once so it can be measured every control cycle.
-    """
-
-    _error_at_last_progress: Optional[float] = field(
-        default=None, init=False, repr=False
-    )
-    """
-    The monitored task's error when it last counted as making progress, since it last
-    started or left its goal.
+    The monitored task's error when it last counted as making progress, or infinity
+    while there is nothing to compare with yet, so that the first error measured counts
+    as progress.
 
     Small falls in between do not move it, so the error has to fall far enough below it
     for all the time since, not merely below the lowest value seen.
     """
 
-    _seconds_since_last_progress: float = field(default=0.0, init=False, repr=False)
+    _seconds_since_last_progress: FloatVariable = field(init=False, repr=False)
     """
-    Simulated time since :attr:`_error_at_last_progress` was recorded.
+    Simulated time from the last progress up to the previous control cycle.
+    """
+
+    _compiled_error: CompiledFunction = field(init=False, repr=False)
+    """
+    The monitored task's error, compiled once and bound to the world state, so that
+    :meth:`on_tick` can record it when the task makes progress.
     """
 
     _control_dt: float = field(default=0.0, init=False, repr=False)
@@ -114,75 +105,106 @@ class NotApproachingGoal(MotionStatechartNode):
 
     def build_artifacts(self, context: MotionStatechartContext) -> NodeArtifacts:
         """
-        Compile the monitored task's error, which :meth:`on_tick` measures every control
-        cycle.
+        Observe whether the monitored task's error lies far enough below its error at
+        the last progress, which :meth:`on_tick` keeps up to date.
         """
         self._control_dt = context.qp_controller_config.control_dt
-        error = self.monitored_task.error_signal.expression
-        self._error_variables = error.free_variables()
-        self._compiled_error = error.compile(
-            VariableParameters.from_lists(self._error_variables)
+        self._error_at_last_progress = self._registered_variable(
+            "error_at_last_progress", context
         )
-        return NodeArtifacts()
+        self._seconds_since_last_progress = self._registered_variable(
+            "seconds_since_last_progress", context
+        )
+        self._forget_progress(context)
+        self._compile_error(context)
+        error = self.monitored_task.error_signal.expression
+        required_fall = (
+            self.minimum_convergence_rate
+            * self.monitored_task.threshold
+            * (self._seconds_since_last_progress + self._control_dt)
+        )
+        return NodeArtifacts(
+            observation=sm.trinary_logic_or(
+                self._monitored_task_is_not_running(),
+                error <= self.monitored_task.threshold,
+                self._error_at_last_progress - error < required_fall,
+            )
+        )
+
+    def _registered_variable(
+        self, name: str, context: MotionStatechartContext
+    ) -> FloatVariable:
+        """
+        :param name: What the variable holds.
+        :param context: The context whose float variable data holds its value.
+        :return: A new variable of this node, registered with that data.
+        """
+        variable = FloatVariable(f"{self.name}_{name}")
+        context.float_variable_data.register_expression(variable)
+        return variable
+
+    def _compile_error(self, context: MotionStatechartContext) -> None:
+        """
+        Compile the monitored task's error against the world's positions and the float
+        variable data, reading both in place.
+        """
+        self._compiled_error = self.monitored_task.error_signal.expression.compile(
+            parameters=VariableParameters.from_lists(
+                context.world.state.position_float_variables,
+                context.float_variable_data.variables,
+            ),
+            sparse=False,
+        )
+        self._compiled_error.bind_args_to_memory_view(0, context.world.state.positions)
+        context.float_variable_data.bind_argument(self._compiled_error, 1)
+
+    def _monitored_task_is_not_running(self) -> Scalar:
+        """
+        :return: ``True`` while the monitored task is in any life cycle state other
+            than :attr:`~giskardpy.motion_statechart.data_types.LifeCycleValues.RUNNING`.
+        """
+        return sm.Scalar(
+            self.monitored_task.life_cycle_variable != int(LifeCycleValues.RUNNING)
+        )
 
     def on_start(self, context: MotionStatechartContext):
-        self._forget_progress()
+        self._forget_progress(context)
 
-    def on_tick(self, context: MotionStatechartContext) -> ObservationStateValues:
+    def on_tick(self, context: MotionStatechartContext) -> None:
         """
-        Compare the monitored task's error against the error it had when it last made
-        progress.
-
-        :return:``FALSE`` while the error falls fast enough, ``TRUE`` otherwise.
+        Move the error at the last progress forward once the task has made progress on
+        this control cycle, and count the time while it has not.
         """
         if (
             self.monitored_task.life_cycle_state != LifeCycleValues.RUNNING
             or self.monitored_task.observation_state == ObservationStateValues.TRUE
         ):
-            self._forget_progress()
-            return ObservationStateValues.TRUE
-        error = self._current_error()
-        if self._error_at_last_progress is None:
-            self._record_progress(error)
-            return ObservationStateValues.FALSE
-        self._seconds_since_last_progress += self._control_dt
-        required_fall = (
-            self.minimum_convergence_rate
-            * self.monitored_task.threshold
-            * self._seconds_since_last_progress
+            self._forget_progress(context)
+            return None
+        if self.observation_state == ObservationStateValues.FALSE:
+            context.float_variable_data.set_value(
+                self._error_at_last_progress,
+                float(self._compiled_error.evaluate()[0]),
+            )
+            context.float_variable_data.set_value(
+                self._seconds_since_last_progress, 0.0
+            )
+            return None
+        context.float_variable_data.set_value(
+            self._seconds_since_last_progress,
+            context.float_variable_data.get_value(self._seconds_since_last_progress)
+            + self._control_dt,
         )
-        if self._error_at_last_progress - error < required_fall:
-            return ObservationStateValues.TRUE
-        self._record_progress(error)
-        return ObservationStateValues.FALSE
+        return None
 
-    def _current_error(self) -> float:
-        """
-        Measured with the error compiled once in :meth:`build_artifacts` rather than
-        through ``Scalar.evaluate``, which would compile it again on every control
-        cycle.
-
-        :return: The monitored task's error in the world as it is now.
-        """
-        arguments = np.array(
-            [variable.resolve() for variable in self._error_variables],
-            dtype=np.float64,
-        )
-        return float(self._compiled_error(arguments)[0])
-
-    def _record_progress(self, error: float) -> None:
-        """
-        :param error: The monitored task's error as it makes progress.
-        """
-        self._error_at_last_progress = error
-        self._seconds_since_last_progress = 0.0
-
-    def _forget_progress(self) -> None:
+    def _forget_progress(self, context: MotionStatechartContext) -> None:
         """
         Start judging progress afresh, from the next measured error.
+
+        :param context: The context whose float variable data holds the progress.
         """
-        self._error_at_last_progress = None
-        self._seconds_since_last_progress = 0.0
+        context.float_variable_data.set_value(self._error_at_last_progress, np.inf)
+        context.float_variable_data.set_value(self._seconds_since_last_progress, 0.0)
 
 
 @dataclass(eq=False, repr=False)

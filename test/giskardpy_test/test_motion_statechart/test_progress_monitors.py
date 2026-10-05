@@ -10,10 +10,7 @@ from typing_extensions import List
 
 from giskardpy.executor import Executor
 from giskardpy.motion_statechart.context import MotionStatechartContext
-from giskardpy.motion_statechart.data_types import (
-    LifeCycleValues,
-    ObservationStateValues,
-)
+from giskardpy.motion_statechart.data_types import ObservationStateValues
 from giskardpy.motion_statechart.error_signals import (
     time_derivative_from_joint_motion,
 )
@@ -314,8 +311,8 @@ class TestStallDetection:
         self, pr2_world_state_reset: World
     ):
         """
-        A task that holds its goal while another one is stuck has not stopped approaching
-        anything, so the stall must not blame it.
+        A task that holds its goal while another one is stuck has not stopped
+        approaching anything, so the stall must not blame it.
         """
         base_footprint = pr2_world_state_reset.get_kinematic_structure_entity_by_name(
             "base_footprint"
@@ -481,54 +478,94 @@ class TestStallDetection:
 # %% the rule that decides whether a task approaches its goal
 
 
-@dataclass
-class _RunningTask:
-    """
-    Stands in for a running task that has not reached its goal, whose error the tests
-    feed to a :class:`NotApproachingGoal` directly.
-    """
-
-    threshold: float = 0.1
-    """
-    The error below which the task would count as having reached its goal.
-    """
-
-    life_cycle_state: LifeCycleValues = LifeCycleValues.RUNNING
-    """
-    The task keeps running throughout.
-    """
-
-    observation_state: ObservationStateValues = ObservationStateValues.FALSE
-    """
-    The task never reaches its goal.
-    """
-
-
 CONVERGENCE_RATE = 0.5
 """
 A minimum convergence rate other than the default, so it is seen to be what the rule
 follows.
 """
 
+TASK_THRESHOLD = 0.1
+"""
+The error below which the watched task would count as having reached its goal.
+"""
 
-def _monitor_fed(errors: List[float]) -> NotApproachingGoal:
-    """
-    :return: A monitor that reads `errors` one per control cycle of a second each.
-    """
-    monitor = NotApproachingGoal(
-        monitored_task=_RunningTask(), minimum_convergence_rate=CONVERGENCE_RATE
-    )
-    monitor._control_dt = 1.0
-    remaining = iter(errors)
-    monitor._current_error = lambda: next(remaining)
-    return monitor
+GOAL_X = 10.0
+"""
+The x position of the watched task's goal, far enough away that the task never reaches
+it.
+"""
 
 
-def _required_fall_per_second() -> float:
+@dataclass
+class ScriptedErrorRun:
     """
-    :return: How far the error of a :class:`_RunningTask` has to fall every second.
+    A :class:`NotApproachingGoal` watching a task whose error a test sets on every
+    control cycle, by putting the bot that far short of the task's goal.
     """
-    return CONVERGENCE_RATE * _RunningTask.threshold
+
+    world: World
+    """
+    The world of the bot whose distance to the goal is the task's error.
+    """
+
+    monitor: NotApproachingGoal = field(init=False)
+    """
+    The monitor under test.
+    """
+
+    context: MotionStatechartContext = field(init=False)
+    """
+    The context the motion runs in.
+    """
+
+    executor: Executor = field(init=False)
+    """
+    The executor ticking the motion.
+    """
+
+    def __post_init__(self):
+        task = CartesianPosition(
+            root_link=self.world.root,
+            tip_link=self.world.get_kinematic_structure_entity_by_name("bot"),
+            goal_point=Point3(GOAL_X, 0, 0, reference_frame=self.world.root),
+            threshold=TASK_THRESHOLD,
+        )
+        self.monitor = NotApproachingGoal(
+            monitored_task=task, minimum_convergence_rate=CONVERGENCE_RATE
+        )
+        motion_statechart = MotionStatechart()
+        motion_statechart.add_nodes([task, self.monitor])
+        motion_statechart.add_node(EndMotion.when_true(task))
+        self.context = MotionStatechartContext(world=self.world)
+        self.executor = Executor(self.context)
+        self.executor.compile(motion_statechart=motion_statechart)
+
+    @property
+    def required_fall_per_cycle(self) -> float:
+        """
+        :return: How far the task's error has to fall on every control cycle.
+        """
+        return (
+            CONVERGENCE_RATE
+            * TASK_THRESHOLD
+            * self.context.qp_controller_config.control_dt
+        )
+
+    def observations_while_the_error_is(
+        self, errors: List[float]
+    ) -> List[ObservationStateValues]:
+        """
+        :param errors: The task's error on each control cycle.
+        :return: What the monitor observes on each of those control cycles.
+        """
+        drive = self.world.get_connections_by_type(OmniDrive)[0]
+        observations = []
+        for error in errors:
+            self.world.state[drive.x.id].position = GOAL_X - error
+            self.world.notify_state_change()
+            self.executor.tick()
+            observations.append(self.monitor.observation_state)
+        return observations
 
 
 class TestConvergenceRule:
@@ -538,42 +575,55 @@ class TestConvergenceRule:
         [(0.8, ObservationStateValues.TRUE), (1.2, ObservationStateValues.FALSE)],
         ids=["too-slow", "fast-enough"],
     )
-    def test_an_error_has_to_fall_by_the_minimum_rate(self, fall_factor, observed):
+    def test_an_error_has_to_fall_by_the_minimum_rate(
+        self, cylinder_bot_world: World, fall_factor, observed
+    ):
+        run = ScriptedErrorRun(cylinder_bot_world)
         start = 1.0
-        monitor = _monitor_fed(
-            [start, start - fall_factor * _required_fall_per_second()]
+
+        observations = run.observations_while_the_error_is(
+            [start, start - fall_factor * run.required_fall_per_cycle]
         )
 
-        assert monitor.on_tick(None) == ObservationStateValues.FALSE
-        assert monitor.on_tick(None) == observed
+        assert observations == [ObservationStateValues.FALSE, observed]
 
-    def test_falling_back_after_a_detour_is_not_progress_until_it_beats_the_start(self):
+    def test_falling_back_after_a_detour_is_not_progress_until_it_beats_the_start(
+        self, cylinder_bot_world: World
+    ):
         """
         An error that rises and then falls back to where it was has made no progress,
         and only falling below that by the rate for all the time since counts.
         """
+        run = ScriptedErrorRun(cylinder_bot_world)
         start = 1.0
-        beyond = start - 3 * _required_fall_per_second()
-        monitor = _monitor_fed([start, start + 0.5, start, beyond])
+        beyond = start - 4 * run.required_fall_per_cycle
 
-        assert [monitor.on_tick(None) for _ in range(4)] == [
+        observations = run.observations_while_the_error_is(
+            [start, start + 0.5, start, beyond]
+        )
+
+        assert observations == [
             ObservationStateValues.FALSE,
             ObservationStateValues.TRUE,
             ObservationStateValues.TRUE,
             ObservationStateValues.FALSE,
         ]
 
-    def test_a_restarted_task_is_judged_afresh(self):
+    def test_a_restarted_task_is_judged_afresh(self, cylinder_bot_world: World):
         """
         A task that starts again has nothing to be compared with from its last run.
         """
-        monitor = _monitor_fed([1.0, 1.0, 5.0])
-        monitor.on_tick(None)
-        assert monitor.on_tick(None) == ObservationStateValues.TRUE
+        run = ScriptedErrorRun(cylinder_bot_world)
+        assert run.observations_while_the_error_is([1.0, 1.0]) == [
+            ObservationStateValues.FALSE,
+            ObservationStateValues.TRUE,
+        ]
 
-        monitor.on_start(None)
+        run.monitor.on_start(run.context)
 
-        assert monitor.on_tick(None) == ObservationStateValues.FALSE
+        assert run.observations_while_the_error_is([5.0]) == [
+            ObservationStateValues.FALSE
+        ]
 
 
 # %% differentiating with respect to time
