@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 
 from typing_extensions import List, TYPE_CHECKING
 
-from semantic_digital_twin.exceptions import InputAlreadyReadError
+from semantic_digital_twin.exceptions import InputAlreadyAddedError
 from semantic_digital_twin.world import World
 
 if TYPE_CHECKING:
@@ -56,7 +56,7 @@ class InputSynchronizer(ABC):
 @dataclass
 class WorldStateInputs:
     """
-    All inputs that one loop reads before it computes anything.
+    All inputs that one loop applies before it computes anything.
     """
 
     world: World
@@ -75,46 +75,47 @@ class WorldStateInputs:
     moves the world state away from what it last read.
     """
 
-    read_inputs: List[InputSynchronizer] = field(default_factory=list, init=False)
+    added_inputs: List[InputSynchronizer] = field(default_factory=list, init=False)
     """
-    The inputs this loop was told to read, as they were handed to it.
+    The inputs added to this loop, as they were handed to it rather than as they are
+    applied.
     """
 
-    def read_robot(self, robot: AbstractRobot) -> None:
+    def add_robot_inputs(self, robot: AbstractRobot) -> None:
         """
         Apply everything the parts of a robot are read from in this loop from now on.
 
         Parts that are read from the world they stand in need nothing applied and are
         therefore left out.
 
-        :param robot: The robot whose parts this loop reads.
+        :param robot: The robot whose inputs are added.
         """
         for synchronizer in robot.get_input_synchronizers():
-            self.read(synchronizer)
+            self.add_input(synchronizer)
 
-    def read_robot_part(self, robot_part: HasInputSource) -> None:
+    def add_robot_part_input(self, robot_part: HasInputSource) -> None:
         """
         Apply what one part of a robot is read from in this loop from now on.
 
         A part that is read from the world it stands in needs nothing applied and is
         therefore left out.
 
-        :param robot_part: The part this loop reads.
+        :param robot_part: The part whose input is added.
         """
         if not isinstance(robot_part.source, InputSynchronizer):
             return
-        self.read(robot_part.source)
+        self.add_input(robot_part.source)
 
-    def read(self, synchronizer: InputSynchronizer) -> None:
+    def add_input(self, synchronizer: InputSynchronizer) -> None:
         """
         Apply the given input in this loop from now on, in the way this loop needs it.
 
-        :param synchronizer: The input this loop reads.
-        :raises InputAlreadyReadError: If this loop already reads the input.
+        :param synchronizer: The input to add.
+        :raises InputAlreadyAddedError: If the input was already added to this loop.
         """
-        if any(read_input is synchronizer for read_input in self.read_inputs):
-            raise InputAlreadyReadError(synchronizer=synchronizer)
-        self.read_inputs.append(synchronizer)
+        if any(added_input is synchronizer for added_input in self.added_inputs):
+            raise InputAlreadyAddedError(synchronizer=synchronizer)
+        self.added_inputs.append(synchronizer)
         if self.reapplies_inputs:
             synchronizer = synchronizer.rewriting_every_cycle()
         self.synchronizers.append(synchronizer)

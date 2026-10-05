@@ -1431,21 +1431,21 @@ class NoLaserScanReceived(UsageError):
 
 
 @dataclass
-class InputAlreadyReadError(UsageError):
+class InputAlreadyAddedError(UsageError):
     """
-    Raised when a loop is told to read an input it already reads.
+    Raised when an input is added to a loop that already applies it.
     """
 
     synchronizer: InputSynchronizer
     """
-    The input the loop already reads.
+    The input that was added a second time.
     """
 
     def error_message(self) -> str:
-        return f"The loop already reads {self.synchronizer}."
+        return f"The loop already applies {self.synchronizer}."
 
     def suggest_correction(self) -> str:
-        return "read every input only once per loop."
+        return "add every input only once per loop."
 
 
 @dataclass

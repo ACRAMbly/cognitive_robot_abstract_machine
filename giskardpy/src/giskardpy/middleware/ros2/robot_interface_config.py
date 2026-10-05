@@ -160,9 +160,9 @@ class RobotInterfaceConfig(ABC):
         wherever that robot publishes it.
         """
         self.robot.use_real_sources(rospy.get_node())
-        self.motion_server.inputs.read_robot(self.robot)
+        self.motion_server.inputs.add_robot_inputs(self.robot)
         if self.server_config.is_closed_loop:
-            self.control_loop.inputs.read_robot(self.robot)
+            self.control_loop.inputs.add_robot_inputs(self.robot)
 
     def sync_robot_part(self, robot_part: HasInputSource):
         """
@@ -170,9 +170,9 @@ class RobotInterfaceConfig(ABC):
         that part declares.
         """
         robot_part.use_real_source(rospy.get_node())
-        self.motion_server.inputs.read_robot_part(robot_part)
+        self.motion_server.inputs.add_robot_part_input(robot_part)
         if self.server_config.is_closed_loop:
-            self.control_loop.inputs.read_robot_part(robot_part)
+            self.control_loop.inputs.add_robot_part_input(robot_part)
 
     def sync_joint_state_topic(self, topic_name: str, group_name: str | None = None):
         """

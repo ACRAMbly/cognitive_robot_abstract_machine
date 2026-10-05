@@ -8,7 +8,7 @@ from semantic_digital_twin.input_synchronization import (
     InputSynchronizer,
     WorldStateInputs,
 )
-from semantic_digital_twin.exceptions import InputAlreadyReadError
+from semantic_digital_twin.exceptions import InputAlreadyAddedError
 from semantic_digital_twin.robots.exceptions import (
     MissingInputSourceError,
     UndeclaredTopicError,
@@ -296,38 +296,38 @@ def test_a_loop_applies_every_source_a_robots_parts_are_read_from(annotated_pr2)
     annotated_pr2.left_arm.use_source(source)
     inputs = WorldStateInputs(world=annotated_pr2._world)
 
-    inputs.read_robot(annotated_pr2)
+    inputs.add_robot_inputs(annotated_pr2)
 
     assert inputs.synchronizers == [source]
 
 
-def test_a_loop_reapplying_its_inputs_reads_a_rewriting_source(annotated_pr2):
+def test_a_loop_reapplying_its_inputs_applies_a_rewriting_source(annotated_pr2):
     annotated_pr2.left_arm.use_source(AppliedSource(world=annotated_pr2._world))
     inputs = WorldStateInputs(world=annotated_pr2._world, reapplies_inputs=True)
 
-    inputs.read_robot(annotated_pr2)
+    inputs.add_robot_inputs(annotated_pr2)
 
     [synchronizer] = inputs.synchronizers
     assert isinstance(synchronizer, RewritingSource)
 
 
-def test_a_loop_reading_a_simulated_robot_applies_nothing(annotated_pr2):
+def test_a_loop_given_a_simulated_robot_applies_nothing(annotated_pr2):
     inputs = WorldStateInputs(world=annotated_pr2._world)
 
-    inputs.read_robot(annotated_pr2)
+    inputs.add_robot_inputs(annotated_pr2)
 
     assert inputs.synchronizers == []
 
 
 @pytest.mark.parametrize("reapplies_inputs", [False, True])
-def test_a_loop_reads_a_source_only_once(annotated_pr2, reapplies_inputs):
+def test_a_loop_takes_an_input_only_once(annotated_pr2, reapplies_inputs):
     source = AppliedSource(world=annotated_pr2._world)
     inputs = WorldStateInputs(
         world=annotated_pr2._world, reapplies_inputs=reapplies_inputs
     )
-    inputs.read(source)
+    inputs.add_input(source)
 
-    with pytest.raises(InputAlreadyReadError) as raised:
-        inputs.read(source)
+    with pytest.raises(InputAlreadyAddedError) as raised:
+        inputs.add_input(source)
 
     assert raised.value.synchronizer is source
