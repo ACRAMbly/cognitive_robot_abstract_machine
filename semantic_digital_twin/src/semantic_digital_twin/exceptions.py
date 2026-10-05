@@ -25,6 +25,7 @@ from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 
 if TYPE_CHECKING:
     from semantic_digital_twin.adapters.ros.messages import MetaData
+    from semantic_digital_twin.input_synchronization import InputSynchronizer
     from semantic_digital_twin.semantic_annotations.mixins import (
         HasRootBody,
         HasSupportingSurface,
@@ -1427,6 +1428,24 @@ class NoLaserScanReceived(UsageError):
 
     def suggest_correction(self) -> str:
         return f"check that something publishes on '{self.topic_name}' and that the node has been spun since."
+
+
+@dataclass
+class InputAlreadyReadError(UsageError):
+    """
+    Raised when a loop is told to read an input it already reads.
+    """
+
+    synchronizer: InputSynchronizer
+    """
+    The input the loop already reads.
+    """
+
+    def error_message(self) -> str:
+        return f"The loop already reads {self.synchronizer}."
+
+    def suggest_correction(self) -> str:
+        return "read every input only once per loop."
 
 
 @dataclass

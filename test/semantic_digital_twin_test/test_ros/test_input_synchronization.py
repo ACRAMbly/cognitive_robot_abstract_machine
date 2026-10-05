@@ -342,6 +342,45 @@ def test_an_input_that_already_rewrites_hands_out_itself(
     assert source.rewriting_every_cycle() is source
 
 
+# %% releasing a part source
+
+
+@pytest.mark.parametrize(
+    "source_type", [PendingJointPositionSource, LatestJointPositionSource]
+)
+def test_closing_the_source_of_a_part_destroys_its_subscription(
+    rclpy_node, world_with_two_connections, source_type
+):
+    world, part_connection, _ = world_with_two_connections
+    source = source_type(
+        world=world,
+        node=rclpy_node,
+        topic_name="joint_states",
+        connections=[part_connection],
+    )
+    subscription = source.subscription
+
+    source.close()
+
+    assert subscription not in rclpy_node.subscriptions
+
+
+def test_closing_the_source_of_a_base_destroys_its_subscription(
+    rclpy_node, omni_drive_world: World
+):
+    source = SubscribedBasePoseSource(
+        world=omni_drive_world,
+        node=rclpy_node,
+        topic_name="odom",
+        connection=omni_drive_world.get_connection_by_name("root_T_base"),
+    )
+    subscription = source.subscription
+
+    source.close()
+
+    assert subscription not in rclpy_node.subscriptions
+
+
 # %% writing the base pose
 
 

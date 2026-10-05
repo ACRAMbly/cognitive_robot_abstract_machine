@@ -1,14 +1,11 @@
 from __future__ import annotations
 
-import importlib
-import pkgutil
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Type
 
-from typing_extensions import ClassVar, Generic, TypeVar, Any, get_args
+from typing_extensions import Generic, TypeVar, Any, get_args
 
-import semantic_digital_twin.adapters.ros as ros_package
 from krrood.utils import recursive_subclasses
 from semantic_digital_twin.adapters.ros.exceptions import (
     CannotConvertRos2ToSemDTError,
@@ -67,25 +64,6 @@ class MessageConverter(ABC, Generic[InputType, OutputType]):
         :return: True if this converter can handle the conversion, False otherwise.
         """
         return cls.input_type == type(data)
-
-    @classmethod
-    def _load_converter_modules(cls) -> None:
-        """
-        Imports every module of this package whose name ends in
-        :attr:`converter_module_suffix`, so that the converters they define are
-        discoverable.
-
-        ..note:: The import happens here rather than at module level because those
-            modules import this one.
-        """
-        if MessageConverter._converter_modules_loaded:
-            return
-        MessageConverter._converter_modules_loaded = True
-        for module in pkgutil.iter_modules(
-            ros_package.__path__, ros_package.__name__ + "."
-        ):
-            if module.name.endswith(cls.converter_module_suffix):
-                importlib.import_module(module.name)
 
     @classmethod
     def get_to_converter(cls, input_obj: Any) -> Type[MessageConverter]:

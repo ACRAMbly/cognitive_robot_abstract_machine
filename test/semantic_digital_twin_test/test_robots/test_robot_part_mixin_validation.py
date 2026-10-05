@@ -19,6 +19,8 @@ from semantic_digital_twin.robots.exceptions import (
 )
 from semantic_digital_twin.robots.input_source import InputSource
 from semantic_digital_twin.robots.robot_part_mixins import (
+    MINIMUM_ARM_COUNT,
+    MINIMUM_FINGER_COUNT,
     HasArms,
     HasEndEffector,
     HasFingers,
@@ -70,16 +72,16 @@ class OpposingFinger(MountedPart):
 @dataclass(eq=False)
 class PartCombiningIndependentMixins(HasTorso[MountedPart], HasLidar[MountedPart]):
     """
-    A part whose two mixins are unrelated, so neither one's assumptions replace the
-    other's.
+    A part whose two mixins are unrelated, so neither one narrows the other's
+    assumptions.
     """
 
 
 @dataclass(eq=False)
 class PartNarrowingAMixin(HasTwoFingers[Thumb, OpposingFinger]):
     """
-    A part whose mixin narrows another one, replacing its assumption about how many
-    fingers there are.
+    A part whose mixin narrows another one's assumption about how many fingers there
+    are.
     """
 
 
@@ -90,6 +92,34 @@ class PartCombiningANarrowingMixinWithAnother(
     """
     A part whose first mixin narrows another and whose second is unrelated, as a torso
     carrying one arm and a neck is.
+    """
+
+
+@dataclass(eq=False)
+class PartWithFingers(HasFingers[Thumb, OpposingFinger]):
+    """
+    A part whose mixin requires a thumb and at least one finger opposing it.
+    """
+
+
+@dataclass(eq=False)
+class PartWithArms(HasArms[MountedPart, MountedPart, MountedPart]):
+    """
+    A part whose mixin requires at least one arm.
+    """
+
+
+@dataclass(eq=False)
+class PartWithOneArm(HasOneArm[MountedPart]):
+    """
+    A part whose mixin requires exactly one arm.
+    """
+
+
+@dataclass(eq=False)
+class PartWithLeftAndRightArm(HasLeftRightArm[MountedPart, MountedPart]):
+    """
+    A part whose mixin requires exactly two arms.
     """
 
 
@@ -113,7 +143,7 @@ def test_a_part_satisfying_every_independent_mixin_passes():
     part.validate()
 
 
-# %% assumptions a narrowing mixin replaces
+# %% assumptions a narrowing mixin narrows
 
 
 def test_a_narrowing_mixin_hands_the_check_on_to_the_mixins_after_it():
@@ -127,13 +157,24 @@ def test_a_narrowing_mixin_hands_the_check_on_to_the_mixins_after_it():
         part.validate()
 
 
-def test_a_narrowed_assumption_replaces_the_one_it_narrows():
-    part = PartNarrowingAMixin(fingers=[Thumb(), OpposingFinger()])
-
+@pytest.mark.parametrize(
+    "part, narrowed_mixin",
+    [
+        (PartNarrowingAMixin(fingers=[Thumb(), OpposingFinger()]), HasFingers),
+        (PartWithOneArm(arms=[MountedPart()]), HasArms),
+        (PartWithLeftAndRightArm(arms=[MountedPart(), MountedPart()]), HasArms),
+    ],
+)
+def test_a_part_satisfying_a_narrowing_mixin_satisfies_the_mixin_it_narrows(
+    part, narrowed_mixin
+):
+    """
+    A narrowing mixin only adds to the assumptions of the mixin it narrows, so every
+    part it accepts is accepted by that mixin as well.
+    """
     part.validate()
 
-    with pytest.raises(TooFewFingersError):
-        HasFingers.validate(part)
+    narrowed_mixin.validate(part)
 
 
 # %% the exception an unmet assumption raises
@@ -161,34 +202,6 @@ class PartWithoutItsSingleChild(
         return MountedSource()
 
 
-@dataclass(eq=False)
-class PartWithManyFingers(HasFingers[Thumb, OpposingFinger]):
-    """
-    A part whose mixin requires more fingers than a thumb and one opposing finger.
-    """
-
-
-@dataclass(eq=False)
-class PartWithManyArms(HasArms[MountedPart, MountedPart, MountedPart]):
-    """
-    A part whose mixin requires more arms than a left and a right one.
-    """
-
-
-@dataclass(eq=False)
-class PartWithOneArm(HasOneArm[MountedPart]):
-    """
-    A part whose mixin requires exactly one arm.
-    """
-
-
-@dataclass(eq=False)
-class PartWithLeftAndRightArm(HasLeftRightArm[MountedPart, MountedPart]):
-    """
-    A part whose mixin requires exactly two arms.
-    """
-
-
 @pytest.mark.parametrize(
     "mixin, error",
     [
@@ -209,13 +222,13 @@ def test_a_mixin_missing_its_child_names_the_child_it_misses(mixin, error):
 
 
 def test_too_few_fingers_carries_the_counts():
-    part = PartWithManyFingers(fingers=[Thumb(), OpposingFinger()])
+    part = PartWithFingers(fingers=[Thumb()])
 
     with pytest.raises(TooFewFingersError) as raised:
         part.validate()
 
     assert raised.value.robot_part is part
-    assert raised.value.minimum_count == 3
+    assert raised.value.minimum_count == MINIMUM_FINGER_COUNT
     assert raised.value.actual_count == len(part.fingers)
 
 
@@ -230,12 +243,12 @@ def test_a_wrong_number_of_fingers_carries_the_counts():
 
 
 def test_too_few_arms_carries_the_counts():
-    part = PartWithManyArms(arms=[MountedPart(), MountedPart()])
+    part = PartWithArms(arms=[])
 
     with pytest.raises(TooFewArmsError) as raised:
         part.validate()
 
-    assert raised.value.minimum_count == 3
+    assert raised.value.minimum_count == MINIMUM_ARM_COUNT
     assert raised.value.actual_count == len(part.arms)
 
 

@@ -62,10 +62,8 @@ class HSRBTopic(StrEnum):
     """
 
     ODOMETRY = "laser_odom"
-
-    LASER_SCAN = "scan"
     """
-    Placeholder, to be replaced with the topic the real robot publishes its scans on.
+    The topic the mobile base reports its odometry on.
     """
 
 
@@ -431,11 +429,6 @@ class HSRBTorso(Torso, HasOneArm[HSRBArm], HasNeck[HSRBNeck]):
 class HSRBBaseLidar(Lidar):
     """
     The Hokuyo scanner sweeping the floor around the HSRB's base.
-    """
-
-    topic_name: ClassVar[str] = HSRBTopic.LASER_SCAN
-    """
-    The topic the robot publishes this scanner's sweeps on.
     """
 
     @classmethod

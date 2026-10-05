@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 
 from typing_extensions import List, TYPE_CHECKING
 
+from semantic_digital_twin.exceptions import InputAlreadyReadError
 from semantic_digital_twin.world import World
 
 if TYPE_CHECKING:
@@ -47,6 +48,8 @@ class InputSynchronizer(ABC):
     def close(self) -> None:
         """
         Release the resources used to receive inputs.
+
+        Does nothing by default, as an input that receives nothing holds none.
         """
 
 
@@ -70,6 +73,11 @@ class WorldStateInputs:
     """
     Whether this loop needs its inputs written again in every cycle, as a loop does that
     moves the world state away from what it last read.
+    """
+
+    read_inputs: List[InputSynchronizer] = field(default_factory=list, init=False)
+    """
+    The inputs this loop was told to read, as they were handed to it.
     """
 
     def read_robot(self, robot: AbstractRobot) -> None:
@@ -102,7 +110,11 @@ class WorldStateInputs:
         Apply the given input in this loop from now on, in the way this loop needs it.
 
         :param synchronizer: The input this loop reads.
+        :raises InputAlreadyReadError: If this loop already reads the input.
         """
+        if any(read_input is synchronizer for read_input in self.read_inputs):
+            raise InputAlreadyReadError(synchronizer=synchronizer)
+        self.read_inputs.append(synchronizer)
         if self.reapplies_inputs:
             synchronizer = synchronizer.rewriting_every_cycle()
         self.synchronizers.append(synchronizer)

@@ -129,7 +129,7 @@ class LatestJointStateSynchronizer(JointStateInputSynchronizer):
 
 @dataclass
 class SubscribedJointPositionSource(
-    JointPositionSource, JointStateInputSynchronizer, ABC
+    JointStateInputSynchronizer, JointPositionSource, ABC
 ):
     """
     The joint positions one robot part reports on a ROS 2 topic.
@@ -203,7 +203,7 @@ class OdometrySynchronizer(TopicInputSynchronizer[Odometry]):
 
 
 @dataclass
-class SubscribedBasePoseSource(BasePoseSource, OdometrySynchronizer):
+class SubscribedBasePoseSource(OdometrySynchronizer, BasePoseSource):
     """
     The pose a real mobile base reports as odometry on a ROS 2 topic.
     """

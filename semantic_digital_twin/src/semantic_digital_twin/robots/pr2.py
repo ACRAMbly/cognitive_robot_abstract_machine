@@ -60,10 +60,8 @@ class PR2Topic(StrEnum):
     """
 
     ODOMETRY = "odom"
-
-    LASER_SCAN = "scan"
     """
-    Placeholder, to be replaced with the topic the real robot publishes its scans on.
+    The topic the mobile base reports its odometry on.
     """
 
 
@@ -132,11 +130,6 @@ class PR2KinectV1(Camera):
 class PR2BaseLidar(Lidar):
     """
     The Hokuyo scanner sweeping the floor in front of the PR2's base.
-    """
-
-    topic_name: ClassVar[str] = PR2Topic.LASER_SCAN
-    """
-    The topic the robot publishes this scanner's sweeps on.
     """
 
     @classmethod

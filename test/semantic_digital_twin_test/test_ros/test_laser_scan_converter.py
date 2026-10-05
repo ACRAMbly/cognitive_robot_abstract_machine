@@ -217,6 +217,17 @@ def test_reading_a_subscribed_source_adopts_the_pattern_of_its_latest_scan(
     )
 
 
+def test_a_subscribed_source_reports_a_scan_without_changing_the_lidar(
+    rclpy_node, world_with_laser_body
+):
+    lidar = subscribed_lidar(rclpy_node, world_with_laser_body)
+    lidar.source.buffer_message(laser_scan())
+
+    lidar.source.get_lidar_reading(lidar)
+
+    assert lidar.scan_pattern == DECLARED_PATTERN
+
+
 def test_subscribed_lidar_source_reads_laser_scan_messages():
     assert SubscribedLidarSource.message_type() is LaserScan
 
@@ -228,6 +239,17 @@ def test_closing_a_subscribed_source_destroys_its_subscription(
     subscription = lidar.source.subscription
 
     lidar.source.close()
+
+    assert subscription not in rclpy_node.subscriptions
+
+
+def test_switching_a_lidar_away_from_its_scanner_destroys_the_subscription(
+    rclpy_node, world_with_laser_body
+):
+    lidar = subscribed_lidar(rclpy_node, world_with_laser_body)
+    subscription = lidar.source.subscription
+
+    lidar.use_simulated_source()
 
     assert subscription not in rclpy_node.subscriptions
 

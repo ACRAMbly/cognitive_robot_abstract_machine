@@ -11,10 +11,16 @@ from semantic_digital_twin.adapters.ros.input_synchronization import (
     SubscribedBasePoseSource,
 )
 from semantic_digital_twin.adapters.ros.lidar import SubscribedLidarSource
+from semantic_digital_twin.adapters.sensors.lidar import SimulatedLidarSource
 from semantic_digital_twin.robots.input_source import RobotTopic
 from semantic_digital_twin.robots.pr2 import PR2, PR2Topic
 from semantic_digital_twin.robots.robot_parts import KinematicChain, MobileBase
 from semantic_digital_twin.world import World
+
+SCANNER_TOPIC = "scanner"
+"""
+A topic a scanner publishes its sweeps on.
+"""
 
 
 @pytest.fixture
@@ -34,14 +40,12 @@ def test_switching_a_robot_reads_every_part_declaring_a_topic_from_the_robot(
     assert isinstance(annotated_pr2.mobile_base.source, SubscribedBasePoseSource)
 
 
-def test_a_switched_lidar_reads_the_scanner_topic_its_robot_declares(
+def test_a_lidar_declaring_no_topic_keeps_reading_the_world_it_stands_in(
     annotated_pr2, rclpy_node
 ):
     annotated_pr2.use_real_sources(rclpy_node)
 
-    lidar_source = annotated_pr2.mobile_base.lidar.source
-    assert isinstance(lidar_source, SubscribedLidarSource)
-    assert lidar_source.topic_name == f"/{PR2Topic.LASER_SCAN}"
+    assert isinstance(annotated_pr2.mobile_base.lidar.source, SimulatedLidarSource)
 
 
 def test_a_switched_lidar_is_not_an_input_a_loop_applies(annotated_pr2, rclpy_node):
@@ -49,7 +53,9 @@ def test_a_switched_lidar_is_not_an_input_a_loop_applies(annotated_pr2, rclpy_no
     A lidar is asked for a reading when something wants one, rather than writing into
     the world state, so no loop has to apply it.
     """
-    annotated_pr2.use_real_sources(rclpy_node)
+    annotated_pr2.mobile_base.lidar.use_source(
+        SubscribedLidarSource(node=rclpy_node, topic_name=SCANNER_TOPIC)
+    )
 
     assert annotated_pr2.mobile_base.lidar.source not in (
         annotated_pr2.get_input_synchronizers()

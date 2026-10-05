@@ -4,7 +4,8 @@ import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from functools import cached_property
-from typing import Union
+from types import NoneType
+from typing import Union, get_args, get_origin
 
 from typing_extensions import (
     ClassVar,
@@ -108,11 +109,10 @@ class HasFingers(
         :raises TooFewFingersError: If fewer fingers are attached than this mixin
             allows.
         """
-        minimum_count = 3
-        if len(self.fingers) < minimum_count:
+        if len(self.fingers) < 2:
             raise TooFewFingersError(
                 robot_part=self,
-                minimum_count=minimum_count,
+                minimum_count=2,
                 actual_count=len(self.fingers),
             )
         super().validate()
@@ -149,9 +149,6 @@ class HasTwoFingers(
         """
         :raises UnexpectedFingerCountError: If a different number of fingers is attached
             than this mixin allows.
-
-        ..note:: Hands the check on past :class:`HasFingers`, whose minimum this exact
-            count replaces, and on to the mixins declared after it.
         """
         if len(self.fingers) != self.finger_count:
             raise UnexpectedFingerCountError(
@@ -159,7 +156,7 @@ class HasTwoFingers(
                 expected_count=self.finger_count,
                 actual_count=len(self.fingers),
             )
-        super(HasFingers, self).validate()
+        super().validate()
 
     @property
     def finger(self) -> Union[TGenericLeftFinger, TGenericRightFinger]:
@@ -235,11 +232,10 @@ class HasArms(Generic[Unpack[TGenericArms]], SubClassSafeGeneric, RobotPartMixin
         """
         :raises TooFewArmsError: If fewer arms are attached than this mixin allows.
         """
-        minimum_count = 3
-        if len(self.arms) < minimum_count:
+        if len(self.arms) < 1:
             raise TooFewArmsError(
                 robot_part=self,
-                minimum_count=minimum_count,
+                minimum_count=1,
                 actual_count=len(self.arms),
             )
         super().validate()
@@ -260,9 +256,6 @@ class HasOneArm(HasArms[TGenericArm], RobotPartMixin, ABC):
         """
         :raises UnexpectedArmCountError: If a different number of arms is attached than
             this mixin allows.
-
-        ..note:: Hands the check on past :class:`HasArms`, whose minimum this exact count
-            replaces, and on to the mixins declared after it.
         """
         if len(self.arms) != self.arm_count:
             raise UnexpectedArmCountError(
@@ -270,7 +263,7 @@ class HasOneArm(HasArms[TGenericArm], RobotPartMixin, ABC):
                 expected_count=self.arm_count,
                 actual_count=len(self.arms),
             )
-        super(HasArms, self).validate()
+        super().validate()
 
     @property
     def arm(self) -> TGenericArm:
@@ -299,12 +292,9 @@ class HasLeftRightArm(
         """
         :raises UnexpectedArmCountError: If a different number of arms is attached than
             this mixin allows.
-
-        ..note:: Hands the check on past :class:`HasArms`, whose minimum this exact count
-            replaces, and on to the mixins declared after it.
         """
         self._validate_arm_count()
-        super(HasArms, self).validate()
+        super().validate()
 
     def _validate_arm_count(self):
         """
@@ -481,7 +471,7 @@ class HasInputSource(
     part cannot be handed a source meant for another kind of part.
     """
 
-    source: TGenericInputSource = field(default=None, kw_only=True)
+    source: Optional[TGenericInputSource] = field(default=None, kw_only=True)
     """
     Where this part is read from.
 
@@ -511,7 +501,13 @@ class HasInputSource(
         ..note:: Read off :attr:`source`, which :class:`SubClassSafeGeneric` narrows to
             the type the part binds, so the binding stays the only place it is stated.
         """
-        return get_existing_field_by_name(cls, "source").type
+        source_type = get_existing_field_by_name(cls, "source").type
+        if get_origin(source_type) is not Union:
+            return source_type
+        [source_family] = [
+            member for member in get_args(source_type) if member is not NoneType
+        ]
+        return source_family
 
     @classmethod
     @abstractmethod
@@ -547,7 +543,8 @@ class HasInputSource(
 
     def use_source(self, source: TGenericInputSource) -> None:
         """
-        Read this part from the given source from now on.
+        Read this part from the given source from now on, releasing the one it was read
+        from before.
 
         :param source: Where this part is read from.
         :raises UnexpectedInputSourceError: If the source is not one this part can be
@@ -559,4 +556,6 @@ class HasInputSource(
                 source=source,
                 expected_source_family=self.source_family(),
             )
+        if self.source is not None and self.source is not source:
+            self.source.close()
         self.source = source

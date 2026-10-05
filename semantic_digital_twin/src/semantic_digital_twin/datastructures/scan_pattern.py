@@ -4,15 +4,8 @@ from dataclasses import dataclass
 
 import numpy as np
 import numpy.typing as npt
-from typing_extensions import TYPE_CHECKING, List, Optional
 
 from semantic_digital_twin.exceptions import InvalidScanPattern
-from semantic_digital_twin.spatial_types.spatial_types import Vector3
-
-if TYPE_CHECKING:
-    from semantic_digital_twin.world_description.world_entity import (
-        KinematicStructureEntity,
-    )
 
 
 @dataclass
@@ -95,15 +88,3 @@ class ScanPattern:
         """
         angles = self.beam_angles
         return np.column_stack((np.cos(angles), np.sin(angles), np.zeros_like(angles)))
-
-    def beam_directions_in_frame(
-        self, reference_frame: Optional[KinematicStructureEntity]
-    ) -> List[Vector3]:
-        """
-        :param reference_frame: The frame the returned vectors are expressed in.
-        :return: A unit vector along every beam.
-        """
-        return [
-            Vector3(*direction, reference_frame=reference_frame)
-            for direction in self.beam_directions
-        ]

@@ -16,11 +16,11 @@ from semantic_digital_twin.exceptions import NoLaserScanReceived
 
 
 @dataclass
-class SubscribedLidarSource(LidarSource, LatestMessageSubscriber[LaserScan]):
+class SubscribedLidarSource(LatestMessageSubscriber[LaserScan], LidarSource):
     """
     A source that reports what a real scanner publishes on a ROS 2 topic.
 
-    The scanner itself decides what it sweeps, so reading it adopts the pattern the
+    The scanner itself decides what it sweeps, so a reading carries the pattern the
     received scan was taken with.
     """
 
@@ -35,8 +35,4 @@ class SubscribedLidarSource(LidarSource, LatestMessageSubscriber[LaserScan]):
         return self.latest_message
 
     def get_lidar_reading(self, lidar: Lidar) -> LidarReading:
-        reading = LaserScanToSemDTConverter.convert(
-            self.received_scan, lidar.root._world
-        )
-        lidar.scan_pattern = reading.scan_pattern
-        return reading
+        return LaserScanToSemDTConverter.convert(self.received_scan, lidar.root._world)

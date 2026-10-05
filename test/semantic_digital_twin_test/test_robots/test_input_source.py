@@ -8,6 +8,7 @@ from semantic_digital_twin.input_synchronization import (
     InputSynchronizer,
     WorldStateInputs,
 )
+from semantic_digital_twin.exceptions import InputAlreadyReadError
 from semantic_digital_twin.robots.exceptions import (
     MissingInputSourceError,
     UndeclaredTopicError,
@@ -27,10 +28,10 @@ from semantic_digital_twin.robots.pr2 import (
     PR2MobileBase,
     PR2Topic,
 )
-from semantic_digital_twin.robots.hsrb import HSRBBaseLidar, HSRBTopic
+from semantic_digital_twin.robots.hsrb import HSRBBaseLidar
 from semantic_digital_twin.robots.robot_part_mixins import HasInputSource
-from semantic_digital_twin.robots.stretch import StretchBaseLidar, StretchTopic
-from semantic_digital_twin.robots.tiago import TiagoBaseLidar, TiagoTopic
+from semantic_digital_twin.robots.stretch import StretchBaseLidar
+from semantic_digital_twin.robots.tiago import TiagoBaseLidar
 from semantic_digital_twin.robots.tracy import (
     TracyLeftArm,
     TracyLeftGripperLeftFinger,
@@ -80,6 +81,21 @@ class AppliedSource(JointPositionSource, InputSynchronizer):
 
     def rewriting_every_cycle(self) -> RewritingSource:
         return RewritingSource(world=self.world)
+
+
+@dataclass
+class ClosableSource(JointPositionSource):
+    """
+    A source holding something that has to be released, remembering whether it was.
+    """
+
+    closed: bool = False
+    """
+    Whether this source was released.
+    """
+
+    def close(self) -> None:
+        self.closed = True
 
 
 # %% stand-ins for the parts that can be told where they are read from
@@ -157,6 +173,26 @@ def test_a_switched_part_reads_the_world_it_stands_in_again():
     assert isinstance(part.source, SimulatedJointPositionSource)
 
 
+def test_a_switched_part_releases_the_source_it_was_read_from():
+    part = PartReadFromADeclaredTopic()
+    previous_source = ClosableSource()
+    part.use_source(previous_source)
+
+    part.use_simulated_source()
+
+    assert previous_source.closed
+
+
+def test_a_part_handed_its_own_source_again_keeps_it_open():
+    part = PartReadFromADeclaredTopic()
+    source = ClosableSource()
+    part.use_source(source)
+
+    part.use_source(source)
+
+    assert not source.closed
+
+
 def test_a_switched_part_reads_the_topic_it_declares():
     part = PartReadFromADeclaredTopic()
 
@@ -186,16 +222,10 @@ def test_the_pr2_base_reads_the_odometry_its_interface_names():
 
 
 @pytest.mark.parametrize(
-    "lidar, topic",
-    [
-        (PR2BaseLidar, PR2Topic.LASER_SCAN),
-        (HSRBBaseLidar, HSRBTopic.LASER_SCAN),
-        (TiagoBaseLidar, TiagoTopic.LASER_SCAN),
-        (StretchBaseLidar, StretchTopic.LASER_SCAN),
-    ],
+    "lidar", [PR2BaseLidar, HSRBBaseLidar, TiagoBaseLidar, StretchBaseLidar]
 )
-def test_a_base_lidar_reads_the_scanner_topic_its_robot_declares(lidar, topic):
-    assert lidar.topic_name == topic
+def test_a_base_lidar_whose_scanner_topic_is_unknown_declares_none(lidar):
+    assert lidar.topic_name is None
 
 
 def test_an_arm_of_a_robot_publishing_per_controller_reads_its_own_topic():
@@ -287,3 +317,17 @@ def test_a_loop_reading_a_simulated_robot_applies_nothing(annotated_pr2):
     inputs.read_robot(annotated_pr2)
 
     assert inputs.synchronizers == []
+
+
+@pytest.mark.parametrize("reapplies_inputs", [False, True])
+def test_a_loop_reads_a_source_only_once(annotated_pr2, reapplies_inputs):
+    source = AppliedSource(world=annotated_pr2._world)
+    inputs = WorldStateInputs(
+        world=annotated_pr2._world, reapplies_inputs=reapplies_inputs
+    )
+    inputs.read(source)
+
+    with pytest.raises(InputAlreadyReadError) as raised:
+        inputs.read(source)
+
+    assert raised.value.synchronizer is source

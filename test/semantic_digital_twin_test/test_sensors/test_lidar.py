@@ -165,19 +165,11 @@ def test_beam_directions_cover_the_pattern_from_its_minimum_to_its_maximum_angle
         maximum_range=10.0,
     )
 
-    directions = pattern.beam_directions_in_frame(None)
+    directions = pattern.beam_directions
 
     assert len(directions) == pattern.beam_count == 5
-    assert np.allclose(directions[0].to_np(), [0.0, -1.0, 0.0, 0.0])
-    assert np.allclose(directions[-1].to_np(), [0.0, 1.0, 0.0, 0.0])
-
-
-def test_beam_directions_are_expressed_in_the_given_reference_frame():
-    _, mount = world_with_walls()
-
-    [direction] = forward_beam_pattern().beam_directions_in_frame(mount)
-
-    assert direction.reference_frame is mount
+    assert np.allclose(directions[0], [0.0, -1.0, 0.0])
+    assert np.allclose(directions[-1], [0.0, 1.0, 0.0])
 
 
 def test_scan_pattern_rejects_a_non_positive_angle_increment():

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import math
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 
@@ -87,19 +86,15 @@ class SimulatedLidarSource(LidarSource):
         :param index_ray: The beam each of those positions belongs to.
         :param world_P_lidar: The origin of every beam.
         :param beam_count: How many beams were cast.
-        :return: The distance of the closest hit per beam, and ``math.inf`` for beams
+        :return: The distance of the closest hit per beam, and ``numpy.inf`` for beams
             that hit nothing.
 
         ..note:: A beam can meet several surfaces, and the ray test does not order its
             hits, so the closest one is picked explicitly.
         """
-        distances = np.full(beam_count, math.inf)
-        if len(index_ray) == 0:
-            return distances
-
+        distances = np.full(beam_count, np.inf)
         hit_distances = np.linalg.norm(points - world_P_lidar[index_ray], axis=1)
-        farthest_first = np.argsort(hit_distances)[::-1]
-        distances[index_ray[farthest_first]] = hit_distances[farthest_first]
+        np.minimum.at(distances, index_ray, hit_distances)
         return distances
 
 

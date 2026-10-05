@@ -13,6 +13,13 @@ class InputSource(ABC):
     Where a robot part is read from, either the world it stands in or the robot itself.
     """
 
+    def close(self) -> None:
+        """
+        Release the resources used to read the part.
+
+        Does nothing by default, as a source reading the world holds none.
+        """
+
 
 class RobotTopic(StrEnum):
     """
