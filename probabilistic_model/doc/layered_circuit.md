@@ -168,11 +168,11 @@ print(probability)
 
 ## Which one to use
 
-| implementation | use it to |
+| implementation | built for |
 | --- | --- |
-| rustworkx | build, learn, inspect and plot the structure of a circuit |
-| numpy | query a fixed circuit many times, including truncation, conditioning and marginals |
-| JAX | learn the parameters of a numpy circuit by gradient descent |
+| rustworkx | trying out new circuit structures, and understanding and developing new algorithms |
+| numpy | speed: answering queries, including truncation, conditioning and marginals |
+| JAX | learning the parameters of a numpy circuit by gradient descent |
 
 To learn the parameters of a numpy circuit, convert it to JAX, train it there and
 convert it back. Both directions go through rustworkx:
