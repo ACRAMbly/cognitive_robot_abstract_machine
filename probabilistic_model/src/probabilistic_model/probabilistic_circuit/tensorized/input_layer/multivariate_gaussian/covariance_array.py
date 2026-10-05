@@ -5,12 +5,13 @@ import math
 from dataclasses import dataclass
 
 import numpy as np
-from typing_extensions import Any, List, Self, Sequence
+from typing_extensions import List, Self, Sequence
 
 from probabilistic_model.distributions.multivariate_gaussian import Covariance
 from probabilistic_model.exceptions import ShapeMismatchError
 from probabilistic_model.probabilistic_circuit.tensorized.array_types import (
     NodeIndices,
+    NodeSelection,
     NodeScopeLowerTriangles,
     NodeScopeMatrices,
     NodeScopeValues,
@@ -139,7 +140,7 @@ class CovarianceArray:
         rows, columns = np.tril_indices(self.dimension)
         return type(self)(self.lower_triangles * factors[rows] * factors[columns])
 
-    def select(self, indices: Any) -> Self:
+    def select(self, indices: NodeSelection) -> Self:
         """
         :param indices: A mask or index array over the matrices.
         :return: The covariances of only those matrices.

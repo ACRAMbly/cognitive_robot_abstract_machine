@@ -6,10 +6,11 @@ import numpy as np
 from random_events.interval import Bound, SimpleInterval
 from random_events.product_algebra import SimpleEvent
 from random_events.variable import Variable
-from typing_extensions import Any, List, Self, Sequence
+from typing_extensions import List, Self, Sequence
 
 from probabilistic_model.probabilistic_circuit.tensorized.array_types import (
     NodeIndices,
+    NodeSelection,
     NodeScopeIntervalBounds,
     NodeScopeIntervals,
     SampleNodeMask,
@@ -172,7 +173,7 @@ class HyperrectangleArray:
             }
         )
 
-    def select(self, indices: Any) -> HyperrectangleArray:
+    def select(self, indices: NodeSelection) -> HyperrectangleArray:
         """
         :param indices: A mask or index array over the first axis.
         :return: The selected hyperrectangles.

@@ -46,6 +46,11 @@ NodeMask: TypeAlias = npt.NDArray[np.bool_]
 One flag per node of a layer, shape (#nodes,).
 """
 
+NodeSelection: TypeAlias = NodeIndices | NodeMask
+"""
+Which nodes of a layer to keep: their indices, or one flag per node.
+"""
+
 SampleNodeValues: TypeAlias = npt.NDArray[np.float64]
 """
 One value per sample and node of a layer, shape (#samples, #nodes).
@@ -103,6 +108,11 @@ NodeScopeIntervalBounds: TypeAlias = npt.NDArray[np.int64]
 Whether the bounds of a :data:`NodeScopeIntervals` array are open or closed, as
 :class:`random_events.interval.Bound` values of shape (#nodes, #variables of the layer,
 2).
+"""
+
+ScopeValues: TypeAlias = npt.NDArray[np.float64]
+"""
+One value per variable of a subset of the scope of a layer, shape (#those variables,).
 """
 
 SampleScopeValues: TypeAlias = npt.NDArray[np.float64]

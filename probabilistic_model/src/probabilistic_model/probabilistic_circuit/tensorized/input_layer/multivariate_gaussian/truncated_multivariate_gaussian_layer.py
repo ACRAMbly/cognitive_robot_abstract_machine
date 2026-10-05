@@ -6,7 +6,7 @@ import numpy as np
 from random_events.product_algebra import Event, SimpleEvent
 from scipy.stats import multivariate_normal, truncnorm
 from sortedcontainers import SortedSet
-from typing_extensions import Any, List, Optional, Self, Tuple, Type
+from typing_extensions import List, Optional, Self, Tuple, Type
 
 from probabilistic_model.distributions.truncated_multivariate_gaussian import (
     MomentIntegration,
@@ -15,12 +15,14 @@ from probabilistic_model.distributions.truncated_multivariate_gaussian import (
 from probabilistic_model.exceptions import ShapeMismatchError
 from probabilistic_model.probabilistic_circuit.tensorized.array_types import (
     NodeIndices,
+    NodeSelection,
     NodeMask,
     NodeValues,
     NodeVariableValues,
     SampleArray,
     SampleNodeValues,
     SampleScopeValues,
+    ScopeValues,
     VariableValues,
 )
 from probabilistic_model.exceptions import NoClosedFormError
@@ -151,7 +153,7 @@ class TruncatedMultivariateGaussianLayer(AbstractMultivariateGaussianLayer):
             moment_integration=distributions[0].moment_integration,
         )
 
-    def with_nodes(self, indices: Any) -> Self:
+    def with_nodes(self, indices: NodeSelection) -> Self:
         """
         :param indices: A mask or index array over the nodes.
         :return: A layer of only those nodes.
@@ -352,7 +354,7 @@ class TruncatedMultivariateGaussianLayer(AbstractMultivariateGaussianLayer):
         )
 
     def log_conditional_of_values(
-        self, fixed: NodeIndices, free: NodeIndices, values: np.ndarray
+        self, fixed: NodeIndices, free: NodeIndices, values: ScopeValues
     ) -> LayerWithLogProbabilities:
         # the Gaussian conditional of every node, confined to the slice its
         # hyperrectangle makes at the values

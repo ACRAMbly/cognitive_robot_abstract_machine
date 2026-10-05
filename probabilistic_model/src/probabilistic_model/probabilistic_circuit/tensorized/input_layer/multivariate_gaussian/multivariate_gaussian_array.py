@@ -18,6 +18,7 @@ from probabilistic_model.probabilistic_circuit.tensorized.array_types import (
     NodeValues,
     SampleNodeValues,
     SampleScopeValues,
+    ScopeValues,
 )
 from probabilistic_model.probabilistic_circuit.tensorized.input_layer.multivariate_gaussian.covariance_array import (
     CovarianceArray,
@@ -150,7 +151,7 @@ class MultivariateGaussianArray:
         return type(self)(self.mean[:, positions], self.covariance.marginal(positions))
 
     def conditional(
-        self, fixed: NodeIndices, free: NodeIndices, values: np.ndarray
+        self, fixed: NodeIndices, free: NodeIndices, values: ScopeValues
     ) -> Self:
         """
         :param fixed: The positions of the variables held at a value.

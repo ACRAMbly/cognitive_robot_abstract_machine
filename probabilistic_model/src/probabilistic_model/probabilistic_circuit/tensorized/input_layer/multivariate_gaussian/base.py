@@ -21,6 +21,7 @@ from probabilistic_model.probabilistic_circuit.tensorized.array_types import (
     NodeScopeValues,
     SampleArray,
     SampleScopeValues,
+    ScopeValues,
     VariableIndices,
     VariableMask,
     VariableValues,
@@ -423,7 +424,7 @@ class AbstractMultivariateGaussianLayer(Layer, ABC):
 
     @abstractmethod
     def log_conditional_of_values(
-        self, fixed: NodeIndices, free: NodeIndices, values: np.ndarray
+        self, fixed: NodeIndices, free: NodeIndices, values: ScopeValues
     ) -> LayerWithLogProbabilities:
         """
         :param fixed: The positions in the scope of the variables held at a value.

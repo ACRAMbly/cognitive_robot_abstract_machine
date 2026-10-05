@@ -21,6 +21,7 @@ from probabilistic_model.probabilistic_circuit.tensorized.array_types import (
     SampleArray,
     SampleNodeValues,
     SampleScopeValues,
+    ScopeValues,
 )
 from probabilistic_model.probabilistic_circuit.tensorized.inner_layer.base import Layer
 from probabilistic_model.probabilistic_circuit.tensorized.input_layer.gaussian_layer import (
@@ -230,7 +231,7 @@ class MultivariateGaussianLayer(AbstractMultivariateGaussianLayer):
         )
 
     def log_conditional_of_values(
-        self, fixed: NodeIndices, free: NodeIndices, values: np.ndarray
+        self, fixed: NodeIndices, free: NodeIndices, values: ScopeValues
     ) -> LayerWithLogProbabilities:
         gaussians = self.untruncated_gaussians
         log_likelihood = gaussians.marginal(fixed).log_density(values[None, :])[0]
