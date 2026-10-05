@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 
 import pytest
 from giskardpy.motion_statechart.context import MotionStatechartContext
+from krrood.exceptions import DataclassException
 from typing_extensions import List
 
 from segmind.datastructures.events import (
@@ -99,6 +100,15 @@ def test_a_run_cannot_watch_a_type_the_world_holds_no_annotation_of(
         Segmind.create_for_semantic_annotation_types(world, [Milk])
 
     assert raised.value.semantic_annotation_type is Milk
+
+
+def test_a_type_the_world_holds_no_annotation_of_is_reported_like_any_cram_error(
+    milk_in_the_apartment,
+):
+    world, _, _ = milk_in_the_apartment
+
+    with pytest.raises(DataclassException):
+        Segmind.create_for_semantic_annotation_types(world, [Milk])
 
 
 def test_a_run_is_given_every_detector_what_it_asks_for_is_read_from(

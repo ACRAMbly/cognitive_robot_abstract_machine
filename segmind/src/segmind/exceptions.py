@@ -8,11 +8,12 @@ from dataclasses import dataclass
 
 from typing_extensions import Type
 
+from krrood.exceptions import DataclassException
 from semantic_digital_twin.world_description.world_entity import SemanticAnnotation
 
 
 @dataclass
-class NoSemanticAnnotationToWatch(Exception):
+class NoSemanticAnnotationToWatch(DataclassException):
     """
     Raised when a run asks for every semantic annotation of a type to be watched and the
     world holds none of that type.
@@ -23,7 +24,8 @@ class NoSemanticAnnotationToWatch(Exception):
     The type asked for.
     """
 
-    def __post_init__(self) -> None:
-        super().__init__(
-            f"The world holds no {self.semantic_annotation_type.__name__} to watch."
-        )
+    def error_message(self) -> str:
+        return f"The world holds no {self.semantic_annotation_type.__name__} to watch."
+
+    def suggest_correction(self) -> str:
+        return "Annotate a body of the world with that type, or ask for another type."

@@ -128,26 +128,17 @@ class Segmind:
         :raises NoSemanticAnnotationToWatch: When ``world`` holds no annotation of a
             type asked for.
         """
-        bodies = [
-            body
-            for semantic_annotation_type in semantic_annotation_types
-            for annotation in cls._annotations_of_type(world, semantic_annotation_type)
-            for body in annotation.bodies
-        ]
+        bodies = []
+        for semantic_annotation_type in semantic_annotation_types:
+            annotations = world.get_semantic_annotations_by_type(
+                semantic_annotation_type
+            )
+            if not annotations:
+                raise NoSemanticAnnotationToWatch(semantic_annotation_type)
+            bodies.extend(
+                body for annotation in annotations for body in annotation.bodies
+            )
         return cls.create_for_bodies(world, list(dict.fromkeys(bodies)), detector_types)
-
-    @staticmethod
-    def _annotations_of_type(
-        world: World, semantic_annotation_type: Type[SemanticAnnotation]
-    ) -> List[SemanticAnnotation]:
-        """
-        :return: Every annotation of ``world`` of ``semantic_annotation_type``.
-        :raises NoSemanticAnnotationToWatch: When ``world`` holds none.
-        """
-        annotations = world.get_semantic_annotations_by_type(semantic_annotation_type)
-        if not annotations:
-            raise NoSemanticAnnotationToWatch(semantic_annotation_type)
-        return annotations
 
     @property
     def watched_bodies(self) -> List[Body]:
