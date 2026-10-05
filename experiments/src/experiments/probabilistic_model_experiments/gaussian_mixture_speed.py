@@ -206,6 +206,9 @@ class GaussianMixtureBenchmark:
 
     @property
     def variables(self) -> List[Continuous]:
+        """
+        :return: The variables of the mixture, in the order of the circuit.
+        """
         return list(self.layered.variables)
 
     def result_of(
@@ -272,6 +275,12 @@ class GaussianMixtureBenchmark:
     def measure_queries_without_truncation(
         self,
     ) -> List[GaussianMixtureQueryDurationResult]:
+        """
+        Time the likelihood, sampling and probability of a box on both circuits, which
+        leave the circuit as it is.
+
+        :return: One result per query.
+        """
         rustworkx_circuit, layered = self.rustworkx_circuit, self.layered
         results = []
         for query, amount in (
@@ -314,6 +323,12 @@ class GaussianMixtureBenchmark:
         return results
 
     def measure_truncation(self) -> List[GaussianMixtureQueryDurationResult]:
+        """
+        Time truncating both circuits to one box and to several boxes, and the
+        likelihood and sampling of the circuit truncated to one box.
+
+        :return: One result per query.
+        """
         rustworkx_circuit, layered = self.rustworkx_circuit, self.layered
         box = self.central_box()
         rustworkx_call = TimedCall.of(
@@ -383,6 +398,12 @@ class GaussianMixtureBenchmark:
         return results
 
     def measure_conditioning(self) -> List[GaussianMixtureQueryDurationResult]:
+        """
+        Time conditioning both circuits on a sample of one variable and of all but one
+        variable.
+
+        :return: One result per query.
+        """
         rustworkx_circuit, layered = self.rustworkx_circuit, self.layered
         sample = rustworkx_circuit.sample(1)[0]
         results = []
