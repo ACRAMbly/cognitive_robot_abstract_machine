@@ -250,7 +250,7 @@ class RobotPartAnnotation:
         """
         sides = cls._arm_sides(robot)
         annotations = []
-        for arm in robot.get_arms():
+        for arm in robot.all_arms:
             arm_name = type(arm).__name__
             side = sides.get(id(arm))
             end_effector = arm.end_effector
@@ -282,7 +282,7 @@ class RobotPartAnnotation:
                 side=None,
                 links=sorted(set(cls.link_names(sensor))),
             )
-            for sensor in robot.get_sensors()
+            for sensor in robot.all_sensors
         )
         return annotations
 

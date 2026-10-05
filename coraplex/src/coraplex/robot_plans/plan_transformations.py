@@ -211,7 +211,7 @@ class OpenDrawerBeforePickUp(DrawerOpening[PickUpAction]):
             ),
         )
         self._bound_candidates(drive_to_the_object)
-        nodes.extend([ParkArmsAction(pick_up.robot.get_arms()), drive_to_the_object])
+        nodes.extend([ParkArmsAction(pick_up.robot.all_arms), drive_to_the_object])
         return nodes
 
 
@@ -303,4 +303,4 @@ class ParkArmsBeforeFirstAction(InsertionTransformation[ActionNode]):
         return plan_node
 
     def nodes_to_insert(self, plan_node: PlanNode) -> List[ActionLike]:
-        return [ParkArmsAction(plan_node.action.robot.get_arms())]
+        return [ParkArmsAction(plan_node.action.robot.all_arms)]

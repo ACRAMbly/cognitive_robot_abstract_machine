@@ -270,7 +270,7 @@ def test_underspecified_language(apartment_world_pr2_copy_with_context):
                 ),
             ),
             a(PickUpAction)(
-                arm=variable(Arm, domain=context.robot.get_arms()),
+                arm=variable(Arm, domain=context.robot.all_arms),
                 grasp=milk.grasp_candidates()[0],
             ),
         ],
@@ -278,7 +278,7 @@ def test_underspecified_language(apartment_world_pr2_copy_with_context):
     )
     plans = list(EntityQueryLanguageGenerativeBackend().evaluate(plan_generator))
     assert len(plans) == len(list(target_locations._domain_)) * len(
-        context.robot.get_arms()
+        context.robot.all_arms
     )
 
 

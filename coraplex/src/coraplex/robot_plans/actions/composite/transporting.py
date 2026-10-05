@@ -134,11 +134,11 @@ class TransportAction(ActionDescription, LimitsItsCandidates):
         self._bound_candidates(self.pick_up, self.place)
         return sequential(
             [
-                ParkArmsAction(self.robot.get_arms()),
+                ParkArmsAction(self.robot.all_arms),
                 self.pick_up,
-                ParkArmsAction(self.robot.get_arms()),
+                ParkArmsAction(self.robot.all_arms),
                 self.place,
-                ParkArmsAction(self.robot.get_arms()),
+                ParkArmsAction(self.robot.all_arms),
             ]
         )
 
@@ -165,11 +165,11 @@ class PickAndPlaceAction(ActionDescription, LimitsItsCandidates):
         self._bound_candidates(self.pick_up, self.place)
         return sequential(
             [
-                ParkArmsAction(self.robot.get_arms()),
+                ParkArmsAction(self.robot.all_arms),
                 self.pick_up,
-                ParkArmsAction(self.robot.get_arms()),
+                ParkArmsAction(self.robot.all_arms),
                 self.place,
-                ParkArmsAction(self.robot.get_arms()),
+                ParkArmsAction(self.robot.all_arms),
             ]
         )
 

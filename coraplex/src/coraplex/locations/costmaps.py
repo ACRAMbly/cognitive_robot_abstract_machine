@@ -11,7 +11,6 @@ from numpy.typing import NDArray
 from matplotlib import colors
 from skimage.measure import label
 from typing_extensions import (
-    Tuple,
     List,
     Optional,
     Iterator,
@@ -36,32 +35,6 @@ from semantic_digital_twin.world_description.world_entity import Body
 from coraplex.datastructures.dataclasses import Context
 
 logger = logging.getLogger("coraplex")
-
-
-@dataclass
-class Rectangle:
-    """
-    A rectangle that is described by a lower and upper x and y value.
-    """
-
-    x_lower: float
-    x_upper: float
-    y_lower: float
-    y_upper: float
-
-    def translate(self, x: float, y: float):
-        """Translate the rectangle by x and y"""
-        self.x_lower += x
-        self.x_upper += x
-        self.y_lower += y
-        self.y_upper += y
-
-    def scale(self, x_factor: float, y_factor: float):
-        """Scale the rectangle by x_factor and y_factor"""
-        self.x_lower *= x_factor
-        self.x_upper *= x_factor
-        self.y_lower *= y_factor
-        self.y_upper *= y_factor
 
 
 @dataclass
@@ -123,47 +96,6 @@ class Costmap(Location):
         for visualization_id in self.visualization_ids:
             self.world.remove_visual_object(visualization_id)
         self.visualization_ids = []
-
-    def _find_consecutive_line(self, start: Tuple[int, int], map: np.ndarray) -> int:
-        """
-        Finds the number of consecutive entries in the locations which are greater
-        than zero.
-
-        :param start: The indices in the locations from which the consecutive line should be found.
-        :param map: The locations in which the line should be found.
-        :return: The length of the consecutive line of entries greater than zero.
-        """
-        width = map.shape[1]
-        length = 0
-        for column in range(start[1], width):
-            if map[start[0]][column] > 0:
-                length += 1
-            else:
-                return length
-        return length
-
-    def _find_max_box_height(
-        self, start: Tuple[int, int], length: int, map: np.ndarray
-    ) -> int:
-        """
-        Finds the maximal height for a rectangle with a given width in a locations.
-        The method traverses one row at a time and checks if all entries for the
-        given width are greater than zero. If an entry is less or equal than zero
-        the height is returned.
-
-        :param start: The indices in the locations from which the method should start.
-        :param length: The given width for the rectangle
-        :param map: The locations in which should be searched.
-        :return: The height of the rectangle.
-        """
-        height, width = map.shape
-        current_height = 1
-        for row in range(start[0], height):
-            for column in range(start[1], start[1] + length):
-                if map[row][column] <= 0:
-                    return current_height
-            current_height += 1
-        return current_height
 
     def merge(self, other: Costmap) -> Costmap:
         """
@@ -237,50 +169,6 @@ class Costmap(Location):
 
     def __and__(self, other):
         return self.merge(other)
-
-    def partitioning_rectangles(self) -> List[Rectangle]:
-        """
-        Partition the map attached to this locations into rectangles. The rectangles are axis aligned, exhaustive and
-        disjoint sets.
-
-        :return: A list containing the partitioning rectangles
-        """
-        remaining_map = np.copy(self.map)
-        origin = np.array([self.height / 2, self.width / 2]) * -1
-        rectangles = []
-
-        # for every index pair (row, column) in the occupancy locations
-        for row in range(self.map.shape[0]):
-            for column in range(self.map.shape[1]):
-
-                # if this index has not been used yet
-                if remaining_map[row][column] > 0:
-                    current_width = self._find_consecutive_line(
-                        (row, column), remaining_map
-                    )
-                    current_start = (row, column)
-                    current_height = self._find_max_box_height(
-                        (row, column), current_width, remaining_map
-                    )
-
-                    # calculate the rectangle in the locations
-                    x_lower = current_start[0]
-                    x_upper = current_start[0] + current_height
-                    y_lower = current_start[1]
-                    y_upper = current_start[1] + current_width
-
-                    # mark the found rectangle as occupied
-                    remaining_map[
-                        row : row + current_height, column : column + current_width
-                    ] = 0
-
-                    # transform rectangle to map space
-                    rectangle = Rectangle(x_lower, x_upper, y_lower, y_upper)
-                    rectangle.translate(*origin)
-                    rectangle.scale(self.resolution, self.resolution)
-                    rectangles.append(rectangle)
-
-        return rectangles
 
     def candidates(self) -> Iterator[Pose]:
         return self.sample(self.number_of_samples, self.seed)

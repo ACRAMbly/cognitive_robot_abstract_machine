@@ -147,7 +147,7 @@ context = Context(
 plan = sequential(
     [
         # Stack Box 2
-        ParkArmsAction(tracy.get_arms()),
+        ParkArmsAction(tracy.all_arms),
         PickUpAction(
             box2_annotation.grasp_candidates()[0],
             tracy.left_arm,
@@ -157,7 +157,7 @@ plan = sequential(
             Pose.from_xyz_rpy(0.8, 0.0, 1.02, yaw=0, reference_frame=world.root),
         ),
         # Stack Box 3
-        ParkArmsAction(tracy.get_arms()),
+        ParkArmsAction(tracy.all_arms),
         PickUpAction(
             box3_annotation.grasp_candidates()[0],
             tracy.right_arm,

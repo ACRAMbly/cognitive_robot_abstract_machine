@@ -397,5 +397,6 @@ class DAiSy(
     def _setup_velocity_limits(self):
         self.tighten_dof_velocity_limits_proportionally(maximum_velocity=0.2)
 
-    def get_end_effectors(self) -> list[EndEffector]:
+    @property
+    def all_end_effectors(self) -> list[EndEffector]:
         return [self.left_arm.end_effector, self.right_arm.end_effector]

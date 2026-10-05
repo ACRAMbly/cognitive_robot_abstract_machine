@@ -137,7 +137,7 @@ class ParkArmsBeforeTorsoMotion(InsertionTransformation[MoveTorsoAction]):
         return motion_of(plan_node)
 
     def nodes_to_insert(self, plan_node: ActionNode) -> List[ActionLike]:
-        return [ParkArmsAction(plan_node.plan.context.robot.get_arms())]
+        return [ParkArmsAction(plan_node.plan.context.robot.all_arms)]
 
 
 @dataclass
@@ -366,7 +366,7 @@ def test_a_transformation_bound_to_a_node_type_reaches_every_action(
     context.plan_transformations.append(MoveGripperBeforeEveryAction())
 
     plan = sequential(
-        [MoveTorsoAction(TorsoState.HIGH), ParkArmsAction(view.get_arms())], context
+        [MoveTorsoAction(TorsoState.HIGH), ParkArmsAction(view.all_arms)], context
     )
     plan.notify()
 
@@ -388,7 +388,7 @@ def test_a_transformation_bound_to_a_designator_type_selects_the_nodes_carrying_
     world, view, context = pr2_apartment_context
     transformation = MoveGrippersBeforeTorsoMotion()
     plan = sequential(
-        [MoveTorsoAction(TorsoState.HIGH), ParkArmsAction(view.get_arms())], context
+        [MoveTorsoAction(TorsoState.HIGH), ParkArmsAction(view.all_arms)], context
     )
     torso, parking = plan.children
 
@@ -530,7 +530,7 @@ def test_a_transformation_leaves_actions_of_another_type_alone(pr2_apartment_con
     world, view, context = pr2_apartment_context
     context.plan_transformations.append(MoveGrippersBeforeTorsoMotion())
 
-    plan = execute_single(ParkArmsAction(view.get_arms()), context=context)
+    plan = execute_single(ParkArmsAction(view.all_arms), context=context)
     plan.notify()
 
     assert [

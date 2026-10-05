@@ -348,7 +348,7 @@ class AllowCollisionBetweenEndEffectorsAndHeldBodies(AllowCollisionRule):
         self.allowed_collision_pairs = {
             CollisionCheck.create_for_bodies_with_collision(held_body, body)
             for robot in world.get_semantic_annotations_by_type(AbstractRobot)
-            for end_effector in robot.get_end_effectors()
+            for end_effector in robot.all_end_effectors
             for held_body in end_effector.held_bodies
             for body in end_effector.bodies_with_collision
             if body != held_body

@@ -68,7 +68,7 @@ def main() -> None:
     plan = sequential(
         [
             SetGripperAction(pr2.right_arm.end_effector, GripperState.CLOSE),
-            ParkArmsAction(pr2.get_arms()),
+            ParkArmsAction(pr2.all_arms),
             MoveTorsoAction(TorsoState.HIGH),
             NavigateAction(
                 Pose.from_xyz_rpy(*BASE_POSITION_XYZ, reference_frame=world.root)

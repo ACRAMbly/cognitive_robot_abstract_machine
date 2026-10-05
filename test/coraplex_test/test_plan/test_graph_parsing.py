@@ -373,7 +373,7 @@ def test_parse_complex_plan(pr2_apartment_context):
 
     plan = sequential(
         [
-            ParkArmsAction(context.robot.get_arms()),
+            ParkArmsAction(context.robot.all_arms),
             ReachAction(
                 grasp=GraspCandidate.from_body_origin(
                     world.get_semantic_annotations_by_type(Milk)[0]
@@ -395,7 +395,7 @@ def test_parsing_two_actions_into_one_exec(pr2_apartment_context):
 
     plan = sequential(
         [
-            ParkArmsAction(context.robot.get_arms()),
+            ParkArmsAction(context.robot.all_arms),
             ReachAction(
                 grasp=GraspCandidate.from_body_origin(
                     world.get_semantic_annotations_by_type(Milk)[0]
@@ -445,7 +445,7 @@ def test_parse_transport_plan(pr2_apartment_context, rclpy_node):
     plan = sequential(
         [
             MoveTorsoAction(TorsoState.HIGH),
-            ParkArmsAction(context.robot.get_arms()),
+            ParkArmsAction(context.robot.all_arms),
             TransportAction.from_graspable_by_closest_grasps(
                 world.get_semantic_annotations_by_type(Milk)[0],
                 Pose.from_xyz_rpy(2.37, 2.5, 1.05, reference_frame=world.root),

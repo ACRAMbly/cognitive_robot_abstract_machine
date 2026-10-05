@@ -46,7 +46,7 @@ construction. Calling `validate()` confirms that all fields are plausibly filled
 synchronized without issues.
 
 To query a robot's parts regardless of its specific structure, `AbstractRobot` provides accessor methods:
-`get_end_effectors()`, `get_arms()`, `get_sensors()`, `get_torso()`, `get_left_arm_if_specified()`,
+`all_end_effectors`, `all_arms`, `all_sensors`, `get_torso()`, `get_left_arm_if_specified()`,
 `get_right_arm_if_specified()` and `get_default_camera()`.
 
 ## Interaction with the World and Motion Control
@@ -85,6 +85,6 @@ world model.
 - `AbstractRobot` is a semantic, world-backed description of a robot's structure and capabilities.
 - Parts are composed from `KinematicChain`, `EndEffector`, `Sensor` and `Torso` using specialized structures
   (mixins and generics), and reached as nested attributes.
-- Accessor methods such as `get_arms()` and `get_default_camera()` query parts in a robot-agnostic way.
+- Accessor methods such as `all_arms` and `get_default_camera()` query parts in a robot-agnostic way.
 - The robot is reconstructed from a `World` via `from_world`; new robots are added by subclassing and implementing
   `get_ros_file_path` and `_get_root_body_name`.

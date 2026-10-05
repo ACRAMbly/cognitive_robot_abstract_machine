@@ -51,9 +51,7 @@ def main() -> None:
     pr2 = PR2.from_world(world)
     context = Context(world=world, robot=pr2, _debug=False, ros_node=None)
 
-    whisk_body = attach_tool(
-        world, pr2.right_arm, parse_object("whisk.stl"), MIX_MOUNT
-    )
+    whisk_body = attach_tool(world, pr2.right_arm, parse_object("whisk.stl"), MIX_MOUNT)
     bowl = Bowl(root=world.get_body_by_name("bowl.stl"))
 
     whisk = Whisk(root=whisk_body)
@@ -65,7 +63,7 @@ def main() -> None:
     plan = sequential(
         [
             SetGripperAction(pr2.right_arm.end_effector, GripperState.CLOSE),
-            ParkArmsAction(pr2.get_arms()),
+            ParkArmsAction(pr2.all_arms),
             MoveTorsoAction(TorsoState.HIGH),
             NavigateAction(
                 Pose.from_xyz_rpy(*BASE_POSITION_XYZ, reference_frame=world.root)

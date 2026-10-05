@@ -425,13 +425,15 @@ class Tracy(
     def _setup_velocity_limits(self):
         """
         Slow the arms down to 0.2 rad/s at their fastest joint, keeping the joints'
-        proportions. The grippers keep the description's own limits: a finger is no
-        danger at that speed, and scaling it down with the arms would leave it too slow
-        to close within a motion.
+        proportions.
+
+        The grippers keep the description's own limits: a finger is no danger at that
+        speed, and scaling it down with the arms would leave it too slow to close within
+        a motion.
         """
         end_effector_connections = {
             connection
-            for arm in self.get_arms()
+            for arm in self.all_arms
             for connection in arm.end_effector.active_connections
         }
         arm_connections = [
@@ -451,5 +453,6 @@ class Tracy(
             }
         )
 
-    def get_end_effectors(self) -> list[EndEffector]:
+    @property
+    def all_end_effectors(self) -> list[EndEffector]:
         return [self.left_arm.end_effector, self.right_arm.end_effector]

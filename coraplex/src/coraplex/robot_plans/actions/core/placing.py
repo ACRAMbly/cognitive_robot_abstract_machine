@@ -128,7 +128,7 @@ class PlaceAction(
             precedes this place.
         """
         object_body = self.object_designator.root
-        for arm in self.robot.get_arms():
+        for arm in self.robot.all_arms:
             end_effector = arm.end_effector
             if GripperHolds(end_effector, object_body)():
                 return arm, GraspCandidate(
@@ -175,7 +175,7 @@ class PlaceAction(
         return or_(
             *[
                 GripperHolds(arm.end_effector, object_body)
-                for arm in context.robot.get_arms()
+                for arm in context.robot.all_arms
             ],
             *PlaceAction._grips_of_every_arm(
                 context, kwargs, kwargs["grasp_detection_threshold"]
@@ -218,5 +218,5 @@ class PlaceAction(
                 arm.end_effector,
                 threshold=threshold,
             )
-            for arm in context.robot.get_arms()
+            for arm in context.robot.all_arms
         ]

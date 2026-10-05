@@ -1168,14 +1168,26 @@ class AbstractRobot(Agent, HasRobotParts, ABC):
                 new_upper_limits=DerivativeMap(None, scaled_limit, None, None),
             )
 
-    def get_end_effectors(self) -> list[EndEffector]:
-        return [p for p in self._robot_parts if isinstance(p, EndEffector)]
+    @property
+    def all_end_effectors(self) -> list[EndEffector]:
+        """
+        :return: Every end effector of this robot, wherever it sits in the robot's parts.
+        """
+        return [part for part in self._robot_parts if isinstance(part, EndEffector)]
 
-    def get_arms(self) -> list[Arm]:
-        return [p for p in self._robot_parts if isinstance(p, Arm)]
+    @property
+    def all_arms(self) -> list[Arm]:
+        """
+        :return: Every arm of this robot, wherever it sits in the robot's parts.
+        """
+        return [part for part in self._robot_parts if isinstance(part, Arm)]
 
-    def get_sensors(self) -> list[Sensor]:
-        return [p for p in self._robot_parts if isinstance(p, Sensor)]
+    @property
+    def all_sensors(self) -> list[Sensor]:
+        """
+        :return: Every sensor of this robot, wherever it sits in the robot's parts.
+        """
+        return [part for part in self._robot_parts if isinstance(part, Sensor)]
 
     def get_torso(self):
         [torso] = [p for p in self._robot_parts if isinstance(p, Torso)]

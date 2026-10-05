@@ -62,7 +62,7 @@ giskard_wrapper.execute()
 ```python
 with real_robot:
     try:
-        ParkArmsActionDescription(robot.get_arms()).resolve().perform()
+        ParkArmsActionDescription(robot.all_arms).resolve().perform()
     except:
         pass
 ```

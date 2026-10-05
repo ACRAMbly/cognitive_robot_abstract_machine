@@ -181,7 +181,7 @@ def test_new_reachability_location_body(
     world, robot, context = multiple_robot_simple_apartment_context
 
     plan = sequential(
-        [ParkArmsAction(context.robot.get_arms()), MoveTorsoAction(TorsoState.HIGH)],
+        [ParkArmsAction(context.robot.all_arms), MoveTorsoAction(TorsoState.HIGH)],
         context,
     )
     with simulated_robot:
@@ -206,7 +206,7 @@ def test_visibility_location_pose(multiple_robot_simple_apartment_context):
     world, robot, context = multiple_robot_simple_apartment_context
 
     plan = sequential(
-        [ParkArmsAction(context.robot.get_arms()), MoveTorsoAction(TorsoState.HIGH)],
+        [ParkArmsAction(context.robot.all_arms), MoveTorsoAction(TorsoState.HIGH)],
         context,
     )
     with simulated_robot:
@@ -228,7 +228,7 @@ def test_visibility_location_body(multiple_robot_simple_apartment_context):
     world, robot, context = multiple_robot_simple_apartment_context
 
     plan = sequential(
-        [ParkArmsAction(context.robot.get_arms()), MoveTorsoAction(TorsoState.HIGH)],
+        [ParkArmsAction(context.robot.all_arms), MoveTorsoAction(TorsoState.HIGH)],
         context,
     )
     with simulated_robot:

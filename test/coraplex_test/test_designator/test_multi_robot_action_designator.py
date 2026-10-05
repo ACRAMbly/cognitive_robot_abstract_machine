@@ -341,7 +341,7 @@ def test_move_gripper_multi(multiple_robot_apartment_context):
     with simulated_robot:
         plan.perform()
 
-    arm = view.get_arms()[0]
+    arm = view.all_arms[0]
     open_state = arm.end_effector.get_joint_state_by_type(GripperState.OPEN)
     close_state = arm.end_effector.get_joint_state_by_type(GripperState.CLOSE)
 
@@ -364,15 +364,15 @@ def test_move_gripper_multi(multiple_robot_apartment_context):
 
 def test_park_arms_multi(multiple_robot_apartment_context):
     world, robot, context = multiple_robot_apartment_context
-    description = ParkArmsAction(context.robot.get_arms())
+    description = ParkArmsAction(context.robot.all_arms)
     plan = execute_single(description, context)
-    assert description.arms == context.robot.get_arms()
+    assert description.arms == context.robot.all_arms
     with simulated_robot:
         plan.perform()
 
     joints = []
     states = []
-    for arm in robot.get_arms():
+    for arm in robot.all_arms:
         joint_state = arm.get_joint_state_by_type(StaticJointState.PARK)
         joints.extend(joint_state.connections)
         states.extend(joint_state.target_values)
@@ -404,7 +404,7 @@ def test_reach_action_multi(multiple_robot_apartment_context):
 
     plan = sequential(
         [
-            ParkArmsAction(context.robot.get_arms()),
+            ParkArmsAction(context.robot.all_arms),
             ReachAction(
                 grasp=GraspCandidate(milk, grasp_pose),
                 arm=left_or_only_arm(context.robot),
@@ -475,7 +475,7 @@ def test_follow_tcp_path_multi(multiple_robot_apartment_context):
     plan = sequential(
         [
             MoveTorsoAction(TorsoState.HIGH),
-            ParkArmsAction(context.robot.get_arms()),
+            ParkArmsAction(context.robot.all_arms),
             FollowToolCenterPointPathAction(
                 arm=left_or_only_arm(context.robot), target_locations=waypoints
             ),
@@ -511,7 +511,7 @@ def test_grasping(multiple_robot_apartment_context):
 
     plan = sequential(
         [
-            ParkArmsAction(context.robot.get_arms()),
+            ParkArmsAction(context.robot.all_arms),
             grasping_action,
         ],
         context,
@@ -543,7 +543,7 @@ def test_pick_up_multi(multiple_robot_apartment_context, rclpy_node):
 
     root = sequential(
         [
-            ParkArmsAction(context.robot.get_arms()),
+            ParkArmsAction(context.robot.all_arms),
             PickUpAction(
                 world.get_semantic_annotations_by_type(Milk)[0].grasp_candidates()[0],
                 left_or_only_arm(context.robot),
@@ -588,7 +588,7 @@ def test_place_multi(multiple_robot_apartment_context):
 
     root = sequential(
         [
-            ParkArmsAction(context.robot.get_arms()),
+            ParkArmsAction(context.robot.all_arms),
             PickUpAction(
                 world.get_semantic_annotations_by_type(Milk)[0].grasp_candidates()[0],
                 left_or_only_arm(context.robot),
@@ -673,7 +673,7 @@ def test_open(multiple_robot_apartment_context):
     plan = sequential(
         [
             MoveTorsoAction(TorsoState.HIGH),
-            ParkArmsAction(context.robot.get_arms()),
+            ParkArmsAction(context.robot.all_arms),
             NavigateAction(
                 Pose(
                     Point3.from_iterable([1.6, 1.9, 0]),
@@ -709,7 +709,7 @@ def test_close(multiple_robot_apartment_context, rclpy_node):
     plan = sequential(
         [
             MoveTorsoAction(TorsoState.HIGH),
-            ParkArmsAction(context.robot.get_arms()),
+            ParkArmsAction(context.robot.all_arms),
             NavigateAction(
                 heading_towards(
                     navigate_position,
@@ -805,7 +805,7 @@ def test_transport_open_container(multiple_robot_apartment_context, rclpy_node):
     plan = sequential(
         [
             MoveTorsoAction(TorsoState.HIGH),
-            ParkArmsAction(context.robot.get_arms()),
+            ParkArmsAction(context.robot.all_arms),
             description,
         ],
         context,

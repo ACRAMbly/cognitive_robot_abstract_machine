@@ -128,7 +128,7 @@ with world.modify_world():
 
 plan = sequential(
     [
-        ParkArmsAction(pr2.get_arms()),
+        ParkArmsAction(pr2.all_arms),
         MoveTorsoAction(TorsoState.HIGH),
         NavigateAction(Pose.from_xyz_rpy(2.0, 2.0, 0.0, reference_frame=world.root)),
         PickUpAction(

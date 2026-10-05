@@ -29,7 +29,7 @@ def simple_plan(pr2_apartment_context):
                 ),
             ),
             MoveTorsoAction(TorsoState.HIGH),
-            ParkArmsAction(context.robot.get_arms()),
+            ParkArmsAction(context.robot.all_arms),
         ],
         context=context,
     ).plan

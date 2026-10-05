@@ -80,6 +80,6 @@ milk_place_pose = Pose(Point3(x=2.2, y=7.6, z=0.865), reference_frame=world.root
 # print(number_of_arms)
 with simulated_robot:
     sequential(
-        [ParkArmsAction(garmi.get_arms())],
+        [ParkArmsAction(garmi.all_arms)],
         context,
     ).perform()

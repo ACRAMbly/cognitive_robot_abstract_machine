@@ -305,7 +305,7 @@ class BulletWorldDemonstration(RobotDemonstration):
         left_arm = context.robot.left_arm
         return sequential(
             [
-                ParkArmsAction(context.robot.get_arms()),
+                ParkArmsAction(context.robot.all_arms),
                 MoveTorsoAction(TorsoState.HIGH),
                 TransportAction.from_graspable_by_closest_grasps(
                     self.milk.annotation_in(world),

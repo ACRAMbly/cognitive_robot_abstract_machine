@@ -56,14 +56,14 @@ def left_or_only_arm(robot: AbstractRobot) -> Arm:
     """
     :return: The left arm of a robot that names one, otherwise its first arm.
     """
-    return robot.get_left_arm_if_specified() or robot.get_arms()[0]
+    return robot.get_left_arm_if_specified() or robot.all_arms[0]
 
 
 def right_or_only_arm(robot: AbstractRobot) -> Arm:
     """
     :return: The right arm of a robot that names one, otherwise its first arm.
     """
-    return robot.get_right_arm_if_specified() or robot.get_arms()[0]
+    return robot.get_right_arm_if_specified() or robot.all_arms[0]
 
 
 @pytest.fixture(scope="session")

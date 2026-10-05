@@ -155,10 +155,10 @@ def build_plan(
 
     return sequential(
         [
-            ParkArmsAction(robot.get_arms()),
+            ParkArmsAction(robot.all_arms),
             NavigateAction(standing_pose_in_front_of(source, world)),
             PickUpAction(GraspCandidate.from_body_origin(parcel), robot.torso.left_arm),
-            ParkArmsAction(robot.get_arms()),
+            ParkArmsAction(robot.all_arms),
             straighten_torso(robot),
             NavigateAction(Pose.from_xyz_rpy(yaw=turn, reference_frame=robot.root)),
             NavigateAction(standing_pose_in_front_of(destination, world)),
@@ -170,7 +170,7 @@ def build_plan(
                     reference_frame=world.root,
                 ),
             ),
-            ParkArmsAction(robot.get_arms()),
+            ParkArmsAction(robot.all_arms),
             straighten_torso(robot),
         ],
         context=context,
