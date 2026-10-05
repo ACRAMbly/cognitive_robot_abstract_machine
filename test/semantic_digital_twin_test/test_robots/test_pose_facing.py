@@ -192,7 +192,7 @@ def test_forward_axis_points_along_the_heading(
 
     base_pose = mobile_base.pose_facing(heading)
 
-    world_V_forward = base_pose.to_rotation_matrix() @ mobile_base.forward_axis
+    world_V_forward = base_pose.rotation_matrix @ mobile_base.forward_axis
     np.testing.assert_allclose(
         world_V_forward.to_np()[:3].flatten(),
         [np.cos(heading_yaw), np.sin(heading_yaw), 0.0],

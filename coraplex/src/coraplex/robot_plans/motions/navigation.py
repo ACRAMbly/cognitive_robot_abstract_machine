@@ -29,7 +29,7 @@ class MoveMotion(BaseMotion):
     def _motion_chart(self):
         return (
             SetOdometry(
-                base_pose=self.target.to_homogeneous_matrix(),
+                base_pose=self.target.homogeneous_matrix,
                 odom_connection=self.robot.root.parent_connection,
             )
             if GiskardExecutable.execution_type == ExecutionType.SIMULATED

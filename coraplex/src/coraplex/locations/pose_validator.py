@@ -91,7 +91,7 @@ class IsVisibleBy(PoseValidator):
                 FixedConnection(
                     parent=self.world.root,
                     child=gen_body,
-                    parent_T_connection_expression=self.target_pose.to_homogeneous_matrix(),
+                    parent_T_connection_expression=self.target_pose.homogeneous_matrix,
                 )
             )
 

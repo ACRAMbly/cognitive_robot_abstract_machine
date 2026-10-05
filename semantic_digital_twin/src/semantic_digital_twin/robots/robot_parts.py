@@ -556,7 +556,7 @@ class Camera(Sensor, ABC):
         The y and z axes only complete the frame and carry no meaning.
         """
         root_T_camera = self.root.global_transform
-        root_V_forward = root_T_camera.to_rotation_matrix() @ self.forward_facing_axis
+        root_V_forward = root_T_camera.rotation_matrix @ self.forward_facing_axis
         return HomogeneousTransformationMatrix.from_point_rotation_matrix(
             point=root_T_camera.position,
             rotation_matrix=RotationMatrix.from_x_axis(root_V_forward),
@@ -710,9 +710,9 @@ class MobileBase(AbstractRobotPart, Generic[TGenericDrive], ABC):
         base_R_forward = RotationMatrix.from_vectors(x=self.forward_axis, z=Vector3.Z())
         return HomogeneousTransformationMatrix.from_point_rotation_matrix(
             heading.position,
-            heading.to_rotation_matrix() @ base_R_forward.inverse(),
+            heading.rotation_matrix @ base_R_forward.inverse(),
             reference_frame=heading.reference_frame,
-        ).to_pose()
+        ).pose
 
     @classmethod
     def get_drive_connection_type(cls) -> Type[TGenericDrive]:
@@ -988,7 +988,7 @@ class AbstractRobot(Agent, HasRobotParts, ABC):
         if pose.reference_frame is not parent_kinematic_structure_entity:
             pose = self._world.transform(pose, parent_kinematic_structure_entity)
 
-        connection.origin = pose.to_homogeneous_matrix()
+        connection.origin = pose.homogeneous_matrix
 
     @property
     def _one_dof_connections(self) -> list[ActiveConnection1DOF]:

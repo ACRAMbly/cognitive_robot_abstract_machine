@@ -653,7 +653,7 @@ class TestCartesianTasks:
         hsr = _hsr_world_setup.get_semantic_annotations_by_type(HSRB)[0]
         hand = _hsr_world_setup.get_semantic_annotations_by_type(EndEffector)[0]
         motion_statechart = MotionStatechart()
-        orientation_goal = hand.front_facing_orientation.to_rotation_matrix()
+        orientation_goal = hand.front_facing_orientation.rotation_matrix
         orientation_goal.reference_frame = _hsr_world_setup.get_body_by_name(
             "base_footprint"
         )

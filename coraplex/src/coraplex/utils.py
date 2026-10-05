@@ -354,7 +354,7 @@ def translate_pose_along_local_axis(
     """
     normalized_translation_vector = np.array(axis) / np.linalg.norm(axis)
 
-    rot_matrix = pose.to_rotation_matrix().to_np()[:3, :3]
+    rot_matrix = pose.rotation_matrix.to_np()[:3, :3]
     translation_in_world = rot_matrix @ normalized_translation_vector
     scaled_translation_vector = (
         np.array(pose.position.to_list()[:3]) + translation_in_world * distance

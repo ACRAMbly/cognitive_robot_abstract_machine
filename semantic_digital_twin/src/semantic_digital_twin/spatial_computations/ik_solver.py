@@ -577,7 +577,7 @@ class ConstraintBuilder:
         rotation_cap = self.max_rotation_velocity * self.dt
 
         hack = RotationMatrix.from_axis_angle(Vector3.Z(), -0.0001)
-        root_R_tip = root_T_tip.to_rotation_matrix().dot(hack)
+        root_R_tip = root_T_tip.rotation_matrix.dot(hack)
         q_actual = HomogeneousTransformationMatrix(self.target).quaternion
         q_goal = root_R_tip.quaternion
         q_goal = sm.if_less(q_goal.dot(q_actual), 0, -q_goal, q_goal)

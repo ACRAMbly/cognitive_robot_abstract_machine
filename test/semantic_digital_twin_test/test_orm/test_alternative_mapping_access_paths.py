@@ -10,6 +10,7 @@ from krrood.entity_query_language.orm.model import (
 )
 from krrood.symbol_graph.symbol_graph import SymbolGraph
 from semantic_digital_twin.orm.model import (
+    AxisAngleMapping,
     HomogeneousTransformationMatrixMapping,
     Point2Mapping,
     Point3Mapping,
@@ -22,9 +23,12 @@ from semantic_digital_twin.orm.model import (
     WorldStateMapping,
 )
 from semantic_digital_twin.spatial_types.spatial_types import (
+    AxisAngle,
     HomogeneousTransformationMatrix,
+    Pose,
     Pose2D,
     RotationMatrix,
+    Vector3,
 )
 from semantic_digital_twin.world import World
 from semantic_digital_twin.world_description.world_entity import Body
@@ -38,6 +42,7 @@ from semantic_digital_twin.world_description.world_entity import Body
         Vector3Mapping,
         Point3Mapping,
         QuaternionMapping,
+        AxisAngleMapping,
         RotationMatrixMapping,
         HomogeneousTransformationMatrixMapping,
         PoseMapping,
@@ -65,41 +70,38 @@ def test_every_field_of_an_alternative_mapping_is_reachable_on_its_domain_class(
     assert missing == []
 
 
-def test_rotation_matrix_exposes_roll_pitch_and_yaw():
-    rotation_matrix = RotationMatrix.from_rpy(roll=0.1, pitch=0.2, yaw=0.3)
-    roll_pitch_yaw = rotation_matrix.roll_pitch_yaw
-    assert dataclasses.astuple(roll_pitch_yaw) == pytest.approx((0.1, 0.2, 0.3))
-    assert all(type(angle) is float for angle in dataclasses.astuple(roll_pitch_yaw))
-
-
-def test_homogeneous_transformation_matrix_exposes_position_roll_pitch_and_yaw():
-    transformation = HomogeneousTransformationMatrix.from_xyz_rpy(
-        x=1.0, y=2.0, z=3.0, roll=0.1, pitch=0.2, yaw=0.3
-    )
-    assert np.allclose(transformation.position.to_np()[:3], [1.0, 2.0, 3.0])
-    assert dataclasses.astuple(transformation.roll_pitch_yaw) == pytest.approx(
-        (0.1, 0.2, 0.3)
-    )
-
-
 @pytest.mark.parametrize(
-    "roll, pitch, yaw",
-    [(0.1, 0.2, 0.3), (-2.0, 1.0, 3.0), (0.4, np.pi / 2, 0.0), (0.0, 0.0, 0.0)],
+    "axis, angle",
+    [
+        ((0.0, 0.0, 1.0), 0.3),
+        ((1.0, 0.0, 0.0), 2.0),
+        ((0.0, 1.0, 0.0), np.pi / 2),
+        ((0.0, 0.0, 1.0), 0.0),
+        ((0.0, 1.0, 0.0), np.pi),
+    ],
 )
-def test_rotation_survives_being_stored_as_roll_pitch_and_yaw(roll, pitch, yaw):
-    transformation = HomogeneousTransformationMatrix.from_xyz_rpy(
-        x=1.0, y=2.0, z=3.0, roll=roll, pitch=pitch, yaw=yaw
-    )
-    restored = HomogeneousTransformationMatrixMapping.from_domain_object(
-        transformation
-    ).to_domain_object()
-    assert np.allclose(restored.to_np(), transformation.to_np())
+@pytest.mark.parametrize(
+    "mapping, rotation_from_axis_angle",
+    [
+        (RotationMatrixMapping, RotationMatrix.from_axis_angle),
+        (
+            HomogeneousTransformationMatrixMapping,
+            HomogeneousTransformationMatrix.from_xyz_axis_angle,
+        ),
+        (PoseMapping, Pose.from_xyz_axis_angle),
+    ],
+    ids=["RotationMatrix", "HomogeneousTransformationMatrix", "Pose"],
+)
+def test_rotation_survives_being_stored_as_axis_angle(
+    mapping, rotation_from_axis_angle, axis, angle
+):
+    rotation = rotation_from_axis_angle(axis=Vector3(*axis), angle=angle)
 
-    rotation_matrix = transformation.to_rotation_matrix()
-    restored_rotation = RotationMatrixMapping.from_domain_object(
-        rotation_matrix
-    ).to_domain_object()
-    assert np.allclose(restored_rotation.to_np(), rotation_matrix.to_np())
+    stored = mapping.from_domain_object(rotation)
+    restored = stored.to_domain_object()
+
+    assert isinstance(stored.axis_angle, AxisAngle)
+    assert np.allclose(restored.to_np(), rotation.to_np())
 
 
 def test_world_state_data_and_ids_follow_the_stored_state():

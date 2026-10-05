@@ -124,8 +124,8 @@ def test_rank_grasps(gripper_mesh, object_mesh):
     # The structurally sound pose should be the champion and rank first
     # Floating-Point Safe Assertion: Convert cleanly back to raw matrices and evaluate tolerances
     assert np.allclose(
-        ranked[0].pose.to_homogeneous_matrix().to_np(),
-        pose_good.to_homogeneous_matrix().to_np(),
+        ranked[0].pose.homogeneous_matrix.to_np(),
+        pose_good.homogeneous_matrix.to_np(),
     )
     assert ranked[0].score > 0.0
 

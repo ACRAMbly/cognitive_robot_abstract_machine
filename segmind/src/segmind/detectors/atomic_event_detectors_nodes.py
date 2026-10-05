@@ -224,9 +224,7 @@ class MotionDetector(AbstractDetector):
         :return: True if the object is rotating, False otherwise.
         """
         rotational_distance = float(
-            poses[0]
-            .to_rotation_matrix()
-            .rotational_distance(poses[-1].to_rotation_matrix())
+            poses[0].rotation_matrix.rotational_distance(poses[-1].rotation_matrix)
         )
         return rotational_distance > self.rotation_threshold
 

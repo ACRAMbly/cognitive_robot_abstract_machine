@@ -573,7 +573,7 @@ def test_transform_a_pose_2d(world_setup):
     assert relative_pose_2d.reference_frame == l1
     np.testing.assert_array_almost_equal(
         relative_pose_2d.to_np(),
-        Pose2D.from_pose(world.transform(pose_2d.to_pose(), l1)).to_np(),
+        Pose2D.from_pose(world.transform(pose_2d.pose, l1)).to_np(),
     )
 
 

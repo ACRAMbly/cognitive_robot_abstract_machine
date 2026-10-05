@@ -210,7 +210,7 @@ class GeometricConstraintBuilder:
         :param max_velocity: rad/s
         """
         root_Q_tipCurrent = frame_R_current.quaternion
-        angle_error = root_Q_tipCurrent.to_axis_angle()[1]
+        angle_error = root_Q_tipCurrent.axis_angle.angle
         self.collection.add_velocity_constraint(
             upper_velocity_limit=max_velocity,
             lower_velocity_limit=-max_velocity,

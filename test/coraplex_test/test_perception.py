@@ -216,9 +216,7 @@ def test_an_upside_down_detection_is_flipped_without_moving_the_body(
         PERCEIVED_MILK_POSITION,
         atol=1e-9,
     )
-    assert (
-        milk_body.global_pose.to_rotation_matrix().z_vector().to_np().flatten()[2] > 0
-    )
+    assert milk_body.global_pose.rotation_matrix.z_vector().to_np().flatten()[2] > 0
 
 
 # %% distrusting a source's orientation
@@ -258,7 +256,7 @@ def test_untrusted_orientation_keeps_the_bodys_existing_orientation(
     world, view, context = pr2_apartment_context
     milk_body = world.get_body_by_name("milk.stl")
     orientation_before_detection = (
-        milk_body.parent_connection.origin.to_rotation_matrix().to_np()
+        milk_body.parent_connection.origin.rotation_matrix.to_np()
     )
     perceived_pose = Pose.from_xyz_rpy(
         *PERCEIVED_MILK_POSITION, yaw=np.pi / 2, reference_frame=world.root
@@ -269,7 +267,7 @@ def test_untrusted_orientation_keeps_the_bodys_existing_orientation(
     )
 
     np.testing.assert_allclose(
-        milk_body.parent_connection.origin.to_rotation_matrix().to_np(),
+        milk_body.parent_connection.origin.rotation_matrix.to_np(),
         orientation_before_detection,
         atol=1e-9,
     )

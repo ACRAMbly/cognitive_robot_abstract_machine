@@ -94,7 +94,7 @@ def build_world() -> World:
         robots=[
             RobotSpecification(
                 semantic_annotation_type=UnitreeG1,
-                world_T_odom=ROBOT_START_POSE.to_homogeneous_matrix(),
+                world_T_odom=ROBOT_START_POSE.homogeneous_matrix,
             )
         ],
         objects=[
@@ -102,7 +102,7 @@ def build_world() -> World:
                 "parcel",
                 PARCEL_SCALE,
                 color=Color(0.85, 0.45, 0.1),
-                parent_T_self=PICK_POSE.to_homogeneous_matrix(),
+                parent_T_self=PICK_POSE.homogeneous_matrix,
             )
         ],
     ).to_domain_object()

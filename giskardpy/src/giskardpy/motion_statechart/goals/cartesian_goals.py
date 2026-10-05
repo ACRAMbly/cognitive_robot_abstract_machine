@@ -183,7 +183,7 @@ class CartesianPoseStraight(Parallel):
                 name=self.name + "/orientation",
                 root_link=self.root_link,
                 tip_link=self.tip_link,
-                goal_orientation=self.goal_pose.to_rotation_matrix(),
+                goal_orientation=self.goal_pose.rotation_matrix,
                 weight=self.weight,
                 binding_policy=self.binding_policy,
             ),

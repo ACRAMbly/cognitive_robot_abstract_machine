@@ -433,7 +433,7 @@ class KinematicStructureEntity(ABC, WorldEntityWithSimulatorProperties):
 
         :return: Pose representing the global pose.
         """
-        return self._world.compute_forward_kinematics(self._world.root, self).to_pose()
+        return self._world.compute_forward_kinematics(self._world.root, self).pose
 
     @property
     def parent_connection(self) -> Connection:

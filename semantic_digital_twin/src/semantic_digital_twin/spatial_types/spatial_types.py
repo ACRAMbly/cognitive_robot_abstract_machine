@@ -78,29 +78,6 @@ class SpatialFrameKey(StrEnum):
     """The entity a transformation points at."""
 
 
-@dataclass
-class RollPitchYaw:
-    """
-    A rotation given as three angles in radians, applied around the fixed x-, y- and
-    z-axis in that order.
-    """
-
-    roll: float
-    """
-    The rotation around the x-axis.
-    """
-
-    pitch: float
-    """
-    The rotation around the y-axis.
-    """
-
-    yaw: float
-    """
-    The rotation around the z-axis.
-    """
-
-
 @dataclass(eq=False, repr=False)
 class SpatialType(ABC):
     """
@@ -623,21 +600,19 @@ class HomogeneousTransformationMatrix(
         """
         :return: The rotation this transformation is composed of.
         """
-        return self.to_rotation_matrix().quaternion
+        return self.rotation_matrix.quaternion
 
     @property
-    def roll_pitch_yaw(self) -> RollPitchYaw:
+    def axis_angle(self) -> AxisAngle:
         """
-        Only works if the transformation has no free variables.
+        :return: The rotation this transformation is composed of.
+        """
+        return self.rotation_matrix.axis_angle
 
-        :return: The rotation this transformation is composed of as roll, pitch and
-            yaw.
+    @property
+    def translation_matrix(self) -> HomogeneousTransformationMatrix:
         """
-        return self.to_rotation_matrix().roll_pitch_yaw
-
-    def to_translation_matrix(self) -> HomogeneousTransformationMatrix:
-        """
-        :return: sets the rotation part of a frame to identity
+        :return: This transformation with its rotation replaced by the identity.
         """
         r = HomogeneousTransformationMatrix()
         r[0, 3] = self[0, 3]
@@ -647,10 +622,18 @@ class HomogeneousTransformationMatrix(
             data=r, reference_frame=self.reference_frame, child_frame=None
         )
 
-    def to_rotation_matrix(self) -> RotationMatrix:
+    @property
+    def rotation_matrix(self) -> RotationMatrix:
+        """
+        :return: The rotation this transformation is composed of.
+        """
         return RotationMatrix(data=self, reference_frame=self.reference_frame)
 
-    def to_pose(self) -> Pose:
+    @property
+    def pose(self) -> Pose:
+        """
+        :return: The pose this transformation moves its reference frame to.
+        """
         result = Pose.from_casadi_sx(casadi_sx=copy(self.casadi_sx))
         result.reference_frame = self.reference_frame
         return result
@@ -733,7 +716,7 @@ class RotationMatrix(sm.SymbolicMathType, SpatialType, SubclassJSONSerializer):
         return Quaternion.from_iterable(
             data["quaternion"],
             reference_frame=reference_frame,
-        ).to_rotation_matrix()
+        ).rotation_matrix
 
     def _constant_to_json(self) -> Dict[str, Any]:
         return {
@@ -895,8 +878,12 @@ class RotationMatrix(sm.SymbolicMathType, SpatialType, SubclassJSONSerializer):
     ) -> GenericRotatableSpatialType:
         return self.dot(other)
 
-    def to_axis_angle(self) -> Tuple[Vector3, sm.Scalar]:
-        return self.quaternion.to_axis_angle()
+    @property
+    def axis_angle(self) -> AxisAngle:
+        """
+        :return: The rotation this matrix describes.
+        """
+        return self.quaternion.axis_angle
 
     def to_angle(self, hint: Optional[Callable] = None) -> sm.Scalar:
         """
@@ -904,13 +891,17 @@ class RotationMatrix(sm.SymbolicMathType, SpatialType, SubclassJSONSerializer):
                         negative
         :return:
         """
-        axis, angle = self.to_axis_angle()
+        axis_angle = self.axis_angle
         if hint is not None:
             return sm.normalize_angle(
-                sm.if_greater_zero(hint(axis), if_result=angle, else_result=-angle)
+                sm.if_greater_zero(
+                    hint(axis_angle.axis),
+                    if_result=axis_angle.angle,
+                    else_result=-axis_angle.angle,
+                )
             )
         else:
-            return angle
+            return axis_angle.angle
 
     def to_generic_matrix(self) -> sm.Matrix:
         return sm.Matrix.from_casadi_sx(copy(self.casadi_sx))
@@ -1060,16 +1051,6 @@ class RotationMatrix(sm.SymbolicMathType, SpatialType, SubclassJSONSerializer):
         :return: The rotation this matrix describes.
         """
         return Quaternion.from_rotation_matrix(self)
-
-    @property
-    def roll_pitch_yaw(self) -> RollPitchYaw:
-        """
-        Only works if the matrix has no free variables.
-
-        :return: The rotation this matrix describes as roll, pitch and yaw.
-        """
-        roll, pitch, yaw = self.to_rpy()
-        return RollPitchYaw(roll=float(roll), pitch=float(pitch), yaw=float(yaw))
 
     def normalize(self) -> None:
         """
@@ -1296,7 +1277,7 @@ class Point3(Point):
         """
         normal = frame_V_plane_vector1.cross(frame_V_plane_vector2)
         normal.scale(1)
-        frame_V_current = self.to_vector3()
+        frame_V_current = self.vector3
         d = normal @ frame_V_current
         v: Vector3 = normal * d
         projection = self - v
@@ -1345,7 +1326,11 @@ class Point3(Point):
         frame_P_nearest = frame_P_line_start + frame_V_offset
         return dist, frame_P_nearest
 
-    def to_vector3(self) -> Vector3:
+    @property
+    def vector3(self) -> Vector3:
+        """
+        :return: The vector from the origin of the reference frame to this point.
+        """
         result = Vector3.from_casadi_sx(copy(self.casadi_sx))
         result.reference_frame = self.reference_frame
         return result
@@ -1827,7 +1812,11 @@ class Vector3(sm.SymbolicMathType, SpatialType, SubclassJSONSerializer):
             + other * (sm.sin(t * angle2) / sm.sin(angle2)),
         )
 
-    def to_point3(self) -> Point3:
+    @property
+    def point3(self) -> Point3:
+        """
+        :return: The point this vector reaches from the origin of the reference frame.
+        """
         result = Point3.from_casadi_sx(copy(self.casadi_sx))
         result.reference_frame = self.reference_frame
         return result
@@ -2105,29 +2094,25 @@ class Quaternion(sm.SymbolicMathType, SpatialType, SubclassJSONSerializer):
         self.z /= norm_
         self.w /= norm_
 
-    def to_axis_angle(self) -> Tuple[Vector3, sm.Scalar]:
-        self.normalize()
-        w2 = sm.sqrt(1 - self.w**2)
-        m = sm.if_eq_zero(w2, sm.Scalar(1), w2)  # avoid /0
-        angle = sm.if_eq_zero(
-            w2, sm.Scalar(0), sm.Scalar(2 * sm.acos(sm.limit(self.w, -1, 1)))
-        )
-        x = sm.if_eq_zero(w2, sm.Scalar(0), self.x / m)
-        y = sm.if_eq_zero(w2, sm.Scalar(0), self.y / m)
-        z = sm.if_eq_zero(w2, sm.Scalar(1), self.z / m)
-        return (
-            Vector3(x=x, y=y, z=z, reference_frame=self.reference_frame),
-            angle,
-        )
+    @property
+    def axis_angle(self) -> AxisAngle:
+        """
+        :return: The rotation this quaternion describes.
+        """
+        return AxisAngle.from_quaternion(self)
 
     def to_generic_vector(self) -> sm.Vector:
         return sm.Vector.from_casadi_sx(copy(self.casadi_sx))
 
-    def to_rotation_matrix(self) -> RotationMatrix:
+    @property
+    def rotation_matrix(self) -> RotationMatrix:
+        """
+        :return: The rotation this quaternion describes.
+        """
         return RotationMatrix.from_quaternion(self)
 
     def to_rpy(self) -> Tuple[sm.Scalar, sm.Scalar, sm.Scalar]:
-        return self.to_rotation_matrix().to_rpy()
+        return self.rotation_matrix.to_rpy()
 
     def dot(self, other: Quaternion) -> sm.Scalar:
         if isinstance(other, Quaternion):
@@ -2190,6 +2175,113 @@ class Quaternion(sm.SymbolicMathType, SpatialType, SubclassJSONSerializer):
 
 
 @dataclass(eq=False, init=False, repr=False)
+class AxisAngle(sm.SymbolicMathType, SpatialType, SubclassJSONSerializer):
+    """
+    A rotation by an angle around a unit axis.
+    """
+
+    def __init__(
+        self,
+        axis: Optional[Vector3] = None,
+        angle: sm.ScalarData = 0,
+        reference_frame: Optional[KinematicStructureEntity] = None,
+    ):
+        """
+        :param axis: The unit axis to rotate around. Defaults to the z-axis.
+        :param angle: The angle to rotate by, in radians.
+        :param reference_frame: The frame the axis is expressed in.
+        """
+        if axis is None:
+            axis = Vector3.Z()
+        self.casadi_sx = sm.to_sx([axis.x, axis.y, axis.z, angle])
+        self.reference_frame = reference_frame
+        super().__post_init__()
+
+    def _verify_type(self):
+        if self.shape != (4, 1):
+            raise WrongDimensionsError(
+                expected_dimensions=(4, 1), actual_dimensions=self.shape
+            )
+
+    @classmethod
+    def _from_constant_json(cls, data: Dict[str, Any], **kwargs) -> Self:
+        reference_frame = cls._parse_optional_frame_from_json(
+            data, frame=SpatialFrameKey.REFERENCE, **kwargs
+        )
+        return cls(
+            axis=Vector3(*data["axis"]),
+            angle=data["angle"],
+            reference_frame=reference_frame,
+        )
+
+    def _constant_to_json(self) -> Dict[str, Any]:
+        return {
+            "axis": self.axis.to_np()[:3].tolist(),
+            "angle": float(self.angle),
+        }
+
+    @classmethod
+    def from_quaternion(cls, quaternion: Quaternion) -> AxisAngle:
+        """
+        The identity rotation has no axis of its own and is read as a rotation by zero
+        around the z-axis.
+
+        :param quaternion: The rotation to describe, normalized in place.
+        :return: The rotation the quaternion describes, with an angle in [0, 2 pi].
+        """
+        quaternion.normalize()
+        sine_of_half_angle = sm.sqrt(1 - quaternion.w**2)
+        divisor = sm.if_eq_zero(sine_of_half_angle, sm.Scalar(1), sine_of_half_angle)
+        angle = sm.if_eq_zero(
+            sine_of_half_angle,
+            sm.Scalar(0),
+            sm.Scalar(2 * sm.acos(sm.limit(quaternion.w, -1, 1))),
+        )
+        x = sm.if_eq_zero(sine_of_half_angle, sm.Scalar(0), quaternion.x / divisor)
+        y = sm.if_eq_zero(sine_of_half_angle, sm.Scalar(0), quaternion.y / divisor)
+        z = sm.if_eq_zero(sine_of_half_angle, sm.Scalar(1), quaternion.z / divisor)
+        return cls(
+            axis=Vector3(x=x, y=y, z=z),
+            angle=angle,
+            reference_frame=quaternion.reference_frame,
+        )
+
+    @property
+    def axis(self) -> Vector3:
+        """
+        :return: The unit axis this rotation turns around.
+        """
+        return Vector3(
+            x=self[0], y=self[1], z=self[2], reference_frame=self.reference_frame
+        )
+
+    @property
+    def angle(self) -> sm.Scalar:
+        """
+        :return: The angle this rotation turns by, in radians.
+        """
+        return self[3]
+
+    @property
+    def quaternion(self) -> Quaternion:
+        """
+        :return: The rotation this axis angle describes.
+        """
+        return Quaternion.from_axis_angle(
+            axis=self.axis, angle=self.angle, reference_frame=self.reference_frame
+        )
+
+    @property
+    def rotation_matrix(self) -> RotationMatrix:
+        """
+        :return: The rotation this axis angle describes.
+        """
+        return RotationMatrix.from_axis_angle(
+            axis=self.axis, angle=self.angle, reference_frame=self.reference_frame
+        )
+
+
+@dataclass(eq=False, init=False, repr=False)
 class Pose(sm.SymbolicMathType, SpatialType, SubclassJSONSerializer):
 
     def __init__(
@@ -2216,7 +2308,7 @@ class Pose(sm.SymbolicMathType, SpatialType, SubclassJSONSerializer):
             orientation = Quaternion()
         transformation_matrix = (
             HomogeneousTransformationMatrix.from_point_rotation_matrix(
-                point=position, rotation_matrix=orientation.to_rotation_matrix()
+                point=position, rotation_matrix=orientation.rotation_matrix
             )
         )
         self._casadi_sx = transformation_matrix._casadi_sx
@@ -2360,15 +2452,15 @@ class Pose(sm.SymbolicMathType, SpatialType, SubclassJSONSerializer):
 
     @property
     def roll(self) -> sm.Scalar:
-        return self.to_rotation_matrix().to_rpy()[0]
+        return self.rotation_matrix.to_rpy()[0]
 
     @property
     def pitch(self) -> sm.Scalar:
-        return self.to_rotation_matrix().to_rpy()[1]
+        return self.rotation_matrix.to_rpy()[1]
 
     @property
     def yaw(self) -> sm.Scalar:
-        return self.to_rotation_matrix().to_rpy()[2]
+        return self.rotation_matrix.to_rpy()[2]
 
     @y.setter
     def y(self, value: sm.ScalarData):
@@ -2392,12 +2484,27 @@ class Pose(sm.SymbolicMathType, SpatialType, SubclassJSONSerializer):
 
     @property
     def quaternion(self) -> Quaternion:
-        return self.to_rotation_matrix().quaternion
+        return self.rotation_matrix.quaternion
 
-    def to_rotation_matrix(self) -> RotationMatrix:
+    @property
+    def axis_angle(self) -> AxisAngle:
+        """
+        :return: The orientation of this pose.
+        """
+        return self.quaternion.axis_angle
+
+    @property
+    def rotation_matrix(self) -> RotationMatrix:
+        """
+        :return: The orientation of this pose.
+        """
         return RotationMatrix(data=self, reference_frame=self.reference_frame)
 
-    def to_homogeneous_matrix(self) -> HomogeneousTransformationMatrix:
+    @property
+    def homogeneous_matrix(self) -> HomogeneousTransformationMatrix:
+        """
+        :return: The transformation that moves the reference frame to this pose.
+        """
         return HomogeneousTransformationMatrix(
             data=self, reference_frame=self.reference_frame
         )
@@ -2421,7 +2528,7 @@ class Pose2D(sm.SymbolicMathType, SpatialType, SubclassJSONSerializer):
 
     Internally stored as a 3×1 symbolic vector ``[x, y, yaw]``. Behaves similarly to
     :class:`Pose`, but lives in the 2D plane (z=0, roll=0, pitch=0). Whenever 3D
-    calculations are required, use :meth:`to_pose` to obtain the equivalent 3D
+    calculations are required, use :attr:`pose` to obtain the equivalent 3D
     :class:`Pose`.
     """
 
@@ -2486,7 +2593,8 @@ class Pose2D(sm.SymbolicMathType, SpatialType, SubclassJSONSerializer):
     # Conversion to 3D
     # ------------------------------------------------------------------
 
-    def to_pose(self) -> Pose:
+    @property
+    def pose(self) -> Pose:
         """
         Convert to a 3D :class:`Pose` with z=0, roll=0, pitch=0.
         """
@@ -2501,7 +2609,7 @@ class Pose2D(sm.SymbolicMathType, SpatialType, SubclassJSONSerializer):
         )
 
     # ------------------------------------------------------------------
-    # Pose-like interface (delegates to to_pose())
+    # Pose-like interface (delegates to pose)
     # ------------------------------------------------------------------
 
     @property
@@ -2517,13 +2625,21 @@ class Pose2D(sm.SymbolicMathType, SpatialType, SubclassJSONSerializer):
 
     @property
     def quaternion(self) -> Quaternion:
-        return self.to_pose().quaternion
+        return self.pose.quaternion
 
-    def to_rotation_matrix(self) -> RotationMatrix:
-        return self.to_pose().to_rotation_matrix()
+    @property
+    def rotation_matrix(self) -> RotationMatrix:
+        """
+        :return: The rotation around the z-axis by the yaw of this pose.
+        """
+        return self.pose.rotation_matrix
 
-    def to_homogeneous_matrix(self) -> HomogeneousTransformationMatrix:
-        return self.to_pose().to_homogeneous_matrix()
+    @property
+    def homogeneous_matrix(self) -> HomogeneousTransformationMatrix:
+        """
+        :return: The transformation that moves the reference frame to this pose.
+        """
+        return self.pose.homogeneous_matrix
 
     # ------------------------------------------------------------------
     # Factory methods
@@ -2538,7 +2654,7 @@ class Pose2D(sm.SymbolicMathType, SpatialType, SubclassJSONSerializer):
         """
         Extract a Pose2D from a 3D Pose by dropping z, roll, pitch.
         """
-        _, _, yaw = pose.to_rotation_matrix().to_rpy()
+        _, _, yaw = pose.rotation_matrix.to_rpy()
         frame = reference_frame if reference_frame is not None else pose.reference_frame
         return cls(x=pose.x, y=pose.y, yaw=yaw, reference_frame=frame)
 
@@ -2558,7 +2674,7 @@ class Pose2D(sm.SymbolicMathType, SpatialType, SubclassJSONSerializer):
             reference frame to the frame it should be expressed in.
         :return: The pose in the transformation's reference frame.
         """
-        return Pose2D.from_pose(target_frame_T_reference_frame @ self.to_pose())
+        return Pose2D.from_pose(target_frame_T_reference_frame @ self.pose)
 
     @classmethod
     def from_position_and_yaw(

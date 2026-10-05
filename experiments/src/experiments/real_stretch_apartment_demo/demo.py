@@ -252,7 +252,7 @@ class StretchApartmentDemonstration(RobotDemonstration):
                 ),
                 a(PlaceAction)(
                     object_designator=cereal_body,
-                    target_location=CEREAL_SHELF_LAYER_T_CEREAL.to_pose(),
+                    target_location=CEREAL_SHELF_LAYER_T_CEREAL.pose,
                     arm=Arms.LEFT,
                 ),
                 ParkArmsAction(Arms.BOTH),

@@ -39,7 +39,7 @@ def _box_obb_from_shape(
     if center_np.shape[0] == 4:
         center_np = center_np[:3]
     center = center_np.reshape(3, 1).astype(float)
-    R = world_T_box.to_rotation_matrix().to_np().astype(float)
+    R = world_T_box.rotation_matrix.to_np().astype(float)
     if R.shape == (4, 4):
         R = R[:3, :3]
     extent = (
@@ -93,7 +93,7 @@ def region_obb_in_camera_coordinates(
     """
     obb = region_obb(region, world=world)
     if isinstance(world_T_camera, HomogeneousTransformationMatrix):
-        R = world_T_camera.to_rotation_matrix().to_np()
+        R = world_T_camera.rotation_matrix.to_np()
         t = world_T_camera.position.to_np()
     else:
         R = world_T_camera[:3, :3]

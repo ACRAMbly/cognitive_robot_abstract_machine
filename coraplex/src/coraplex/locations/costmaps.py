@@ -277,7 +277,7 @@ class Costmap(PoseGeneratorBackend):
             not np.allclose(self.origin.x, other_cm.origin.x)
             or not np.allclose(self.origin.y, other_cm.origin.y)
             or not np.allclose(
-                self.origin.to_rotation_matrix(), other_cm.origin.to_rotation_matrix()
+                self.origin.rotation_matrix, other_cm.origin.rotation_matrix
             )
         ):
             raise ValueError(
@@ -643,7 +643,7 @@ class VisibilityCostmap(Costmap):
 
         r_t = RayTracer(self.world)
 
-        origin_copy = deepcopy(self.origin).to_homogeneous_matrix()
+        origin_copy = deepcopy(self.origin).homogeneous_matrix
 
         for _ in range(4):
             origin_copy = origin_copy @ HomogeneousTransformationMatrix.from_xyz_rpy(

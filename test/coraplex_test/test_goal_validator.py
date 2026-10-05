@@ -418,7 +418,7 @@ def validate_list_of_poses_goal(goal_validator, world):
             world.root,
         )
         world.get_body_by_name("base_footprint").parent_connection.origin = (
-            current_pose_goal.to_homogeneous_matrix()
+            current_pose_goal.homogeneous_matrix
         )
         assert np.allclose(
             (world.get_body_by_name("base_footprint").global_pose).position.to_list(),

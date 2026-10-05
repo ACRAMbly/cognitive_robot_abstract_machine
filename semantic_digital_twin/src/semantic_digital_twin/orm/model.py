@@ -21,7 +21,7 @@ from semantic_digital_twin.spatial_types.spatial_types import (
     Pose,
     Point2,
     Pose2D,
-    RollPitchYaw,
+    AxisAngle,
     SpatialType,
 )
 from semantic_digital_twin.world import World
@@ -165,27 +165,44 @@ class QuaternionMapping(AlternativeMapping[Quaternion]):
 
 
 @dataclass(eq=False)
-class RotationMatrixMapping(AlternativeMapping[RotationMatrix]):
-    roll_pitch_yaw: RollPitchYaw
+class AxisAngleMapping(AlternativeMapping[AxisAngle]):
+    axis: Vector3
+    angle: float
     reference_frame: Optional[KinematicStructureEntity]
 
     @classmethod
-    def from_domain_object(cls, obj: RotationMatrix):
+    def from_domain_object(cls, obj: AxisAngle):
         return cls(
-            roll_pitch_yaw=obj.roll_pitch_yaw, reference_frame=obj.reference_frame
+            axis=obj.axis, angle=float(obj.angle), reference_frame=obj.reference_frame
         )
 
-    def to_domain_object(self) -> RotationMatrix:
-        return RotationMatrix.from_rpy(
-            roll=self.roll_pitch_yaw.roll,
-            pitch=self.roll_pitch_yaw.pitch,
-            yaw=self.roll_pitch_yaw.yaw,
-            reference_frame=self.reference_frame,
+    def to_domain_object(self) -> AxisAngle:
+        return AxisAngle(
+            axis=self.axis, angle=self.angle, reference_frame=self.reference_frame
         )
 
     @classmethod
     def required_pre_build_classes(cls) -> List[Type]:
-        return [RollPitchYaw]
+        return [Vector3]
+
+
+@dataclass(eq=False)
+class RotationMatrixMapping(AlternativeMapping[RotationMatrix]):
+    axis_angle: AxisAngle
+    reference_frame: Optional[KinematicStructureEntity]
+
+    @classmethod
+    def from_domain_object(cls, obj: RotationMatrix):
+        return cls(axis_angle=obj.axis_angle, reference_frame=obj.reference_frame)
+
+    def to_domain_object(self) -> RotationMatrix:
+        rotation_matrix = self.axis_angle.rotation_matrix
+        rotation_matrix.reference_frame = self.reference_frame
+        return rotation_matrix
+
+    @classmethod
+    def required_pre_build_classes(cls) -> List[Type]:
+        return [AxisAngle]
 
 
 @dataclass(eq=False)
@@ -193,7 +210,7 @@ class HomogeneousTransformationMatrixMapping(
     AlternativeMapping[HomogeneousTransformationMatrix]
 ):
     position: Point3
-    roll_pitch_yaw: RollPitchYaw
+    axis_angle: AxisAngle
 
     reference_frame: Optional[KinematicStructureEntity]
     child_frame: Optional[KinematicStructureEntity]
@@ -202,7 +219,7 @@ class HomogeneousTransformationMatrixMapping(
     def from_domain_object(cls, obj: HomogeneousTransformationMatrix):
         return cls(
             position=obj.position,
-            roll_pitch_yaw=obj.roll_pitch_yaw,
+            axis_angle=obj.axis_angle,
             reference_frame=obj.reference_frame,
             child_frame=obj.child_frame,
         )
@@ -210,40 +227,34 @@ class HomogeneousTransformationMatrixMapping(
     def to_domain_object(self) -> HomogeneousTransformationMatrix:
         return HomogeneousTransformationMatrix.from_point_rotation_matrix(
             point=self.position,
-            rotation_matrix=RotationMatrix.from_rpy(
-                roll=self.roll_pitch_yaw.roll,
-                pitch=self.roll_pitch_yaw.pitch,
-                yaw=self.roll_pitch_yaw.yaw,
-            ),
+            rotation_matrix=self.axis_angle.rotation_matrix,
             reference_frame=self.reference_frame,
             child_frame=self.child_frame,
         )
 
     @classmethod
     def required_pre_build_classes(cls) -> List[Type]:
-        return [Point3, RollPitchYaw]
+        return [Point3, AxisAngle]
 
 
 @dataclass(eq=False)
 class PoseMapping(AlternativeMapping[Pose]):
     position: Point3
-    orientation: Quaternion
+    axis_angle: AxisAngle
     reference_frame: Optional[KinematicStructureEntity] = field(
         default=None, kw_only=True
     )
 
     @classmethod
     def from_domain_object(cls, obj: Pose):
-        position = obj.position
-        orientation = obj.orientation
-        result = cls(position=position, orientation=orientation)
+        result = cls(position=obj.position, axis_angle=obj.axis_angle)
         result.reference_frame = obj.reference_frame
         return result
 
     def to_domain_object(self) -> Pose:
         return Pose(
             position=self.position,
-            orientation=self.orientation,
+            orientation=self.axis_angle.quaternion,
             reference_frame=self.reference_frame,
         )
 
@@ -278,7 +289,7 @@ class PoseMapping(AlternativeMapping[Pose]):
 
     @classmethod
     def required_pre_build_classes(cls) -> List[Type]:
-        return [Point3, Quaternion]
+        return [Point3, AxisAngle]
 
 
 @dataclass(eq=False)

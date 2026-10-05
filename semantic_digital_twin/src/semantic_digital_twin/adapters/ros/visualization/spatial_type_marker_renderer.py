@@ -342,7 +342,7 @@ class PoseLikeMarkerRenderer(SpatialTypeMarkerRenderer[Pose]):
         if isinstance(spatial_type, RotationMatrix):
             return np.zeros(3), spatial_type.quaternion.evaluate()
         if isinstance(spatial_type, Pose2D):
-            spatial_type = spatial_type.to_pose()
+            spatial_type = spatial_type.pose
         return (
             spatial_type.position.evaluate()[:3],
             spatial_type.quaternion.evaluate(),

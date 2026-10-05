@@ -77,11 +77,9 @@ class GrasPoseMapping(PoseMapping, AlternativeMapping[GraspPose]):
 
     @classmethod
     def from_domain_object(cls, obj: GraspPose) -> Self:
-        position = obj.position
-        orientation = obj.quaternion
         result = cls(
-            position=position,
-            orientation=orientation,
+            position=obj.position,
+            axis_angle=obj.axis_angle,
             reference_frame=obj.reference_frame,
             grasp_description=obj.grasp_description,
             arm=obj.arm,
@@ -91,7 +89,7 @@ class GrasPoseMapping(PoseMapping, AlternativeMapping[GraspPose]):
     def to_domain_object(self) -> T:
         return GraspPose(
             position=self.position,
-            orientation=self.orientation,
+            orientation=self.axis_angle.quaternion,
             reference_frame=self.reference_frame,
             grasp_description=self.grasp_description,
             arm=self.arm,

@@ -423,8 +423,8 @@ class ViewDependentSpatialRelation(PointSpatialRelation, ABC):
             reference_frame=self.point_of_view.reference_frame,
         )
 
-        s_body = front_norm.dot(self.point.to_vector3())
-        s_other = front_norm.dot(self.other.to_vector3())
+        s_body = front_norm.dot(self.point.vector3)
+        s_other = front_norm.dot(self.other.vector3)
         return (s_body - s_other).compile()()
 
 

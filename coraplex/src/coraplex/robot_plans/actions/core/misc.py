@@ -163,8 +163,8 @@ class MoveToReach(ActionDescription, HasTcpGoalThresholds):
         target_pose = Pose(
             self.target_pose_end_effector.position,
             (
-                self.target_pose_end_effector.to_rotation_matrix()
-                @ grasp_orientation.to_rotation_matrix()
+                self.target_pose_end_effector.rotation_matrix
+                @ grasp_orientation.rotation_matrix
             ).quaternion,
             self.target_pose_end_effector.reference_frame,
         )
@@ -188,7 +188,7 @@ class MoveToReach(ActionDescription, HasTcpGoalThresholds):
 
         :return: The calculated standing pose on the floor.
         """
-        reference_T_target = self.target_pose_end_effector.to_homogeneous_matrix()
+        reference_T_target = self.target_pose_end_effector.homogeneous_matrix
         target_V_robot = -Vector3(
             x=self.target_pose_offset_robot.x, y=self.target_pose_offset_robot.y
         )
@@ -207,9 +207,7 @@ class MoveToReach(ActionDescription, HasTcpGoalThresholds):
             reference_frame=self.target_pose_end_effector.reference_frame,
         )
         reference_T_robot = reference_T_target @ target_T_robot
-        world_T_robot = self.world.transform(
-            reference_T_robot.to_pose(), self.world.root
-        )
+        world_T_robot = self.world.transform(reference_T_robot.pose, self.world.root)
         return Pose.from_xyz_rpy(
             x=world_T_robot.x,
             y=world_T_robot.y,

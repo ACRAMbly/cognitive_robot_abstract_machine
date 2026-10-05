@@ -99,10 +99,10 @@ class PoseReached(RootRelativeGoalMonitor):
         distance_to_goal = root_P_goal.euclidean_distance(root_P_current)
         position_reached = distance_to_goal < self.position_threshold
 
-        root_R_goal = root_T_goal.to_rotation_matrix()
+        root_R_goal = root_T_goal.rotation_matrix
         root_R_current = context.world.compose_forward_kinematics_expression(
             self.root_link, self.tip_link
-        ).to_rotation_matrix()
+        ).rotation_matrix
         rotation_error = root_R_current.rotational_distance(root_R_goal)
         orientation_reached = sm.abs(rotation_error) < self.orientation_threshold
 
@@ -160,7 +160,7 @@ class OrientationReached(RootRelativeGoalMonitor):
 
         root_R_current = context.world.compose_forward_kinematics_expression(
             self.root_link, self.tip_link
-        ).to_rotation_matrix()
+        ).rotation_matrix
         rotation_error = root_R_current.rotational_distance(root_R_goal)
         return NodeArtifacts(observation=sm.abs(rotation_error) < self.threshold)
 
@@ -234,7 +234,7 @@ class VectorsAligned(MotionStatechartNode):
 
         root_R_tip = context.world.compose_forward_kinematics_expression(
             self.root_link, self.tip_link
-        ).to_rotation_matrix()
+        ).rotation_matrix
         root_V_tip_normal = root_R_tip.dot(tip_V_tip_normal)
         error = root_V_tip_normal.angle_between(root_V_root_normal)
         return NodeArtifacts(observation=error < self.threshold)

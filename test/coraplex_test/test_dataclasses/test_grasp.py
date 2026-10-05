@@ -719,7 +719,7 @@ def test_from_attachment_recovers_the_grasp_the_body_is_held_in(
     milk.parent_connection.origin = (
         HomogeneousTransformationMatrix.from_point_rotation_matrix(
             point=milk.parent_connection.origin.position,
-            rotation_matrix=grasp.grasp_orientation().to_rotation_matrix().inverse(),
+            rotation_matrix=grasp.grasp_orientation().rotation_matrix.inverse(),
         )
     )
     world.notify_state_change()

@@ -178,8 +178,8 @@ class NavigateActionServerTask(
         position_error = root_T_goal.position.euclidean_distance(
             root_T_current.position
         )
-        rotation_error = root_T_goal.to_rotation_matrix().rotational_distance(
-            root_T_current.to_rotation_matrix()
+        rotation_error = root_T_goal.rotation_matrix.rotational_distance(
+            root_T_current.rotation_matrix
         )
 
         artifacts.observation = sm.trinary_logic_and(

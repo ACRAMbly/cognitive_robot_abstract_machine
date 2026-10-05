@@ -125,7 +125,7 @@ class GraspScorer:
         :return: The calculated float score for the grasp.
         """
         total_score = 0.0
-        grasp_pose_matrix = grasp_pose.to_homogeneous_matrix().to_np()
+        grasp_pose_matrix = grasp_pose.homogeneous_matrix.to_np()
 
         gripper_at_pose = gripper_mesh.copy()
         gripper_at_pose.apply_transform(grasp_pose_matrix)
@@ -271,7 +271,9 @@ def load_successful_grasps_from_dataset(
     with Session(engine) as session:
         query = (
             select(GrasPoseMappingDAO)
-            .join(BodyDAO, GrasPoseMappingDAO._reference_frame_id == BodyDAO.database_id)
+            .join(
+                BodyDAO, GrasPoseMappingDAO._reference_frame_id == BodyDAO.database_id
+            )
             .where(BodyDAO.id == object_uuid)
         )
 

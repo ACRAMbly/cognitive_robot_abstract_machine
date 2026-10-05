@@ -360,14 +360,14 @@ def test_move_tcp_follows_sine_waypoints(stationary_block_context, anchor_positi
     world, view, context = stationary_block_context
     right_arm = ViewManager.get_arm_view(Arms.RIGHT, view)
     anchor = Pose(anchor_position, reference_frame=world.root)
-    anchor_T = anchor.to_homogeneous_matrix()
+    anchor_T = anchor.homogeneous_matrix
     offset_T = HomogeneousTransformationMatrix.from_xyz_axis_angle(
         z=-0.03,
         axis=(0, 1, 0),
         angle=np.pi / 2,
         reference_frame=world.root,
     )
-    target_pose = (anchor_T @ offset_T).to_pose()
+    target_pose = (anchor_T @ offset_T).pose
     waypoints = PoseTrajectory(_make_sine_scan_poses(target_pose, lane_axis="z"))
 
     plan = execute_single(

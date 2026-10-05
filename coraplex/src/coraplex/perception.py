@@ -171,9 +171,7 @@ class Detection:
         robot = world.get_semantic_annotations_by_type(AbstractRobot)[0]
 
         # Foundation Pose may return a upside down pose. this detects and fixes it by rotation around x by 180 degree
-        detected_global_pose = world.transform(
-            self.pose, world.root
-        ).to_homogeneous_matrix()
+        detected_global_pose = world.transform(self.pose, world.root).homogeneous_matrix
         detected_global_pose = self._with_z_up_and_x_towards(
             root_T_frame=detected_global_pose,
             root_P_target=robot.root.global_transform.position,
@@ -189,7 +187,7 @@ class Detection:
             body.parent_connection.origin = (
                 HomogeneousTransformationMatrix.from_point_rotation_matrix(
                     point=parent_T_object.position,
-                    rotation_matrix=parent_origin.to_rotation_matrix(),
+                    rotation_matrix=parent_origin.rotation_matrix,
                     reference_frame=body.parent_connection.parent,
                 )
             )
@@ -212,7 +210,7 @@ class Detection:
         root_V_target = root_P_target - root_T_frame.position
 
         flip_z = root_T_frame[2, 2] < 0
-        flip_x = root_T_frame.to_rotation_matrix().x_vector().dot(root_V_target) > 0
+        flip_x = root_T_frame.rotation_matrix.x_vector().dot(root_V_target) > 0
 
         return root_T_frame @ HomogeneousTransformationMatrix.from_xyz_rpy(
             roll=np.pi if flip_z and not flip_x else 0,

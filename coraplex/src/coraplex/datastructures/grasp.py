@@ -111,8 +111,8 @@ class GraspDescription:
             which is what :meth:`grasp_orientation` describes for a held body.
         """
         body_R_tool = (
-            body.global_pose.to_rotation_matrix().inverse()
-            @ end_effector.tool_frame.global_pose.to_rotation_matrix()
+            body.global_pose.rotation_matrix.inverse()
+            @ end_effector.tool_frame.global_pose.rotation_matrix
         )
         return body_R_tool.quaternion
 
@@ -139,8 +139,8 @@ class GraspDescription:
         # if we just did target_T_grasp_pose @ grasp_pose_R_gripper_goal we would also rotate the translation in the
         # global frame, which we dont want here. Thus we just multiply the rotations, and take the translation as is
         target_R_gripper_goal = (
-            target_T_grasp_pose.to_rotation_matrix()
-            @ grasp_pose_R_gripper_goal.to_rotation_matrix()
+            target_T_grasp_pose.rotation_matrix
+            @ grasp_pose_R_gripper_goal.rotation_matrix
         )
         target_T_gripper_goal: Pose = Pose(
             position=target_T_grasp_pose.position,
@@ -172,7 +172,7 @@ class GraspDescription:
 
         # Lift pose calculation. We want the lift pose to be moved along the global z-axis, but the final pose should be in the target frame.
         map_T_grasp = world.transform(
-            target_T_grasp_pose.to_homogeneous_matrix(), world.root
+            target_T_grasp_pose.homogeneous_matrix, world.root
         )
         grasp_T_lift = HomogeneousTransformationMatrix.from_xyz_rpy(
             z=self.manipulation_offset
@@ -347,9 +347,7 @@ class GraspDescription:
             permutations.
         """
         world = end_effector._world
-        map_T_object = world.transform(
-            pose.to_homogeneous_matrix(), world.root
-        ).to_pose()
+        map_T_object = world.transform(pose.homogeneous_matrix, world.root).pose
 
         map_T_robot = end_effector._robot.root.global_pose
 
@@ -369,7 +367,7 @@ class GraspDescription:
 
         map_V_robot_to_object = map_P_robot - map_P_object
 
-        object_R_map = map_T_object.to_rotation_matrix().inverse()
+        object_R_map = map_T_object.rotation_matrix.inverse()
 
         object_V_robot = object_R_map @ map_V_robot_to_object
 

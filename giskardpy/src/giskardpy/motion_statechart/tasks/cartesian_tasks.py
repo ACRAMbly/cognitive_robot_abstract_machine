@@ -616,7 +616,7 @@ class CartesianOrientation(CartesianTask):
         root_T_current = context.world.compose_forward_kinematics_expression(
             self.root_link, self.tip_link
         )
-        root_R_current = root_T_current.to_rotation_matrix()
+        root_R_current = root_T_current.rotation_matrix
 
         # Add constraints to rotate tip towards goal
         artifacts.geometry.add_rotation_goal_constraints(
@@ -707,7 +707,7 @@ class CartesianPose(Parallel):
                 name=f"{self.name}/orientation",
                 root_link=self.root_link,
                 tip_link=self.tip_link,
-                goal_orientation=self.goal_pose.to_rotation_matrix(),
+                goal_orientation=self.goal_pose.rotation_matrix,
                 reference_velocity=self.reference_angular_velocity,
                 threshold=self.orientation_threshold,
                 weight=self.weight,
@@ -821,7 +821,7 @@ class CartesianRotationVelocityLimit(Task):
 
         root_R_tip = context.world.compose_forward_kinematics_expression(
             self.root_link, self.tip_link
-        ).to_rotation_matrix()
+        ).rotation_matrix
 
         artifacts.geometry.add_rotational_velocity_limit(
             frame_R_current=root_R_tip,
@@ -829,7 +829,7 @@ class CartesianRotationVelocityLimit(Task):
             quadratic_weight=self.weight,
         )
 
-        _, angle = root_R_tip.to_axis_angle()
+        angle = root_R_tip.axis_angle.angle
         angle_dot = time_derivative_from_joint_motion(angle)
 
         artifacts.observation = sm.abs(angle_dot) <= self.max_angular_velocity

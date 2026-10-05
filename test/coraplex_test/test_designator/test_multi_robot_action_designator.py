@@ -147,7 +147,7 @@ def stand_facing(
     """
     return robot.mobile_base.pose_facing(
         heading_towards(world_P_stand, world_P_target, world)
-    ).to_homogeneous_matrix()
+    ).homogeneous_matrix
 
 
 @pytest.fixture(
@@ -305,7 +305,7 @@ def test_navigate_multi(multiple_robot_apartment_context, rclpy_node):
     robot_base_position = view.root.global_transform.position.to_np()
     # An identity heading points the robot's front along the world's x-axis, whatever
     # the axes its own base happens to be modelled with.
-    world_R_base = view.mobile_base.root.global_transform.to_rotation_matrix()
+    world_R_base = view.mobile_base.root.global_transform.rotation_matrix
     world_V_forward = world_R_base @ view.mobile_base.forward_axis
 
     assert robot_base_position[:3] == pytest.approx(target_position, abs=0.01)
@@ -438,7 +438,7 @@ def test_follow_tcp_path_multi(multiple_robot_apartment_context):
     grasp_axis = AxisIdentifier.from_tuple(front_axis)
 
     pose_T = world.get_body_by_name("milk.stl").global_transform
-    pose = pose_T.to_pose()
+    pose = pose_T.pose
     if grasp_axis == AxisIdentifier.X:
         target_pose = pose
     elif grasp_axis == AxisIdentifier.Z:
@@ -447,7 +447,7 @@ def test_follow_tcp_path_multi(multiple_robot_apartment_context):
             angle=np.pi / 2,
             reference_frame=world.root,
         )
-        target_pose = (pose_T @ offset_T).to_pose()
+        target_pose = (pose_T @ offset_T).pose
     else:
         target_pose = pose
 
@@ -871,7 +871,7 @@ def test_a_location_validates_a_candidate_where_navigating_to_it_would_stand(
     assert list(location) == [heading]
     np.testing.assert_allclose(
         recorder.base_poses[0].to_np(),
-        robot.mobile_base.pose_facing(heading).to_homogeneous_matrix().to_np(),
+        robot.mobile_base.pose_facing(heading).homogeneous_matrix.to_np(),
         atol=1e-9,
     )
 
@@ -940,7 +940,7 @@ def test_gcs_navigation_arrives_at_each_waypoint_facing_the_next_one(
         world_V_travel = np.array(
             [float(next_waypoint.x - waypoint.x), float(next_waypoint.y - waypoint.y)]
         )
-        world_V_facing = pose.to_rotation_matrix().to_np()[:2, 0]
+        world_V_facing = pose.rotation_matrix.to_np()[:2, 0]
 
         assert world_V_facing == pytest.approx(
             world_V_travel / np.linalg.norm(world_V_travel), abs=0.01

@@ -225,7 +225,7 @@ class WiggleInsert(ConvergingTask):
         )
         root_R_current = context.world.compose_forward_kinematics_expression(
             self.root_link, self.tip_link
-        ).to_rotation_matrix()
+        ).rotation_matrix
         root_R_goal = root_R_current.dot(tip_R_hole_normal)
 
         artifacts.geometry.add_rotation_goal_constraints(
