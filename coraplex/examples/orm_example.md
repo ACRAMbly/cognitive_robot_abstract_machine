@@ -40,10 +40,18 @@ Next, we will write a simple plan where the robot raises its torso and transport
 navigates to the milk, faces and looks at it, picks it up, navigates to the target, faces and looks at it, and places
 the milk there.
 
+Only grounded actions can be stored, so every step of the transport is given here: where the robot stands, which grasp
+it takes the milk by and with which arm. A step that is still an EQL query, as the ones
+`TransportAction.from_graspable_by_closest_grasps` builds, is refused with a `QueryCannotBePersisted`.
+
 ```python
 from coraplex.robot_plans import *
 from coraplex.execution_environment import simulated_robot
-from coraplex.robot_plans.actions.composite.transporting import TransportAction
+from coraplex.robot_plans.actions.composite.transporting import (
+    MoveAndPickUpAction,
+    MoveAndPlaceAction,
+    TransportAction,
+)
 from coraplex.robot_plans.actions.core.robot_body import MoveTorsoAction
 from coraplex.plans.factories import *
 from coraplex.testing import setup_world
@@ -53,15 +61,22 @@ from coraplex.datastructures.dataclasses import Context
 
 world = setup_world()
 pr2_view = PR2.from_world(world)
-# A location samples its candidates from a costmap, so a seed is what makes this
-# example run the same way twice.
-context = Context(world, pr2_view, sampling_seed=0)
+context = Context(world, pr2_view)
 
-description = TransportAction.from_graspable_by_closest_grasps(
-    world.get_semantic_annotations_by_type(Milk)[0],
-    Pose.from_xyz_quaternion(2.4, 3, 1.05, 0.0, 0.0, 0.0, 1.0, reference_frame=world.root),
-    pr2_view.left_arm,
-    context,
+milk = world.get_semantic_annotations_by_type(Milk)[0]
+description = TransportAction(
+    pick_up=MoveAndPickUpAction.from_standing_position(
+        standing_position=Pose.from_xyz_rpy(1.63, 1.98, 0.0, reference_frame=world.root),
+        grasp=milk.grasp_candidates()[0],
+        arm=pr2_view.left_arm,
+    ),
+    place=MoveAndPlaceAction.from_standing_position(
+        standing_position=Pose.from_xyz_rpy(1.64, 3.24, 0.0, reference_frame=world.root),
+        target_location=Pose.from_xyz_quaternion(
+            2.4, 3, 1.05, 0.0, 0.0, 0.0, 1.0, reference_frame=world.root
+        ),
+        object_designator=milk,
+    ),
 )
 plan = sequential([MoveTorsoAction(TorsoState.HIGH),
                    description], context=context).plan

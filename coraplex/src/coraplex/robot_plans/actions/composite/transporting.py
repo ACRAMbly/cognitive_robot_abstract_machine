@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing_extensions import Self
 
 from krrood.entity_query_language.factories import a, variable
@@ -22,7 +22,6 @@ from coraplex.robot_plans.actions.core.pick_up import PickUpAction
 from coraplex.robot_plans.actions.core.placing import PlaceAction
 from coraplex.robot_plans.actions.core.robot_body import ParkArmsAction
 from krrood.entity_query_language.query.match import Match
-from krrood.patterns.field_metadata import JSONMetadata
 from semantic_digital_twin.robots.robot_parts import Arm
 from semantic_digital_twin.grasping.grasp_candidates import (
     GraspCandidate,
@@ -38,14 +37,12 @@ class TransportAction(ActionDescription):
     Picks an object up with one step and puts it down with another.
     """
 
-    pick_up: MoveAndPickUpAction = field(
-        metadata=JSONMetadata(serialize=False).as_dict()
-    )
+    pick_up: MoveAndPickUpAction
     """
     The step that picks the object up.
     """
 
-    place: MoveAndPlaceAction = field(metadata=JSONMetadata(serialize=False).as_dict())
+    place: MoveAndPlaceAction
     """
     The step that puts down what :attr:`pick_up` picked up.
     """
@@ -119,12 +116,12 @@ class PickAndPlaceAction(ActionDescription):
     base of the robot.
     """
 
-    pick_up: PickUpAction = field(metadata=JSONMetadata(serialize=False).as_dict())
+    pick_up: PickUpAction
     """
     The step that picks the object up.
     """
 
-    place: PlaceAction = field(metadata=JSONMetadata(serialize=False).as_dict())
+    place: PlaceAction
     """
     The step that puts down what :attr:`pick_up` picked up.
     """
