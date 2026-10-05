@@ -14,15 +14,18 @@ from coraplex.exceptions import ReachHasNoFinalApproach
 from coraplex.locations.locations import ReachabilityLocation
 from coraplex.plans.plan_node import ActionLike, ActionNode, MotionNode, PlanNode
 from coraplex.plans.underspecified import UnderspecifiedNode
+from coraplex.plans.factories import make_node
 from coraplex.plans.plan_transformation import (
     InsertionTransformation,
     MatchedType,
+    PlanTransformation,
 )
 from coraplex.robot_plans import MoveToolCenterPointMotion
 from coraplex.robot_plans.actions.composite.facing import FaceAndLookAtAction
 from coraplex.robot_plans.actions.composite.transporting import (
     MoveAndOpenAction,
     MoveAndPickUpAction,
+    PickAndPlaceAction,
 )
 from coraplex.robot_plans.actions.core.container import OpenAction
 from coraplex.robot_plans.actions.core.misc import DetectAction
@@ -317,6 +320,35 @@ class OpenDrawerBeforeMoveAndPickUp(DrawerOpening[MoveAndPickUpAction]):
             return None
         [graspable] = graspables
         return PickUpTarget(graspable=graspable, arm=arm)
+
+
+# %% parking around a pick-and-place
+
+
+@dataclass
+class ParkArmsAroundPickAndPlaceSteps(PlanTransformation[PickAndPlaceAction]):
+    """
+    Parks the robot's arms before the pick-up of a pick-and-place, between it and the
+    place, and after the place, so that neither step starts with the arms wherever the
+    one before it left them.
+    """
+
+    def is_applicable(self, plan_node: ActionNode) -> bool:
+        return True
+
+    def apply(self, plan_node: ActionNode) -> None:
+        [steps] = plan_node.body_children
+        for step in steps.children:
+            plan_node.plan.insert_before(step, self._parking(plan_node))
+        plan_node.plan.insert_after(steps.children[-1], self._parking(plan_node))
+
+    @staticmethod
+    def _parking(plan_node: ActionNode) -> PlanNode:
+        """
+        :param plan_node: The node of the pick-and-place.
+        :return: A new node parking every arm of the robot running the plan.
+        """
+        return make_node(ParkArmsAction(plan_node.plan.robot.all_arms))
 
 
 # %% parking before anything else

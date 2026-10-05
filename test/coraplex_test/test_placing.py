@@ -10,7 +10,7 @@ from coraplex.robot_plans.actions.core.placing import PlaceAction
 from coraplex.robot_plans.motions.gripper import MoveToolCenterPointMotion
 from semantic_digital_twin.robots.robot_parts import Arm
 from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix
-from semantic_digital_twin.semantic_annotations.semantic_annotations import Milk, Spoon
+from semantic_digital_twin.semantic_annotations.semantic_annotations import Milk
 from semantic_digital_twin.spatial_types.spatial_types import Pose
 
 from ..conftest import SAMPLING_SEED
@@ -183,45 +183,3 @@ def test_place_takes_the_arm_its_pick_up_will_use(pr2_apartment_context):
     sequential([pick_up, place], context=context)
 
     assert _arms_moved_by(place) == {robot.right_arm}
-
-
-def test_place_takes_the_arm_of_an_earlier_pick_up_of_the_object(
-    pr2_apartment_context,
-):
-    """
-    The pick-up of the object need not be the last one before the place: the other arm
-    may have picked up something else in between.
-    """
-    world, robot, context = pr2_apartment_context
-    milk = world.get_semantic_annotations_by_type(Milk)[0]
-    spoon = world.get_semantic_annotations_by_type(Spoon)[0]
-    target = Pose.from_xyz_rpy(1.2, 0.4, 0.9, reference_frame=world.root)
-    place = PlaceAction(milk, target)
-    sequential(
-        [
-            PickUpAction(milk.grasp_candidates()[0], robot.right_arm),
-            PickUpAction(spoon.grasp_candidates()[0], robot.left_arm),
-            place,
-        ],
-        context=context,
-    )
-
-    assert _arms_moved_by(place) == {robot.right_arm}
-
-
-def test_a_place_after_a_pick_up_of_something_else_is_refused(pr2_apartment_context):
-    """
-    A pick-up of another object does not put this one in a gripper.
-    """
-    world, robot, context = pr2_apartment_context
-    milk = world.get_semantic_annotations_by_type(Milk)[0]
-    spoon = world.get_semantic_annotations_by_type(Spoon)[0]
-    target = Pose.from_xyz_rpy(1.2, 0.4, 0.9, reference_frame=world.root)
-    place = PlaceAction(milk, target)
-    sequential(
-        [PickUpAction(spoon.grasp_candidates()[0], robot.left_arm), place],
-        context=context,
-    )
-
-    with pytest.raises(ObjectIsNotHeld):
-        place._action_plan

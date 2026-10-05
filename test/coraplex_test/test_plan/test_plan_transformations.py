@@ -36,10 +36,12 @@ from coraplex.robot_plans.actions.composite.transporting import (
     MoveAndPickUpAction,
     TransportAction,
 )
+from coraplex.robot_plans.actions.core.placing import PlaceAction
 from coraplex.robot_plans.plan_transformations import (
     DetectBeforeGrasp,
     OpenDrawerBeforeMoveAndPickUp,
     OpenDrawerBeforePickUp,
+    ParkArmsAroundPickAndPlaceSteps,
     ParkArmsBeforeFirstAction,
 )
 from krrood.entity_query_language.factories import a, variable
@@ -59,6 +61,7 @@ from semantic_digital_twin.spatial_types.spatial_types import Pose
 from semantic_digital_twin.world import World
 
 from .test_graph_parsing import detect_actions_of, reach_action
+from ..test_transporting import pick_and_place_of_the_milk
 
 # %% transformations under test
 
@@ -1162,6 +1165,52 @@ def test_opening_a_drawer_tries_a_bounded_number_of_candidates(pr2_apartment_con
         opening.underspecified_action._get_expression_()._limit_
         == transformation.candidates_to_try
     )
+
+
+# %% parking around a pick-and-place
+
+
+def step_types_of(plan_node: ActionNode) -> List[type]:
+    """
+    :param plan_node: The node of an expanded composite action.
+    :return: The type of each step the action runs, in the order they are run.
+    """
+    [steps] = plan_node.body_children
+    return [
+        (
+            step.designator_type
+            if isinstance(step, UnderspecifiedNode)
+            else type(step.action)
+        )
+        for step in steps.children
+    ]
+
+
+def test_a_pick_and_place_does_not_park_the_arms_by_itself(pr2_apartment_context):
+    world, view, context = pr2_apartment_context
+    pick_and_place = pick_and_place_of_the_milk(world, view.right_arm)
+    plan = sequential([pick_and_place], context)
+    plan.notify()
+
+    assert step_types_of(pick_and_place.plan_node) == [PickUpAction, PlaceAction]
+
+
+def test_the_arms_are_parked_around_every_step_of_a_pick_and_place(
+    pr2_apartment_context,
+):
+    world, view, context = pr2_apartment_context
+    context.plan_transformations.append(ParkArmsAroundPickAndPlaceSteps())
+    pick_and_place = pick_and_place_of_the_milk(world, view.right_arm)
+    plan = sequential([pick_and_place], context)
+    plan.notify()
+
+    assert step_types_of(pick_and_place.plan_node) == [
+        ParkArmsAction,
+        PickUpAction,
+        ParkArmsAction,
+        PlaceAction,
+        ParkArmsAction,
+    ]
 
 
 # %% transformations that collide on one node

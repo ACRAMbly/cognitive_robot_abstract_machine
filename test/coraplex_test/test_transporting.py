@@ -191,7 +191,7 @@ def test_a_transport_of_a_graspable_stands_around_the_object_then_the_target(
 # %% picking up and placing without moving
 
 
-def _pick_and_place_of_the_milk(world: World, arm: Arm) -> PickAndPlaceAction:
+def pick_and_place_of_the_milk(world: World, arm: Arm) -> PickAndPlaceAction:
     """
     :param arm: The arm that picks the milk up and puts it down.
     :return: A pick-and-place of the milk that tries every grasp it offers.
@@ -210,7 +210,7 @@ def _pick_and_place_of_the_milk(world: World, arm: Arm) -> PickAndPlaceAction:
 
 def test_a_pick_and_place_grounds_the_steps_it_is_given(pr2_apartment_context):
     world, robot, context = pr2_apartment_context
-    pick_and_place = _pick_and_place_of_the_milk(world, robot.right_arm)
+    pick_and_place = pick_and_place_of_the_milk(world, robot.right_arm)
     sequential([pick_and_place], context)
 
     assert [
@@ -236,7 +236,7 @@ def _candidate_limits(action: LimitsItsCandidates) -> List[int]:
     "build",
     [
         lambda world, robot, context: _transport_of_the_milk(world, context),
-        lambda world, robot, context: _pick_and_place_of_the_milk(
+        lambda world, robot, context: pick_and_place_of_the_milk(
             world, robot.right_arm
         ),
     ],

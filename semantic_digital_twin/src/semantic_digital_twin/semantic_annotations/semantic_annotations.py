@@ -1002,14 +1002,35 @@ class Wall(HasApertures):
 
 
 @dataclass(eq=False)
-class Bottle(HasGraspCandidates):
+class Container(HasGraspCandidates):
+    """
+    An object that holds contents and has an opening they go in and out through.
+    """
+
+
+@dataclass(eq=False)
+class Cookware(HasGraspCandidates):
+    """
+    An object used to cook with.
+    """
+
+
+@dataclass(eq=False)
+class Tableware(HasGraspCandidates):
+    """
+    An object a table is set with for a meal.
+    """
+
+
+@dataclass(eq=False)
+class Bottle(Container):
     """
     Abstract class for bottles.
     """
 
 
 @dataclass(eq=False)
-class Statue(HasRootBody): ...
+class Statue(HasGraspCandidates): ...
 
 
 @dataclass(eq=False)
@@ -1034,7 +1055,7 @@ class MustardBottle(Bottle):
 
 
 @dataclass(eq=False)
-class DrinkingContainer(HasGraspCandidates): ...
+class DrinkingContainer(Container, Tableware): ...
 
 
 @dataclass(eq=False)
@@ -1052,11 +1073,11 @@ class Mug(DrinkingContainer):
 
 
 @dataclass(eq=False)
-class CookingContainer(HasGraspCandidates): ...
+class CookingContainer(Container, Cookware): ...
 
 
 @dataclass(eq=False)
-class Lid(HasGraspCandidates): ...
+class Lid(Cookware): ...
 
 
 @dataclass(eq=False)
@@ -1088,14 +1109,14 @@ class PotLid(Lid):
 
 
 @dataclass(eq=False)
-class Plate(HasSupportingSurface, HasGraspCandidates):
+class Plate(HasSupportingSurface, Tableware):
     """
     A plate.
     """
 
 
 @dataclass(eq=False)
-class Bowl(HasSupportingSurface, HasGraspCandidates, IsPerceivable):
+class Bowl(HasSupportingSurface, Container, Tableware, IsPerceivable):
     """
     A bowl.
     """
@@ -1263,7 +1284,7 @@ class Milk(Food, IsPerceivable):
 
 
 @dataclass(eq=False)
-class SaltContainer(HasGraspCandidates, IsPerceivable):
+class SaltContainer(Container, IsPerceivable):
     """
     A container of salt.
     """
@@ -1451,7 +1472,7 @@ class WallDecor(Decor):
 
 
 @dataclass(eq=False)
-class Cloth(HasRootBody): ...
+class Cloth(HasGraspCandidates): ...
 
 
 @dataclass(eq=False)
@@ -1495,14 +1516,14 @@ class Houseplant(HasRootBody):
 
 
 @dataclass(eq=False)
-class SprayBottle(HasGraspCandidates):
+class SprayBottle(Bottle):
     """
     A spray bottle.
     """
 
 
 @dataclass(eq=False)
-class Vase(HasGraspCandidates):
+class Vase(Container):
     """
     A vase.
     """
@@ -1522,14 +1543,14 @@ class BookFront(HasRootBody): ...
 
 
 @dataclass(eq=False)
-class SaltPepperShaker(HasGraspCandidates):
+class SaltPepperShaker(SaltContainer):
     """
     A salt and pepper shaker.
     """
 
 
 @dataclass(eq=False)
-class Cutlery(HasGraspCandidates):
+class Cutlery(Tableware):
     """
     A piece of cutlery.
     """
@@ -1580,21 +1601,21 @@ class Spoon(Cutlery, IsPerceivable): ...
 
 
 @dataclass(eq=False)
-class Pencil(HasRootBody):
+class Pencil(HasGraspCandidates):
     """
     A pencil.
     """
 
 
 @dataclass(eq=False)
-class Pen(HasRootBody):
+class Pen(HasGraspCandidates):
     """
     A pen.
     """
 
 
 @dataclass(eq=False)
-class Baseball(HasRootBody):
+class Baseball(HasGraspCandidates):
     """
     A baseball.
     """
@@ -1884,7 +1905,7 @@ class CuttingKnife(ToolWithHandle):
 
 
 @dataclass(eq=False)
-class PouringCup(Tool):
+class PouringCup(Tool, Container):
     """
     A cup for pouring liquids into containers.
     """

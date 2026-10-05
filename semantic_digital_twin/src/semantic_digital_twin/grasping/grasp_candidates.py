@@ -69,7 +69,8 @@ class GraspCandidate:
         """
         :return: The grasp frame in the world frame, where the object is now.
         """
-        return self.graspable.root.global_transform @ self.grasp_pose
+        world = self.graspable.root._world
+        return world.transform(self.grasp_pose, world.root)
 
     def moved_to(self, reference_T_object: Pose) -> Pose:
         """

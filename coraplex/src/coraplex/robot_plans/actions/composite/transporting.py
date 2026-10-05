@@ -133,15 +133,7 @@ class PickAndPlaceAction(ActionDescription, LimitsItsCandidates):
     @property
     def _action_plan(self) -> PlanNode:
         self._bound_candidates(self.pick_up, self.place)
-        return sequential(
-            [
-                ParkArmsAction(self.robot.all_arms),
-                self.pick_up,
-                ParkArmsAction(self.robot.all_arms),
-                self.place,
-                ParkArmsAction(self.robot.all_arms),
-            ]
-        )
+        return sequential([self.pick_up, self.place])
 
 
 @dataclass
