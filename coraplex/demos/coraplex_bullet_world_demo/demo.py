@@ -8,9 +8,13 @@ world to Rviz, so the run can be watched while it happens.
 Every transport leaves the grasp and the standing pose open: each pair is tried out
 before it is executed, and the first that succeeds is taken. The bowl shows why, as only
 some of the grasps around its rim can be reached from where the robot may stand.
+
+While the plan runs, SegMind segments it into the grasps, pick-ups, placings and
+containments of the place setting, and reports them once the plan is done.
 """
 
 import os
+from contextlib import AbstractContextManager
 from dataclasses import dataclass, field
 from enum import StrEnum
 
@@ -35,6 +39,13 @@ from semantic_digital_twin.api import (
     SemanticAnnotationWithRootSpecification,
     WorldSpecification,
 )
+from segmind.detectors.agent_event_detector_nodes import GraspDetector
+from segmind.detectors.coarse_event_detector_nodes import (
+    PickUpDetector,
+    PlacingDetector,
+)
+from segmind.detectors.spatial_relation_detector_nodes import ContainmentDetector
+from segmind.event_segmentation import Segmind
 from semantic_digital_twin.datastructures.definitions import TorsoState
 from semantic_digital_twin.reasoning.world_reasoner import WorldReasoner
 from semantic_digital_twin.robots.pr2 import PR2
@@ -212,7 +223,7 @@ class BulletWorldDemonstration(RobotDemonstration):
         default_factory=lambda: PlaceSettingObject(
             Milk,
             SceneFile.MILK,
-            HomogeneousTransformationMatrix.from_xyz_rpy(2.37, 2, 1.05),
+            HomogeneousTransformationMatrix.from_xyz_rpy(2.37, 2, 1.0345),
             along_table=4.8,
             height=0.82,
         )
@@ -225,7 +236,7 @@ class BulletWorldDemonstration(RobotDemonstration):
         default_factory=lambda: PlaceSettingObject(
             Bowl,
             SceneFile.BOWL,
-            HomogeneousTransformationMatrix.from_xyz_rpy(2.4, 2.2, 1),
+            HomogeneousTransformationMatrix.from_xyz_rpy(2.4, 2.2, 0.98),
             along_table=5.0,
             height=0.76,
         )
@@ -238,7 +249,7 @@ class BulletWorldDemonstration(RobotDemonstration):
         default_factory=lambda: PlaceSettingObject(
             Spoon,
             SceneFile.SPOON,
-            HomogeneousTransformationMatrix.from_xyz_rpy(-0.05, -0.05, 0),
+            HomogeneousTransformationMatrix.from_xyz_rpy(-0.05, -0.05, -0.01),
             along_table=5.2,
             height=0.74,
             across_table=3.25,
@@ -297,6 +308,24 @@ class BulletWorldDemonstration(RobotDemonstration):
             _debug=self.debug,
         )
 
+    def segment_events(self, world: World) -> AbstractContextManager:
+        """
+        Detect the place setting being grasped, picked up, placed and contained.
+        """
+        return Segmind.create_for_semantic_annotation_types(
+            world,
+            tuple(
+                placed_object.semantic_annotation_type
+                for placed_object in self.place_setting
+            ),
+            detector_types=(
+                PickUpDetector,
+                PlacingDetector,
+                ContainmentDetector,
+                GraspDetector,
+            ),
+        )
+
     def build_plan(self, context: Context) -> PlanNode:
         """
         Carry each object to its place on the table.
@@ -333,6 +362,7 @@ class BulletWorldDemonstration(RobotDemonstration):
 def main(
     execution_type: ExecutionType = ExecutionType.SIMULATED,
     collision_avoidance: bool = True,
+    event_segmentation: bool = True,
     debug: bool = False,
 ) -> None:
     """
@@ -340,6 +370,7 @@ def main(
 
     :param execution_type: Whether to drive the real robot or simulate it.
     :param collision_avoidance: Whether every motion state chart avoids collisions.
+    :param event_segmentation: Whether SegMind segments the run into events.
     :param debug: Whether to run in debug mode, publishing every copy of the world a
         candidate is tried in.
     """
@@ -347,6 +378,7 @@ def main(
         used_robot=PR2,
         execution_type=execution_type,
         collision_avoidance=collision_avoidance,
+        event_segmentation=event_segmentation,
         debug=debug,
     ).run()
 
