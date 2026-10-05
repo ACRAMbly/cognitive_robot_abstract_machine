@@ -16,27 +16,6 @@ from probabilistic_model.probabilistic_circuit.tensorized.input_layer.multivaria
     MultivariateGaussianArray,
 )
 
-x, y, z = Continuous("x"), Continuous("y"), Continuous("z")
-
-DISTRIBUTIONS = [
-    MultivariateGaussianDistribution(
-        variables=(x, y, z),
-        mean=np.array([0.0, 1.0, -1.0]),
-        covariance=Covariance.from_matrix(
-            [[1.0, 0.6, 0.1], [0.6, 2.0, -0.3], [0.1, -0.3, 0.5]]
-        ),
-    ),
-    MultivariateGaussianDistribution(
-        variables=(x, y, z),
-        mean=np.array([2.0, -1.0, 0.5]),
-        covariance=Covariance.from_matrix(
-            [[0.5, -0.2, 0.0], [-0.2, 0.8, 0.4], [0.0, 0.4, 3.0]]
-        ),
-    ),
-]
-
-POINTS = np.array([[0.0, 0.0, 0.0], [1.0, -2.0, 0.5], [2.5, 1.0, -1.0]])
-
 
 class MultivariateGaussianArrayTestCase(unittest.TestCase):
     """
@@ -45,16 +24,34 @@ class MultivariateGaussianArrayTestCase(unittest.TestCase):
     """
 
     def setUp(self):
+        self.x, self.y, self.z = Continuous("x"), Continuous("y"), Continuous("z")
+        self.distributions = [
+            MultivariateGaussianDistribution(
+                variables=(self.x, self.y, self.z),
+                mean=np.array([0.0, 1.0, -1.0]),
+                covariance=Covariance.from_matrix(
+                    [[1.0, 0.6, 0.1], [0.6, 2.0, -0.3], [0.1, -0.3, 0.5]]
+                ),
+            ),
+            MultivariateGaussianDistribution(
+                variables=(self.x, self.y, self.z),
+                mean=np.array([2.0, -1.0, 0.5]),
+                covariance=Covariance.from_matrix(
+                    [[0.5, -0.2, 0.0], [-0.2, 0.8, 0.4], [0.0, 0.4, 3.0]]
+                ),
+            ),
+        ]
+        self.points = np.array([[0.0, 0.0, 0.0], [1.0, -2.0, 0.5], [2.5, 1.0, -1.0]])
         self.gaussians = MultivariateGaussianArray.from_distributions(
-            DISTRIBUTIONS, [x, y, z]
+            self.distributions, [self.x, self.y, self.z]
         )
 
     def test_from_distributions_lays_the_parameters_out_in_the_given_order(self):
         reordered = MultivariateGaussianArray.from_distributions(
-            DISTRIBUTIONS, [z, x, y]
+            self.distributions, [self.z, self.x, self.y]
         )
         order = [2, 0, 1]
-        for index, distribution in enumerate(DISTRIBUTIONS):
+        for index, distribution in enumerate(self.distributions):
             np.testing.assert_array_equal(
                 reordered.mean[index], distribution.mean[order]
             )
@@ -65,10 +62,13 @@ class MultivariateGaussianArrayTestCase(unittest.TestCase):
 
     def test_log_density_is_the_log_likelihood_of_every_distribution(self):
         expected = np.stack(
-            [distribution.log_likelihood(POINTS) for distribution in DISTRIBUTIONS],
+            [
+                distribution.log_likelihood(self.points)
+                for distribution in self.distributions
+            ],
             axis=1,
         )
-        np.testing.assert_allclose(self.gaussians.log_density(POINTS), expected)
+        np.testing.assert_allclose(self.gaussians.log_density(self.points), expected)
 
     def test_probability_of_hyperrectangles(self):
         hyperrectangles = HyperrectangleArray.of_simple_intervals(
@@ -81,7 +81,7 @@ class MultivariateGaussianArrayTestCase(unittest.TestCase):
             multivariate_normal(
                 distribution.mean[:2], distribution.covariance.matrix[:2, :2]
             ).cdf([1.0, 0.5], lower_limit=[-1.0, -2.0])
-            for distribution in DISTRIBUTIONS
+            for distribution in self.distributions
         ]
         np.testing.assert_allclose(
             self.gaussians.probability_of_hyperrectangles(hyperrectangles),
@@ -91,8 +91,8 @@ class MultivariateGaussianArrayTestCase(unittest.TestCase):
 
     def test_marginal_is_the_marginal_of_every_distribution(self):
         marginal = self.gaussians.marginal(np.array([0, 2]))
-        for index, distribution in enumerate(DISTRIBUTIONS):
-            expected = distribution.marginal([x, z])
+        for index, distribution in enumerate(self.distributions):
+            expected = distribution.marginal([self.x, self.z])
             np.testing.assert_allclose(marginal.mean[index], expected.mean)
             np.testing.assert_allclose(
                 marginal.covariance.matrices[index], expected.covariance.matrix
@@ -102,9 +102,9 @@ class MultivariateGaussianArrayTestCase(unittest.TestCase):
         conditional = self.gaussians.conditional(
             np.array([1]), np.array([0, 2]), np.array([0.3])
         )
-        for index, distribution in enumerate(DISTRIBUTIONS):
-            expected, _ = distribution.log_conditional({y: 0.3})
-            gaussian = expected.marginal([x, z])
+        for index, distribution in enumerate(self.distributions):
+            expected, _ = distribution.log_conditional({self.y: 0.3})
+            gaussian = expected.marginal([self.x, self.z])
             np.testing.assert_allclose(conditional.mean[index], gaussian.mean)
             np.testing.assert_allclose(
                 conditional.covariance.matrices[index], gaussian.covariance.matrix

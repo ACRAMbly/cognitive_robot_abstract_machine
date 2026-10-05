@@ -61,7 +61,7 @@ class QuadraturePoints:
     """
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class MomentIntegration:
     """
     How the moments of a Gaussian confined to a box are integrated numerically: by

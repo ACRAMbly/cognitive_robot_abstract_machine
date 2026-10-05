@@ -1339,3 +1339,8 @@ class TestMomentIntegration:
         assert len(points.values) == 6
         assert np.sum(points.weights) == pytest.approx(2.0)
         assert np.sum(points.weights * points.values**3) == pytest.approx(4.0)
+
+    def test_the_settings_cannot_be_changed_after_creation(self):
+        moment_integration = MomentIntegration()
+        with pytest.raises(dataclasses.FrozenInstanceError):
+            moment_integration.panels = 1
