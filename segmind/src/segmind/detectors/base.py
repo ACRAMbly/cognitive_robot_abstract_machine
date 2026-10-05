@@ -4,6 +4,8 @@ from abc import abstractmethod, ABC
 from dataclasses import dataclass, field
 from typing import Optional, Dict, Set, List, Any, Sequence, Tuple, Type
 
+from typing_extensions import TypeVar
+
 from giskardpy.motion_statechart.context import (
     MotionStatechartContext,
     ContextExtension,
@@ -11,6 +13,7 @@ from giskardpy.motion_statechart.context import (
 from giskardpy.motion_statechart.data_types import ObservationStateValues
 from giskardpy.motion_statechart.graph_node import MotionStatechartNode, NodeArtifacts
 from giskardpy.motion_statechart.motion_statechart import MotionStatechart
+from krrood.entity_query_language.predicate import Triple
 from segmind.datastructures.events import MotionEvent, DetectionEvent, RotationEvent
 from segmind.datastructures.object_tracker import ObjectTrackerFactory
 from segmind.event_logger import EventLogger
@@ -34,6 +37,11 @@ class DetectorStateChart(MotionStatechart):
 IndexedBodyPairs = Dict[Body, Set[Body]]
 """
 Type hint for dictionaries mapping bodies to sets of bodies
+"""
+
+BodyRelation = TypeVar("BodyRelation", bound=Triple[Body, Body])
+"""
+A relation whose subject and object are both bodies.
 """
 
 
@@ -274,7 +282,7 @@ class AbstractDetector(MotionStatechartNode, ABC):
         self,
         context: MotionStatechartContext,
         tracked_objects: List[Body],
-        predicate,
+        relation: Type[BodyRelation],
         candidates: Optional[List[Body]] = None,
     ) -> Dict[Body, Set[Body]]:
         """
@@ -282,7 +290,8 @@ class AbstractDetector(MotionStatechartNode, ABC):
 
         :param context: The context containing world information.
         :param tracked_objects: List of bodies to check for contact changes.
-        :param predicate: Function that returns true if the objects are related.
+        :param relation: The relation between two bodies, with each tracked body as its
+            subject and each other body as its object.
         :param candidates: The bodies a tracked object may be related to; every
             collidable body of the world when not given. The bodies
             :meth:`bodies_left_out` names are left out of them.
@@ -298,7 +307,7 @@ class AbstractDetector(MotionStatechartNode, ABC):
             for body in candidates:
                 if body is tracked_object:
                     continue
-                if predicate(tracked_object, body):
+                if relation.from_subject_object(tracked_object, body)():
                     related_bodies.setdefault(tracked_object, set()).add(body)
         return related_bodies
 

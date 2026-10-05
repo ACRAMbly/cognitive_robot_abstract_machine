@@ -16,7 +16,7 @@ from segmind.datastructures.events import (
     InsertionEvent,
 )
 
-from semantic_digital_twin.reasoning.predicates import is_supported_by, InsideOf
+from semantic_digital_twin.reasoning.predicates import SupportedBy, InsideOf
 from semantic_digital_twin.world_description.world_entity import Body
 
 from segmind.detectors.atomic_event_detectors_nodes import ContactDetector
@@ -59,7 +59,7 @@ class SupportDetector(AbstractDetector):
         supports_now = self.get_relation(
             context,
             objects_to_check,
-            is_supported_by,
+            SupportedBy,
             candidates=self.bodies_outside_end_effectors(context.world),
         )
         latest_supports = segmind_context.latest_support

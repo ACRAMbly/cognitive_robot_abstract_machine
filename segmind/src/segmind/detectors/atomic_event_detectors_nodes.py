@@ -17,7 +17,7 @@ from segmind.datastructures.events import (
     StopRotationEvent,
 )
 from segmind.detectors.base import SegmindContext, AbstractDetector
-from semantic_digital_twin.reasoning.predicates import contact
+from semantic_digital_twin.reasoning.predicates import InContactWith
 from semantic_digital_twin.spatial_types.spatial_types import Pose
 from semantic_digital_twin.world import World
 from semantic_digital_twin.world_description.world_entity import Body
@@ -60,7 +60,7 @@ class ContactDetector(AbstractDetector):
         :return: The contacts formed, then the contacts lost, apart from those of the
             robot's end effectors while the robot is left out.
         """
-        contacts_now = self.get_relation(context, tracked_objects, contact)
+        contacts_now = self.get_relation(context, tracked_objects, InContactWith)
         latest_contacts = segmind_context.latest_contact_bodies
         new_contacts = self.remember_new_relations(latest_contacts, contacts_now)
         lost_contacts = self.forget_lost_relations(
