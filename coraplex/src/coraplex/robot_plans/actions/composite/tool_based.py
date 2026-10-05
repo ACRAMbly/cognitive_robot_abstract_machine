@@ -12,7 +12,6 @@ from typing_extensions import Any, List, Optional, Tuple, Union
 from semantic_digital_twin.datastructures.alignment import AlignmentPair
 from semantic_digital_twin.robots.robot_part_mixins import HasMobileBase
 from semantic_digital_twin.robots.robot_parts import Arm
-from semantic_digital_twin.grasping.grasp_candidates import HasGraspCandidates
 from semantic_digital_twin.semantic_annotations.semantic_annotations import Tool
 from semantic_digital_twin.spatial_types import (
     HomogeneousTransformationMatrix,
@@ -193,7 +192,7 @@ class MixingAction(ToolMotionAction):
     Mix the contents of a container with a tool.
     """
 
-    container: HasGraspCandidates
+    container: Body
     """
     The container (e.g., a bowl) whose contents are mixed.
     """
@@ -208,18 +207,18 @@ class MixingAction(ToolMotionAction):
     def _build_tool_path(self) -> ToolPath:
         if self.mix_duration > 0.0:
             return build_container_path(
-                self.container.root,
+                self.container,
                 pattern=MixingPattern.STIR,
                 mix_duration=self.mix_duration,
             )
-        return build_container_path(self.container.root, pattern=MixingPattern.SPIRAL)
+        return build_container_path(self.container, pattern=MixingPattern.SPIRAL)
 
     def _path_frame(self) -> HomogeneousTransformationMatrix:
-        return self.container.root.global_pose.to_homogeneous_matrix()
+        return self.container.global_pose.to_homogeneous_matrix()
 
     @property
     def _alignment_target(self) -> Optional[Union[Body, Pose]]:
-        return self.container.root
+        return self.container
 
 
 @dataclass(kw_only=True)
@@ -228,7 +227,7 @@ class CuttingAction(ToolMotionAction):
     Cut a food object with a tool.
     """
 
-    object_to_cut: HasGraspCandidates
+    object_to_cut: Body
     """
     The object to cut.
     """
@@ -260,7 +259,7 @@ class CuttingAction(ToolMotionAction):
 
     def _build_tool_path(self) -> ToolPath:
         return build_cutting_path(
-            self.object_to_cut.root,
+            self.object_to_cut,
             technique=self.technique,
             slice_thickness=self.slice_thickness,
             number_of_cuts_on_local_x_axis=self.number_of_cuts_on_local_x_axis,
@@ -268,11 +267,11 @@ class CuttingAction(ToolMotionAction):
         )
 
     def _path_frame(self) -> HomogeneousTransformationMatrix:
-        return self.object_to_cut.root.global_pose.to_homogeneous_matrix()
+        return self.object_to_cut.global_pose.to_homogeneous_matrix()
 
     @property
     def _alignment_target(self) -> Optional[Union[Body, Pose]]:
-        return self.object_to_cut.root
+        return self.object_to_cut
 
 
 @dataclass(kw_only=True)
@@ -281,9 +280,9 @@ class WipingAction(ToolMotionAction):
     Wipe a surface or a patch around a target pose with a tool.
     """
 
-    surface: Optional[HasGraspCandidates] = None
+    surface: Optional[Body] = None
     """
-    The surface to wipe.
+    The surface body to wipe.
 
     If None, ``target_pose`` is used instead.
     """
@@ -325,7 +324,7 @@ class WipingAction(ToolMotionAction):
 
     def _build_tool_path(self) -> ToolPath:
         if self.surface is not None:
-            return build_surface_path(self.surface.root, technique=self.technique)
+            return build_surface_path(self.surface, technique=self.technique)
         if self.technique is WipingTechnique.SPREAD:
             return ToolPath(
                 [
@@ -354,7 +353,7 @@ class WipingAction(ToolMotionAction):
 
     def _path_frame(self) -> HomogeneousTransformationMatrix:
         if self.surface is not None:
-            return self.surface.root.global_pose.to_homogeneous_matrix()
+            return self.surface.global_pose.to_homogeneous_matrix()
         if self.target_pose.reference_frame is None:
             self.target_pose.reference_frame = self.world.root
         return self.target_pose.to_homogeneous_matrix()
@@ -362,7 +361,7 @@ class WipingAction(ToolMotionAction):
     @property
     def _alignment_target(self) -> Optional[Union[Body, Pose]]:
         if self.surface is not None:
-            return self.surface.root
+            return self.surface
         return self.target_pose
 
     def _perform_plan(self) -> None:
@@ -399,7 +398,7 @@ class PouringAction(FullBodyControlledAction, HasTcpGoalThresholds):
     to the target's rim.
     """
 
-    target_container: HasGraspCandidates
+    target_container: Body
     """
     The container that is poured into.
     """
@@ -516,7 +515,7 @@ class PouringAction(FullBodyControlledAction, HasTcpGoalThresholds):
             pouring pose.
         """
         pour_side = self._effective_pour_side()
-        target_pose = self.target_container.root.global_pose
+        target_pose = self.target_container.global_pose
         robot_pose = self.robot.root.global_pose
 
         approach_x, approach_y = self._approach_direction(target_pose, robot_pose)

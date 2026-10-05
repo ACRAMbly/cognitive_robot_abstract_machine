@@ -113,7 +113,7 @@ def axes_of(pose: Pose) -> NDArray[np.float64]:
 
 def test_default_grasp_candidates_are_in_the_root_frame(milk):
     for grasp in milk.grasp_candidates():
-        assert grasp.root_T_grasp.reference_frame is milk.root
+        assert grasp.grasp_pose.reference_frame is milk.root
 
 
 def test_default_grasp_candidates_belong_to_the_annotation_that_offers_them(milk):
@@ -124,7 +124,7 @@ def test_default_grasp_candidates_belong_to_the_annotation_that_offers_them(milk
 def test_default_grasp_candidates_are_at_the_root_origin(milk):
     for grasp in milk.grasp_candidates():
         np.testing.assert_allclose(
-            grasp.root_T_grasp.to_np()[:3, 3], np.zeros(3), atol=1e-9
+            grasp.grasp_pose.to_np()[:3, 3], np.zeros(3), atol=1e-9
         )
 
 
@@ -137,13 +137,13 @@ def test_default_grasp_candidates_differ_only_in_yaw(milk):
     for grasp in milk.grasp_candidates():
         # A pure yaw keeps the frame's z-axis on the body's z-axis.
         np.testing.assert_allclose(
-            axes_of(grasp.root_T_grasp)[:, 2], [0, 0, 1], atol=1e-9
+            axes_of(grasp.grasp_pose)[:, 2], [0, 0, 1], atol=1e-9
         )
 
 
 def test_default_grasp_candidates_approach_along_evenly_spaced_yaws(milk):
     approach_yaws = sorted(
-        np.arctan2(axes_of(grasp.root_T_grasp)[1, 0], axes_of(grasp.root_T_grasp)[0, 0])
+        np.arctan2(axes_of(grasp.grasp_pose)[1, 0], axes_of(grasp.grasp_pose)[0, 0])
         for grasp in milk.grasp_candidates()
     )
     expected = np.linspace(0, 2 * np.pi, milk.grasp_candidate_count, endpoint=False)
@@ -158,7 +158,7 @@ def test_default_grasp_candidates_approach_along_evenly_spaced_yaws(milk):
 def test_bowl_grasps_sit_on_the_rim_wall(bowl):
     wall_center_radius = (BOWL_INNER_RADIUS + BOWL_OUTER_RADIUS) / 2
     for grasp in bowl.grasp_candidates():
-        position = grasp.root_T_grasp.to_np()[:3, 3]
+        position = grasp.grasp_pose.to_np()[:3, 3]
         assert np.linalg.norm(position[:2]) == pytest.approx(
             wall_center_radius, abs=1e-3
         )
@@ -167,13 +167,13 @@ def test_bowl_grasps_sit_on_the_rim_wall(bowl):
 def test_bowl_grasps_sit_below_the_rim_by_the_configured_depth(bowl):
     rim_height = BOWL_HEIGHT / 2 - bowl.rim_grasp_depth
     for grasp in bowl.grasp_candidates():
-        assert grasp.root_T_grasp.to_np()[2, 3] == pytest.approx(rim_height)
+        assert grasp.grasp_pose.to_np()[2, 3] == pytest.approx(rim_height)
 
 
 def test_bowl_grasps_approach_straight_down(bowl):
     for grasp in bowl.grasp_candidates():
         np.testing.assert_allclose(
-            axes_of(grasp.root_T_grasp)[:, 0], [0, 0, -1], atol=1e-9
+            axes_of(grasp.grasp_pose)[:, 0], [0, 0, -1], atol=1e-9
         )
 
 
@@ -183,10 +183,10 @@ def test_bowl_grasp_fingers_close_across_the_rim_wall(bowl):
     pinching along it.
     """
     for grasp in bowl.grasp_candidates():
-        position = grasp.root_T_grasp.to_np()[:3, 3]
+        position = grasp.grasp_pose.to_np()[:3, 3]
         radial = position / np.linalg.norm(position[:2])
         radial[2] = 0
-        finger_axis = axes_of(grasp.root_T_grasp)[:, 1]
+        finger_axis = axes_of(grasp.grasp_pose)[:, 1]
         assert abs(float(np.dot(finger_axis, radial))) == pytest.approx(1.0, abs=1e-6)
 
 
@@ -223,8 +223,8 @@ def test_cutlery_is_grasped_from_above_across_its_length(length_axis):
     """
     [grasp] = _spoon_lying_along(length_axis).grasp_candidates()
     approach, closing = (
-        axes_of(grasp.root_T_grasp)[:, 0],
-        axes_of(grasp.root_T_grasp)[:, 1],
+        axes_of(grasp.grasp_pose)[:, 0],
+        axes_of(grasp.grasp_pose)[:, 1],
     )
     length_direction = np.eye(3)[length_axis]
 
@@ -269,8 +269,8 @@ def test_a_grasp_from_the_body_origin_takes_the_object_at_its_own_origin(milk):
     grasp = GraspCandidate.from_body_origin(milk)
 
     assert grasp.graspable is milk
-    assert grasp.root_T_grasp.reference_frame is milk.root
-    np.testing.assert_allclose(grasp.root_T_grasp.to_np(), np.eye(4), atol=1e-9)
+    assert grasp.grasp_pose.reference_frame is milk.root
+    np.testing.assert_allclose(grasp.grasp_pose.to_np(), np.eye(4), atol=1e-9)
 
 
 def test_a_grasp_in_the_world_frame_follows_where_the_object_stands():
@@ -295,7 +295,7 @@ def test_a_grasp_in_the_world_frame_follows_where_the_object_stands():
     assert world_T_grasp.reference_frame is world_root
     np.testing.assert_allclose(
         world_T_grasp.to_np(),
-        world_T_milk.to_np() @ grasp.root_T_grasp.to_np(),
+        world_T_milk.to_np() @ grasp.grasp_pose.to_np(),
         atol=1e-9,
     )
 
@@ -327,5 +327,5 @@ def test_an_object_described_with_its_type_can_be_grasped(milk):
     )
 
     assert [
-        grasp.root_T_grasp.to_np().tolist() for grasp in described.grasp_candidates()
-    ] == [grasp.root_T_grasp.to_np().tolist() for grasp in milk.grasp_candidates()]
+        grasp.grasp_pose.to_np().tolist() for grasp in described.grasp_candidates()
+    ] == [grasp.grasp_pose.to_np().tolist() for grasp in milk.grasp_candidates()]

@@ -38,19 +38,19 @@ class GraspCandidate:
     The annotation of the object offering this grasp.
     """
 
-    root_T_grasp: Pose
+    grasp_pose: Pose
     """
     The grasp frame relative to :attr:`graspable`'s root body, so that it stays correct
     when the object moves.
     """
 
     def __post_init__(self):
-        if self.root_T_grasp.reference_frame is None:
-            raise MissingReferenceFrameError(self.root_T_grasp)
-        if self.root_T_grasp.reference_frame is not self.graspable.root:
+        if self.grasp_pose.reference_frame is None:
+            raise MissingReferenceFrameError(self.grasp_pose)
+        if self.grasp_pose.reference_frame is not self.graspable.root:
             raise ReferenceFrameMismatchError(
                 expected_frame=self.graspable.root,
-                actual_frame=self.root_T_grasp.reference_frame,
+                actual_frame=self.grasp_pose.reference_frame,
                 context="grasp pose",
             )
 
@@ -69,7 +69,7 @@ class GraspCandidate:
         """
         :return: The grasp frame in the world frame, where the object is now.
         """
-        return self.graspable.root.global_transform @ self.root_T_grasp
+        return self.graspable.root.global_transform @ self.grasp_pose
 
     def moved_to(self, reference_T_object: Pose) -> Pose:
         """
@@ -78,7 +78,7 @@ class GraspCandidate:
         :param reference_T_object: The pose the object is going to have.
         :return:``reference_T_grasp``, the grasp in the same frame that pose is in.
         """
-        return reference_T_object.to_homogeneous_matrix() @ self.root_T_grasp
+        return reference_T_object.to_homogeneous_matrix() @ self.grasp_pose
 
 
 @dataclass(eq=False)

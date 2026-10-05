@@ -377,7 +377,7 @@ def _standing_in_front_of(grasp: GraspCandidate, world: World) -> Pose:
         direction `grasp` is approached along, so that it is approached straight from
         there.
     """
-    world_T_grasp = world.transform(grasp.root_T_grasp, world.root).to_np()
+    world_T_grasp = world.transform(grasp.grasp_pose, world.root).to_np()
     world_P_standing = world_T_grasp[:3, 3] - STANDING_DISTANCE * world_T_grasp[:3, 0]
     return Pose.from_xyz_rpy(
         world_P_standing[0], world_P_standing[1], 0.0, reference_frame=world.root
@@ -389,12 +389,12 @@ def _raised(grasp: GraspCandidate, height: float) -> GraspCandidate:
     :param height: How far to move the grasp up along its object's z-axis.
     :return: `grasp`, approached the same way from higher up.
     """
-    root_P_grasp = grasp.root_T_grasp.to_np()[:3, 3] + np.array([0.0, 0.0, height])
+    root_P_grasp = grasp.grasp_pose.to_np()[:3, 3] + np.array([0.0, 0.0, height])
     return GraspCandidate(
         grasp.graspable,
         Pose(
             position=Point3.from_iterable(root_P_grasp),
-            orientation=grasp.root_T_grasp.to_quaternion(),
+            orientation=grasp.grasp_pose.to_quaternion(),
             reference_frame=grasp.graspable.root,
         ),
     )
@@ -406,14 +406,14 @@ def _turned_around(grasp: GraspCandidate, nearer_by: float = 0.0) -> GraspCandid
         approached along.
     :return: `grasp`, approached from the opposite side.
     """
-    root_T_grasp = grasp.root_T_grasp
-    root_P_grasp = root_T_grasp.to_np()[:3, 3] - nearer_by * root_T_grasp.to_np()[:3, 0]
+    grasp_pose = grasp.grasp_pose
+    root_P_grasp = grasp_pose.to_np()[:3, 3] - nearer_by * grasp_pose.to_np()[:3, 0]
     return GraspCandidate(
         grasp.graspable,
         Pose(
             position=Point3.from_iterable(root_P_grasp),
             orientation=(
-                root_T_grasp.to_rotation_matrix() @ RotationMatrix.from_rpy(yaw=np.pi)
+                grasp_pose.to_rotation_matrix() @ RotationMatrix.from_rpy(yaw=np.pi)
             ).to_quaternion(),
             reference_frame=grasp.graspable.root,
         ),
@@ -425,7 +425,7 @@ def _grasp_signature(grasp: GraspCandidate) -> tuple:
     :return: The grasp's transform, rounded, to tell grasps of separately generated
         lists apart by value.
     """
-    return tuple(np.round(grasp.root_T_grasp.to_np(), 6).ravel())
+    return tuple(np.round(grasp.grasp_pose.to_np(), 6).ravel())
 
 
 def _assert_each_standing_pose_keeps_the_closest_grasps(
@@ -532,7 +532,7 @@ def test_grasps_at_the_standing_position_itself_still_rank(pr2_apartment_context
     world, robot, context = pr2_apartment_context
     grasp = world.get_semantic_annotations_by_type(Milk)[0].grasp_candidates()[0]
     tied = [grasp, _raised(grasp, 0.0)]
-    standing_position = world.transform(grasp.root_T_grasp, world.root)
+    standing_position = world.transform(grasp.grasp_pose, world.root)
 
     closest = [
         candidate

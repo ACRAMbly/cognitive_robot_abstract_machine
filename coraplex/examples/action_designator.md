@@ -181,6 +181,7 @@ import rclpy
 from semantic_digital_twin.adapters.ros.visualization.viz_marker import VizMarkerPublisher
 
 arm = pr2.right_arm
+milk = world.get_semantic_annotations_by_type(Milk)[0]
 
 with simulated_robot:
     sequential(
@@ -190,7 +191,7 @@ with simulated_robot:
              Pose.from_xyz_rpy(1.5, 2.4, 0.0, reference_frame=world.root)
          ),
          PickUpAction(
-             grasp=(milk := world.get_semantic_annotations_by_type(Milk)[0]).grasp_candidates()[0],
+             grasp=next(iter(milk.grasp_candidates())),
              arm=arm,
          ),
          PlaceAction(

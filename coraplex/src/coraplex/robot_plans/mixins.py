@@ -354,9 +354,9 @@ class HasApproachesGraspPoses:
             body
         ).bounding_box()
 
-        grasp_position = grasp.root_T_grasp.to_np()[:3, 3]
+        grasp_position = grasp.grasp_pose.to_np()[:3, 3]
         # The grasp frame's x-axis is where the gripper comes from, so it retraces -x.
-        retrace_direction = -grasp.root_T_grasp.to_np()[:3, 0]
+        retrace_direction = -grasp.grasp_pose.to_np()[:3, 0]
         intervals = (
             bounding_box.x_interval,
             bounding_box.y_interval,

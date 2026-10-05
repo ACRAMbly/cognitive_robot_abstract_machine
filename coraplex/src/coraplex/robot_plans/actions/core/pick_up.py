@@ -103,7 +103,7 @@ class ReachAction(
     @property
     def _action_plan(self) -> PlanNode:
         poses = self.grasp_pose_sequence(
-            self.grasp.root_T_grasp, self.arm.end_effector, self.grasp
+            self.grasp.grasp_pose, self.arm.end_effector, self.grasp
         )
         pre_pose = poses.retreat if self.reverse_reach_order else poses.pre_grasp
         children = [
@@ -212,7 +212,7 @@ class PickUpAction(
     @property
     def _action_plan(self) -> PlanNode:
         lift_to_pose = self.grasp_pose_sequence(
-            self.grasp.root_T_grasp, self.arm.end_effector, self.grasp
+            self.grasp.grasp_pose, self.arm.end_effector, self.grasp
         ).retreat
         return sequential(
             children=[

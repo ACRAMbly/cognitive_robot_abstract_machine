@@ -52,11 +52,11 @@ def main() -> None:
     context = Context(world=world, robot=pr2, _debug=False, ros_node=None)
 
     whisk_body = attach_tool(world, pr2.right_arm, parse_object("whisk.stl"), MIX_MOUNT)
-    bowl = Bowl(root=world.get_body_by_name("bowl.stl"))
+    bowl_body = world.get_body_by_name("bowl.stl")
 
     whisk = Whisk(root=whisk_body)
     with world.modify_world():
-        world.add_semantic_annotations([bowl, whisk])
+        world.add_semantic_annotations([Bowl(root=bowl_body), whisk])
 
     context.evaluate_conditions = False
 
@@ -68,7 +68,7 @@ def main() -> None:
             NavigateAction(
                 Pose.from_xyz_rpy(*BASE_POSITION_XYZ, reference_frame=world.root)
             ),
-            MixingAction(container=bowl, arm=pr2.right_arm, tool=whisk),
+            MixingAction(container=bowl_body, arm=pr2.right_arm, tool=whisk),
         ],
         context=context,
     ).plan

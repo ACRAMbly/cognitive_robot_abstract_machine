@@ -235,7 +235,7 @@ class IsAmongTheClosestGraspsTo(Predicate):
             world frame.
         :return: the tuple of the horizontal distance and the angle.
         """
-        world_T_grasp = world_T_object @ grasp.root_T_grasp.to_np()
+        world_T_grasp = world_T_object @ grasp.grasp_pose.to_np()
         world_V_standing_to_grasp = world_T_grasp[:, 3] - world_P_standing
         horizontal_distance = np.linalg.norm(world_V_standing_to_grasp[:2])
         distance = np.linalg.norm(world_V_standing_to_grasp)

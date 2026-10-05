@@ -66,7 +66,7 @@ def test_bowl_grasps_close_on_the_bowls_wall(bowl):
     inside the bowl.
     """
     positions = np.array(
-        [grasp.root_T_grasp.to_np()[:3, 3] for grasp in bowl.grasp_candidates()]
+        [grasp.grasp_pose.to_np()[:3, 3] for grasp in bowl.grasp_candidates()]
     )
 
     assert len(positions) == bowl.grasp_candidate_count
@@ -127,5 +127,5 @@ def test_transporting_a_bowl_grasps_it_at_its_rim(pr2_and_bowl):
     sequential([transport], context=context)
 
     first_pick_up = next(iter(context.query_backend.evaluate(transport.pick_up)))
-    grasp_position = first_pick_up.pick_up.grasp.root_T_grasp.to_np()[:3, 3]
+    grasp_position = first_pick_up.pick_up.grasp.grasp_pose.to_np()[:3, 3]
     assert distances_to_surface(bowl, grasp_position[None, :])[0] < GRIPPABLE_DISTANCE

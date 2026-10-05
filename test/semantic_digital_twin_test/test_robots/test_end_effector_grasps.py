@@ -189,7 +189,7 @@ def test_every_robot_states_its_axes_in_the_frame_they_belong_to(
 
 
 def test_tool_frame_goal_keeps_the_grasp_position(pr2_gripper, graspable_box):
-    grasp = graspable_box.grasp_candidates()[0].root_T_grasp
+    grasp = graspable_box.grasp_candidates()[0].grasp_pose
 
     goal = pr2_gripper.tool_frame_goal(grasp)
 
@@ -203,7 +203,7 @@ def test_tool_frame_goal_applies_the_end_effectors_own_orientation(
     Two grippers pointing different ways must be sent different orientations for one
     and the same grasp.
     """
-    grasp = graspable_box.grasp_candidates()[0].root_T_grasp
+    grasp = graspable_box.grasp_candidates()[0].grasp_pose
 
     goal = pr2_gripper.tool_frame_goal(grasp)
 

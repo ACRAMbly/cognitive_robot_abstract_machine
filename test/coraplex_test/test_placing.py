@@ -124,8 +124,8 @@ def test_place_uses_the_grasp_its_pick_up_will_take(pr2_apartment_context):
     sequential([pick_up, place], context=context)
 
     np.testing.assert_allclose(
-        place._grasp_on_the_held_object().root_T_grasp.to_np(),
-        pick_up.grasp.root_T_grasp.to_np(),
+        place._grasp_on_the_held_object().grasp_pose.to_np(),
+        pick_up.grasp.grasp_pose.to_np(),
         atol=1e-9,
     )
 
