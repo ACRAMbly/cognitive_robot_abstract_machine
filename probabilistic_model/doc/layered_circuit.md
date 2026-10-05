@@ -150,181 +150,39 @@ JAX and networkx formats can be converted into each other.
 
 ## NumPy Implementation
 
-The JAX implementation trades the structural inferences for hardware acceleration. The
-numpy implementation in `probabilistic_model.probabilistic_circuit.tensorized` keeps the layered
-layout but gives the structural inferences back, so it supports every query the rustworkx
-implementation supports.
-
-It uses the same decomposition into layers: a `SumLayer` stores the weights of all of its
-nodes as one sparse matrix whose columns are the nodes of its child layers, a
-`ProductLayer` stores the edges of all of its nodes as one sparse integer matrix, and an
-input layer stores the parameters of all of its nodes in contiguous arrays. A rustworkx
-circuit is converted into a layered one, and back, by the converters in
-`probabilistic_model.adapters.rustworkx_tensorized`.
-
-```{code-cell} ipython3
-from probabilistic_model.adapters.rustworkx_tensorized.rustworkx_to_tensorized import RustworkxCircuitToLayeredCircuitConverter
-
-numpy_model = RustworkxCircuitToLayeredCircuitConverter.convert(model)
-print(numpy_model)
-print(numpy_model.root)
-```
-
-Queries that do not change the structure are evaluated for all nodes of a layer at once,
-just like in JAX:
-
-```{code-cell} ipython3
-samples = numpy_model.sample(5)
-print(numpy_model.log_likelihood(samples))
-print(numpy_model.expectation())
-```
-
-The structural queries work as well and return a layered circuit again:
+The numpy implementation in `probabilistic_model.probabilistic_circuit.tensorized` uses
+the same layers as the JAX one, but answers every query the rustworkx implementation
+answers, including marginals, truncation and conditioning, which return a layered
+circuit again.
 
 ```{code-cell} ipython3
 from random_events.interval import closed
 from random_events.product_algebra import SimpleEvent
+from probabilistic_model.adapters.rustworkx_tensorized.rustworkx_to_tensorized import RustworkxCircuitToLayeredCircuitConverter
 
+numpy_model = RustworkxCircuitToLayeredCircuitConverter.convert(model)
 event = SimpleEvent.from_data({x: closed(0.25, 2.5)}).as_composite_set()
 truncated, probability = numpy_model.truncated(event)
 print(probability)
-print(truncated.marginal([y]))
-print(numpy_model.conditional({x: 0.5})[0])
 ```
 
-Three design decisions make this possible:
+## Which one to use
 
-- Truncating an input layer keeps its number of nodes, so the edges of the parents stay
-  valid. When a node splits into several pieces, or when the truncated nodes no longer
-  share one type, the pieces are grouped into layers by type and a sum layer selects the
-  pieces of each original node. Nodes that became impossible are marked with a
-  log-probability of `-inf` and are then removed by a pass that prunes every impossible
-  and unreachable node and renumbers the sparse structures.
-- Every bottom-up query is memoized by the identity of the layer, so a layer that several
-  parents point at is evaluated once rather than once per path.
-- A structural pass never writes into the layers it reads; it builds new ones. That is
-  what lets a truncation to a composite event work off a single copy of the circuit.
+| implementation | use it to |
+| --- | --- |
+| rustworkx | build, learn, inspect and plot the structure of a circuit |
+| numpy | query a fixed circuit many times, including truncation, conditioning and marginals |
+| JAX | learn the parameters of a numpy circuit by gradient descent |
 
-### Truncating to an event with many simple sets
+To learn the parameters of a numpy circuit, convert it to JAX, train it there and
+convert it back. Both directions go through rustworkx:
+`LayeredCircuitToRustworkxCircuitConverter` and `JaxPC.from_rustworkx` one way,
+`to_rustworkx` and `RustworkxCircuitToLayeredCircuitConverter` the other.
 
-Truncating to an event with `k` simple sets is the most demanding query of the package.
-The graph implementation truncates a copy of the circuit to each simple set and mixes the
-`k` results. Doing that in a layered circuit would defeat the layout: the result gets one
-set of layers per simple set, so a circuit with ten layers turns into one with hundreds of
-layers holding a handful of nodes each, and every later query pays python overhead per
-layer instead of running over arrays.
-
-The numpy implementation truncates to all `k` simple sets in **one** pass instead. Every
-layer is replicated once per simple set inside its own parameter block, so the number of
-layers of the result does not depend on `k`, only its blocks are up to `k` times taller. A layer whose type changes with the assignment -- a Gaussian layer becomes a
-truncated Gaussian layer, a composite assignment splits a node into several pieces --
-still batches fine as long as every simple set in the `k` produces the *same* resulting
-type; only a batch whose simple sets disagree on the type (for instance a Gaussian layer
-where one simple set leaves the whole real line and another bounds it) reports that it
-cannot be batched, and the circuit falls back to truncating once per simple set.
-
-Measured on a joint probability tree with 528 nodes over 4 variables, truncated to a
-staircase of disjoint boxes:
-
-| simple sets | rustworkx | numpy layered | layers in the result |
-| --- | --- | --- | --- |
-| 5 | 76 ms | 6.8 ms | 11 |
-| 10 | 192 ms | 9.4 ms | 11 |
-| 25 | 331 ms | 17.1 ms | 11 |
-| 50 | 703 ms | 30.3 ms | 11 |
-| 100 | 1413 ms | 57.4 ms | 11 |
-
-Truncating one simple set at a time instead, the same 100-set result is spread over 821
-layers and takes 287 ms to build.
-
+The numpy circuit is faster than rustworkx for the probability of an event, for
+truncation and for conditioning, by between about 2 and 60 times on a joint probability
+tree and on Gaussian mixtures, and more the larger the event or the mixture. Rustworkx stays
+faster for the likelihood of large batches of events on circuits whose leaves have small,
+disjoint supports, like those of a joint probability tree.
 `experiments/src/experiments/probabilistic_model_experiments/layered_circuit_speed.py`
-reproduces this table and the query timings below it.
-
-### Speed of the other queries
-
-On the same joint probability tree, before truncation:
-
-| query | rustworkx | numpy layered |
-| --- | --- | --- |
-| `log_likelihood`, 100 events | 8.6 ms | 2.1 ms |
-| `log_likelihood`, 1000 events | 14.6 ms | 15.8 ms |
-| `log_likelihood`, 10000 events | 70.9 ms | 161 ms |
-| `sample`, 1000 samples | 5.1 ms | 6.6 ms |
-| `sample`, 10000 samples | 6.0 ms | 7.6 ms |
-| `probability_of_simple_event` | 11.5 ms | 0.7 ms |
-
-and on the circuit truncated to 100 simple sets, which has 5575 nodes:
-
-| query | rustworkx | numpy layered |
-| --- | --- | --- |
-| `log_likelihood`, 100 events | 77 ms | 14 ms |
-| `log_likelihood`, 1000 events | 125 ms | 195 ms |
-| `log_likelihood`, 10000 events | 456 ms | 1804 ms |
-| `sample`, 1000 samples | 26 ms | 104 ms |
-| `sample`, 10000 samples | 42 ms | 66 ms |
-| `probability_of_simple_event` | 263 ms | 4.5 ms |
-
-Conditioning on a partial point, on the tree before truncation:
-
-| conditioned variables | rustworkx | numpy layered |
-| --- | --- | --- |
-| 1 | 14.5 ms | 3.6 ms |
-| 2 | 14.9 ms | 3.3 ms |
-| 3 | 15.7 ms | 3.1 ms |
-| 4 | 17.0 ms | 2.3 ms |
-
-Conditioning sees a smaller speedup than truncation, since there is nothing to batch in
-a single point the way there is in a many-simple-set truncation.
-
-The layered layout removes the per-node python overhead, which dominates small queries,
-and a query over a `SimpleEvent` becomes one pass over a handful of arrays. It does not
-make the *asymptotics* better, and it is slower than the rustworkx implementation for
-large batches of events or samples on circuits whose leaves have small disjoint
-supports, like the leaves of a joint probability tree: rustworkx evaluates each leaf only
-at the events inside its support, while a layer evaluates its whole `(#events, #nodes)`
-block.
-
-### Gaussians over several variables
-
-The input layers above hold one variable each. A `MultivariateGaussianLayer` holds
-Gaussians over several variables at once, with the mean and covariance matrix of every node
-stacked into arrays; it is what the multivariate Gaussian leaves of a Gaussian mixture,
-as `GaussianMixtureModel` learns it, convert into. Truncating it to a box turns it into a
-`TruncatedMultivariateGaussianLayer`, which stores the box of every node, and truncating to
-several boxes mixes the truncations like any other input layer. Conditioning keeps a
-Gaussian over the free variables and turns the fixed ones into Dirac deltas.
-
-The marginal over some of the variables of a node confined to a box has no closed form,
-since what is left is not a Gaussian confined to a box, so it raises `NoClosedFormError`.
-The moments of such a node are integrated numerically by Gauss-Legendre quadrature, with
-the settings `MomentIntegration` holds. The probability of a box that bounds one variable
-is answered in closed form, in log space so that boxes far in the tails keep a probability
-above zero; a box that bounds several variables is integrated numerically by
-`scipy.stats.multivariate_normal`, over only the variables it bounds.
-
-Measured on Gaussian mixtures over 4 variables, fitted to clustered samples, against the
-rustworkx circuit the learning method returns:
-
-| query | 5 components | 20 components | 80 components |
-| --- | --- | --- | --- |
-| `log_likelihood`, 1000 events | 1.4 ms / 0.5 ms | 5.5 ms / 1.0 ms | 22 ms / 3.2 ms |
-| `log_likelihood`, 10000 events | 3.4 ms / 2.6 ms | 15 ms / 12 ms | 59 ms / 30 ms |
-| `sample`, 1000 | 1.6 ms / 0.4 ms | 6.0 ms / 0.5 ms | 22 ms / 1.0 ms |
-| probability of a box | 23 ms / 1.6 ms | 76 ms / 5.2 ms | 268 ms / 20 ms |
-| truncation to a box | 14 ms / 2.6 ms | 65 ms / 6.2 ms | 280 ms / 21 ms |
-| truncation to 10 boxes | 140 ms / 18 ms | 544 ms / 55 ms | 2323 ms / 202 ms |
-| `log_likelihood` after truncation, 1000 events | 68 ms / 0.5 ms | 286 ms / 1.4 ms | 1126 ms / 4.8 ms |
-| `sample` after truncation, 1000 | 561 ms / 261 ms | 1633 ms / 270 ms | 5596 ms / 276 ms |
-| conditioning on one variable | 3.3 ms / 1.9 ms | 12 ms / 2.0 ms | 48 ms / 1.9 ms |
-| conditioning on all but one variable | 3.3 ms / 1.8 ms | 12 ms / 1.9 ms | 49 ms / 1.9 ms |
-
-Each cell is rustworkx / numpy layered. The truncated layer samples by Gibbs sampling like
-the distribution does, but runs the chains of all of its nodes together, so its cost barely
-grows with the number of components.
-`experiments/src/experiments/probabilistic_model_experiments/gaussian_mixture_speed.py`
-reproduces the table.
-
-Use the rustworkx implementation to build and learn circuits, the numpy implementation
-when the same fixed circuit is queried many times and the structural inferences are
-needed, and the JAX implementation when the circuit has to be trained by gradient descent.
-All three convert into each other.
+and `gaussian_mixture_speed.py` in the same folder measure both.

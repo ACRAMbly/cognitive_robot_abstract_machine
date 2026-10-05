@@ -2,9 +2,9 @@ import pytest
 from random_events.interval import closed
 
 from experiments.probabilistic_model_experiments.layered_circuit_speed import (
-    NUMBERS_OF_SIMPLE_SETS,
     BenchmarkStage,
     CorrelatedNormalTreeFactory,
+    StaircaseTruncation,
     measure_conditioning,
     measure_query_durations,
     measure_truncation_scaling,
@@ -54,10 +54,11 @@ def test_query_durations_measure_every_query_of_the_stage(rustworkx_circuit, lay
 def test_the_number_of_layers_does_not_grow_with_the_number_of_simple_sets(
     rustworkx_circuit, layered
 ):
-    scaling = measure_truncation_scaling(rustworkx_circuit, layered)
-    assert [result.number_of_simple_sets for result in scaling.results] == list(
-        NUMBERS_OF_SIMPLE_SETS
-    )
+    truncations = StaircaseTruncation.variants()
+    scaling = measure_truncation_scaling(rustworkx_circuit, layered, truncations)
+    assert [result.number_of_simple_sets for result in scaling.results] == [
+        truncation.number_of_simple_sets for truncation in truncations
+    ]
     numbers_of_layers = {result.result_number_of_layers for result in scaling.results}
     assert numbers_of_layers == {len(scaling.layered_truncated.layers)}
 
@@ -68,4 +69,18 @@ def test_conditioning_is_measured_for_every_number_of_variables(
     results = measure_conditioning(rustworkx_circuit, layered)
     assert [result.number_of_conditioned_variables for result in results] == list(
         range(1, len(layered.variables) + 1)
+    )
+
+
+def test_the_largest_number_of_simple_sets_is_the_most_any_truncation_has(
+    rustworkx_circuit, layered
+):
+    truncations = [
+        StaircaseTruncation(3),
+        StaircaseTruncation(7),
+        StaircaseTruncation(2),
+    ]
+    scaling = measure_truncation_scaling(rustworkx_circuit, layered, truncations)
+    assert scaling.largest_number_of_simple_sets == max(
+        truncation.number_of_simple_sets for truncation in truncations
     )

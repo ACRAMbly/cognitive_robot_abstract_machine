@@ -18,7 +18,7 @@ from random_events.interval import Interval, closed
 from random_events.product_algebra import Event, SimpleEvent
 from random_events.variable import Continuous
 from sklearn.mixture import GaussianMixture
-from typing_extensions import List
+from typing_extensions import List, Self
 
 from experiments.experiment_definitions import (
     ExperimentResult,
@@ -31,6 +31,10 @@ from experiments.probabilistic_model_experiments.layered_circuit_speed import (
     speedup_of,
     staircase_of_boxes,
 )
+from krrood.entity_query_language.backends import (
+    EntityQueryLanguageGenerativeBackend,
+)
+from krrood.entity_query_language.factories import a, variable_from
 from probabilistic_model.adapters.rustworkx_tensorized.rustworkx_to_tensorized import (
     RustworkxCircuitToLayeredCircuitConverter,
 )
@@ -44,19 +48,6 @@ from probabilistic_model.probabilistic_circuit.tensorized.layered_probabilistic_
     LayeredProbabilisticCircuit,
 )
 
-NUMBERS_OF_COMPONENTS = (5, 20, 80)
-
-NUMBER_OF_BOXES = 10
-"""
-How many disjoint boxes the event of the batched truncation is made of.
-"""
-
-NUMERICAL_INTEGRATION_TOLERANCE = 1e-3
-"""
-The absolute difference allowed between two probabilities that
-:mod:`scipy.stats.multivariate_normal` integrated numerically.
-"""
-
 
 class GaussianMixtureQuery(enum.Enum):
     """
@@ -68,11 +59,46 @@ class GaussianMixtureQuery(enum.Enum):
     SAMPLE = "sample, 1000"
     PROBABILITY_OF_A_BOX = "probability of a box"
     TRUNCATION_TO_A_BOX = "truncation to a box"
-    TRUNCATION_TO_SEVERAL_BOXES = f"truncation to {NUMBER_OF_BOXES} boxes"
+    TRUNCATION_TO_SEVERAL_BOXES = "truncation to several boxes"
     LOG_LIKELIHOOD_AFTER_TRUNCATION = "log_likelihood after truncation, 1000 events"
     SAMPLE_AFTER_TRUNCATION = "sample after truncation, 1000"
     CONDITIONING_ON_ONE_VARIABLE = "conditioning on one variable"
     CONDITIONING_ON_ALL_BUT_ONE_VARIABLE = "conditioning on all but one variable"
+
+
+@dataclass
+class GaussianMixtureConfiguration:
+    """
+    The size of one Gaussian mixture the benchmark measures, and how its answers are
+    compared.
+    """
+
+    number_of_components: int
+    """
+    How many Gaussians the mixture has.
+    """
+
+    number_of_boxes: int = 10
+    """
+    How many disjoint boxes the event of the batched truncation is made of.
+    """
+
+    numerical_integration_tolerance: float = 1e-3
+    """
+    The absolute difference allowed between two probabilities that
+    :mod:`scipy.stats.multivariate_normal` integrated numerically.
+    """
+
+    @classmethod
+    def variants(cls) -> List[Self]:
+        """
+        :return: The mixtures the benchmark measures, from the fewest components to the
+            most.
+        """
+        configurations = a(cls)(number_of_components=variable_from([5, 20, 80]))
+        return list(
+            configurations.evaluate(backend=EntityQueryLanguageGenerativeBackend())
+        )
 
 
 @dataclass
@@ -163,9 +189,9 @@ class GaussianMixtureBenchmark:
     The measurements on one mixture, converted once into a layered circuit.
     """
 
-    number_of_components: int
+    configuration: GaussianMixtureConfiguration
     """
-    How many Gaussians the mixture has.
+    The size of the mixture and how its answers are compared.
     """
 
     rustworkx_circuit: RustworkxProbabilisticCircuit
@@ -195,7 +221,7 @@ class GaussianMixtureBenchmark:
         :return: The result.
         """
         return GaussianMixtureQueryDurationResult(
-            number_of_components=self.number_of_components,
+            number_of_components=self.configuration.number_of_components,
             query=query,
             rustworkx_duration=rustworkx_call.duration,
             layered_duration=layered_call.duration,
@@ -278,7 +304,7 @@ class GaussianMixtureBenchmark:
         assert np.isclose(
             rustworkx_call.result,
             layered_call.result,
-            atol=NUMERICAL_INTEGRATION_TOLERANCE,
+            atol=self.configuration.numerical_integration_tolerance,
         )
         results.append(
             self.result_of(
@@ -299,7 +325,7 @@ class GaussianMixtureBenchmark:
         assert np.isclose(
             rustworkx_probability,
             layered_probability,
-            atol=NUMERICAL_INTEGRATION_TOLERANCE,
+            atol=self.configuration.numerical_integration_tolerance,
         )
         results = [
             self.result_of(
@@ -313,7 +339,7 @@ class GaussianMixtureBenchmark:
             second,
             self.window_of(first, 0.0, 1.0).simple_sets[0],
             self.window_of(second, 0.0, 1.0).simple_sets[0],
-            NUMBER_OF_BOXES,
+            self.configuration.number_of_boxes,
         )
         rustworkx_call = TimedCall.of(
             lambda: rustworkx_circuit.truncated(staircase.__deepcopy__()), repeats=1
@@ -324,7 +350,7 @@ class GaussianMixtureBenchmark:
         assert np.isclose(
             rustworkx_call.result[1],
             layered_call.result[1],
-            atol=NUMERICAL_INTEGRATION_TOLERANCE,
+            atol=self.configuration.numerical_integration_tolerance,
         )
         results.append(
             self.result_of(
@@ -383,12 +409,12 @@ class GaussianMixtureBenchmark:
 def main():
     factory = ClusteredSamplesFactory()
     results = []
-    for number_of_components in NUMBERS_OF_COMPONENTS:
-        rustworkx_circuit = factory.learn_circuit(number_of_components)
+    for configuration in GaussianMixtureConfiguration.variants():
+        rustworkx_circuit = factory.learn_circuit(configuration.number_of_components)
         layered = RustworkxCircuitToLayeredCircuitConverter.convert(rustworkx_circuit)
         results.extend(
             GaussianMixtureBenchmark(
-                number_of_components, rustworkx_circuit, layered
+                configuration, rustworkx_circuit, layered
             ).measure()
         )
     print(
