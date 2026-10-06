@@ -471,7 +471,7 @@ class TestStallDetection:
         executor.tick()
         executor.tick()
 
-        assert arrived.error_signal.expression.evaluate()[0] == pytest.approx(0)
+        assert arrived.error_signal.evaluate()[0] == pytest.approx(0)
         assert monitor.observation_state == ObservationStateValues.TRUE
 
 
@@ -676,7 +676,7 @@ class TestErrorDrivesObservation:
             cylinder_bot_world.root, bot
         )[:3, 3]
         expected = np.linalg.norm(goal_point.to_np()[:3] - tip_position)
-        assert artifacts.error.expression.evaluate()[0] == pytest.approx(expected)
+        assert artifacts.error.evaluate()[0] == pytest.approx(expected)
 
     def test_observation_follows_from_the_error(self, cylinder_bot_world: World):
         """
@@ -692,7 +692,7 @@ class TestErrorDrivesObservation:
 
         artifacts = goal.build(MotionStatechartContext(world=cylinder_bot_world))
 
-        expected = (artifacts.error.expression <= goal.threshold).evaluate()[0]
+        expected = (artifacts.error <= goal.threshold).evaluate()[0]
         assert artifacts.observation.evaluate()[0] == expected
 
     def test_normalized_error_is_one_at_the_threshold(self, cylinder_bot_world: World):
@@ -712,7 +712,7 @@ class TestErrorDrivesObservation:
         executor = Executor(MotionStatechartContext(world=cylinder_bot_world))
         executor.compile(motion_statechart=motion_statechart)
 
-        raw_error = goal.error_signal.expression.evaluate()[0]
+        raw_error = goal.error_signal.evaluate()[0]
         assert goal.normalized_error.evaluate()[0] == pytest.approx(
             raw_error / goal.threshold
         )

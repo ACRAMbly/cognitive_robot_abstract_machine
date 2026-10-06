@@ -113,7 +113,7 @@ class NotApproachingGoal(MotionStatechartNode):
         )
         self._forget_progress(context)
         self._compile_error(context)
-        error = self.monitored_task.error_signal.expression
+        error = self.monitored_task.error_signal
         required_fall = (
             self.minimum_convergence_rate
             * self.monitored_task.threshold
@@ -122,7 +122,7 @@ class NotApproachingGoal(MotionStatechartNode):
         return NodeArtifacts(
             observation=sm.trinary_logic_or(
                 self._monitored_task_is_not_running(),
-                error <= self.monitored_task.threshold,
+                self.monitored_task.goal_reached_at(error),
                 self._error_at_last_progress - error < required_fall,
             )
         )
@@ -144,7 +144,7 @@ class NotApproachingGoal(MotionStatechartNode):
         Compile the monitored task's error against the world's positions and the float
         variable data, reading both in place.
         """
-        self._compiled_error = self.monitored_task.error_signal.expression.compile(
+        self._compiled_error = self.monitored_task.error_signal.compile(
             parameters=VariableParameters.from_lists(
                 context.world.state.position_float_variables,
                 context.float_variable_data.variables,

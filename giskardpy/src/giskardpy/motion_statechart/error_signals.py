@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-
 from typing_extensions import List, Tuple
 
 from krrood.symbolic_math.symbolic_math import Scalar, SymbolicMathType
@@ -54,18 +52,3 @@ def time_derivative_from_joint_motion(expression: Scalar) -> Scalar:
     if not position_variables:
         return Scalar(0)
     return expression.total_derivative(position_variables, velocity_variables)[0]
-
-
-# %% error signals
-
-
-@dataclass
-class ErrorSignal:
-    """
-    How far a task is from its goal.
-    """
-
-    expression: Scalar
-    """
-    The current error in the task's own units, where zero means the goal is reached.
-    """
