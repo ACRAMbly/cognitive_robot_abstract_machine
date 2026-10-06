@@ -123,7 +123,10 @@ class FeatureExtractor:
         :return: The discovered scalar features and per-relation aggregation features.
         """
         result = []
-        seen = set()
+        # A property may build the object it returns, which would be freed after its
+        # visit and hand its id to a later object. Holding the visited objects keeps
+        # their ids theirs.
+        seen = {}
         exchangeable_features = defaultdict(list)
         queue = deque()
         queue.append((example_instance, symbolic_root))
@@ -133,7 +136,7 @@ class FeatureExtractor:
 
             if id(current_instance) in seen:
                 continue
-            seen.add(id(current_instance))
+            seen[id(current_instance)] = current_instance
 
             data_access_object_class = FeatureExtractor._data_access_object_class_of(
                 current_instance
