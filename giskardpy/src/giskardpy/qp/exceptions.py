@@ -4,14 +4,13 @@ Exceptions raised while building and solving the quadratic program.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import timedelta
 
 from typing_extensions import TYPE_CHECKING, Type
 
 from giskardpy.data_types.exceptions import (
     GiskardException,
-    DontPrintStackTrace,
     SetupException,
 )
 
@@ -169,10 +168,12 @@ class DegreeOfFreedomBrakingExceedsHorizonError(BrakingExceedsHorizonError):
 
 
 @dataclass
-class EmptyProblemException(InfeasibleException, DontPrintStackTrace):
+class EmptyProblemException(InfeasibleException):
     """
     Raised when the QP problem has no free variables.
     """
+
+    print_stack_trace: bool = field(default=False, kw_only=True)
 
     def error_message(self) -> str:
         return "Empty QP problem."
