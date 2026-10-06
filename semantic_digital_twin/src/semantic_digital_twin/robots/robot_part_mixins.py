@@ -18,6 +18,7 @@ from typing_extensions import (
     Unpack,
 )
 
+from krrood.ormatic.utils import classproperty
 from krrood.patterns.subclass_safe_generic import (
     SubClassSafeGeneric,
 )
@@ -140,20 +141,15 @@ class HasTwoFingers(
     a thumb.
     """
 
-    finger_count: ClassVar[int] = 2
-    """
-    How many fingers a part combining this mixin has.
-    """
-
     def validate(self):
         """
         :raises UnexpectedFingerCountError: If a different number of fingers is attached
             than this mixin allows.
         """
-        if len(self.fingers) != self.finger_count:
+        if len(self.fingers) != 2:
             raise UnexpectedFingerCountError(
                 robot_part=self,
-                expected_count=self.finger_count,
+                expected_count=2,
                 actual_count=len(self.fingers),
             )
         super().validate()
@@ -479,11 +475,13 @@ class HasInputSource(
         give it the default its own kind of source has.
     """
 
-    topic_name: ClassVar[Optional[str]] = None
-    """
-    The topic the real robot publishes this part's state on, if its description names
-    one.
-    """
+    @classproperty
+    def topic_name(cls) -> Optional[str]:
+        """
+        The topic the real robot publishes this part's state on, if its description
+        names one.
+        """
+        return None
 
     def validate(self):
         """

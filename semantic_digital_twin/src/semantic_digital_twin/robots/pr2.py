@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from importlib.resources import files
 from pathlib import Path
-from typing import ClassVar, Self, List
+from typing import Self, List
 
 from krrood.ormatic.utils import classproperty
 from semantic_digital_twin.adapters.sensors.lidar import Lidar, LidarSource
@@ -506,10 +506,12 @@ class PR2Torso(Torso, HasLeftRightArm[PR2LeftArm, PR2RightArm], HasNeck[PR2Neck]
 @dataclass(eq=False)
 class PR2MobileBase(MobileBase[OmniDrive], HasTorso[PR2Torso], HasLidar[PR2BaseLidar]):
 
-    topic_name: ClassVar[str] = PR2Topic.ODOMETRY
-    """
-    The topic the PR2 publishes the pose of its base on.
-    """
+    @classproperty
+    def topic_name(cls) -> str:
+        """
+        The topic the PR2 publishes the pose of its base on.
+        """
+        return PR2Topic.ODOMETRY
 
     @classproperty
     def forward_axis(cls) -> Vector3:

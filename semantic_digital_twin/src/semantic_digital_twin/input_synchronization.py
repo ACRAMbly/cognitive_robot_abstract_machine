@@ -51,6 +51,7 @@ class InputSynchronizer(ABC):
 
         Does nothing by default, as an input that receives nothing holds none.
         """
+        return None
 
 
 @dataclass

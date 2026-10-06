@@ -199,23 +199,6 @@ def test_subscribed_source_reports_the_reading_of_its_latest_scan(
     assert reading.reference_frame is expected.reference_frame
 
 
-def test_reading_a_subscribed_source_adopts_the_pattern_of_its_latest_scan(
-    rclpy_node, world_with_laser_body
-):
-    scan = laser_scan()
-    lidar = subscribed_lidar(rclpy_node, world_with_laser_body)
-    lidar.source.buffer_message(scan)
-
-    lidar.get_lidar_reading()
-
-    assert lidar.scan_pattern == ScanPattern(
-        minimum_angle=scan.angle_min,
-        maximum_angle=scan.angle_max,
-        angle_increment=scan.angle_increment,
-        minimum_range=scan.range_min,
-        maximum_range=scan.range_max,
-    )
-
 
 def test_a_subscribed_source_reports_a_scan_without_changing_the_lidar(
     rclpy_node, world_with_laser_body

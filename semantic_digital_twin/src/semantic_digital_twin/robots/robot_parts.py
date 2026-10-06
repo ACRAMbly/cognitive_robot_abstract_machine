@@ -8,7 +8,6 @@ from collections import defaultdict
 from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import (
-    ClassVar,
     Optional,
     Self,
     TYPE_CHECKING,
@@ -464,10 +463,12 @@ class KinematicChain(AbstractRobotPart, HasInputSource[JointPositionSource], ABC
     Where the positions of this chain's joints come from.
     """
 
-    topic_name: ClassVar[str] = RobotTopic.JOINT_STATES
-    """
-    The topic a robot publishes the positions of its joints on.
-    """
+    @classproperty
+    def topic_name(cls) -> str:
+        """
+        The topic a robot publishes the positions of its joints on.
+        """
+        return RobotTopic.JOINT_STATES
 
     @classmethod
     def simulated_source(cls) -> JointPositionSource:

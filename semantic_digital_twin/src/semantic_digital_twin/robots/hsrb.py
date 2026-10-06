@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from importlib.resources import files
 from pathlib import Path
-from typing import ClassVar, Self, List
+from typing import Self, List
 
 from krrood.ormatic.utils import classproperty
 from semantic_digital_twin.adapters.sensors.lidar import Lidar, LidarSource
@@ -455,10 +455,12 @@ class HSRBMobileBase(
     MobileBase[OmniDrive], HasTorso[HSRBTorso], HasLidar[HSRBBaseLidar]
 ):
 
-    topic_name: ClassVar[str] = HSRBTopic.ODOMETRY
-    """
-    The topic the HSRB publishes the pose of its base on.
-    """
+    @classproperty
+    def topic_name(cls) -> str:
+        """
+        The topic the HSRB publishes the pose of its base on.
+        """
+        return HSRBTopic.ODOMETRY
 
     @classproperty
     def forward_axis(cls) -> Vector3:

@@ -8,7 +8,7 @@ from importlib.resources import files
 from pathlib import Path
 
 import numpy as np
-from typing_extensions import ClassVar, Self, List
+from typing_extensions import Self, List
 
 from krrood.ormatic.utils import classproperty
 from semantic_digital_twin.adapters.sensors.lidar import Lidar, LidarSource
@@ -404,10 +404,12 @@ class StretchMobileBase(
     HasTorso[StretchTorso],
     HasLidar[StretchBaseLidar],
 ):
-    topic_name: ClassVar[str] = StretchTopic.ODOMETRY
-    """
-    The topic the Stretch publishes the pose of its base on.
-    """
+    @classproperty
+    def topic_name(cls) -> str:
+        """
+        The topic the Stretch publishes the pose of its base on.
+        """
+        return StretchTopic.ODOMETRY
 
     full_body_controlled: bool = field(default=True, kw_only=True)
 
