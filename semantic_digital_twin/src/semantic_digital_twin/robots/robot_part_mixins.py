@@ -8,7 +8,6 @@ from types import NoneType
 from typing import Union, get_args, get_origin
 
 from typing_extensions import (
-    ClassVar,
     Optional,
     TYPE_CHECKING,
     Type,
@@ -243,20 +242,15 @@ class HasOneArm(HasArms[TGenericArm], RobotPartMixin, ABC):
     Mixin class for robots or robot parts that have exactly one arm.
     """
 
-    arm_count: ClassVar[int] = 1
-    """
-    How many arms a part combining this mixin has.
-    """
-
     def validate(self):
         """
         :raises UnexpectedArmCountError: If a different number of arms is attached than
             this mixin allows.
         """
-        if len(self.arms) != self.arm_count:
+        if len(self.arms) != 1:
             raise UnexpectedArmCountError(
                 robot_part=self,
-                expected_count=self.arm_count,
+                expected_count=1,
                 actual_count=len(self.arms),
             )
         super().validate()
@@ -279,11 +273,6 @@ class HasLeftRightArm(
     the left and which is the right arm.
     """
 
-    arm_count: ClassVar[int] = 2
-    """
-    How many arms a part combining this mixin has.
-    """
-
     def validate(self):
         """
         :raises UnexpectedArmCountError: If a different number of arms is attached than
@@ -297,10 +286,10 @@ class HasLeftRightArm(
         :raises UnexpectedArmCountError: If a different number of arms is attached than
             this mixin allows.
         """
-        if len(self.arms) != self.arm_count:
+        if len(self.arms) != 2:
             raise UnexpectedArmCountError(
                 robot_part=self,
-                expected_count=self.arm_count,
+                expected_count=2,
                 actual_count=len(self.arms),
             )
 

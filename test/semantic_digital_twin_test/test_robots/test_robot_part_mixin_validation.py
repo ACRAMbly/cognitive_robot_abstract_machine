@@ -19,8 +19,6 @@ from semantic_digital_twin.robots.exceptions import (
 )
 from semantic_digital_twin.robots.input_source import InputSource
 from semantic_digital_twin.robots.robot_part_mixins import (
-    MINIMUM_ARM_COUNT,
-    MINIMUM_FINGER_COUNT,
     HasArms,
     HasEndEffector,
     HasFingers,
@@ -228,7 +226,7 @@ def test_too_few_fingers_carries_the_counts():
         part.validate()
 
     assert raised.value.robot_part is part
-    assert raised.value.minimum_count == MINIMUM_FINGER_COUNT
+    assert raised.value.minimum_count == 2
     assert raised.value.actual_count == len(part.fingers)
 
 
@@ -238,7 +236,7 @@ def test_a_wrong_number_of_fingers_carries_the_counts():
     with pytest.raises(UnexpectedFingerCountError) as raised:
         part.validate()
 
-    assert raised.value.expected_count == HasTwoFingers.finger_count
+    assert raised.value.expected_count == 2
     assert raised.value.actual_count == len(part.fingers)
 
 
@@ -248,15 +246,15 @@ def test_too_few_arms_carries_the_counts():
     with pytest.raises(TooFewArmsError) as raised:
         part.validate()
 
-    assert raised.value.minimum_count == MINIMUM_ARM_COUNT
+    assert raised.value.minimum_count == 1
     assert raised.value.actual_count == len(part.arms)
 
 
 @pytest.mark.parametrize(
     "part_type, expected_count",
     [
-        (PartWithOneArm, HasOneArm.arm_count),
-        (PartWithLeftAndRightArm, HasLeftRightArm.arm_count),
+        (PartWithOneArm, 1),
+        (PartWithLeftAndRightArm, 2),
     ],
 )
 def test_a_wrong_number_of_arms_carries_the_counts(part_type, expected_count):
