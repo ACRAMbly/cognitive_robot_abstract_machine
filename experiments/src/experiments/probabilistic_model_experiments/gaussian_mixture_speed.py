@@ -28,6 +28,7 @@ from experiments.experiment_definitions import (
 )
 from experiments.probabilistic_model_experiments.layered_circuit_speed import (
     TimedCall,
+    raise_if_answers_disagree,
     speedup_of,
     staircase_of_boxes,
 )
@@ -292,7 +293,9 @@ class GaussianMixtureBenchmark:
                 lambda: rustworkx_circuit.log_likelihood(samples)
             )
             layered_call = TimedCall.of(lambda: layered.log_likelihood(samples))
-            assert np.allclose(rustworkx_call.result, layered_call.result)
+            raise_if_answers_disagree(
+                query.value, rustworkx_call.result, layered_call.result
+            )
             results.append(self.result_of(query, rustworkx_call, layered_call))
 
         results.append(
@@ -310,10 +313,11 @@ class GaussianMixtureBenchmark:
             lambda: rustworkx_circuit.probability_of_simple_event(box)
         )
         layered_call = TimedCall.of(lambda: layered.probability_of_simple_event(box))
-        assert np.isclose(
+        raise_if_answers_disagree(
+            GaussianMixtureQuery.PROBABILITY_OF_A_BOX.value,
             rustworkx_call.result,
             layered_call.result,
-            atol=self.configuration.numerical_integration_tolerance,
+            self.configuration.numerical_integration_tolerance,
         )
         results.append(
             self.result_of(
@@ -337,10 +341,11 @@ class GaussianMixtureBenchmark:
         layered_call = TimedCall.of(lambda: layered.truncated(box.__deepcopy__()))
         rustworkx_truncated, rustworkx_probability = rustworkx_call.result
         layered_truncated, layered_probability = layered_call.result
-        assert np.isclose(
+        raise_if_answers_disagree(
+            GaussianMixtureQuery.TRUNCATION_TO_A_BOX.value,
             rustworkx_probability,
             layered_probability,
-            atol=self.configuration.numerical_integration_tolerance,
+            self.configuration.numerical_integration_tolerance,
         )
         results = [
             self.result_of(
@@ -362,10 +367,11 @@ class GaussianMixtureBenchmark:
         layered_call = TimedCall.of(
             lambda: layered.truncated(staircase.__deepcopy__()), repeats=1
         )
-        assert np.isclose(
+        raise_if_answers_disagree(
+            GaussianMixtureQuery.TRUNCATION_TO_SEVERAL_BOXES.value,
             rustworkx_call.result[1],
             layered_call.result[1],
-            atol=self.configuration.numerical_integration_tolerance,
+            self.configuration.numerical_integration_tolerance,
         )
         results.append(
             self.result_of(
@@ -380,7 +386,12 @@ class GaussianMixtureBenchmark:
             lambda: rustworkx_truncated.log_likelihood(samples)
         )
         layered_call = TimedCall.of(lambda: layered_truncated.log_likelihood(samples))
-        assert np.allclose(rustworkx_call.result, layered_call.result, atol=1e-2)
+        raise_if_answers_disagree(
+            GaussianMixtureQuery.LOG_LIKELIHOOD_AFTER_TRUNCATION.value,
+            rustworkx_call.result,
+            layered_call.result,
+            absolute_tolerance=1e-2,
+        )
         results.append(
             self.result_of(
                 GaussianMixtureQuery.LOG_LIKELIHOOD_AFTER_TRUNCATION,
@@ -422,7 +433,9 @@ class GaussianMixtureBenchmark:
                 lambda: rustworkx_circuit.log_conditional(point)
             )
             layered_call = TimedCall.of(lambda: layered.log_conditional(point))
-            assert np.isclose(rustworkx_call.result[1], layered_call.result[1])
+            raise_if_answers_disagree(
+                query.value, rustworkx_call.result[1], layered_call.result[1]
+            )
             results.append(self.result_of(query, rustworkx_call, layered_call))
         return results
 

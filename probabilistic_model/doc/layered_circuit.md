@@ -33,7 +33,6 @@ from probabilistic_model.probabilistic_circuit.rx.probabilistic_circuit import *
 from probabilistic_model.distributions.distributions import *
 from probabilistic_model.distributions.uniform import *
 from random_events.variable import Continuous
-import networkx as nx
 from probabilistic_model.probabilistic_circuit.jax.probabilistic_circuit import ProbabilisticCircuit as JaxPC
 import plotly.graph_objects as go
 import matplotlib.pyplot as plt
@@ -88,7 +87,7 @@ The Benefits of the DAG representation are:
 
 The drawbacks are:
 - Python implementations are usually slow
-- Rustowrkx does not benefit from SMID instruction like jax would
+- Rustworkx does not benefit from SMID instruction like jax would
 - No benefit from modern hardware acceleration
 
 
@@ -143,10 +142,10 @@ However, for a fixed circuit, the speed-up is immense.
 
 In the scripts folder, you can reproduce these results.
 
-Be aware that the JAX implementation is still in development and might not be as stable as the networkx implementation.
+Be aware that the JAX implementation is still in development and might not be as stable as the rustworkx implementation.
 I would be happy to get support here if someone is interested in it.
 
-JAX and networkx formats can be converted into each other.
+JAX and rustworkx formats can be converted into each other.
 
 ## NumPy Implementation
 

@@ -3,11 +3,13 @@ from random_events.interval import closed
 
 from experiments.probabilistic_model_experiments.layered_circuit_speed import (
     BenchmarkStage,
+    CircuitsDisagreeError,
     CorrelatedNormalTreeFactory,
     StaircaseTruncation,
     measure_conditioning,
     measure_query_durations,
     measure_truncation_scaling,
+    raise_if_answers_disagree,
     staircase_of_boxes,
 )
 from probabilistic_model.adapters.rustworkx_tensorized.rustworkx_to_tensorized import (
@@ -84,3 +86,17 @@ def test_the_largest_number_of_simple_sets_is_the_most_any_truncation_has(
     assert scaling.largest_number_of_simple_sets == max(
         truncation.number_of_simple_sets for truncation in truncations
     )
+
+
+def test_agreeing_answers_do_not_raise():
+    raise_if_answers_disagree("log_likelihood", [0.5, 1.0], [0.5, 1.0 + 1e-10])
+
+
+def test_disagreeing_answers_raise_with_the_largest_difference():
+    with pytest.raises(CircuitsDisagreeError) as raised:
+        raise_if_answers_disagree(
+            "log_likelihood", [0.5, 1.0], [0.5, 1.5], absolute_tolerance=1e-3
+        )
+    assert raised.value.query == "log_likelihood"
+    assert raised.value.largest_difference == pytest.approx(0.5)
+    assert raised.value.absolute_tolerance == 1e-3

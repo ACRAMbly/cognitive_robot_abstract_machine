@@ -29,6 +29,7 @@ from krrood.entity_query_language.backends import (
     EntityQueryLanguageGenerativeBackend,
 )
 from krrood.entity_query_language.factories import a, variable_from
+from krrood.exceptions import DataclassException
 from probabilistic_model.adapters.rustworkx_tensorized.rustworkx_to_tensorized import (
     RustworkxCircuitToLayeredCircuitConverter,
 )
@@ -202,6 +203,67 @@ class TimedCall:
         )
 
 
+@dataclass
+class CircuitsDisagreeError(DataclassException):
+    """
+    Raised when the two circuits a benchmark compares answer the same query differently.
+    """
+
+    query: str
+    """
+    The query both circuits answered.
+    """
+
+    largest_difference: float
+    """
+    The largest absolute difference between the two answers.
+    """
+
+    absolute_tolerance: float
+    """
+    The absolute difference that was allowed.
+    """
+
+    def error_message(self) -> str:
+        return (
+            f"The answers of the two circuits to the query '{self.query}' differ by up "
+            f"to {self.largest_difference}, which is more than the allowed absolute "
+            f"difference of {self.absolute_tolerance}."
+        )
+
+    def suggest_correction(self) -> str:
+        return (
+            "Check that the layered circuit was converted from the rustworkx circuit "
+            "it is compared to and that both were given the same query."
+        )
+
+
+def raise_if_answers_disagree(
+    query: str,
+    rustworkx_answer: Any,
+    layered_answer: Any,
+    absolute_tolerance: float = 1e-8,
+):
+    """
+    Make sure a measurement compares two circuits that still answer alike.
+
+    :param query: The query both circuits answered.
+    :param rustworkx_answer: The answer of the rustworkx circuit.
+    :param layered_answer: The answer of the layered circuit.
+    :param absolute_tolerance: The absolute difference allowed between the answers.
+    :raises CircuitsDisagreeError: If the answers differ by more than the tolerance.
+    """
+    if np.allclose(rustworkx_answer, layered_answer, atol=absolute_tolerance):
+        return
+    raise CircuitsDisagreeError(
+        query=query,
+        largest_difference=float(
+            np.max(np.abs(np.asarray(rustworkx_answer) - np.asarray(layered_answer)))
+        ),
+        absolute_tolerance=absolute_tolerance,
+    )
+
+
 def speedup_of(
     rustworkx_duration: MeanAndStandardDeviation,
     layered_duration: MeanAndStandardDeviation,
@@ -290,11 +352,10 @@ def measure_query_durations(
         samples = rustworkx_circuit.sample(amount)
         rustworkx_call = TimedCall.of(lambda: rustworkx_circuit.log_likelihood(samples))
         layered_call = TimedCall.of(lambda: layered.log_likelihood(samples))
-        assert np.allclose(rustworkx_call.result, layered_call.result)
+        query = f"log_likelihood, {amount} events"
+        raise_if_answers_disagree(query, rustworkx_call.result, layered_call.result)
         results.append(
-            QueryDurationResult.of(
-                stage, f"log_likelihood, {amount} events", rustworkx_call, layered_call
-            )
+            QueryDurationResult.of(stage, query, rustworkx_call, layered_call)
         )
 
     for amount in (1000, 10000):
@@ -429,7 +490,11 @@ def measure_truncation_scaling(
         layered_call = TimedCall.of(lambda: layered.truncated(event.__deepcopy__()))
         rustworkx_truncated, rustworkx_probability = rustworkx_call.result
         layered_truncated, layered_probability = layered_call.result
-        assert np.isclose(rustworkx_probability, layered_probability)
+        raise_if_answers_disagree(
+            f"truncation to {truncation.number_of_simple_sets} simple sets",
+            rustworkx_probability,
+            layered_probability,
+        )
 
         if truncation is largest:
             largest_rustworkx_truncated = rustworkx_truncated
@@ -514,7 +579,11 @@ def measure_conditioning(
             lambda: layered.__deepcopy__().log_conditional_in_place(point), repeats=5
         )
         _, layered_log_probability = layered_call.result
-        assert np.isclose(expected_log_probability, layered_log_probability)
+        raise_if_answers_disagree(
+            f"conditioning on {number_of_conditioned} variables",
+            expected_log_probability,
+            layered_log_probability,
+        )
 
         results.append(
             ConditioningResult(
