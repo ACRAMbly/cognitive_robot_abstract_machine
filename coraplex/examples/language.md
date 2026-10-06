@@ -68,7 +68,7 @@ from coraplex.robot_plans.actions.core.robot_body import ParkArmsAction
 from semantic_digital_twin.spatial_types import Pose
 
 navigate = NavigateAction(Pose.from_xyz_rpy(1, 1, 0, reference_frame=world.root))
-park = ParkArmsAction(pr2.get_arms())
+park = ParkArmsAction(pr2.all_arms)
 
 plan = sequential([navigate, park], context=context).plan
 ```
@@ -106,7 +106,7 @@ from coraplex.robot_plans.actions.core.robot_body import ParkArmsAction
 from semantic_digital_twin.spatial_types import Pose
 
 navigate = NavigateAction(Pose.from_xyz_rpy(1, 1, 0, reference_frame=world.root))
-park = ParkArmsAction(pr2.get_arms())
+park = ParkArmsAction(pr2.all_arms)
 
 plan = try_in_order([navigate, park], context=context).plan
 
@@ -130,7 +130,7 @@ from coraplex.robot_plans.actions.core.robot_body import ParkArmsAction
 from semantic_digital_twin.spatial_types import Pose
 
 navigate = NavigateAction(Pose.from_xyz_rpy(1, 1, 0, reference_frame=world.root))
-park = ParkArmsAction(pr2.get_arms())
+park = ParkArmsAction(pr2.all_arms)
 
 plan = parallel([navigate, park], context=context).plan
 
@@ -152,7 +152,7 @@ from coraplex.robot_plans.actions.core.robot_body import ParkArmsAction
 from semantic_digital_twin.spatial_types import Pose
 
 navigate = NavigateAction(Pose.from_xyz_rpy(1, 1, 0, reference_frame=world.root))
-park = ParkArmsAction(pr2.get_arms())
+park = ParkArmsAction(pr2.all_arms)
 
 plan = try_all([navigate, park], context=context).plan
 
@@ -173,7 +173,7 @@ from semantic_digital_twin.datastructures.definitions import TorsoState
 from semantic_digital_twin.spatial_types import Pose
 
 navigate = NavigateAction(Pose.from_xyz_rpy(1, 1, 0, reference_frame=world.root))
-park = ParkArmsAction(pr2.get_arms())
+park = ParkArmsAction(pr2.all_arms)
 move_torso = MoveTorsoAction(TorsoState.HIGH)
 
 plan = parallel([navigate, sequential([park, move_torso])], context=context).plan
@@ -206,7 +206,7 @@ def code_test():
     print("Code function")
 
 
-park = ParkArmsAction(pr2.get_arms())
+park = ParkArmsAction(pr2.all_arms)
 code_lambda = code(lambda: print("This is from the code object"), context=context)
 code_func = code(code_test, context=context)
 

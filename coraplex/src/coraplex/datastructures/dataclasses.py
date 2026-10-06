@@ -125,6 +125,12 @@ class Context(PlanEntity):
     repeated; ``None`` samples afresh each run.
     """
 
+    candidates_to_try: int = field(default=50, kw_only=True)
+    """
+    How many candidates an underspecified step of this plan tries before giving up,
+    unless the step has a limit of its own.
+    """
+
     motion_tolerances: MotionToleranceConfig = field(
         default_factory=MotionToleranceConfig
     )

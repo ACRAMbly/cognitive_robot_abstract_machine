@@ -237,7 +237,7 @@ class ParkArmsBeforeNavigating(InsertionTransformation[NavigateAction]):
         return drive
 
     def nodes_to_insert(self, plan_node: ActionNode) -> List[ActionLike]:
-        return [ParkArmsAction(plan_node.action.robot.get_arms())]
+        return [ParkArmsAction(plan_node.action.robot.all_arms)]
 ```
 
 ```python

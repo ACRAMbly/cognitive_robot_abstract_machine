@@ -214,7 +214,7 @@ def build_plan() -> Plan:
 
     root = sequential(
         [
-            ParkArmsAction(pr2.get_arms()),
+            ParkArmsAction(pr2.all_arms),
             MoveTorsoAction(TorsoState.HIGH),
             try_in_order(
                 [

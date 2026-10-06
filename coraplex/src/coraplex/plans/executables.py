@@ -12,6 +12,7 @@ from coraplex.exceptions import (
     UnknownExecutionType,
 )
 from coraplex.plans.failures import (
+    CandidateLimitReached,
     EmptyUnderspecified,
     MotionExceededSimulationTimeLimit,
     MotionMadeNoProgress,
@@ -508,8 +509,9 @@ class UnderspecifiedExecutable(Executable):
     is reached. Only then is the underspecified statement grounded, so the query sees
     the correct world state (e.g. the torso already raised, the object already in the
     gripper). Candidates are tried in order until one executes without raising a
-    :class:`~pycram.plans.failures.PlanFailure`; if the generator is exhausted,
-    :class:`~pycram.plans.failures.EmptyUnderspecified` is raised.
+    :class:`~pycram.plans.failures.PlanFailure`; if the node gives up after its candidate
+    limit, :class:`~coraplex.plans.failures.CandidateLimitReached` is raised, and if the
+    generator is exhausted before, :class:`~pycram.plans.failures.EmptyUnderspecified`.
     """
 
     node: UnderspecifiedNode = field(kw_only=True)
@@ -525,4 +527,6 @@ class UnderspecifiedExecutable(Executable):
                 return
             except PlanFailure:
                 continue
+        if self.node.reached_candidate_limit:
+            raise CandidateLimitReached(self.node, self.node.candidate_limit)
         raise EmptyUnderspecified()

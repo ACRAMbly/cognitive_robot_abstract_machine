@@ -35,10 +35,8 @@ from semantic_digital_twin.reasoning.predicates import (
 )
 from semantic_digital_twin.robots.hsrb import HSRB
 from semantic_digital_twin.robots.robot_parts import Arm
-from semantic_digital_twin.semantic_annotations.mixins import (
-    HasGraspCandidates,
-    HasRootBody,
-)
+from semantic_digital_twin.semantic_annotations.mixins import HasRootBody
+from semantic_digital_twin.grasping.grasp_candidates import HasGraspCandidates
 from semantic_digital_twin.spatial_types import Point3, Pose, Vector3
 from semantic_digital_twin.world import World
 from semantic_digital_twin.world_description.world_entity import Body
@@ -109,7 +107,7 @@ class Sage10kAbstractDemoHSRB:
         """
         :return: The HSRB's only arm.
         """
-        return self.robot.get_arms()[0]
+        return self.robot.all_arms[0]
 
     def remove_rooted_annotations(self, semantic_annotations: Iterable[HasRootBody]):
         """
@@ -203,7 +201,7 @@ class Sage10kGymDemo(Sage10kAbstractDemoHSRB):
         plan = sequential(
             [
                 open_door,
-                ParkArmsAction(self.robot.get_arms()),
+                ParkArmsAction(self.robot.all_arms),
                 NavigateAction(
                     Pose.from_xyz_rpy(2.81, -3.76, reference_frame=self.world.root)
                 ),
@@ -218,7 +216,7 @@ class Sage10kGymDemo(Sage10kAbstractDemoHSRB):
                     standing_position=self.pickup_navigation_pose,
                     arm=arm,
                 ),
-                ParkArmsAction(self.robot.get_arms()),
+                ParkArmsAction(self.robot.all_arms),
                 MoveAndPlaceAction.from_standing_position(
                     standing_position=self.place_navigation_pose,
                     object_designator=object_of_interest,
@@ -615,7 +613,7 @@ class Sage10kSouthwesternStoreDemo(Sage10kAbstractDemoHSRB):
         plan = sequential(
             [
                 open_door,
-                ParkArmsAction(self.robot.get_arms()),
+                ParkArmsAction(self.robot.all_arms),
                 NavigateAction(
                     target_location=Pose.from_xyz_rpy(
                         x=0.81, y=4.81, reference_frame=self.world.root
@@ -626,7 +624,7 @@ class Sage10kSouthwesternStoreDemo(Sage10kAbstractDemoHSRB):
                     standing_position=self.pickup_navigation_pose,
                     arm=arm,
                 ),
-                ParkArmsAction(self.robot.get_arms()),
+                ParkArmsAction(self.robot.all_arms),
                 NavigateAction(
                     target_location=Pose.from_xyz_rpy(
                         x=0.81, y=4.81, reference_frame=self.world.root
@@ -637,7 +635,7 @@ class Sage10kSouthwesternStoreDemo(Sage10kAbstractDemoHSRB):
                     object_designator=self.object_of_interest,
                     target_location=self.place_pose,
                 ),
-                ParkArmsAction(self.robot.get_arms()),
+                ParkArmsAction(self.robot.all_arms),
                 NavigateAction(
                     target_location=Pose.from_xyz_rpy(
                         x=0.48, y=4.81, reference_frame=self.world.root
@@ -732,7 +730,7 @@ class Sage10kBrutalistStoreDemo(Sage10kAbstractDemoHSRB):
         plan = sequential(
             [
                 open_door,
-                ParkArmsAction(self.robot.get_arms()),
+                ParkArmsAction(self.robot.all_arms),
                 NavigateAction(
                     target_location=Pose.from_xyz_rpy(
                         x=12, y=8.13, reference_frame=self.world.root
@@ -743,7 +741,7 @@ class Sage10kBrutalistStoreDemo(Sage10kAbstractDemoHSRB):
                     standing_position=self.pickup_navigation_pose,
                     arm=arm,
                 ),
-                ParkArmsAction(self.robot.get_arms()),
+                ParkArmsAction(self.robot.all_arms),
                 MoveAndPlaceAction.from_standing_position(
                     standing_position=self.place_navigation_pose,
                     object_designator=self.object_of_interest,
@@ -832,13 +830,13 @@ class Sage10kAmericanBuffetDemo(Sage10kAbstractDemoHSRB):
         plan = sequential(
             [
                 open_door,
-                ParkArmsAction(self.robot.get_arms()),
+                ParkArmsAction(self.robot.all_arms),
                 MoveAndPickUpAction.from_standing_position(
                     grasp=self.object_of_interest.grasp_candidates()[0],
                     standing_position=self.pickup_navigation_pose,
                     arm=arm,
                 ),
-                ParkArmsAction(self.robot.get_arms()),
+                ParkArmsAction(self.robot.all_arms),
                 NavigateAction(target_location=navigate),
                 MoveAndPlaceAction.from_standing_position(
                     standing_position=self.place_navigation_pose,

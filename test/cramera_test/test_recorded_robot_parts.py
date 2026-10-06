@@ -179,7 +179,7 @@ def test_native_sensors_are_recorded_as_sensor_parts(pr2_world_copy: World) -> N
     }
     expected = {
         type(sensor).__name__: sorted(set(RobotPartAnnotation.link_names(sensor)))
-        for sensor in robot.get_sensors()
+        for sensor in robot.all_sensors
     }
 
     assert expected

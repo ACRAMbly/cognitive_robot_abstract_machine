@@ -7,10 +7,12 @@ context. None of it needs a controller.
 """
 
 import logging
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 
 import pytest
 import rclpy
+from typing_extensions import Iterator
 
 from coraplex.datastructures.dataclasses import Context
 from coraplex.datastructures.enums import ExecutionType
@@ -76,6 +78,16 @@ class RecordingDemonstration(RobotDemonstration):
     The context this demonstration built for its plan.
     """
 
+    segmenting_events: bool = False
+    """
+    Whether the events of the run are being segmented right now.
+    """
+
+    observed_segmenting_events: bool | None = field(default=None)
+    """
+    Whether the events of the run were being segmented while the plan ran.
+    """
+
     def build_simulated_world(self) -> World:
         return self.world
 
@@ -98,6 +110,12 @@ class RecordingDemonstration(RobotDemonstration):
     def build_plan(self, context: Context) -> PlanNode:
         return code(self.run_plan_body, context)
 
+    @contextmanager
+    def segment_events(self, world: World) -> Iterator[None]:
+        self.segmenting_events = True
+        yield
+        self.segmenting_events = False
+
     def run_plan_body(self) -> None:
         """
         Record the execution environment, or fail if this demonstration is meant to.
@@ -106,6 +124,7 @@ class RecordingDemonstration(RobotDemonstration):
             raise PlanDeliberatelyFailed()
         self.observed_execution_type = GiskardExecutable.execution_type
         self.observed_collision_avoidance = GiskardExecutable.collision_avoidance
+        self.observed_segmenting_events = self.segmenting_events
 
     def tear_down(self) -> None:
         self.tear_down_calls += 1
@@ -192,6 +211,32 @@ def test_run_returns_the_world_it_acted_on(cylinder_bot_world):
     )
 
     assert demonstration.run() is cylinder_bot_world
+
+
+# %% event segmentation
+
+
+def test_the_events_of_the_plan_are_segmented_while_it_runs(cylinder_bot_world):
+    demonstration = RecordingDemonstration(
+        world=cylinder_bot_world, used_robot=MinimalRobot
+    )
+
+    demonstration.run()
+
+    assert demonstration.observed_segmenting_events is True
+    assert demonstration.segmenting_events is False
+
+
+def test_the_events_of_the_plan_are_not_segmented_when_switched_off(
+    cylinder_bot_world,
+):
+    demonstration = RecordingDemonstration(
+        world=cylinder_bot_world, used_robot=MinimalRobot, event_segmentation=False
+    )
+
+    demonstration.run()
+
+    assert demonstration.observed_segmenting_events is False
 
 
 # %% debugging

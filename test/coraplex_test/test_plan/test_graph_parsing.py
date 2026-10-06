@@ -64,7 +64,7 @@ from giskardpy.motion_statechart.tasks.cartesian_tasks import CartesianPose
 from giskardpy.motion_statechart.tasks.joint_tasks import JointPositionList
 from semantic_digital_twin.datastructures.definitions import TorsoState
 from semantic_digital_twin.semantic_annotations.semantic_annotations import Milk
-from semantic_digital_twin.semantic_annotations.mixins import GraspCandidate
+from semantic_digital_twin.grasping.grasp_candidates import GraspCandidate
 from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix
 from semantic_digital_twin.spatial_types.spatial_types import Pose
 from semantic_digital_twin.world_description.geometry import VolumetricBoundingBox
@@ -373,7 +373,7 @@ def test_parse_complex_plan(pr2_apartment_context):
 
     plan = sequential(
         [
-            ParkArmsAction(context.robot.get_arms()),
+            ParkArmsAction(context.robot.all_arms),
             ReachAction(
                 grasp=GraspCandidate.from_body_origin(
                     world.get_semantic_annotations_by_type(Milk)[0]
@@ -395,7 +395,7 @@ def test_parsing_two_actions_into_one_exec(pr2_apartment_context):
 
     plan = sequential(
         [
-            ParkArmsAction(context.robot.get_arms()),
+            ParkArmsAction(context.robot.all_arms),
             ReachAction(
                 grasp=GraspCandidate.from_body_origin(
                     world.get_semantic_annotations_by_type(Milk)[0]
@@ -445,7 +445,7 @@ def test_parse_transport_plan(pr2_apartment_context, rclpy_node):
     plan = sequential(
         [
             MoveTorsoAction(TorsoState.HIGH),
-            ParkArmsAction(context.robot.get_arms()),
+            ParkArmsAction(context.robot.all_arms),
             TransportAction.from_graspable_by_closest_grasps(
                 world.get_semantic_annotations_by_type(Milk)[0],
                 Pose.from_xyz_rpy(2.37, 2.5, 1.05, reference_frame=world.root),

@@ -607,7 +607,7 @@ def test_parameterization_of_pick_up(apartment_world_pr2_copy_with_context):
 
     pick_up_description = a(PickUpAction)(
         grasp=grasp_variable,
-        arm=variable_from(context.robot.get_arms()),
+        arm=variable_from(context.robot.all_arms),
         approach_clearance=0.05,
     )
 

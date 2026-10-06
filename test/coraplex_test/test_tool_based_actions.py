@@ -25,7 +25,6 @@ from coraplex.robot_plans.actions.composite.tool_based import (
 from coraplex.robot_plans.motions.gripper import MoveTCPWaypointsAlignedMotion
 from krrood.ormatic.data_access_objects.helper import to_dao
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
-from semantic_digital_twin.semantic_annotations.mixins import HasGraspCandidates
 from semantic_digital_twin.semantic_annotations.semantic_annotations import (
     PouringCup,
     CuttingKnife,
@@ -62,13 +61,9 @@ def _add_box_body(world, name, size, position):
 @pytest.fixture
 def tool_action_world(pr2_apartment_context):
     world, robot, context = pr2_apartment_context
-    container = HasGraspCandidates(
-        root=_add_box_body(
-            world, "tool_test_container", (0.2, 0.2, 0.1), (2.4, 2.2, 1.0)
-        )
+    container = _add_box_body(
+        world, "tool_test_container", (0.2, 0.2, 0.1), (2.4, 2.2, 1.0)
     )
-    with world.modify_world():
-        world.add_semantic_annotation(container)
     tool_body = _add_box_body(
         world, "tool_test_tool", (0.04, 0.04, 0.2), (1.0, 1.0, 1.0)
     )
@@ -210,8 +205,8 @@ def test_pouring_action_poses_tilt_and_mirror(tool_action_world):
 
     container_position = np.array(
         [
-            float(container.root.global_pose.x),
-            float(container.root.global_pose.y),
+            float(container.global_pose.x),
+            float(container.global_pose.y),
         ]
     )
     right_offset = (
@@ -333,12 +328,8 @@ def test_pouring_action_pour_point_lands_on_target_container_center(
     mouth_in_tool_frame = tool_frame_T_source @ np.array([0.0, 0.0, 0.1, 1.0])
     mouth_in_world = pour_pose.to_homogeneous_matrix().to_np() @ mouth_in_tool_frame
 
-    assert mouth_in_world[0] == pytest.approx(
-        float(container.root.global_pose.x), abs=1e-6
-    )
-    assert mouth_in_world[1] == pytest.approx(
-        float(container.root.global_pose.y), abs=1e-6
-    )
+    assert mouth_in_world[0] == pytest.approx(float(container.global_pose.x), abs=1e-6)
+    assert mouth_in_world[1] == pytest.approx(float(container.global_pose.y), abs=1e-6)
 
 
 def test_mixing_action_orm_roundtrip(tool_action_world, coraplex_testing_session):

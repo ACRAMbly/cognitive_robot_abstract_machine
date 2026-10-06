@@ -38,9 +38,7 @@ from coraplex.robot_plans.motions.gripper import (
 from semantic_digital_twin.datastructures.definitions import GripperState
 from semantic_digital_twin.reasoning.robot_predicates import is_body_gripped
 from semantic_digital_twin.robots.robot_parts import Arm
-from semantic_digital_twin.semantic_annotations.mixins import (
-    GraspCandidate,
-)
+from semantic_digital_twin.grasping.grasp_candidates import GraspCandidate
 
 logger = logging.getLogger(__name__)
 
@@ -50,10 +48,8 @@ class HasGraspChoice:
     """
     Adds to an action the grasp it takes hold by.
 
-    Shared by every action that closes a gripper on something: which grasp is taken, and
-    whether the gripper is free to take it, are the same questions however much the
-    action goes on to do with the object afterwards. The grasp names the object it is
-    on, so that is not asked for separately.
+    Shared by every action that closes a gripper on something. The grasp names the
+    object it is on, so that is not asked for separately.
     """
 
     grasp: GraspCandidate
@@ -61,27 +57,13 @@ class HasGraspChoice:
     The grasp to take hold by.
 
     One of the object's own
-    :meth:`~semantic_digital_twin.semantic_annotations.mixins.HasGraspCandidates.grasp_candidates`.
+    :meth:`~semantic_digital_twin.grasping.grasp_candidates.HasGraspCandidates.grasp_candidates`.
     """
 
     arm: Arm
     """
     The arm that should be used.
     """
-
-    @staticmethod
-    def can_take_hold(
-        variables: Dict[str, Any], context: Context, kwargs: Dict[str, Any]
-    ) -> ConditionType:
-        """
-        The gripper needs to be free.
-
-        :param variables: The action's bound variables.
-        :param context: The context the check runs in.
-        :param kwargs: The action's parameters.
-        :return: The condition.
-        """
-        return GripperIsFree(variables["arm"].end_effector)
 
 
 @dataclass
@@ -121,7 +103,7 @@ class ReachAction(
     @property
     def _action_plan(self) -> PlanNode:
         poses = self.grasp_pose_sequence(
-            self.grasp.root_T_grasp, self.arm.end_effector, self.grasp
+            self.grasp.grasp_pose, self.arm.end_effector, self.grasp
         )
         pre_pose = poses.retreat if self.reverse_reach_order else poses.pre_grasp
         children = [
@@ -230,7 +212,7 @@ class PickUpAction(
     @property
     def _action_plan(self) -> PlanNode:
         lift_to_pose = self.grasp_pose_sequence(
-            self.grasp.root_T_grasp, self.arm.end_effector, self.grasp
+            self.grasp.grasp_pose, self.arm.end_effector, self.grasp
         ).retreat
         return sequential(
             children=[
@@ -254,7 +236,7 @@ class PickUpAction(
         """
         The gripper needs to be free.
         """
-        return HasGraspChoice.can_take_hold(variables, context, kwargs)
+        return GripperIsFree(variables["arm"].end_effector)
 
     @staticmethod
     def post_condition(
@@ -331,7 +313,7 @@ class GraspingAction(
         """
         The gripper needs to be free.
         """
-        return HasGraspChoice.can_take_hold(variables, context, kwargs)
+        return GripperIsFree(variables["arm"].end_effector)
 
     @staticmethod
     def post_condition(

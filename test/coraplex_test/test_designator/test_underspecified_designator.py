@@ -19,7 +19,11 @@ from coraplex.language import SequentialNode
 from coraplex.execution_environment import simulated_robot
 from coraplex.plans.executables import Executable
 from coraplex.plans.factories import sequential, execute_single
-from coraplex.plans.failures import PlanFailure
+from coraplex.plans.failures import (
+    CandidateLimitReached,
+    EmptyUnderspecified,
+    PlanFailure,
+)
 from coraplex.plans.plan_node import ExecutionBoundaryNode, PlanNode
 from coraplex.plans.plan import Plan
 from coraplex.plans.plan_callbacks import PlanCallback
@@ -270,7 +274,7 @@ def test_underspecified_language(apartment_world_pr2_copy_with_context):
                 ),
             ),
             a(PickUpAction)(
-                arm=variable(Arm, domain=context.robot.get_arms()),
+                arm=variable(Arm, domain=context.robot.all_arms),
                 grasp=milk.grasp_candidates()[0],
             ),
         ],
@@ -278,7 +282,7 @@ def test_underspecified_language(apartment_world_pr2_copy_with_context):
     )
     plans = list(EntityQueryLanguageGenerativeBackend().evaluate(plan_generator))
     assert len(plans) == len(list(target_locations._domain_)) * len(
-        context.robot.get_arms()
+        context.robot.all_arms
     )
 
 
@@ -538,6 +542,64 @@ def test_a_trial_catches_its_copy_up_with_what_the_world_gained(
     assert caught_up is copied
     assert caught_up.get_kinematic_structure_entity_by_id(body.id).name == body.name
     trial.discard()
+
+
+# %% how many candidates a step tries
+
+
+def test_a_step_gives_up_after_as_many_candidates_as_the_context_allows(
+    apartment_world_pr2_copy_with_context,
+):
+    world, robot, context = apartment_world_pr2_copy_with_context
+    context.candidates_to_try = 2
+    probe_key = register_probe()
+    action = a(RecordingAction)(
+        probe_key=probe_key,
+        dof_id=world.degrees_of_freedom[0].id,
+        fail_on_attempt_number=variable_from([1, 2, 3]),
+    )
+    plan = execute_single(action_like=action, context=context).plan
+
+    with simulated_robot, pytest.raises(CandidateLimitReached) as failure:
+        plan.perform()
+
+    assert failure.value.candidate_limit == context.candidates_to_try
+    assert len(_registered_probes[probe_key].calls) == context.candidates_to_try
+
+
+def test_a_step_keeps_its_own_limit_over_the_contexts(
+    apartment_world_pr2_copy_with_context,
+):
+    world, robot, context = apartment_world_pr2_copy_with_context
+    context.candidates_to_try = 2
+    action = a(RecordingAction)(
+        probe_key=register_probe(),
+        dof_id=world.degrees_of_freedom[0].id,
+        fail_on_attempt_number=variable_from([1, 2, None]),
+    ).limit(3)
+    plan = execute_single(action_like=action, context=context).plan
+
+    with simulated_robot:
+        plan.perform()
+
+    assert plan.root.status == LifeCycleValues.SUCCEEDED
+
+
+def test_a_step_that_runs_out_of_candidates_below_its_limit_says_it_is_empty(
+    apartment_world_pr2_copy_with_context,
+):
+    world, robot, context = apartment_world_pr2_copy_with_context
+    action = a(RecordingAction)(
+        probe_key=register_probe(),
+        dof_id=world.degrees_of_freedom[0].id,
+        fail_on_attempt_number=variable_from([1, 2]),
+    )
+    plan = execute_single(action_like=action, context=context).plan
+
+    with simulated_robot, pytest.raises(EmptyUnderspecified) as failure:
+        plan.perform()
+
+    assert type(failure.value) is EmptyUnderspecified
 
 
 # %% a trial copy is published while debugging

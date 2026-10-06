@@ -23,7 +23,7 @@ from coraplex.datastructures.trajectory import PoseTrajectory
 from coraplex.exceptions import NoFloorBelowRobot
 from coraplex.execution_environment import simulated_robot
 from coraplex.plans.factories import sequential, execute_single
-from coraplex.robot_plans.plan_transformations import OpenDrawerBeforeTransport
+from coraplex.robot_plans.plan_transformations import OpenDrawerBeforeMoveAndPickUp
 from coraplex.robot_plans.actions.composite.transporting import TransportAction
 from coraplex.robot_plans.actions.core.container import OpenAction, CloseAction
 from coraplex.robot_plans.actions.core.misc import DetectAction, MoveToReach
@@ -68,7 +68,7 @@ from semantic_digital_twin.robots.hsrb import HSRB
 from semantic_digital_twin.robots.pr2 import PR2
 from semantic_digital_twin.robots.stretch import Stretch
 from semantic_digital_twin.robots.tiago import Tiago
-from semantic_digital_twin.semantic_annotations.mixins import GraspCandidate
+from semantic_digital_twin.grasping.grasp_candidates import GraspCandidate
 from semantic_digital_twin.semantic_annotations.semantic_annotations import (
     Elevator,
     FirstFloor,
@@ -341,7 +341,7 @@ def test_move_gripper_multi(multiple_robot_apartment_context):
     with simulated_robot:
         plan.perform()
 
-    arm = view.get_arms()[0]
+    arm = view.all_arms[0]
     open_state = arm.end_effector.get_joint_state_by_type(GripperState.OPEN)
     close_state = arm.end_effector.get_joint_state_by_type(GripperState.CLOSE)
 
@@ -364,15 +364,15 @@ def test_move_gripper_multi(multiple_robot_apartment_context):
 
 def test_park_arms_multi(multiple_robot_apartment_context):
     world, robot, context = multiple_robot_apartment_context
-    description = ParkArmsAction(context.robot.get_arms())
+    description = ParkArmsAction(context.robot.all_arms)
     plan = execute_single(description, context)
-    assert description.arms == context.robot.get_arms()
+    assert description.arms == context.robot.all_arms
     with simulated_robot:
         plan.perform()
 
     joints = []
     states = []
-    for arm in robot.get_arms():
+    for arm in robot.all_arms:
         joint_state = arm.get_joint_state_by_type(StaticJointState.PARK)
         joints.extend(joint_state.connections)
         states.extend(joint_state.target_values)
@@ -404,7 +404,7 @@ def test_reach_action_multi(multiple_robot_apartment_context):
 
     plan = sequential(
         [
-            ParkArmsAction(context.robot.get_arms()),
+            ParkArmsAction(context.robot.all_arms),
             ReachAction(
                 grasp=GraspCandidate(milk, grasp_pose),
                 arm=left_or_only_arm(context.robot),
@@ -475,7 +475,7 @@ def test_follow_tcp_path_multi(multiple_robot_apartment_context):
     plan = sequential(
         [
             MoveTorsoAction(TorsoState.HIGH),
-            ParkArmsAction(context.robot.get_arms()),
+            ParkArmsAction(context.robot.all_arms),
             FollowToolCenterPointPathAction(
                 arm=left_or_only_arm(context.robot), target_locations=waypoints
             ),
@@ -511,7 +511,7 @@ def test_grasping(multiple_robot_apartment_context):
 
     plan = sequential(
         [
-            ParkArmsAction(context.robot.get_arms()),
+            ParkArmsAction(context.robot.all_arms),
             grasping_action,
         ],
         context,
@@ -543,7 +543,7 @@ def test_pick_up_multi(multiple_robot_apartment_context, rclpy_node):
 
     root = sequential(
         [
-            ParkArmsAction(context.robot.get_arms()),
+            ParkArmsAction(context.robot.all_arms),
             PickUpAction(
                 world.get_semantic_annotations_by_type(Milk)[0].grasp_candidates()[0],
                 left_or_only_arm(context.robot),
@@ -588,7 +588,7 @@ def test_place_multi(multiple_robot_apartment_context):
 
     root = sequential(
         [
-            ParkArmsAction(context.robot.get_arms()),
+            ParkArmsAction(context.robot.all_arms),
             PickUpAction(
                 world.get_semantic_annotations_by_type(Milk)[0].grasp_candidates()[0],
                 left_or_only_arm(context.robot),
@@ -673,7 +673,7 @@ def test_open(multiple_robot_apartment_context):
     plan = sequential(
         [
             MoveTorsoAction(TorsoState.HIGH),
-            ParkArmsAction(context.robot.get_arms()),
+            ParkArmsAction(context.robot.all_arms),
             NavigateAction(
                 Pose(
                     Point3.from_iterable([1.6, 1.9, 0]),
@@ -709,7 +709,7 @@ def test_close(multiple_robot_apartment_context, rclpy_node):
     plan = sequential(
         [
             MoveTorsoAction(TorsoState.HIGH),
-            ParkArmsAction(context.robot.get_arms()),
+            ParkArmsAction(context.robot.all_arms),
             NavigateAction(
                 heading_towards(
                     navigate_position,
@@ -795,7 +795,7 @@ def test_transport_open_container(multiple_robot_apartment_context, rclpy_node):
     target_pose = Pose.from_xyz_rpy(
         5.1, 3.25, 0.75, yaw=1.57, reference_frame=world.root
     )
-    context.plan_transformations.append(OpenDrawerBeforeTransport())
+    context.plan_transformations.append(OpenDrawerBeforeMoveAndPickUp())
     description = TransportAction.from_graspable_by_closest_grasps(
         world.get_semantic_annotations_by_type(Spoon)[0],
         target_pose,
@@ -805,7 +805,7 @@ def test_transport_open_container(multiple_robot_apartment_context, rclpy_node):
     plan = sequential(
         [
             MoveTorsoAction(TorsoState.HIGH),
-            ParkArmsAction(context.robot.get_arms()),
+            ParkArmsAction(context.robot.all_arms),
             description,
         ],
         context,

@@ -164,14 +164,14 @@ class StretchApartmentDemonstration(RobotDemonstration):
         world = context.world
 
         cereal = world.get_semantic_annotations_by_type(CheezeIt)[0]
-        arm = context.robot.get_arms()[0]
+        arm = context.robot.all_arms[0]
         shelf_layer_body = world.get_body_by_name(CEREAL_SHELF_LAYER_NAME)
         bedside_table_body = world.get_body_by_name("bedside_table.dae")
         CEREAL_SHELF_LAYER_T_CEREAL.reference_frame = shelf_layer_body
 
         plan = sequential(
             [
-                ParkArmsAction(context.robot.get_arms()),
+                ParkArmsAction(context.robot.all_arms),
                 SetGripperAction(arm.end_effector, motion=GripperState.CLOSE),
                 NavigateAction(
                     Pose.from_xyz_rpy(
@@ -195,7 +195,7 @@ class StretchApartmentDemonstration(RobotDemonstration):
                     cereal.grasp_candidates()[0],
                     arm,
                 ),
-                ParkArmsAction(context.robot.get_arms()),
+                ParkArmsAction(context.robot.all_arms),
                 NavigateAction(
                     Pose.from_xyz_rpy(
                         0.8, 0, 0, yaw=np.pi, reference_frame=bedside_table_body
@@ -210,7 +210,7 @@ class StretchApartmentDemonstration(RobotDemonstration):
                         reference_frame=bedside_table_body,
                     ),
                 ),
-                ParkArmsAction(context.robot.get_arms()),
+                ParkArmsAction(context.robot.all_arms),
                 SetGripperAction(arm.end_effector, motion=GripperState.CLOSE),
                 NavigateAction(
                     Pose.from_xyz_rpy(
@@ -234,7 +234,7 @@ class StretchApartmentDemonstration(RobotDemonstration):
                     grasp=cereal.grasp_candidates()[0],
                     arm=arm,
                 ),
-                ParkArmsAction(context.robot.get_arms()),
+                ParkArmsAction(context.robot.all_arms),
                 NavigateAction(
                     Pose.from_xyz_rpy(
                         0.8, 0.6, 0, yaw=-np.pi / 2, reference_frame=world.root
@@ -244,7 +244,7 @@ class StretchApartmentDemonstration(RobotDemonstration):
                     object_designator=cereal,
                     target_location=CEREAL_SHELF_LAYER_T_CEREAL.to_pose(),
                 ),
-                ParkArmsAction(context.robot.get_arms()),
+                ParkArmsAction(context.robot.all_arms),
                 SetGripperAction(arm.end_effector, motion=GripperState.CLOSE),
             ],
             context=context,

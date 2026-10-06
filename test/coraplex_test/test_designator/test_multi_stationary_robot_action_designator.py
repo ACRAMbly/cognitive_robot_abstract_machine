@@ -34,7 +34,7 @@ from semantic_digital_twin.spatial_types.spatial_types import Pose
 from semantic_digital_twin.world_description.connections import Connection6DoF
 from semantic_digital_twin.world_description.geometry import Box, Scale
 from semantic_digital_twin.world_description.shape_collection import ShapeCollection
-from semantic_digital_twin.semantic_annotations.mixins import (
+from semantic_digital_twin.grasping.grasp_candidates import (
     GraspCandidate,
     HasGraspCandidates,
 )
@@ -145,14 +145,14 @@ def stationary_block_context(robot_setup):
 def test_park_arms_multi(stationary_block_context):
     world, view, context = stationary_block_context
 
-    description = ParkArmsAction(context.robot.get_arms())
+    description = ParkArmsAction(context.robot.all_arms)
     plan = execute_single(description, context=context).plan
     with simulated_robot:
         plan.perform()
 
     joints = []
     states = []
-    for arm in view.get_arms():
+    for arm in view.all_arms:
         joint_state = arm.get_joint_state_by_type(StaticJointState.PARK)
         joints.extend(joint_state.connections)
         states.extend(joint_state.target_values)
@@ -177,7 +177,7 @@ def test_reach_action_multi(stationary_block_context):
 
     plan = sequential(
         [
-            ParkArmsAction(context.robot.get_arms()),
+            ParkArmsAction(context.robot.all_arms),
             ReachAction(
                 grasp=GraspCandidate(box, grasp_pose),
                 arm=left_or_only_arm(context.robot),
@@ -216,7 +216,7 @@ def test_move_gripper_multi(stationary_block_context):
     with simulated_robot:
         plan.perform()
 
-    arm = view.get_arms()[0]
+    arm = view.all_arms[0]
     open_state = arm.end_effector.get_joint_state_by_type(GripperState.OPEN)
     close_state = arm.end_effector.get_joint_state_by_type(GripperState.CLOSE)
 
@@ -250,7 +250,7 @@ def test_grasping(stationary_block_context):
         left_or_only_arm(context.robot),
     )
     plan = sequential(
-        [ParkArmsAction(context.robot.get_arms()), description],
+        [ParkArmsAction(context.robot.all_arms), description],
         context=context,
     ).plan
     with simulated_robot:
@@ -271,7 +271,7 @@ def test_pick_up_multi(stationary_block_context):
     box_body = world.get_body_by_name("box1")
     plan = sequential(
         [
-            ParkArmsAction(context.robot.get_arms()),
+            ParkArmsAction(context.robot.all_arms),
             PickUpAction(
                 graspable_annotation(world, box_body).grasp_candidates()[0],
                 left_or_only_arm(context.robot),
@@ -313,7 +313,7 @@ def test_place_multi(stationary_block_context, place_position):
 
     plan = sequential(
         [
-            ParkArmsAction(context.robot.get_arms()),
+            ParkArmsAction(context.robot.all_arms),
             PickUpAction(
                 graspable_annotation(world, box_body).grasp_candidates()[0],
                 left_or_only_arm(context.robot),

@@ -155,8 +155,6 @@ class CollisionManager(ModelChangeCallback):
     )
     """
     Objects that are notified about changes in the collision matrix.
-
-    Live observers, not part of the model, so they are not serialized.
     """
 
     def __post_init__(self):

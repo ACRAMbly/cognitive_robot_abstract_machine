@@ -59,24 +59,24 @@ def main() -> None:
     knife_body = attach_tool(
         world, pr2.right_arm, parse_object("big-knife.stl"), CUT_MOUNT
     )
-    bread = Bread(root=world.get_body_by_name("bread.stl"))
+    bread_body = world.get_body_by_name("bread.stl")
 
     knife = CuttingKnife(root=knife_body)
     with world.modify_world():
-        world.add_semantic_annotations([bread, knife])
+        world.add_semantic_annotations([Bread(root=bread_body), knife])
 
     context.evaluate_conditions = False
 
     plan = sequential(
         [
             SetGripperAction(pr2.right_arm.end_effector, GripperState.CLOSE),
-            ParkArmsAction(pr2.get_arms()),
+            ParkArmsAction(pr2.all_arms),
             MoveTorsoAction(TorsoState.HIGH),
             NavigateAction(
                 Pose.from_xyz_rpy(*BASE_POSITION_XYZ, reference_frame=world.root)
             ),
             CuttingAction(
-                object_to_cut=bread,
+                object_to_cut=bread_body,
                 arm=pr2.right_arm,
                 tool=knife,
                 technique=CuttingTechnique.SLICE,

@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from typing_extensions import Any, Dict, List, Optional, Tuple
+from typing_extensions import Any, Dict, List, Tuple
 
 from coraplex.plans.attachment_nodes import ReAttachNode
-from coraplex.plans.plan_node import DesignatorNode, PlanNode
+from coraplex.plans.plan_node import PlanNode
 from krrood.entity_query_language.core.variable import Variable
 from krrood.entity_query_language.factories import (
     or_,
@@ -35,7 +35,7 @@ from semantic_digital_twin.reasoning.predicates import allclose
 from semantic_digital_twin.reasoning.robot_predicates import is_body_gripped
 from semantic_digital_twin.robots.robot_parts import Arm
 from semantic_digital_twin.spatial_types.spatial_types import Pose
-from semantic_digital_twin.semantic_annotations.mixins import (
+from semantic_digital_twin.grasping.grasp_candidates import (
     GraspCandidate,
     HasGraspCandidates,
 )
@@ -121,37 +121,25 @@ class PlaceAction(
         The arm that holds :attr:`object_designator`, and the grasp it holds it by.
 
         Read off the gripper while it holds the object; while the plan is still being
-        built, taken from the latest pick-up of the object before this place.
+        built, taken from the latest pick-up before this place.
 
         :return: The arm and its grasp on the object.
-        :raises ObjectIsNotHeld: If no arm holds the object and no pick-up of it
-            precedes this place.
+        :raises ObjectIsNotHeld: If no arm holds the object and no pick-up precedes this
+            place.
         """
         object_body = self.object_designator.root
-        for arm in self.robot.get_arms():
+        for arm in self.robot.all_arms:
             end_effector = arm.end_effector
             if GripperHolds(end_effector, object_body)():
                 return arm, GraspCandidate(
                     self.object_designator, end_effector.held_body_T_grasp
                 )
-        pick_up = self._latest_pick_up_of_the_object()
-        if pick_up is None:
+        previous_pick = self.plan_node.get_previous_node_by_designator_type(
+            PickUpAction
+        )
+        if previous_pick is None:
             raise ObjectIsNotHeld(self.object_designator)
-        return pick_up.arm, pick_up.grasp
-
-    def _latest_pick_up_of_the_object(self) -> Optional[PickUpAction]:
-        """
-        :return: The latest pick-up of :attr:`object_designator` before this place, if
-            there is one.
-        """
-        for node in reversed(self.plan_node.previous_nodes):
-            if not isinstance(node, DesignatorNode):
-                continue
-            if not isinstance(node.designator, PickUpAction):
-                continue
-            if node.designator.grasp.graspable.root is self.object_designator.root:
-                return node.designator
-        return None
+        return previous_pick.designator.arm, previous_pick.designator.grasp
 
     def _grasp_on_the_held_object(self) -> GraspCandidate:
         """
@@ -175,7 +163,7 @@ class PlaceAction(
         return or_(
             *[
                 GripperHolds(arm.end_effector, object_body)
-                for arm in context.robot.get_arms()
+                for arm in context.robot.all_arms
             ],
             *PlaceAction._grips_of_every_arm(
                 context, kwargs, kwargs["grasp_detection_threshold"]
@@ -218,5 +206,5 @@ class PlaceAction(
                 arm.end_effector,
                 threshold=threshold,
             )
-            for arm in context.robot.get_arms()
+            for arm in context.robot.all_arms
         ]

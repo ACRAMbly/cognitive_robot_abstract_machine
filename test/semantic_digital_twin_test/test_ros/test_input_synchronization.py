@@ -13,30 +13,33 @@ from nav_msgs.msg import Odometry
 from numpy.testing import assert_allclose
 from sensor_msgs.msg import JointState
 
-from giskardpy.middleware.ros2.exceptions import (
+from semantic_digital_twin.adapters.ros.input_synchronization import (
+    LatestJointPositionSource,
+    LatestJointStateSynchronizer,
+    OdometrySynchronizer,
+    PendingJointPositionSource,
+    PendingJointStateSynchronizer,
+    SubscribedBasePoseSource,
+    TfFrameSynchronizer,
+    TopicInputSynchronizer,
+)
+from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
+from semantic_digital_twin.exceptions import (
     AlreadyTrackedByTfFrameError,
     ConnectionCannotBeTrackedByTfFrameError,
     UnboundMessageTypeError,
 )
-from giskardpy.middleware.ros2.input_synchronization import (
-    OdometrySynchronizer,
-    PendingJointStateSynchronizer,
-    TfFrameSynchronizer,
-    TopicInputSynchronizer,
-    WorldStateInputs,
+from semantic_digital_twin.spatial_types import (
+    HomogeneousTransformationMatrix,
+    Vector3,
 )
-from giskardpy.middleware.ros2.robot_interface_config import RobotInterfaceConfig
-from giskardpy.middleware.ros2.server_config import (
-    ExecutionMode,
-    GiskardServerConfig,
-)
-from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
-from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix
 from semantic_digital_twin.world import World
 from semantic_digital_twin.world_description.connections import (
+    ActiveConnection1DOF,
     Connection6DoF,
     FixedConnection,
     OmniDrive,
+    RevoluteConnection,
 )
 from semantic_digital_twin.world_description.world_entity import Body
 
@@ -66,108 +69,6 @@ class RecordedTransformLookup:
 
     def lookup_pose(self, target_frame: str, source_frame: str) -> PoseStamped:
         return self.parent_T_child
-
-
-@dataclass
-class ControlLoopMimic:
-    """
-    Holds the inputs a control loop reads in every cycle.
-    """
-
-    inputs: WorldStateInputs
-    """
-    The inputs read before every tick of the controller.
-    """
-
-
-@dataclass
-class MotionServerMimic:
-    """
-    Holds the inputs read between goals and the control loop that executes a goal.
-    """
-
-    inputs: WorldStateInputs
-    """
-    The inputs read while no goal is executed.
-    """
-
-    control_loop: ControlLoopMimic
-    """
-    The loop that executes a goal.
-    """
-
-
-@dataclass
-class ContextMimic:
-    """
-    Holds the world a motion is executed in.
-    """
-
-    world: World
-    """
-    The world whose state the inputs write.
-    """
-
-
-@dataclass
-class ExecutorMimic:
-    """
-    Holds the context of the motion.
-    """
-
-    context: ContextMimic
-    """
-    The context whose world the inputs write.
-    """
-
-
-@dataclass
-class RobotMimic:
-    """
-    A robot that is only known by its name.
-    """
-
-    name: str
-    """
-    The name that joint state topics are grouped under.
-    """
-
-
-@dataclass
-class GiskardMimic:
-    """
-    Offers the parts of Giskard that a robot interface configures.
-    """
-
-    executor: ExecutorMimic
-    """
-    The executor whose world the inputs write.
-    """
-
-    robot: RobotMimic
-    """
-    The robot the interface talks to.
-    """
-
-    server_config: GiskardServerConfig
-    """
-    Decides whether the robot is commanded in a closed loop.
-    """
-
-    motion_server: MotionServerMimic
-    """
-    The server whose inputs the interface registers.
-    """
-
-
-@dataclass
-class JointStateTopicInterface(RobotInterfaceConfig):
-    """
-    Reads the state of the robot from a single joint state topic.
-    """
-
-    def setup(self):
-        self.sync_joint_state_topic("joint_states")
 
 
 def latest_message_field_type(synchronizer_type: type) -> Any:
@@ -237,6 +138,30 @@ def omni_drive_world() -> World:
 
 
 @pytest.fixture()
+def world_with_two_connections() -> (
+    tuple[World, ActiveConnection1DOF, ActiveConnection1DOF]
+):
+    """
+    A world whose root drives two separate one degree of freedom connections, standing
+    for the joints of two different robot parts.
+    """
+    world = World()
+    with world.modify_world():
+        root = Body(name=PrefixedName("root"))
+        part_body = Body(name=PrefixedName("part_body"))
+        other_body = Body(name=PrefixedName("other_body"))
+        part_connection = RevoluteConnection.create_with_dofs(
+            world=world, parent=root, child=part_body, axis=Vector3.Z()
+        )
+        other_connection = RevoluteConnection.create_with_dofs(
+            world=world, parent=root, child=other_body, axis=Vector3.Z()
+        )
+        world.add_connection(part_connection)
+        world.add_connection(other_connection)
+    return world, part_connection, other_connection
+
+
+@pytest.fixture()
 def tracked_connection(world_with_two_bodies):
     """
     A world whose two bodies are joined by a tracked 6 degree of freedom connection.
@@ -253,10 +178,17 @@ def tracked_connection(world_with_two_bodies):
 
 def test_joint_state_synchronizers_read_joint_state_messages():
     assert PendingJointStateSynchronizer.message_type() is JointState
+    assert LatestJointStateSynchronizer.message_type() is JointState
 
 
 def test_odometry_synchronizer_reads_odometry_messages():
     assert OdometrySynchronizer.message_type() is Odometry
+
+
+def test_the_source_of_a_part_reads_the_same_messages_as_the_synchronizer_it_is():
+    assert PendingJointPositionSource.message_type() is JointState
+    assert LatestJointPositionSource.message_type() is JointState
+    assert SubscribedBasePoseSource.message_type() is Odometry
 
 
 def test_synchronizer_without_bound_message_type_is_rejected():
@@ -270,6 +202,9 @@ def test_joint_state_synchronizers_buffer_joint_state_messages():
     assert (
         latest_message_field_type(PendingJointStateSynchronizer) == Optional[JointState]
     )
+    assert (
+        latest_message_field_type(LatestJointStateSynchronizer) == Optional[JointState]
+    )
 
 
 def test_odometry_synchronizer_buffers_odometry_messages():
@@ -280,11 +215,11 @@ def test_odometry_synchronizer_buffers_odometry_messages():
 
 
 def test_pending_joint_state_synchronizer_writes_a_message_once(
-    init_rospy, mini_world: World
+    rclpy_node, mini_world: World
 ):
     [connection] = mini_world.connections
     synchronizer = PendingJointStateSynchronizer(
-        world=mini_world, topic_name="joint_states"
+        world=mini_world, node=rclpy_node, topic_name="joint_states"
     )
     synchronizer.latest_message = joint_state_message(connection.name.name, 0.42)
 
@@ -293,29 +228,195 @@ def test_pending_joint_state_synchronizer_writes_a_message_once(
     assert synchronizer.apply() is False
 
 
-def test_synchronizer_writes_nothing_without_a_message(init_rospy, mini_world: World):
+def test_latest_joint_state_synchronizer_rewrites_its_message_every_cycle(
+    rclpy_node, mini_world: World
+):
+    [connection] = mini_world.connections
+    synchronizer = LatestJointStateSynchronizer(
+        world=mini_world, node=rclpy_node, topic_name="joint_states"
+    )
+    synchronizer.latest_message = joint_state_message(connection.name.name, 0.42)
+
+    assert synchronizer.apply() is True
+    mini_world.state[connection.raw_dof.id].position = 1.0
+    assert synchronizer.apply() is True
+    assert mini_world.state[connection.raw_dof.id].position == 0.42
+
+
+def test_synchronizer_writes_nothing_without_a_message(rclpy_node, mini_world: World):
     [connection] = mini_world.connections
     position_before_apply = mini_world.state[connection.raw_dof.id].position
     synchronizer = PendingJointStateSynchronizer(
-        world=mini_world, topic_name="joint_states"
+        world=mini_world, node=rclpy_node, topic_name="joint_states"
     )
 
     assert synchronizer.apply() is False
     assert mini_world.state[connection.raw_dof.id].position == position_before_apply
 
 
+# %% writing the joints of one robot part
+
+
+def test_the_source_of_a_part_writes_the_joints_of_that_part(
+    rclpy_node, world_with_two_connections
+):
+    world, part_connection, other_connection = world_with_two_connections
+    source = PendingJointPositionSource(
+        world=world,
+        node=rclpy_node,
+        topic_name="joint_states",
+        connections=[part_connection],
+    )
+    source.latest_message = joint_state_message(part_connection.name.name, 0.42)
+
+    assert source.apply() is True
+    assert world.state[part_connection.raw_dof.id].position == 0.42
+
+
+def test_the_source_of_a_part_leaves_the_joints_of_another_part_alone(
+    rclpy_node, world_with_two_connections
+):
+    world, part_connection, other_connection = world_with_two_connections
+    position_before_apply = world.state[other_connection.raw_dof.id].position
+    source = PendingJointPositionSource(
+        world=world,
+        node=rclpy_node,
+        topic_name="joint_states",
+        connections=[part_connection],
+    )
+    source.latest_message = joint_state_message(other_connection.name.name, 0.42)
+
+    assert source.apply() is True
+    assert world.state[other_connection.raw_dof.id].position == position_before_apply
+
+
+# %% the reader a loop that moves the state away from the robot needs
+
+
+def test_a_part_source_hands_out_a_rewriting_reader_of_the_same_topic(
+    rclpy_node, world_with_two_connections
+):
+    world, part_connection, _ = world_with_two_connections
+    source = PendingJointPositionSource(
+        world=world,
+        node=rclpy_node,
+        topic_name="joint_states",
+        connections=[part_connection],
+    )
+
+    rewriting_source = source.rewriting_every_cycle()
+
+    assert isinstance(rewriting_source, LatestJointPositionSource)
+    assert rewriting_source.topic_name == source.topic_name
+    assert rewriting_source.connections == source.connections
+
+
+def test_a_rewriting_part_source_writes_its_message_every_cycle(
+    rclpy_node, world_with_two_connections
+):
+    world, part_connection, _ = world_with_two_connections
+    source = LatestJointPositionSource(
+        world=world,
+        node=rclpy_node,
+        topic_name="joint_states",
+        connections=[part_connection],
+    )
+    source.latest_message = joint_state_message(part_connection.name.name, 0.42)
+
+    assert source.apply() is True
+    world.state[part_connection.raw_dof.id].position = 1.0
+    assert source.apply() is True
+    assert world.state[part_connection.raw_dof.id].position == 0.42
+
+
+def test_an_input_that_already_rewrites_hands_out_itself(
+    rclpy_node, omni_drive_world: World
+):
+    source = SubscribedBasePoseSource(
+        world=omni_drive_world,
+        node=rclpy_node,
+        topic_name="odom",
+        connection=omni_drive_world.get_connection_by_name("root_T_base"),
+    )
+
+    assert source.rewriting_every_cycle() is source
+
+
+# %% releasing a part source
+
+
+@pytest.mark.parametrize(
+    "source_type", [PendingJointPositionSource, LatestJointPositionSource]
+)
+def test_closing_the_source_of_a_part_destroys_its_subscription(
+    rclpy_node, world_with_two_connections, source_type
+):
+    world, part_connection, _ = world_with_two_connections
+    source = source_type(
+        world=world,
+        node=rclpy_node,
+        topic_name="joint_states",
+        connections=[part_connection],
+    )
+    subscription = source.subscription
+
+    source.close()
+
+    assert subscription not in rclpy_node.subscriptions
+
+
+def test_closing_the_source_of_a_base_destroys_its_subscription(
+    rclpy_node, omni_drive_world: World
+):
+    source = SubscribedBasePoseSource(
+        world=omni_drive_world,
+        node=rclpy_node,
+        topic_name="odom",
+        connection=omni_drive_world.get_connection_by_name("root_T_base"),
+    )
+    subscription = source.subscription
+
+    source.close()
+
+    assert subscription not in rclpy_node.subscriptions
+
+
 # %% writing the base pose
 
 
+def test_the_source_of_a_base_writes_the_reported_pose_into_the_drive(
+    rclpy_node, omni_drive_world: World
+):
+    connection = omni_drive_world.get_connection_by_name("root_T_base")
+    expected_pose = HomogeneousTransformationMatrix.from_xyz_rpy(x=0.5, yaw=-0.25)
+    source = SubscribedBasePoseSource(
+        world=omni_drive_world,
+        node=rclpy_node,
+        topic_name="odom",
+        connection=connection,
+    )
+    source.latest_message = odometry_message(expected_pose)
+
+    assert source.apply() is True
+    assert_allclose(
+        connection.origin.to_np().astype(float),
+        expected_pose.to_np().astype(float),
+        atol=1e-9,
+    )
+
+
 def test_odometry_synchronizer_writes_the_pose_into_the_drive(
-    init_rospy, omni_drive_world: World
+    rclpy_node, omni_drive_world: World
 ):
     connection = omni_drive_world.get_connection_by_name("root_T_base")
     expected_pose = HomogeneousTransformationMatrix.from_xyz_rpy(
         x=1.5, y=-2.5, yaw=0.75
     )
     synchronizer = OdometrySynchronizer(
-        world=omni_drive_world, topic_name="odom", connection=connection
+        world=omni_drive_world,
+        node=rclpy_node,
+        topic_name="odom",
+        connection=connection,
     )
     synchronizer.latest_message = odometry_message(expected_pose)
 
@@ -331,7 +432,7 @@ def test_odometry_synchronizer_writes_the_pose_into_the_drive(
 
 
 def test_apply_writes_the_looked_up_transform_into_the_connection(
-    init_rospy, tracked_connection
+    rclpy_node, tracked_connection
 ):
     """
     The origin the synchronizer assigns has to carry the frames of the connection it
@@ -339,7 +440,7 @@ def test_apply_writes_the_looked_up_transform_into_the_connection(
     transform into the parent frame and rejects one without a reference frame.
     """
     world, connection = tracked_connection
-    synchronizer = TfFrameSynchronizer(world=world)
+    synchronizer = TfFrameSynchronizer(world=world, node=rclpy_node)
     synchronizer.tf_wrapper = RecordedTransformLookup(
         parent_T_child=make_pose_stamped(1.0, -2.0, 0.5)
     )
@@ -358,14 +459,14 @@ def test_apply_writes_the_looked_up_transform_into_the_connection(
 
 
 def test_apply_writes_nothing_without_a_tracked_connection(
-    init_rospy, world_with_two_bodies
+    rclpy_node, world_with_two_bodies
 ):
     """
     A synchronizer that tracks nothing must report that it did not write, so the loop
     around it does not recompute the forward kinematics for no reason.
     """
     world, _, _ = world_with_two_bodies
-    synchronizer = TfFrameSynchronizer(world=world)
+    synchronizer = TfFrameSynchronizer(world=world, node=rclpy_node)
 
     assert not synchronizer.apply()
 
@@ -373,12 +474,12 @@ def test_apply_writes_nothing_without_a_tracked_connection(
 # %% rejecting connections it cannot write
 
 
-def test_tracking_a_connection_twice_is_rejected(init_rospy, tracked_connection):
+def test_tracking_a_connection_twice_is_rejected(rclpy_node, tracked_connection):
     """
     A second pair of frames for the same connection would silently overwrite the first.
     """
     world, connection = tracked_connection
-    synchronizer = TfFrameSynchronizer(world=world)
+    synchronizer = TfFrameSynchronizer(world=world, node=rclpy_node)
     synchronizer.track(connection, tf_parent_frame="map", tf_child_frame="odom")
 
     with pytest.raises(AlreadyTrackedByTfFrameError):
@@ -388,7 +489,7 @@ def test_tracking_a_connection_twice_is_rejected(init_rospy, tracked_connection)
 
 
 def test_tracking_a_connection_without_six_degrees_of_freedom_is_rejected(
-    init_rospy, world_with_two_bodies
+    rclpy_node, world_with_two_bodies
 ):
     """
     Only a connection with all six degrees of freedom can follow an arbitrary transform.
@@ -397,38 +498,7 @@ def test_tracking_a_connection_without_six_degrees_of_freedom_is_rejected(
     with world.modify_world():
         connection = FixedConnection(parent=parent, child=child)
         world.add_connection(connection)
-    synchronizer = TfFrameSynchronizer(world=world)
+    synchronizer = TfFrameSynchronizer(world=world, node=rclpy_node)
 
     with pytest.raises(ConnectionCannotBeTrackedByTfFrameError):
         synchronizer.track(connection, tf_parent_frame="map", tf_child_frame="odom")
-
-
-# %% closed loop
-
-
-def test_closed_loop_does_not_rewrite_a_joint_state_it_already_wrote(
-    init_rospy, mini_world: World
-):
-    [connection] = mini_world.connections
-    control_loop_inputs = WorldStateInputs(world=mini_world)
-    interface = JointStateTopicInterface()
-    interface.attach(
-        GiskardMimic(
-            executor=ExecutorMimic(context=ContextMimic(world=mini_world)),
-            robot=RobotMimic(name="robot"),
-            server_config=GiskardServerConfig(execution_mode=ExecutionMode.CLOSED_LOOP),
-            motion_server=MotionServerMimic(
-                inputs=WorldStateInputs(world=mini_world),
-                control_loop=ControlLoopMimic(inputs=control_loop_inputs),
-            ),
-        )
-    )
-    interface.setup()
-    [synchronizer] = control_loop_inputs.synchronizers
-    synchronizer.buffer_message(joint_state_message(connection.name.name, 0.42))
-
-    control_loop_inputs.apply_inputs()
-    mini_world.state[connection.raw_dof.id].position = 1.0
-    control_loop_inputs.apply_inputs()
-
-    assert mini_world.state[connection.raw_dof.id].position == 1.0

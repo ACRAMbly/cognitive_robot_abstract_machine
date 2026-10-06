@@ -18,7 +18,7 @@ if TYPE_CHECKING:
     from coraplex.plans.plan_node import PlanNode
     from coraplex.robot_plans.actions.base import ActionDescription
     from semantic_digital_twin.robots.robot_parts import AbstractRobot, Arm
-    from semantic_digital_twin.semantic_annotations.mixins import HasGraspCandidates
+    from semantic_digital_twin.grasping.grasp_candidates import HasGraspCandidates
     from semantic_digital_twin.world_description.world_entity import (
         SemanticAnnotation,
     )
@@ -462,25 +462,3 @@ class NotOnASingleLevelException(DataclassException):
 
     def suggest_correction(self) -> str:
         return f"Move the robot to a recognized level"
-
-
-@dataclass
-class NonPositiveNumberOfSamples(DataclassException):
-    """
-    Raised when a costmap is asked for fewer than one candidate, which no sampling can
-    satisfy.
-    """
-
-    number_of_samples: int
-    """
-    The number of candidates that was asked for.
-    """
-
-    def error_message(self) -> str:
-        return f"A costmap cannot be asked for {self.number_of_samples} candidates."
-
-    def suggest_correction(self) -> str:
-        return (
-            "ask for at least one; a map offers everything it holds when asked for "
-            "more than that."
-        )

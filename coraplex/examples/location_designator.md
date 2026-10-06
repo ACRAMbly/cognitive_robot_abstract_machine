@@ -60,7 +60,7 @@ from coraplex.robot_plans.actions.core.robot_body import ParkArmsAction, MoveTor
 from semantic_digital_twin.datastructures.definitions import TorsoState
 
 with simulated_robot:
-    sequential([ParkArmsAction(pr2_view.get_arms()),
+    sequential([ParkArmsAction(pr2_view.all_arms),
                 MoveTorsoAction(TorsoState.HIGH)], context=context).perform()
 
 ```

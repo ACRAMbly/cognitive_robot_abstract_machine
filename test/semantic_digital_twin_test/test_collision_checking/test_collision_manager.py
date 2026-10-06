@@ -428,6 +428,10 @@ def test_a_consumer_does_not_have_to_be_serializable(pr2_world_copy):
     """
     Consumers are live observers, not part of the model, so attaching one must not make
     the world's modification history unserializable.
+
+    Every collision rule change serializes the whole collision manager into that
+    history, so a consumer holding a ROS node, as the collision marker publisher does,
+    would otherwise make the change raise.
     """
     collision_manager = pr2_world_copy.collision_manager
     collision_manager.add_collision_consumer(ConsumerHoldingSomethingUnserializable())

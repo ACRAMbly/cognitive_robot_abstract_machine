@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing_extensions import Self
 
 from krrood.entity_query_language.factories import a, variable
@@ -9,7 +9,7 @@ from coraplex.locations.locations import ReachabilityLocation
 from coraplex.plans.factories import sequential
 from coraplex.plans.plan_node import PlanNode
 from coraplex.robot_plans.actions.base import ActionDescription
-from coraplex.robot_plans.mixins import HasApproachesGraspPoses, LimitsItsCandidates
+from coraplex.robot_plans.mixins import HasApproachesGraspPoses
 from coraplex.robot_plans.actions.composite.facing import FaceAndLookAtAction
 from coraplex.robot_plans.actions.core.container import OpenAction
 from coraplex.robot_plans.actions.core.navigation import (
@@ -22,9 +22,8 @@ from coraplex.robot_plans.actions.core.pick_up import PickUpAction
 from coraplex.robot_plans.actions.core.placing import PlaceAction
 from coraplex.robot_plans.actions.core.robot_body import ParkArmsAction
 from krrood.entity_query_language.query.match import Match
-from krrood.patterns.field_metadata import JSONMetadata
 from semantic_digital_twin.robots.robot_parts import Arm
-from semantic_digital_twin.semantic_annotations.mixins import (
+from semantic_digital_twin.grasping.grasp_candidates import (
     GraspCandidate,
     HasGraspCandidates,
 )
@@ -33,52 +32,20 @@ from semantic_digital_twin.spatial_types.spatial_types import Pose
 
 
 @dataclass
-class TransportAction(ActionDescription, LimitsItsCandidates):
+class TransportAction(ActionDescription):
     """
     Picks an object up with one step and puts it down with another.
     """
 
-    pick_up: MoveAndPickUpAction = field(
-        metadata=JSONMetadata(serialize=False).as_dict()
-    )
+    pick_up: MoveAndPickUpAction
     """
     The step that picks the object up.
     """
 
-    place: MoveAndPlaceAction = field(metadata=JSONMetadata(serialize=False).as_dict())
+    place: MoveAndPlaceAction
     """
     The step that puts down what :attr:`pick_up` picked up.
     """
-
-    @property
-    def transported_object(self) -> HasGraspCandidates:
-        """
-        :return: The object this transport carries, as its placing step states it,
-            whether that step is grounded already or still to be grounded.
-        """
-        place = (
-            self.place._kwargs_["place"]
-            if isinstance(self.place, Match)
-            else self.place.place
-        )
-        if isinstance(place, Match):
-            return place._kwargs_["object_designator"]
-        return place.object_designator
-
-    @property
-    def carrying_arm(self) -> Arm:
-        """
-        :return: The arm this transport carries its object with, as its picking-up step
-            states it, whether that step is grounded already or still to be grounded.
-        """
-        pick_up = (
-            self.pick_up._kwargs_["pick_up"]
-            if isinstance(self.pick_up, Match)
-            else self.pick_up.pick_up
-        )
-        if isinstance(pick_up, Match):
-            return pick_up._kwargs_["arm"]
-        return pick_up.arm
 
     @classmethod
     def from_graspable_by_closest_grasps(
@@ -131,47 +98,37 @@ class TransportAction(ActionDescription, LimitsItsCandidates):
 
     @property
     def _action_plan(self) -> PlanNode:
-        self._bound_candidates(self.pick_up, self.place)
         return sequential(
             [
-                ParkArmsAction(self.robot.get_arms()),
+                ParkArmsAction(self.robot.all_arms),
                 self.pick_up,
-                ParkArmsAction(self.robot.get_arms()),
+                ParkArmsAction(self.robot.all_arms),
                 self.place,
-                ParkArmsAction(self.robot.get_arms()),
+                ParkArmsAction(self.robot.all_arms),
             ]
         )
 
 
 @dataclass
-class PickAndPlaceAction(ActionDescription, LimitsItsCandidates):
+class PickAndPlaceAction(ActionDescription):
     """
     Picks an object up with one step and puts it down with another, without moving the
     base of the robot.
     """
 
-    pick_up: PickUpAction = field(metadata=JSONMetadata(serialize=False).as_dict())
+    pick_up: PickUpAction
     """
     The step that picks the object up.
     """
 
-    place: PlaceAction = field(metadata=JSONMetadata(serialize=False).as_dict())
+    place: PlaceAction
     """
     The step that puts down what :attr:`pick_up` picked up.
     """
 
     @property
     def _action_plan(self) -> PlanNode:
-        self._bound_candidates(self.pick_up, self.place)
-        return sequential(
-            [
-                ParkArmsAction(self.robot.get_arms()),
-                self.pick_up,
-                ParkArmsAction(self.robot.get_arms()),
-                self.place,
-                ParkArmsAction(self.robot.get_arms()),
-            ]
-        )
+        return sequential([self.pick_up, self.place])
 
 
 @dataclass

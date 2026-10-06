@@ -155,7 +155,7 @@ from coraplex.robot_plans.actions.core.robot_body import ParkArmsAction
 from coraplex.execution_environment import simulated_robot
 
 with simulated_robot:
-    execute_single(ParkArmsAction(pr2.get_arms()), context=context).perform()
+    execute_single(ParkArmsAction(pr2.all_arms), context=context).perform()
 ```
 
 ## Pick Up and Place
@@ -181,16 +181,17 @@ import rclpy
 from semantic_digital_twin.adapters.ros.visualization.viz_marker import VizMarkerPublisher
 
 arm = pr2.right_arm
+milk = world.get_semantic_annotations_by_type(Milk)[0]
 
 with simulated_robot:
     sequential(
-        [ParkArmsAction(pr2.get_arms()),
+        [ParkArmsAction(pr2.all_arms),
          MoveTorsoAction(TorsoState.HIGH),
          NavigateAction(
              Pose.from_xyz_rpy(1.5, 2.4, 0.0, reference_frame=world.root)
          ),
          PickUpAction(
-             grasp=(milk := world.get_semantic_annotations_by_type(Milk)[0]).grasp_candidates()[0],
+             grasp=next(iter(milk.grasp_candidates())),
              arm=arm,
          ),
          PlaceAction(
@@ -231,7 +232,7 @@ designator will return a resolved instance of an ObjectDesignatorDescription.
 # milk_desig = BelieveObject(names=["milk"])
 # 
 # with simulated_robot:
-#     ParkArmsActionDescription(pr2.get_arms()).resolve().perform()
+#     ParkArmsActionDescription(pr2.all_arms).resolve().perform()
 # 
 #     NavigateActionDescription([PoseStamped.from_list([1.7, 2, 0], [0, 0, 0, 1])]).resolve().perform()
 # 
@@ -292,7 +293,7 @@ with world.modify_world():
 with simulated_robot:
     sequential([
         MoveTorsoAction(TorsoState.HIGH),
-        ParkArmsAction(pr2.get_arms()),
+        ParkArmsAction(pr2.all_arms),
         NavigateAction(Pose.from_xyz_quaternion(1.7074915981292725, 2.6873629093170166, 0.0,
                                                 -0.0, 0.0, 0.5253598267689507, -0.850880163370435,
                                                 reference_frame=world.root)),
@@ -314,7 +315,7 @@ from coraplex.execution_environment import simulated_robot
 with simulated_robot:
     sequential([
         MoveTorsoAction(TorsoState.HIGH),
-        ParkArmsAction(pr2.get_arms()),
+        ParkArmsAction(pr2.all_arms),
         NavigateAction(Pose.from_xyz_quaternion(1.72, 2.65, 0.0,
                                                 -0.0, 0.0, 0.5253598267689507, -0.850880163370435,
                                                 reference_frame=world.root)),

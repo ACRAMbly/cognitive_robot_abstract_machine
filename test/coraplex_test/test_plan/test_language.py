@@ -112,7 +112,7 @@ def test_combination_construction():
 
 def test_repeat_construction(pr2_apartment_context):
     world, robot_view, context = pr2_apartment_context
-    act = ParkArmsAction(context.robot.get_arms())
+    act = ParkArmsAction(context.robot.all_arms)
     act2 = MoveTorsoAction(TorsoState.HIGH)
 
     root = repeat([act, act2], maximum_repetitions=10)
@@ -124,7 +124,7 @@ def test_perform_execute_single(pr2_apartment_context):
     world, robot_view, context = pr2_apartment_context
     act = NavigateAction(Pose.from_xyz_rpy(0.3, -1.3, 0, reference_frame=world.root))
     act2 = MoveTorsoAction(TorsoState.HIGH)
-    act3 = ParkArmsAction(context.robot.get_arms())
+    act3 = ParkArmsAction(context.robot.all_arms)
 
     plan = sequential([act, act2, act3], context).plan
     with simulated_robot:
@@ -281,7 +281,7 @@ def test_exception_try_all(pr2_apartment_context):
 
 def test_cancel_monitor_construction(pr2_apartment_context):
     world, robot_view, context = pr2_apartment_context
-    act = ParkArmsAction(context.robot.get_arms())
+    act = ParkArmsAction(context.robot.all_arms)
     act2 = MoveTorsoAction(TorsoState.HIGH)
 
     root = cancel_when([act, act2], monitor=ConstFalseNode(name="never"))

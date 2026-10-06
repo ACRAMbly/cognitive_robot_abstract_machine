@@ -242,7 +242,7 @@ class UnderspecifiedNode(ExecutionBoundaryNode):
 
     This node is used to generate fully specified actions  or language expressions.
     The semantics are: try until it succeeds or fails if the underspecified action is exhausted.
-    If you want to limit the number of attempts, add a limit clause to the underspecified action.
+    It tries at most :attr:`candidate_limit` candidates.
     """
 
     underspecified_action: Match = field(kw_only=True)
@@ -279,9 +279,37 @@ class UnderspecifiedNode(ExecutionBoundaryNode):
     those nodes are part of what this node runs rather than being skipped.
     """
 
+    _candidates_pulled: int = field(default=0, init=False, repr=False)
+    """
+    How many candidates the current run through the underspecified statement has
+    produced.
+    """
+
+    _transformations_applied: bool = field(default=False, init=False, repr=False)
+    """
+    Whether the plan transformations matching this node have rewritten the plan around
+    it already, so that expanding the plan again does not apply them a second time.
+    """
+
     @property
     def designator_type(self) -> Type:
         return self.underspecified_action._type_
+
+    @property
+    def candidate_limit(self) -> int:
+        """
+        :return: How many candidates this node tries: the underspecified statement's own
+            limit, or the context's if it has none.
+        """
+        return self.underspecified_action._limit_ or self.context.candidates_to_try
+
+    @property
+    def reached_candidate_limit(self) -> bool:
+        """
+        :return: Whether the last run through the underspecified statement stopped
+            because it produced :attr:`candidate_limit` candidates.
+        """
+        return self._candidates_pulled == self.candidate_limit
 
     @property
     def trial(self) -> ActionTrial:
@@ -300,16 +328,23 @@ class UnderspecifiedNode(ExecutionBoundaryNode):
         """
         Pull the next grounded action from the iterator, without attaching it anywhere.
 
-        :return: The next grounded action, or None if the iterator is exhausted.
+        :return: The next grounded action, or None if the iterator is exhausted or has
+            produced :attr:`candidate_limit` candidates already.
         """
         if self._action_iterator is None:
             self._action_iterator = self.context.query_backend.evaluate(
                 self.underspecified_action
             )
+            self._candidates_pulled = 0
 
+        if self.reached_candidate_limit:
+            self.stop_grounding()
+            return None
         action = next(self._action_iterator, None)
         if action is None:
             self._action_iterator = None
+            return None
+        self._candidates_pulled += 1
         return action
 
     def _attach(self, action: ActionDescription) -> ActionNode:
@@ -350,8 +385,12 @@ class UnderspecifiedNode(ExecutionBoundaryNode):
         # Resolution is deferred to execution time: the underspecified statement can
         # only be grounded once the preceding actions have run and mutated the world
         # (e.g. the torso is raised, the object is in the gripper). The grounding
-        # happens in UnderspecifiedExecutable, so expansion does nothing here.
-        pass
+        # happens in UnderspecifiedExecutable, so expansion only lets the plan
+        # transformations matching this node rewrite the plan around it.
+        if self._transformations_applied:
+            return
+        self._transformations_applied = True
+        self.plan.apply_plan_transformations(self)
 
     def advance(self) -> bool:
         """

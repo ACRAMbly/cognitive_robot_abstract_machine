@@ -34,13 +34,12 @@ from coraplex.robot_plans.actions.core.pick_up import PickUpAction
 from coraplex.querying.predicates import IsAmongTheClosestGraspsTo
 from coraplex.robot_plans.actions.core.placing import PlaceAction
 from coraplex.robot_plans.actions.core.robot_body import MoveTorsoAction
-from coraplex.robot_plans.mixins import LimitsItsCandidates
 from semantic_digital_twin.semantic_annotations.semantic_annotations import (
     Handle,
     Milk,
 )
 from semantic_digital_twin.robots.robot_parts import AbstractRobot, Arm
-from semantic_digital_twin.semantic_annotations.mixins import (
+from semantic_digital_twin.grasping.grasp_candidates import (
     GraspCandidate,
     HasGraspCandidates,
 )
@@ -188,61 +187,10 @@ def test_a_transport_of_a_graspable_stands_around_the_object_then_the_target(
     assert place_location.target_pose is target
 
 
-def test_a_transport_of_a_graspable_carries_it_with_the_arm_it_was_given(
-    pr2_apartment_context,
-):
-    """
-    A transport whose steps are still to be grounded tells what it carries, and with
-    which arm, from the values its steps state.
-    """
-    world, robot, context = pr2_apartment_context
-    milk = world.get_semantic_annotations_by_type(Milk)[0]
-
-    transport = TransportAction.from_graspable_by_closest_grasps(
-        milk,
-        Pose.from_xyz_rpy(4.0, 1.5, 0.9, reference_frame=world.root),
-        context.robot.right_arm,
-        context,
-    )
-
-    assert transport.transported_object is milk
-    assert transport.carrying_arm is context.robot.right_arm
-
-
-def test_a_transport_of_grounded_steps_carries_what_they_pick_up_and_place(
-    pr2_apartment_context,
-):
-    """
-    A transport whose steps are already grounded tells what it carries, and with which
-    arm, from the steps themselves.
-    """
-    world, robot, context = pr2_apartment_context
-    milk = world.get_semantic_annotations_by_type(Milk)[0]
-    standing_position = Pose(reference_frame=world.root)
-
-    transport = TransportAction(
-        pick_up=MoveAndPickUpAction.from_standing_position(
-            standing_position=standing_position,
-            grasp=milk.grasp_candidates()[0],
-            arm=context.robot.right_arm,
-        ),
-        place=MoveAndPlaceAction.from_standing_position(
-            standing_position=standing_position,
-            target_location=Pose.from_xyz_rpy(
-                4.0, 1.5, 0.9, reference_frame=world.root
-            ),
-            object_designator=milk,
-        ),
-    )
-
-    assert transport.transported_object is milk
-    assert transport.carrying_arm is context.robot.right_arm
-
-
 # %% picking up and placing without moving
 
 
-def _pick_and_place_of_the_milk(world: World, arm: Arm) -> PickAndPlaceAction:
+def pick_and_place_of_the_milk(world: World, arm: Arm) -> PickAndPlaceAction:
     """
     :param arm: The arm that picks the milk up and puts it down.
     :return: A pick-and-place of the milk that tries every grasp it offers.
@@ -261,7 +209,7 @@ def _pick_and_place_of_the_milk(world: World, arm: Arm) -> PickAndPlaceAction:
 
 def test_a_pick_and_place_grounds_the_steps_it_is_given(pr2_apartment_context):
     world, robot, context = pr2_apartment_context
-    pick_and_place = _pick_and_place_of_the_milk(world, robot.right_arm)
+    pick_and_place = pick_and_place_of_the_milk(world, robot.right_arm)
     sequential([pick_and_place], context)
 
     assert [
@@ -269,69 +217,6 @@ def test_a_pick_and_place_grounds_the_steps_it_is_given(pr2_apartment_context):
         for child in pick_and_place._action_plan.children
         if isinstance(child, UnderspecifiedNode)
     ] == [PickUpAction, PlaceAction]
-
-
-def _candidate_limits(action: LimitsItsCandidates) -> List[int]:
-    """
-    :return: How many candidates each step of `action` that tries candidates is limited
-        to, read off the queries the steps are grounded from.
-    """
-    return [
-        child.underspecified_action._get_expression_()._limit_
-        for child in action._action_plan.children
-        if isinstance(child, UnderspecifiedNode)
-    ]
-
-
-@pytest.mark.parametrize(
-    "build",
-    [
-        lambda world, robot, context: _transport_of_the_milk(world, context),
-        lambda world, robot, context: _pick_and_place_of_the_milk(
-            world, robot.right_arm
-        ),
-    ],
-    ids=["transport", "pick-and-place"],
-)
-def test_an_action_tries_a_bounded_number_of_candidates(pr2_apartment_context, build):
-    """
-    Each candidate is tried by running the step with it, so a step that can succeed with
-    none has to give up after a fixed number of them.
-    """
-    world, robot, context = pr2_apartment_context
-    action = build(world, robot, context)
-    sequential([action], context)
-
-    limits = _candidate_limits(action)
-
-    assert limits
-    assert limits == [action.candidates_to_try] * len(limits)
-
-
-def test_a_transport_of_grounded_steps_limits_nothing(pr2_apartment_context):
-    """
-    A step that is already grounded tries no candidates, so there is nothing to limit.
-    """
-    world, robot, context = pr2_apartment_context
-    milk = world.get_semantic_annotations_by_type(Milk)[0]
-    standing_position = Pose(reference_frame=world.root)
-    transport = TransportAction(
-        pick_up=MoveAndPickUpAction.from_standing_position(
-            standing_position=standing_position,
-            grasp=milk.grasp_candidates()[0],
-            arm=context.robot.right_arm,
-        ),
-        place=MoveAndPlaceAction.from_standing_position(
-            standing_position=standing_position,
-            target_location=Pose.from_xyz_rpy(
-                4.0, 1.5, 0.9, reference_frame=world.root
-            ),
-            object_designator=milk,
-        ),
-    )
-    sequential([transport], context)
-
-    assert _candidate_limits(transport) == []
 
 
 # %% moving to an object and picking it up
@@ -428,7 +313,7 @@ def _standing_in_front_of(grasp: GraspCandidate, world: World) -> Pose:
         direction `grasp` is approached along, so that it is approached straight from
         there.
     """
-    world_T_grasp = world.transform(grasp.root_T_grasp, world.root).to_np()
+    world_T_grasp = world.transform(grasp.grasp_pose, world.root).to_np()
     world_P_standing = world_T_grasp[:3, 3] - STANDING_DISTANCE * world_T_grasp[:3, 0]
     return Pose.from_xyz_rpy(
         world_P_standing[0], world_P_standing[1], 0.0, reference_frame=world.root
@@ -440,12 +325,12 @@ def _raised(grasp: GraspCandidate, height: float) -> GraspCandidate:
     :param height: How far to move the grasp up along its object's z-axis.
     :return: `grasp`, approached the same way from higher up.
     """
-    root_P_grasp = grasp.root_T_grasp.to_np()[:3, 3] + np.array([0.0, 0.0, height])
+    root_P_grasp = grasp.grasp_pose.to_np()[:3, 3] + np.array([0.0, 0.0, height])
     return GraspCandidate(
         grasp.graspable,
         Pose(
             position=Point3.from_iterable(root_P_grasp),
-            orientation=grasp.root_T_grasp.to_quaternion(),
+            orientation=grasp.grasp_pose.to_quaternion(),
             reference_frame=grasp.graspable.root,
         ),
     )
@@ -457,14 +342,14 @@ def _turned_around(grasp: GraspCandidate, nearer_by: float = 0.0) -> GraspCandid
         approached along.
     :return: `grasp`, approached from the opposite side.
     """
-    root_T_grasp = grasp.root_T_grasp
-    root_P_grasp = root_T_grasp.to_np()[:3, 3] - nearer_by * root_T_grasp.to_np()[:3, 0]
+    grasp_pose = grasp.grasp_pose
+    root_P_grasp = grasp_pose.to_np()[:3, 3] - nearer_by * grasp_pose.to_np()[:3, 0]
     return GraspCandidate(
         grasp.graspable,
         Pose(
             position=Point3.from_iterable(root_P_grasp),
             orientation=(
-                root_T_grasp.to_rotation_matrix() @ RotationMatrix.from_rpy(yaw=np.pi)
+                grasp_pose.to_rotation_matrix() @ RotationMatrix.from_rpy(yaw=np.pi)
             ).to_quaternion(),
             reference_frame=grasp.graspable.root,
         ),
@@ -476,7 +361,7 @@ def _grasp_signature(grasp: GraspCandidate) -> tuple:
     :return: The grasp's transform, rounded, to tell grasps of separately generated
         lists apart by value.
     """
-    return tuple(np.round(grasp.root_T_grasp.to_np(), 6).ravel())
+    return tuple(np.round(grasp.grasp_pose.to_np(), 6).ravel())
 
 
 def _assert_each_standing_pose_keeps_the_closest_grasps(
@@ -583,7 +468,7 @@ def test_grasps_at_the_standing_position_itself_still_rank(pr2_apartment_context
     world, robot, context = pr2_apartment_context
     grasp = world.get_semantic_annotations_by_type(Milk)[0].grasp_candidates()[0]
     tied = [grasp, _raised(grasp, 0.0)]
-    standing_position = world.transform(grasp.root_T_grasp, world.root)
+    standing_position = world.transform(grasp.grasp_pose, world.root)
 
     closest = [
         candidate
