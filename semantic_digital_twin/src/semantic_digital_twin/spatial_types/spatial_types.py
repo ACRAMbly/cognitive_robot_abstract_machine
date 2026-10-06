@@ -889,7 +889,8 @@ class RotationMatrix(sm.SymbolicMathType, SpatialType, SubclassJSONSerializer):
         """
         :param hint: A function whose sign of the result will be used to determine if angle should be positive or
                         negative
-        :return:
+        :return: The angle of the rotation around its axis in radians. With a hint, the angle is negated if the
+                        hint is not positive for the axis, and normalized to (-pi, pi].
         """
         axis_angle = self.axis_angle
         if hint is not None:
@@ -2549,9 +2550,7 @@ class Pose2D(sm.SymbolicMathType, SpatialType, SubclassJSONSerializer):
                 expected_dimensions=(3, 1), actual_dimensions=self.shape
             )
 
-    # ------------------------------------------------------------------
-    # Properties
-    # ------------------------------------------------------------------
+    # %% Properties
 
     @property
     def x(self) -> sm.Scalar:
@@ -2589,9 +2588,7 @@ class Pose2D(sm.SymbolicMathType, SpatialType, SubclassJSONSerializer):
     def pitch(self) -> float:
         return 0
 
-    # ------------------------------------------------------------------
-    # Conversion to 3D
-    # ------------------------------------------------------------------
+    # %% Conversion to 3D
 
     @property
     def pose(self) -> Pose:
@@ -2608,9 +2605,7 @@ class Pose2D(sm.SymbolicMathType, SpatialType, SubclassJSONSerializer):
             reference_frame=self.reference_frame,
         )
 
-    # ------------------------------------------------------------------
-    # Pose-like interface (delegates to pose)
-    # ------------------------------------------------------------------
+    # %% Pose-like interface (delegates to pose)
 
     @property
     def position(self) -> Point2:
@@ -2641,9 +2636,7 @@ class Pose2D(sm.SymbolicMathType, SpatialType, SubclassJSONSerializer):
         """
         return self.pose.homogeneous_matrix
 
-    # ------------------------------------------------------------------
-    # Factory methods
-    # ------------------------------------------------------------------
+    # %% Factory methods
 
     @classmethod
     def from_pose(
@@ -2696,9 +2689,7 @@ class Pose2D(sm.SymbolicMathType, SpatialType, SubclassJSONSerializer):
         )
         return cls(x=position.x, y=position.y, yaw=yaw, reference_frame=frame)
 
-    # ------------------------------------------------------------------
-    # JSON serialization
-    # ------------------------------------------------------------------
+    # %% JSON serialization
 
     @classmethod
     def _from_constant_json(cls, data: Dict[str, Any], **kwargs) -> Self:
