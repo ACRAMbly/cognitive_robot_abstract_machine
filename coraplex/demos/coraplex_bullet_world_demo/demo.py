@@ -90,7 +90,6 @@ class ApartmentBody(StrEnum):
     """
 
     SPOON_DRAWER = "cabinet10_drawer_top"
-    TABLE = "table_area_main"
 
 
 @dataclass

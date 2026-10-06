@@ -1,22 +1,21 @@
 """
-Tests for where the bullet world demo lays its place setting: each object is laid resting
-on the table, so what watches the run sees it put there.
+Tests for where the bullet world demo puts its place setting: each object starts resting
+on something and is laid resting on the table, so what watches the run sees it taken up
+and put down.
 """
 
 from __future__ import annotations
 
 import importlib.util
+from enum import StrEnum
 from pathlib import Path
 from types import ModuleType
 
 import pytest
-from typing_extensions import Tuple, Type
 
+from semantic_digital_twin.api import WorldSpecification
 from semantic_digital_twin.reasoning.predicates import SupportedBy
 from semantic_digital_twin.robots.pr2 import PR2
-from semantic_digital_twin.semantic_annotations.mixins import (
-    HasRootKinematicStructureEntity,
-)
 from semantic_digital_twin.semantic_annotations.semantic_annotations import (
     Bowl,
     Milk,
@@ -24,7 +23,6 @@ from semantic_digital_twin.semantic_annotations.semantic_annotations import (
 )
 from semantic_digital_twin.world import World
 from semantic_digital_twin.world_description.connections import FixedConnection
-from semantic_digital_twin.world_description.world_entity import Body
 
 DEMO_PATH = (
     Path(__file__).resolve().parents[2]
@@ -37,10 +35,15 @@ DEMO_PATH = (
 The bullet world demo, which lives outside any package and is loaded from its file.
 """
 
-PLACE_SETTING_TYPES = [Milk, Bowl, Spoon]
-"""
-What the demo lays on the table.
-"""
+
+class ApartmentSurface(StrEnum):
+    """
+    The apartment's bodies the place setting rests on.
+    """
+
+    COUNTER = "island_countertop"
+    SPOON_DRAWER = "cabinet10_drawer_top"
+    TABLE = "table_area_main"
 
 
 @pytest.fixture(scope="module")
@@ -56,45 +59,80 @@ def bullet_world_demo() -> ModuleType:
     return module
 
 
-def _laid_on_the_table(
-    bullet_world_demo: ModuleType,
-    semantic_annotation_type: Type[HasRootKinematicStructureEntity],
-) -> Tuple[World, Body, Body]:
+def _apartment_with_the_place_setting(bullet_world_demo: ModuleType) -> World:
     """
-    Build the demo's scene and fix the object of ``semantic_annotation_type`` to the
-    world where the demo lays it, as releasing it there leaves it.
+    :return: The apartment alone, without a robot, with the place setting where the demo
+        starts it.
+    """
+    world = WorldSpecification.from_urdf(
+        bullet_world_demo.SceneFile.APARTMENT.path
+    ).to_domain_object()
+    for placed_object in bullet_world_demo.BulletWorldDemonstration(
+        used_robot=PR2
+    ).place_setting:
+        placed_object.spawn(world)
+    return world
 
-    :return: The world, the object's body, and the table it is laid on.
+
+@pytest.fixture(scope="module")
+def apartment_at_the_start(bullet_world_demo) -> World:
     """
-    demonstration = bullet_world_demo.BulletWorldDemonstration(used_robot=PR2)
-    world = demonstration.build_simulated_world()
-    demonstration.populate_scene(world)
-    placed_object = next(
-        candidate
-        for candidate in demonstration.place_setting
-        if candidate.semantic_annotation_type is semantic_annotation_type
-    )
-    body = placed_object.annotation_in(world).root
-    target = placed_object.target_location(world).to_homogeneous_matrix()
-    with world.modify_world():
-        world.remove_connection(body.parent_connection)
-        world.add_connection(
-            FixedConnection(
-                parent=world.root, child=body, parent_T_connection_expression=target
+    :return: The apartment with the place setting where the demo starts it.
+    """
+    return _apartment_with_the_place_setting(bullet_world_demo)
+
+
+@pytest.fixture(scope="module")
+def apartment_laid_out(bullet_world_demo) -> World:
+    """
+    :return: The apartment with the place setting fixed where the demo lays it, as
+        releasing each object there leaves it.
+    """
+    world = _apartment_with_the_place_setting(bullet_world_demo)
+    for placed_object in bullet_world_demo.BulletWorldDemonstration(
+        used_robot=PR2
+    ).place_setting:
+        body = placed_object.annotation_in(world).root
+        target = placed_object.target_location(world).to_homogeneous_matrix()
+        with world.modify_world():
+            world.remove_connection(body.parent_connection)
+            world.add_connection(
+                FixedConnection(
+                    parent=world.root, child=body, parent_T_connection_expression=target
+                )
             )
-        )
-    table = world.get_body_by_name(bullet_world_demo.ApartmentBody.TABLE)
-    return world, body, table
+    return world
 
 
 @pytest.mark.parametrize(
-    "semantic_annotation_type",
-    PLACE_SETTING_TYPES,
-    ids=[laid.__name__ for laid in PLACE_SETTING_TYPES],
+    "semantic_annotation_type, surface",
+    [
+        (Milk, ApartmentSurface.COUNTER),
+        (Bowl, ApartmentSurface.COUNTER),
+        (Spoon, ApartmentSurface.SPOON_DRAWER),
+    ],
+    ids=["Milk", "Bowl", "Spoon"],
+)
+def test_each_object_starts_resting_on_its_surface(
+    apartment_at_the_start, semantic_annotation_type, surface
+):
+    world = apartment_at_the_start
+
+    assert SupportedBy(
+        world.get_body_by_name(semantic_annotation_type.__name__),
+        world.get_body_by_name(surface),
+    )()
+
+
+@pytest.mark.parametrize(
+    "semantic_annotation_type", [Milk, Bowl, Spoon], ids=["Milk", "Bowl", "Spoon"]
 )
 def test_each_object_is_laid_resting_on_the_table(
-    bullet_world_demo, semantic_annotation_type
+    apartment_laid_out, semantic_annotation_type
 ):
-    _, body, table = _laid_on_the_table(bullet_world_demo, semantic_annotation_type)
+    world = apartment_laid_out
 
-    assert SupportedBy(body, table)()
+    assert SupportedBy(
+        world.get_body_by_name(semantic_annotation_type.__name__),
+        world.get_body_by_name(ApartmentSurface.TABLE),
+    )()
