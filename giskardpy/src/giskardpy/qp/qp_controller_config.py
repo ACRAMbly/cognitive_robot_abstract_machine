@@ -9,7 +9,10 @@ from typing import Dict, Type
 
 from typing_extensions import TYPE_CHECKING
 
-from giskardpy.qp.exceptions import BrakingTimeExceedsHorizonError
+from giskardpy.qp.exceptions import (
+    BrakingTimeExceedsHorizonError,
+    PredictionHorizonTooShortForDerivativeError,
+)
 from giskardpy.qp.jerk_limited_braking import JerkLimitedBraking
 from giskardpy.qp.solvers.qp_solver_piqp import QPSolverPIQP
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
@@ -134,8 +137,10 @@ class QPControllerConfig:
                 braking_prediction_horizon, self.minimum_prediction_horizon
             )
         if self.prediction_horizon < self.minimum_prediction_horizon:
-            raise ValueError(
-                f"prediction horizon must be >= {self.minimum_prediction_horizon}."
+            raise PredictionHorizonTooShortForDerivativeError(
+                prediction_horizon=self.prediction_horizon,
+                minimum_prediction_horizon=self.minimum_prediction_horizon,
+                max_derivative=self.max_derivative,
             )
         if self.prediction_horizon < braking_prediction_horizon:
             raise BrakingTimeExceedsHorizonError(

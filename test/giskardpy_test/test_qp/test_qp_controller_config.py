@@ -7,7 +7,10 @@ from giskardpy.executor import Executor
 from giskardpy.motion_statechart.context import MotionStatechartContext
 from giskardpy.motion_statechart.motion_statechart import MotionStatechart
 from giskardpy.motion_statechart.tasks.joint_tasks import JointPositionList, JointState
-from giskardpy.qp.exceptions import BrakingTimeExceedsHorizonError
+from giskardpy.qp.exceptions import (
+    BrakingTimeExceedsHorizonError,
+    PredictionHorizonTooShortForDerivativeError,
+)
 from giskardpy.qp.jerk_limited_braking import JerkLimitedBraking
 from giskardpy.qp.qp_controller_config import QPControllerConfig
 from semantic_digital_twin.spatial_types.derivatives import Derivatives
@@ -117,6 +120,26 @@ def test_explicit_prediction_horizon_too_short_for_the_braking_raises():
         )
 
     assert error.value.minimum_prediction_horizon == minimum_prediction_horizon
+
+
+@pytest.mark.parametrize("max_derivative", [Derivatives.jerk, Derivatives.acceleration])
+def test_explicit_prediction_horizon_too_short_for_the_highest_derivative_raises(
+    max_derivative,
+):
+    minimum_prediction_horizon = QPControllerConfig(
+        target_frequency=20, max_derivative=max_derivative
+    ).minimum_prediction_horizon
+
+    with pytest.raises(PredictionHorizonTooShortForDerivativeError) as error:
+        QPControllerConfig(
+            target_frequency=20,
+            max_derivative=max_derivative,
+            prediction_horizon=minimum_prediction_horizon - 1,
+        )
+
+    assert error.value.prediction_horizon == minimum_prediction_horizon - 1
+    assert error.value.minimum_prediction_horizon == minimum_prediction_horizon
+    assert error.value.max_derivative == max_derivative
 
 
 # %% behaviour independent of the control frequency
