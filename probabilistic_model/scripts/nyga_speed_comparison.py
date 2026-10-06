@@ -13,7 +13,7 @@ from probabilistic_model.adapters.rustworkx_tensorized.rustworkx_to_tensorized i
     RustworkxCircuitToLayeredCircuitConverter,
 )
 from probabilistic_model.probabilistic_circuit.jax.probabilistic_circuit import (
-    ProbabilisticCircuit,
+    DifferentiableLayeredCircuit,
 )
 from probabilistic_model.probabilistic_circuit.rx.probabilistic_circuit import (
     ProbabilisticCircuit as NXProbabilisticCircuit,
@@ -73,7 +73,7 @@ else:
     with open(rustworkx_path, "r") as f:
         rustworkx_model = NXProbabilisticCircuit.from_json(json.loads(f.read()))
     with open(jax_model_path, "r") as f:
-        jax_model = ProbabilisticCircuit.from_json(json.loads(f.read()))
+        jax_model = DifferentiableLayeredCircuit.from_json(json.loads(f.read()))
 
 
 print("Number of edges:", len(list(rustworkx_model.edges)))

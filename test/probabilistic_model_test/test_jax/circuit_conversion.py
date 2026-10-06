@@ -16,7 +16,7 @@ from probabilistic_model.adapters.rustworkx_tensorized.tensorized_to_rustworkx i
     LayeredCircuitToRustworkxCircuitConverter,
 )
 from probabilistic_model.probabilistic_circuit.jax.probabilistic_circuit import (
-    ProbabilisticCircuit as JaxProbabilisticCircuit,
+    DifferentiableLayeredCircuit,
 )
 from probabilistic_model.probabilistic_circuit.rx.probabilistic_circuit import (
     ProbabilisticCircuit as RustworkxProbabilisticCircuit,
@@ -25,7 +25,7 @@ from probabilistic_model.probabilistic_circuit.rx.probabilistic_circuit import (
 
 def jax_circuit_of(
     circuit: RustworkxProbabilisticCircuit,
-) -> JaxProbabilisticCircuit:
+) -> DifferentiableLayeredCircuit:
     """
     :param circuit: A circuit of the ``rx`` package.
     :return: The circuit of the ``jax`` package with the same distribution.
@@ -36,7 +36,7 @@ def jax_circuit_of(
 
 
 def rustworkx_circuit_of(
-    circuit: JaxProbabilisticCircuit,
+    circuit: DifferentiableLayeredCircuit,
 ) -> RustworkxProbabilisticCircuit:
     """
     :param circuit: A circuit of the ``jax`` package.

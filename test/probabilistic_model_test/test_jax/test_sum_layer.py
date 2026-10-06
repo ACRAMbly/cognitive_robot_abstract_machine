@@ -19,7 +19,7 @@ from probabilistic_model.probabilistic_circuit.jax.inner_layer import (
 import jax
 
 from probabilistic_model.probabilistic_circuit.jax.probabilistic_circuit import (
-    ProbabilisticCircuit,
+    DifferentiableLayeredCircuit,
 )
 from probabilistic_model.probabilistic_circuit.rx.probabilistic_circuit import (
     ProbabilisticCircuit as NXProbabilisticCircuit,
@@ -248,7 +248,7 @@ class UnlikelyEventTestCase(unittest.TestCase):
 class NygaDistributionTestCase(unittest.TestCase):
 
     nx_model: NXProbabilisticCircuit
-    jax_model: ProbabilisticCircuit
+    jax_model: DifferentiableLayeredCircuit
     data: jax.Array
 
     @classmethod

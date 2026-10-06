@@ -19,7 +19,7 @@ from probabilistic_model.learning.jpt.variables import infer_variables_from_data
 from probabilistic_model.probabilistic_circuit.jax.uniform_layer import UniformLayer
 from probabilistic_model.probabilistic_circuit.jax.inner_layer import SparseSumLayer
 from probabilistic_model.probabilistic_circuit.jax.probabilistic_circuit import (
-    ProbabilisticCircuit,
+    DifferentiableLayeredCircuit,
 )
 from probabilistic_model.probabilistic_circuit.rx.helper import (
     uniform_measure_of_event,
@@ -41,7 +41,7 @@ class SmallCircuitIntegrationTestCase(unittest.TestCase):
     y = Continuous("y")
 
     nx_model = SumUnit()
-    jax_model: ProbabilisticCircuit
+    jax_model: DifferentiableLayeredCircuit
     nx_model: NXProbabilisticCircuit
 
     @classmethod
@@ -202,7 +202,7 @@ class NanGradientTestCase(unittest.TestCase):
     y: Continuous = Continuous("y")
 
     nx_model: NXProbabilisticCircuit
-    jax_model: ProbabilisticCircuit
+    jax_model: DifferentiableLayeredCircuit
     event: Event
 
     @classmethod

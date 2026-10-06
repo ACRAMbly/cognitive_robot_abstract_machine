@@ -12,7 +12,7 @@ from probabilistic_model.distributions.distributions import SymbolicDistribution
 from probabilistic_model.probabilistic_circuit.jax.discrete_layer import DiscreteLayer
 from probabilistic_model.probabilistic_circuit.jax.inner_layer import SparseSumLayer
 from probabilistic_model.probabilistic_circuit.jax.probabilistic_circuit import (
-    ProbabilisticCircuit,
+    DifferentiableLayeredCircuit,
 )
 from probabilistic_model.probabilistic_circuit.rx.probabilistic_circuit import (
     ProbabilisticCircuit as NXProbabilisticCircuit,
@@ -95,7 +95,7 @@ class DiscreteLayerTestCase(unittest.TestCase):
             [BCOO((jnp.zeros(2), jnp.array([[0, 0], [0, 1]])), shape=(1, 2))],
         )
         rx_circuit = rustworkx_circuit_of(
-            ProbabilisticCircuit(SortedSet([self.x]), mixture)
+            DifferentiableLayeredCircuit(SortedSet([self.x]), mixture)
         )
         leaves = [
             node

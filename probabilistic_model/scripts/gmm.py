@@ -24,7 +24,7 @@ from probabilistic_model.adapters.rustworkx_tensorized.tensorized_to_rustworkx i
     LayeredCircuitToRustworkxCircuitConverter,
 )
 from probabilistic_model.probabilistic_circuit.jax.probabilistic_circuit import (
-    ProbabilisticCircuit,
+    DifferentiableLayeredCircuit,
 )
 from probabilistic_model.probabilistic_circuit.rx.probabilistic_circuit import (
     ProbabilisticCircuit as NXProbabilisticCircuit,
@@ -114,7 +114,7 @@ else:
     with open(rustworkx_model_path, "r") as f:
         rustworkx_model = NXProbabilisticCircuit.from_json(json.loads(f.read()))
     with open(jax_model_path, "r") as f:
-        jax_model = ProbabilisticCircuit.from_json(json.loads(f.read()))
+        jax_model = DifferentiableLayeredCircuit.from_json(json.loads(f.read()))
 
 # nx_model.plot_structure()
 # plt.show()

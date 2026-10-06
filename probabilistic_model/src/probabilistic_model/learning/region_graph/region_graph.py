@@ -15,7 +15,7 @@ from probabilistic_model.probabilistic_circuit.jax.inner_layer import (
 from probabilistic_model.probabilistic_circuit.jax.discrete_layer import DiscreteLayer
 from probabilistic_model.probabilistic_circuit.jax.gaussian_layer import GaussianLayer
 from probabilistic_model.probabilistic_circuit.jax.probabilistic_circuit import (
-    ProbabilisticCircuit as JPC,
+    DifferentiableLayeredCircuit,
     ClassificationCircuit,
 )
 import jax.numpy as jnp
@@ -183,7 +183,7 @@ class RegionGraph(nx.DiGraph):
 
     def as_probabilistic_circuit(
         self, input_units: int = 5, sum_units: int = 5, key=jax.random.PRNGKey(69)
-    ) -> Union[JPC, ClassificationCircuit]:
+    ) -> Union[DifferentiableLayeredCircuit, ClassificationCircuit]:
         """
         Convert the region graph to a jax probabilistic circuit.
 
@@ -278,6 +278,6 @@ class RegionGraph(nx.DiGraph):
         if self.classes > 1:
             model = ClassificationCircuit(self.variables, root.layer)
         else:
-            model = JPC(self.variables, root.layer)
+            model = DifferentiableLayeredCircuit(self.variables, root.layer)
 
         return model

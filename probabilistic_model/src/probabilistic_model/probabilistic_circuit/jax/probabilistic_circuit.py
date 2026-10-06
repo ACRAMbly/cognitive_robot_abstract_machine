@@ -25,10 +25,10 @@ import equinox as eqx
 
 
 @dataclass
-class ProbabilisticCircuit(SubclassJSONSerializer):
+class DifferentiableLayeredCircuit(SubclassJSONSerializer):
     """
-    A probabilistic circuit as wrapper for a layered probabilistic model, for learning
-    its parameters by gradient descent.
+    A layered probabilistic circuit whose log-likelihood is differentiable in its
+    parameters, for learning them by gradient descent.
 
     Only the log-likelihood, the loss of training, is computed here. Every other query
     is answered by the layered circuits of the ``tensorized`` package, which the
@@ -102,7 +102,7 @@ class ProbabilisticCircuit(SubclassJSONSerializer):
 
 
 @dataclass
-class ClassificationCircuit(ProbabilisticCircuit):
+class ClassificationCircuit(DifferentiableLayeredCircuit):
     """
     A probabilistic circuit for classification.
 
@@ -112,7 +112,7 @@ class ClassificationCircuit(ProbabilisticCircuit):
 
     def as_probabilistic_circuit(
         self, class_variable: Symbolic, class_probabilities: jnp.array = None
-    ) -> ProbabilisticCircuit:
+    ) -> DifferentiableLayeredCircuit:
         """
         Create a full probabilistic circuit from this classification circuit.
 
@@ -176,7 +176,7 @@ class ClassificationCircuit(ProbabilisticCircuit):
         for layer in root.all_layers():
             layer.variables  # trigger the setter
 
-        return ProbabilisticCircuit(new_variables, root)
+        return DifferentiableLayeredCircuit(new_variables, root)
 
     def fit(
         self,

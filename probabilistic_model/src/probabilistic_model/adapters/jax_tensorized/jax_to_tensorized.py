@@ -3,7 +3,6 @@ from __future__ import annotations
 from abc import abstractmethod
 from dataclasses import dataclass, field
 
-import jax
 import numpy as np
 from random_events.interval import Bound
 from random_events.variable import Integer, Symbolic
@@ -16,8 +15,9 @@ from probabilistic_model.adapters.jax_tensorized.converter import (
     InputType,
     JaxToTensorizedConverter,
 )
-from probabilistic_model.adapters.jax_tensorized.exceptions import (
-    StatesAreNotColumnIndicesError,
+from probabilistic_model.adapters.jax_tensorized.utils import (
+    columns_of_domain_elements,
+    to_numpy,
 )
 from probabilistic_model.probabilistic_circuit.jax import (
     discrete_layer as jax_discrete_layer,
@@ -26,9 +26,6 @@ from probabilistic_model.probabilistic_circuit.jax import (
     input_layer as jax_input_layer,
     probabilistic_circuit as jax_probabilistic_circuit,
     uniform_layer as jax_uniform_layer,
-)
-from probabilistic_model.probabilistic_circuit.tensorized.array_types import (
-    StateIndices,
 )
 from probabilistic_model.probabilistic_circuit.tensorized.inner_layer.base import Layer
 from probabilistic_model.probabilistic_circuit.tensorized.inner_layer.product_layer import (
@@ -95,14 +92,6 @@ class LayeredCircuitBuilder:
                 jax_layer, self
             )
         return self.layers_by_jax_layer[id(jax_layer)]
-
-
-def to_numpy(array: jax.Array) -> np.ndarray:
-    """
-    :param array: An array of the ``jax`` package, usually in single precision.
-    :return: The array in double precision, as the ``tensorized`` package computes.
-    """
-    return np.asarray(array, dtype=float)
 
 
 # %% inner layers
@@ -284,26 +273,13 @@ class DiscreteLayerToDiscreteLayerConverter(
         raise CannotConvertError(data_type=type(variable))
 
 
-def columns_of_domain_elements(variable: Symbolic) -> StateIndices:
-    """
-    :param variable: A symbolic variable.
-    :return: The column of the probability table of a discrete layer of the ``jax``
-        package that holds every domain element, at the position of the element.
-    :raises StatesAreNotColumnIndicesError: If the domain elements of the variable do
-        not hash to the numbers from zero to the size of the domain.
-    """
-    hashes = SymbolicEncoding(variable).hashes
-    if not np.array_equal(np.sort(hashes), np.arange(len(hashes))):
-        raise StatesAreNotColumnIndicesError(variable=variable, states=hashes)
-    return hashes.astype(np.int64)
-
-
 # %% circuit
 
 
 class JaxCircuitToLayeredCircuitConverter(
     JaxToTensorizedConverter[
-        jax_probabilistic_circuit.ProbabilisticCircuit, LayeredProbabilisticCircuit
+        jax_probabilistic_circuit.DifferentiableLayeredCircuit,
+        LayeredProbabilisticCircuit,
     ]
 ):
     """
@@ -316,7 +292,7 @@ class JaxCircuitToLayeredCircuitConverter(
 
     @classmethod
     def convert(
-        cls, data: jax_probabilistic_circuit.ProbabilisticCircuit
+        cls, data: jax_probabilistic_circuit.DifferentiableLayeredCircuit
     ) -> LayeredProbabilisticCircuit:
         if not cls.can_convert(data):
             raise CannotConvertError(data_type=type(data))

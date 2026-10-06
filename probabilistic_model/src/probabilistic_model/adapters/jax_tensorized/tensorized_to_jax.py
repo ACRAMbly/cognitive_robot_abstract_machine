@@ -4,7 +4,6 @@ from dataclasses import dataclass, field
 
 import jax.numpy as jnp
 import numpy as np
-from jax.experimental.sparse import BCOO
 from random_events.variable import Symbolic
 from sortedcontainers import SortedSet
 from typing_extensions import Dict
@@ -15,8 +14,10 @@ from probabilistic_model.adapters.jax_tensorized.converter import (
 from probabilistic_model.adapters.jax_tensorized.exceptions import (
     StatesAreNotColumnIndicesError,
 )
-from probabilistic_model.adapters.jax_tensorized.jax_to_tensorized import (
+from probabilistic_model.adapters.jax_tensorized.utils import (
     columns_of_domain_elements,
+    discrete_layer_of,
+    sparse_matrix,
 )
 from probabilistic_model.probabilistic_circuit.jax import (
     discrete_layer as jax_discrete_layer,
@@ -25,9 +26,6 @@ from probabilistic_model.probabilistic_circuit.jax import (
     input_layer as jax_input_layer,
     probabilistic_circuit as jax_probabilistic_circuit,
     uniform_layer as jax_uniform_layer,
-)
-from probabilistic_model.probabilistic_circuit.tensorized.array_types import (
-    StateIndices,
 )
 from probabilistic_model.probabilistic_circuit.tensorized.inner_layer.base import Layer
 from probabilistic_model.probabilistic_circuit.tensorized.inner_layer.product_layer import (
@@ -40,7 +38,6 @@ from probabilistic_model.probabilistic_circuit.tensorized.input_layer.dirac_delt
     DiracDeltaLayer,
 )
 from probabilistic_model.probabilistic_circuit.tensorized.input_layer.discrete_layer import (
-    DiscreteLayer,
     IntegerLayer,
     SymbolicLayer,
 )
@@ -84,22 +81,6 @@ class JaxCircuitBuilder:
                 layer, self
             )
         return self.jax_layers_by_layer[id(layer)]
-
-
-def sparse_matrix(
-    values: np.ndarray, rows: np.ndarray, columns: np.ndarray, shape
-) -> BCOO:
-    """
-    :param values: The value of every stored entry.
-    :param rows: The row of every stored entry.
-    :param columns: The column of every stored entry.
-    :param shape: The shape of the dense matrix.
-    :return: The sparse matrix of the ``jax`` package that stores the entries.
-    """
-    indices = np.stack([rows, columns], axis=1).astype(np.int32).reshape(-1, 2)
-    return BCOO(
-        (jnp.asarray(values), jnp.asarray(indices)), shape=tuple(shape)
-    ).sort_indices()
 
 
 # %% inner layers
@@ -254,32 +235,13 @@ class IntegerLayerToDiscreteLayerConverter(
         return discrete_layer_of(data, data.states, int(data.states.max()) + 1)
 
 
-def discrete_layer_of(
-    data: DiscreteLayer, columns: StateIndices, number_of_columns: int
-) -> jax_discrete_layer.DiscreteLayer:
-    """
-    :param data: A discrete layer.
-    :param columns: The column of the probability table that holds every state of the
-        layer.
-    :param number_of_columns: The number of columns of the probability table.
-    :return: The discrete layer of the ``jax`` package, impossible in every column
-        that holds no state.
-    """
-    probabilities = np.zeros((data.number_of_nodes, number_of_columns))
-    probabilities[:, columns] = data.table.dense_probabilities()
-    with np.errstate(divide="ignore"):
-        log_probabilities = np.log(probabilities)
-    return jax_discrete_layer.DiscreteLayer(
-        data.variable, jnp.asarray(log_probabilities)
-    )
-
-
 # %% circuit
 
 
 class LayeredCircuitToJaxCircuitConverter(
     TensorizedToJaxConverter[
-        LayeredProbabilisticCircuit, jax_probabilistic_circuit.ProbabilisticCircuit
+        LayeredProbabilisticCircuit,
+        jax_probabilistic_circuit.DifferentiableLayeredCircuit,
     ]
 ):
     """
@@ -290,8 +252,8 @@ class LayeredCircuitToJaxCircuitConverter(
     @classmethod
     def convert(
         cls, data: LayeredProbabilisticCircuit
-    ) -> jax_probabilistic_circuit.ProbabilisticCircuit:
+    ) -> jax_probabilistic_circuit.DifferentiableLayeredCircuit:
         builder = JaxCircuitBuilder(data.variables)
-        return jax_probabilistic_circuit.ProbabilisticCircuit(
+        return jax_probabilistic_circuit.DifferentiableLayeredCircuit(
             SortedSet(data.variables), builder.jax_layer_of(data.root)
         )

@@ -9,7 +9,7 @@ from sortedcontainers import SortedSet
 
 from probabilistic_model.distributions.gaussian import GaussianDistribution
 from probabilistic_model.probabilistic_circuit.jax.probabilistic_circuit import (
-    ProbabilisticCircuit as JPC,
+    DifferentiableLayeredCircuit,
 )
 from probabilistic_model.learning.region_graph.region_graph import RegionGraph
 from probabilistic_model.probabilistic_circuit.jax.probabilistic_circuit import (
@@ -100,7 +100,7 @@ class ClassificationTestCase(unittest.TestCase):
         self.assertEqual(model.root.number_of_nodes, 2)
         model.fit(data, labels=labels, epochs=10, optimizer=optax.adamw(0.01))
         pc = model.as_probabilistic_circuit(self.target)
-        self.assertIsInstance(pc, JPC)
+        self.assertIsInstance(pc, DifferentiableLayeredCircuit)
         self.assertEqual(pc.variables, self.features | SortedSet([self.target]))
         nx_pc = rustworkx_circuit_of(pc)
         self.assertTrue(nx_pc.is_decomposable())

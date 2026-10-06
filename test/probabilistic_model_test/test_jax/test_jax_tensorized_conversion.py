@@ -30,7 +30,7 @@ from probabilistic_model.probabilistic_circuit.jax import (
 )
 from probabilistic_model.probabilistic_circuit.jax.probabilistic_circuit import (
     ClassificationCircuit,
-    ProbabilisticCircuit as JaxProbabilisticCircuit,
+    DifferentiableLayeredCircuit,
 )
 from probabilistic_model.probabilistic_circuit.tensorized.inner_layer.product_layer import (
     ProductLayer,
@@ -98,7 +98,7 @@ single_precision_tolerance = 1e-4
 # %% circuits
 
 
-def region_graph_circuit(variables: SortedSet) -> JaxProbabilisticCircuit:
+def region_graph_circuit(variables: SortedSet) -> DifferentiableLayeredCircuit:
     """
     :param variables: At least four variables, so that every region of the region
         graph can be split.
@@ -132,7 +132,7 @@ def product_edges(entries, shape) -> BCOO:
 
 def mixture_of_products(
     x_layer: jax_inner_layer.InputLayer, y_layer: jax_inner_layer.InputLayer
-) -> JaxProbabilisticCircuit:
+) -> DifferentiableLayeredCircuit:
     """
     :return: A circuit over x and y whose root mixes two products of the nodes of the
         layers with unnormalized weights, as training leaves them.
@@ -144,7 +144,7 @@ def mixture_of_products(
     root = jax_inner_layer.SparseSumLayer(
         [product], [sparse_matrix([(0, 0, 0.3), (0, 1, -1.2)], (1, 2))]
     )
-    return JaxProbabilisticCircuit(SortedSet([x, y]), root)
+    return DifferentiableLayeredCircuit(SortedSet([x, y]), root)
 
 
 def gaussian_layer(variable: int) -> jax_gaussian_layer.GaussianLayer:
@@ -218,7 +218,7 @@ class JaxToNumpyConversionTestCase(unittest.TestCase):
 
     def assert_same_log_likelihoods(
         self,
-        jax_circuit: JaxProbabilisticCircuit,
+        jax_circuit: DifferentiableLayeredCircuit,
         numpy_circuit: LayeredProbabilisticCircuit,
         events: np.ndarray,
     ):
