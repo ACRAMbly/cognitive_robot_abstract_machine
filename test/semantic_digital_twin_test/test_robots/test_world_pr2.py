@@ -442,8 +442,8 @@ def test_pr2_semantic_annotation(pr2_world_state_reset):
     assert len(pr2.torso.neck.sensors) == 1
     assert pr2.left_arm and pr2.right_arm
     assert pr2.left_arm != pr2.right_arm
-    assert pr2.get_default_camera() in pr2.get_sensors()
-    assert pr2.mobile_base.lidar in pr2.get_sensors()
+    assert pr2.get_default_camera() in pr2.all_sensors
+    assert pr2.mobile_base.lidar in pr2.all_sensors
 
 
 def test_has_left_right_arm_mixin(pr2_world_state_reset):
