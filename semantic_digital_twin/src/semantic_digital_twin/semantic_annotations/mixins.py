@@ -900,9 +900,7 @@ class HasSupportingSurface(IsStorageSpace):
 
         # --- Build the region ---
         # The region is placed where the surface was found, relative to the root's
-        # origin, so that it lies on top of the root wherever that origin is - at the
-        # middle of the root's geometry, or at a corner on the floor as many scanned
-        # and vendor assets have it.
+        # origin, so that it lies on top of the root wherever that origin is
         vertices = candidates_filtered.vertices
         self_P_supporting_surface = vertices.mean(axis=0)
         points_3d = [
