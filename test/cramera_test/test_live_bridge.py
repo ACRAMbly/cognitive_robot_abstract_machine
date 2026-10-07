@@ -8,7 +8,6 @@ import urllib.parse
 from dataclasses import dataclass, field
 
 import pytest
-from coraplex.datastructures.enums import Arms
 from coraplex.language import SequentialNode
 from coraplex.plans.condition_nodes import ConditionNode
 from coraplex.plans.plan import Plan
@@ -19,6 +18,7 @@ from giskardpy.motion_statechart.data_types import LifeCycleValues
 from krrood.entity_query_language.factories import inference
 from krrood.entity_query_language.verbalization.pipeline import verbalize_expression
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
+from semantic_digital_twin.robots.pr2 import PR2
 from semantic_digital_twin.spatial_types import (
     HomogeneousTransformationMatrix,
     Vector3,
@@ -57,18 +57,20 @@ from .test_robot_parts import ArmPart, EndEffectorPart, NamedBody, OneArmedRobot
 
 # %% native plan fixtures
 @pytest.fixture()
-def plan_bridge() -> (
-    tuple[Bridge, SequentialNode, ActionNode, ConditionNode, MotionNode]
-):
+def plan_bridge(
+    pr2_world_copy: World,
+) -> tuple[Bridge, SequentialNode, ActionNode, ConditionNode, MotionNode]:
     """
     Build a native plan with an action, condition, and body-targeting motion.
 
+    :param pr2_world_copy: The world containing the native robot annotations.
     :return: The observing bridge and the plan's root, action, condition and motion.
     """
     bridge = Bridge()
     target = Body(name=PrefixedName("milk.stl", prefix="world"))
     motion = MotionNode(designator=BodyTargetMotion(target_body=target))
-    action = ActionNode(designator=ParkArmsAction(arm=Arms.RIGHT))
+    [robot] = pr2_world_copy.get_semantic_annotations_by_type(PR2)
+    action = ActionNode(designator=ParkArmsAction(arms=[robot.right_arm]))
     condition = ConditionNode(condition=True, pre_condition=True, action_node=action)
     root = SequentialNode()
     plan = Plan()

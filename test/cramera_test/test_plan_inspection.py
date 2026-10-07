@@ -5,12 +5,13 @@ Keep recorded plan inspection separate from the active execution stream.
 import json
 from pathlib import Path
 
-from coraplex.datastructures.enums import Arms
 from coraplex.plans.plan import Plan
 from coraplex.plans.plan_node import ActionNode
 from coraplex.robot_plans.actions.core.robot_body import ParkArmsAction
 from krrood.entity_query_language.factories import inference
 from krrood.entity_query_language.verbalization.pipeline import verbalize_expression
+from semantic_digital_twin.robots.pr2 import PR2
+from semantic_digital_twin.world import World
 
 from cramera import paths
 from cramera.knowledge.knowledge_base import EpisodeKnowledgeBase
@@ -42,13 +43,17 @@ def test_live_plan_subscribes_to_the_execution_stream(fixture_scene: Path) -> No
     assert PlanViewPayload.of_tab(knowledge).panel_options()["live"] == "plan"
 
 
-def test_recorded_plan_keeps_native_designator_description(fixture_scene: Path) -> None:
+def test_recorded_plan_keeps_native_designator_description(
+    fixture_scene: Path, pr2_world_copy: World
+) -> None:
     """
     Display the native parameter wording after saving and reopening a plan tree.
 
     :param fixture_scene: Isolated recorded scene and architecture fixture.
+    :param pr2_world_copy: The world containing the native robot annotations.
     """
-    action = ParkArmsAction(arm=Arms.BOTH)
+    [robot] = pr2_world_copy.get_semantic_annotations_by_type(PR2)
+    action = ParkArmsAction(arms=robot.all_arms)
     plan = Plan()
     plan.add_node(ActionNode(designator=action))
     bridge = Bridge()
