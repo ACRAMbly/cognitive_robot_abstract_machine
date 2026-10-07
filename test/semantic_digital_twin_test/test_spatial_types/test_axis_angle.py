@@ -11,6 +11,10 @@ from semantic_digital_twin.spatial_types import (
     Vector3,
 )
 from semantic_digital_twin.world_description.world_entity import Body
+from .reference_implementations import (
+    quaternion_from_axis_angle,
+    rotation_matrix_from_axis_angle,
+)
 
 # %% rotations given as a unit axis and an angle in (0, pi)
 
@@ -33,8 +37,8 @@ def axis_and_angle_of(axis_angle: AxisAngle) -> tuple[np.ndarray, float]:
 @pytest.mark.parametrize(
     "rotation_from_axis_angle",
     [
-        RotationMatrix.from_axis_angle,
-        Quaternion.from_axis_angle,
+        lambda axis, angle: RotationMatrix.from_axis_angle(AxisAngle(axis, angle)),
+        lambda axis, angle: Quaternion.from_axis_angle(AxisAngle(axis, angle)),
         HomogeneousTransformationMatrix.from_xyz_axis_angle,
         Pose.from_xyz_axis_angle,
     ],
@@ -73,11 +77,11 @@ def test_axis_angle_converts_into_the_rotation_it_describes(axis, angle):
 
     assert np.allclose(
         axis_angle.rotation_matrix.to_np(),
-        RotationMatrix.from_axis_angle(axis=Vector3(*axis), angle=angle).to_np(),
+        rotation_matrix_from_axis_angle(np.array(axis), angle),
     )
     assert np.allclose(
         axis_angle.quaternion.to_np(),
-        Quaternion.from_axis_angle(axis=Vector3(*axis), angle=angle).to_np(),
+        quaternion_from_axis_angle(axis, angle),
     )
 
 

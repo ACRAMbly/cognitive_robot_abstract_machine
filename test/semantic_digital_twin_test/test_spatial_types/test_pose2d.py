@@ -67,13 +67,13 @@ class TestPose2DToPose:
         yaw = math.pi / 4
         p2 = Pose2D(x=0, y=0, yaw=yaw)
         pose = p2.pose
-        _, _, actual_yaw = pose.rotation_matrix.to_rpy()
+        _, _, actual_yaw = pose.rotation_matrix.rpy
         assert actual_yaw.to_np() == pytest.approx(yaw, abs=1e-6)
 
     def test_to_pose_roll_pitch_zero(self):
         p2 = Pose2D(x=1, y=2, yaw=1.0)
         pose = p2.pose
-        roll, pitch, _ = pose.rotation_matrix.to_rpy()
+        roll, pitch, _ = pose.rotation_matrix.rpy
         assert roll.to_np() == pytest.approx(0.0, abs=1e-6)
         assert pitch.to_np() == pytest.approx(0.0, abs=1e-6)
 

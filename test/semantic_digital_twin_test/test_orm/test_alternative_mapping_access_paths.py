@@ -83,7 +83,10 @@ def test_every_field_of_an_alternative_mapping_is_reachable_on_its_domain_class(
 @pytest.mark.parametrize(
     "mapping, rotation_from_axis_angle",
     [
-        (RotationMatrixMapping, RotationMatrix.from_axis_angle),
+        (
+            RotationMatrixMapping,
+            lambda axis, angle: RotationMatrix.from_axis_angle(AxisAngle(axis, angle)),
+        ),
         (
             HomogeneousTransformationMatrixMapping,
             HomogeneousTransformationMatrix.from_xyz_axis_angle,

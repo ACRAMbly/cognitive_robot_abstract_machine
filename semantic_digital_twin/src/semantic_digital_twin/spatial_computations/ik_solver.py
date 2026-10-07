@@ -17,6 +17,7 @@ from krrood.symbolic_math.symbolic_math import (
     VariableParameters,
 )
 from semantic_digital_twin.spatial_types import (
+    AxisAngle,
     HomogeneousTransformationMatrix,
     RotationMatrix,
     Vector3,
@@ -576,7 +577,7 @@ class ConstraintBuilder:
         """
         rotation_cap = self.max_rotation_velocity * self.dt
 
-        hack = RotationMatrix.from_axis_angle(Vector3.Z(), -0.0001)
+        hack = RotationMatrix.from_axis_angle(AxisAngle(Vector3.Z(), -0.0001))
         root_R_tip = root_T_tip.rotation_matrix.dot(hack)
         q_actual = HomogeneousTransformationMatrix(self.target).quaternion
         q_goal = root_R_tip.quaternion

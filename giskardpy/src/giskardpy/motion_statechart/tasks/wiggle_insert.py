@@ -17,7 +17,12 @@ from giskardpy.motion_statechart.graph_node import (
     DebugExpression,
     NodeArtifacts,
 )
-from semantic_digital_twin.spatial_types import Point3, Vector3, RotationMatrix
+from semantic_digital_twin.spatial_types import (
+    AxisAngle,
+    Point3,
+    Vector3,
+    RotationMatrix,
+)
 from semantic_digital_twin.world_description.world_entity import Body
 
 
@@ -220,7 +225,7 @@ class WiggleInsert(ConvergingTask):
             target_frame=self.tip_link, spatial_object=hole_normal
         )
         tip_R_hole_normal = RotationMatrix.from_axis_angle(
-            angle=self._random_angle, axis=tip_V_hole_normal
+            AxisAngle(angle=self._random_angle, axis=tip_V_hole_normal)
         )
         root_R_current = context.world.compose_forward_kinematics_expression(
             self.root_link, self.tip_link

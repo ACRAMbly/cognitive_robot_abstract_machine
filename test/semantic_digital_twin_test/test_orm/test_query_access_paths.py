@@ -22,6 +22,7 @@ from krrood.parametrization.model_registries import DictRegistry
 from krrood.parametrization.parameterizer import ConditionParameters
 from probabilistic_model.learning.jpt.jpt import JointProbabilityTree
 from semantic_digital_twin.spatial_types.spatial_types import (
+    AxisAngle,
     HomogeneousTransformationMatrix,
     Pose,
     RotationMatrix,
@@ -49,7 +50,10 @@ def rotations_about_varied_axes(rotation_from_axis_angle) -> list:
 spatial_types = pytest.mark.parametrize(
     "spatial_type, rotation_from_axis_angle",
     [
-        (RotationMatrix, RotationMatrix.from_axis_angle),
+        (
+            RotationMatrix,
+            lambda axis, angle: RotationMatrix.from_axis_angle(AxisAngle(axis, angle)),
+        ),
         (
             HomogeneousTransformationMatrix,
             HomogeneousTransformationMatrix.from_xyz_axis_angle,

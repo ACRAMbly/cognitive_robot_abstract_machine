@@ -45,6 +45,7 @@ from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 from semantic_digital_twin.robots.robot_parts import EndEffector
 from semantic_digital_twin.robots.hsrb import HSRB
 from semantic_digital_twin.spatial_types import (
+    AxisAngle,
     HomogeneousTransformationMatrix,
     Vector3,
     Point3,
@@ -795,7 +796,9 @@ class TestCartesianTasks:
             "odom_combined"
         )
 
-        tip_goal = RotationMatrix.from_axis_angle(Vector3.Z(), 4.0, reference_frame=tip)
+        tip_goal = RotationMatrix.from_axis_angle(
+            AxisAngle(Vector3.Z(), 4.0, reference_frame=tip)
+        )
 
         motion_statechart = MotionStatechart()
         cart_goal = CartesianOrientation(
@@ -982,10 +985,10 @@ class TestCartesianTasks:
         initial_fk = pr2_world_state_reset.compute_forward_kinematics_np(root, tip)
 
         tip_rot1 = RotationMatrix.from_axis_angle(
-            Vector3.Z(), np.pi / 6, reference_frame=tip
+            AxisAngle(Vector3.Z(), np.pi / 6, reference_frame=tip)
         )
         tip_rot2 = RotationMatrix.from_axis_angle(
-            Vector3.Z(), -np.pi / 6, reference_frame=tip
+            AxisAngle(Vector3.Z(), -np.pi / 6, reference_frame=tip)
         )
 
         motion_statechart = MotionStatechart()
@@ -1036,10 +1039,10 @@ class TestCartesianTasks:
         )
 
         tip_rot1 = RotationMatrix.from_axis_angle(
-            Vector3.Z(), np.pi / 6, reference_frame=tip
+            AxisAngle(Vector3.Z(), np.pi / 6, reference_frame=tip)
         )
         tip_rot2 = RotationMatrix.from_axis_angle(
-            Vector3.Z(), -np.pi / 6, reference_frame=tip
+            AxisAngle(Vector3.Z(), -np.pi / 6, reference_frame=tip)
         )
 
         motion_statechart = MotionStatechart()

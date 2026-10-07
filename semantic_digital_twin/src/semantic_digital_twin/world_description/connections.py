@@ -781,7 +781,7 @@ class WheeledDrive(ActiveConnection, HasUpdateState, ABC):
         """
         local_kinematics = self._calculate_local_kinematics(transformation)
         position = local_kinematics.position
-        roll, pitch, yaw = local_kinematics.rotation_matrix.to_rpy()
+        roll, pitch, yaw = local_kinematics.rotation_matrix.rpy
         with self._world._world_lock:
             self._world.state[self.x.id].position = position.x
             self._world.state[self.y.id].position = position.y
