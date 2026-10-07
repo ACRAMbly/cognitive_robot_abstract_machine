@@ -4,7 +4,7 @@ import dataclasses
 import math
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import ClassVar, Optional, assert_never, Union
+from typing import Optional, assert_never, Union
 
 from experiments.shelf_generation_experiments.exceptions import PathError
 from experiments.shelf_generation_experiments.utils import (
@@ -335,17 +335,12 @@ class RelationalCircuitExperimentShelfLayer(SpawnSpecification[ShelfLayer]):
     Optional explicit name for the spawned layer annotation and its body.
     """
 
-    # % ClassVars
-    slab_thickness: ClassVar[float] = 0.02
-    """
-    Thickness, in metres, of the spawned layer slab.
-    """
-
     def spawn(
         self,
         world: World,
         corpus: KinematicStructureEntity,
         shelf_scale: Scale,
+        slab_thickness: float,
         name: Optional[str] = None,
         parent: Optional[KinematicStructureEntity] = None,
         parent_T_self: Optional[HomogeneousTransformationMatrix] = None,
@@ -374,6 +369,7 @@ class RelationalCircuitExperimentShelfLayer(SpawnSpecification[ShelfLayer]):
             under it once spawned.
         :param shelf_scale: The owning shelf's scale -- a layer carries no footprint of
             its own.
+        :param slab_thickness: Thickness, in metres, of the spawned slab.
         :raises ValueError: If *parent_T_self* is omitted.
         :return: The spawned layer's supporting-surface annotation.
         """
@@ -384,7 +380,7 @@ class RelationalCircuitExperimentShelfLayer(SpawnSpecification[ShelfLayer]):
                 "height."
             )
         _parent = parent if parent is not None else world.root
-        slab_scale = Scale(x=shelf_scale.x, y=shelf_scale.y, z=self.slab_thickness)
+        slab_scale = Scale(x=shelf_scale.x, y=shelf_scale.y, z=slab_thickness)
         layer_annotation = ShelfLayer.get_annotation_specification(
             name or self.name or "layer",
             ShelfLayer.get_default_root_kinematic_structure_entity_specification(
@@ -447,18 +443,10 @@ class RelationalCircuitExperimentShelf(SpawnSpecification[Cabinet]):
     Optional explicit name for the spawned corpus annotation and its body.
     """
 
-    corpus_wall_thickness: ClassVar[float] = 0.03
-    """
-    Thickness, in metres, of the spawned shelf corpus wall.
-    """
-
-    content_frame_yaw_offset_degrees: ClassVar[float] = 90
-    """
-    Offset, in degrees, between a shelf's own yaw and its content frame's yaw.
-    """
-
-    @classmethod
-    def content_frame_yaw(cls, shelf_yaw_radians: float = 0.0) -> float:
+    @staticmethod
+    def content_frame_yaw(
+        shelf_yaw_radians: float = 0.0, offset_degrees: float = 90.0
+    ) -> float:
         """
         Absolute yaw, in radians, of the frame a shelf's layers are stored in.
 
@@ -468,9 +456,11 @@ class RelationalCircuitExperimentShelf(SpawnSpecification[Cabinet]):
         :param shelf_yaw_radians: The raw shelf's own yaw, before extraction. Omitted at
             spawn time, since a spawned :class:`RelationalCircuitExperimentShelf`
             carries no pose of its own.
+        :param offset_degrees: Offset, in degrees, between a shelf's own yaw and its
+            content frame's yaw.
         :return: The content frame's yaw, in radians.
         """
-        return shelf_yaw_radians + math.radians(cls.content_frame_yaw_offset_degrees)
+        return shelf_yaw_radians + math.radians(offset_degrees)
 
     @property
     def world(self) -> Optional[World]:
@@ -502,8 +492,7 @@ class RelationalCircuitExperimentShelf(SpawnSpecification[Cabinet]):
         """
         return None if self.annotation is None else self.annotation.root
 
-    @property
-    def corpus_footprint(self) -> Scale:
+    def corpus_footprint(self, corpus_wall_thickness: float) -> Scale:
         """
         The footprint the spawned corpus occupies, in the shelf's own frame.
 
@@ -515,8 +504,11 @@ class RelationalCircuitExperimentShelf(SpawnSpecification[Cabinet]):
         reserve this, not the bare footprint, or the corpus reaches through by the pad.
 
         Taken from the shelf's own dimensions -- a layer carries none of its own.
+
+        :param corpus_wall_thickness: Thickness, in metres, of the corpus walls.
+        :return: The padded footprint.
         """
-        wall_margin = 2 * self.corpus_wall_thickness
+        wall_margin = 2 * corpus_wall_thickness
         return Scale(
             x=self.scale.x + wall_margin,
             y=self.scale.y + wall_margin,
@@ -614,6 +606,8 @@ class RelationalCircuitExperimentShelf(SpawnSpecification[Cabinet]):
         own_height: float,
         layer_heights: list[float],
         corpus_height: float,
+        slab_thickness: float,
+        corpus_wall_thickness: float,
     ) -> float:
         """
         Height, in the corpus frame, of the surface a *layer*'s objects would pierce.
@@ -624,19 +618,21 @@ class RelationalCircuitExperimentShelf(SpawnSpecification[Cabinet]):
             objects, so searching for one by value finds the wrong height.
         :param layer_heights: Every layer's slab height above the shelf base.
         :param corpus_height: Interior height of the shelf corpus, in metres.
+        :param slab_thickness: Thickness, in metres, of every layer slab.
+        :param corpus_wall_thickness: Thickness, in metres, of the corpus walls.
         :return: The next slab's underside, the corpus interior ceiling, or infinity
             for a layer resting on the shelf's top, which has open air above it.
         """
         if self._rests_on_top(layer):
             return math.inf
         heights_above = [height for height in layer_heights if height > own_height]
-        corpus_wall_thickness = self.corpus_wall_thickness
-        layer_slab_thickness = RelationalCircuitExperimentShelfLayer.slab_thickness
         if not heights_above:
             return corpus_height / 2 - corpus_wall_thickness
-        return (min(heights_above) - corpus_height / 2) - layer_slab_thickness / 2
+        return (min(heights_above) - corpus_height / 2) - slab_thickness / 2
 
-    def layers_with_geometry(self) -> list[RelationalCircuitExperimentShelfLayer]:
+    def layers_with_geometry(
+        self, slab_thickness: float = 0.02, corpus_wall_thickness: float = 0.03
+    ) -> list[RelationalCircuitExperimentShelfLayer]:
         """
         Copies of :attr:`layers`, each with
         :attr:`~RelationalCircuitExperimentShelfLayer.slab_top_height` and
@@ -646,17 +642,22 @@ class RelationalCircuitExperimentShelf(SpawnSpecification[Cabinet]):
         An object taller than the room above its slab would pierce the surface above,
         which no in-plane repair can fix, so that room is what a layer accepts.
 
+        :param slab_thickness: Thickness, in metres, of every layer slab.
+        :param corpus_wall_thickness: Thickness, in metres, of the corpus walls.
         :return: One geometry-populated layer per entry in :attr:`layers`.
         """
-        corpus_height = self.corpus_footprint.z
+        corpus_height = self.corpus_footprint(corpus_wall_thickness).z
         layer_heights = self._layer_heights(corpus_height)
         result = []
         for layer, height in zip(self.layers, layer_heights):
-            slab_top_height = (
-                height - corpus_height / 2
-            ) + RelationalCircuitExperimentShelfLayer.slab_thickness / 2
+            slab_top_height = (height - corpus_height / 2) + slab_thickness / 2
             surface_above_height = self._surface_above_height(
-                layer, height, layer_heights, corpus_height
+                layer,
+                height,
+                layer_heights,
+                corpus_height,
+                slab_thickness,
+                corpus_wall_thickness,
             )
             result.append(
                 dataclasses.replace(
@@ -690,6 +691,9 @@ class RelationalCircuitExperimentShelf(SpawnSpecification[Cabinet]):
         name: Optional[str] = None,
         parent: Optional[KinematicStructureEntity] = None,
         parent_T_self: Optional[HomogeneousTransformationMatrix] = None,
+        *,
+        slab_thickness: float,
+        corpus_wall_thickness: float,
     ) -> tuple[Body, list[RelationalCircuitExperimentShelfLayer]]:
         """
         Instantiate the shelf's corpus and every layer's slab, but none of its objects.
@@ -708,11 +712,13 @@ class RelationalCircuitExperimentShelf(SpawnSpecification[Cabinet]):
             :meth:`content_frame_yaw`'s offset and half its height) rather than
             replacing it, so the corpus and every layer move together as one rigid
             placement. Identity when omitted.
+        :param slab_thickness: Thickness, in metres, of every layer slab.
+        :param corpus_wall_thickness: Thickness, in metres, of the corpus walls.
         :return: The spawned corpus body, and :meth:`layers_with_geometry`.
         """
         _parent = parent if parent is not None else world.root
 
-        footprint = self.corpus_footprint
+        footprint = self.corpus_footprint(corpus_wall_thickness)
         # Contents are stored in the shelf's content frame, so the corpus and its
         # slabs are built in that same frame -- see content_frame_yaw.
         yaw_radians = self.content_frame_yaw()
@@ -733,7 +739,7 @@ class RelationalCircuitExperimentShelf(SpawnSpecification[Cabinet]):
             name or self.name or "shelf_corpus",
             Cabinet.get_default_root_kinematic_structure_entity_specification(
                 scale=footprint,
-                wall_thickness=0.03,
+                wall_thickness=corpus_wall_thickness,
             ),
         ).spawn(world, parent=_parent, parent_T_self=corpus_pose)
         corpus_body = corpus_annotation.root
@@ -765,9 +771,12 @@ class RelationalCircuitExperimentShelf(SpawnSpecification[Cabinet]):
                 parent_T_self=layer_pose,
                 corpus=corpus_body,
                 shelf_scale=self.scale,
+                slab_thickness=slab_thickness,
             )
 
-        return corpus_body, self.layers_with_geometry()
+        return corpus_body, self.layers_with_geometry(
+            slab_thickness, corpus_wall_thickness
+        )
 
     def match_meshes(
         self, layers: list[RelationalCircuitExperimentShelfLayer]
@@ -778,8 +787,8 @@ class RelationalCircuitExperimentShelf(SpawnSpecification[Cabinet]):
 
         Needs no live :class:`World`: every input (*layers*, :attr:`source_ids`) is
         plain data, so a caller can match meshes -- and read off their
-        :attr:`~MeshCandidate.native_extents`/:attr:`~MeshCandidate.footprint_scale` --
-        before deciding whether to spawn the layout at all.
+        :attr:`~MeshCandidate.scale` -- before deciding whether to spawn the layout at
+        all.
 
         :param layers: This shelf's own :meth:`layers_with_geometry`, passed in rather
             than recomputed so a caller that already has them (e.g. right after
@@ -860,6 +869,8 @@ class RelationalCircuitExperimentShelf(SpawnSpecification[Cabinet]):
         name: Optional[str] = None,
         parent: Optional[KinematicStructureEntity] = None,
         parent_T_self: Optional[HomogeneousTransformationMatrix] = None,
+        slab_thickness: float = 0.02,
+        corpus_wall_thickness: float = 0.03,
     ) -> Cabinet:
         """
         Instantiate the shelf and its objects inside a :class:`World`.
@@ -879,10 +890,17 @@ class RelationalCircuitExperimentShelf(SpawnSpecification[Cabinet]):
             Applied on top of the shelf's intrinsic offset rather than replacing it, so
             the corpus and every layer move together as one rigid placement. Identity
             when omitted.
+        :param slab_thickness: Thickness, in metres, of every layer slab.
+        :param corpus_wall_thickness: Thickness, in metres, of the corpus walls.
         :return: The spawned corpus annotation.
         """
         corpus_body, layers = self._spawn_corpus_and_slabs(
-            world, name, parent, parent_T_self
+            world,
+            name,
+            parent,
+            parent_T_self,
+            slab_thickness=slab_thickness,
+            corpus_wall_thickness=corpus_wall_thickness,
         )
         matches = self.match_meshes(layers)
         RelationalCircuitExperimentShelf.spawn_objects(

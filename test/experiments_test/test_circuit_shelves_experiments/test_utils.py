@@ -77,7 +77,7 @@ def _book_candidate(source_id: str, size: float) -> MeshCandidate:
         scene_directory=Path(),
         source_id=source_id,
         object_type=ObjectType.BOOK,
-        native_extents=(size, size, size),
+        scale=Scale(x=size, y=size, z=size),
     )
 
 

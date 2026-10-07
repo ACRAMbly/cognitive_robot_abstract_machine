@@ -155,28 +155,14 @@ class MeshCandidate:
     The generalized category of the object this mesh was captured from.
     """
 
-    native_extents: Optional[tuple[float, float, float]] = None
+    scale: Optional[Scale] = None
     """
-    The mesh's own real-world size as ``(width, length, height)``, used to decide
-    whether it fits a target space.
+    The mesh's own real-world size, as ``(length, width, height)`` on ``(x, y, z)``,
+    used to decide whether it fits a target space.
 
     ``None`` when the size is unknown, in which case the candidate is treated as always
     fitting.
     """
-
-    @property
-    def footprint_scale(self) -> Optional[Scale]:
-        """
-        :attr:`native_extents`, re-ordered from ``(width, length, height)`` onto the
-        ``(x, y, z)`` axis convention :class:`RelationalCircuitExperimentObject2D.scale`
-        uses.
-
-        ``None`` when :attr:`native_extents` is ``None``.
-        """
-        if self.native_extents is None:
-            return None
-        width, length, height = self.native_extents
-        return Scale(x=length, y=width, z=height)
 
 
 @dataclass
@@ -270,13 +256,13 @@ class MeshTypeMatcher:
             height)`` on ``(x, y, z)``.
         :return: The mismatch, zero being an exact match.
         """
-        footprint = candidate.footprint_scale
-        if footprint is None:
+        candidate_scale = candidate.scale
+        if candidate_scale is None:
             return 0.0
         measured_and_targets = (
-            (footprint.x, target_extents.x),
-            (footprint.y, target_extents.y),
-            (footprint.z, target_extents.z),
+            (candidate_scale.x, target_extents.x),
+            (candidate_scale.y, target_extents.y),
+            (candidate_scale.z, target_extents.z),
         )
         return max(
             abs(math.log(measured / target))
@@ -295,13 +281,13 @@ class MeshTypeMatcher:
             ``(x, y, z)``.
         :return:``True`` if the candidate fits or its size is unknown.
         """
-        footprint = candidate.footprint_scale
-        if footprint is None:
+        candidate_scale = candidate.scale
+        if candidate_scale is None:
             return True
         return (
-            footprint.x <= max_extents.x
-            and footprint.y <= max_extents.y
-            and footprint.z <= max_extents.z
+            candidate_scale.x <= max_extents.x
+            and candidate_scale.y <= max_extents.y
+            and candidate_scale.z <= max_extents.z
         )
 
 

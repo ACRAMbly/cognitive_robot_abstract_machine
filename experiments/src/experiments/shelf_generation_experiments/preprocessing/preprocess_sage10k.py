@@ -491,8 +491,8 @@ class ShelfExtractor:
         """
         Express *object_*'s pose relative to *shelf* in the shelf's content frame.
 
-        The content frame is the shelf's own yaw plus
-        :attr:`RelationalCircuitExperimentShelf.content_frame_yaw_offset_degrees`, the frame
+        The content frame is the one :meth:`RelationalCircuitExperimentShelf.content_frame_yaw`
+        gives for the shelf's own yaw, the frame
         :meth:`RelationalCircuitExperimentShelf.spawn` builds its corpus in. Storing the pose in any other frame
         makes the contents' spread land on the corpus's shallow depth axis and overflow
         front and back.

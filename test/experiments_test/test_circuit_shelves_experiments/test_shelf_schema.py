@@ -48,8 +48,8 @@ def close_and_oversized_book_candidates(
     but claiming very different real-world sizes -- one close to the book object
     :func:`_make_layer` samples, one bookcase-sized.
 
-    The geometry itself is irrelevant here; only the claimed ``native_extents`` matter
-    for the size scoring under test.
+    The geometry itself is irrelevant here; only the claimed ``scale`` matters for the
+    size scoring under test.
     """
     resources_root = (
         Path(files("semantic_digital_twin")).parent.parent / "resources" / "ply"
@@ -66,10 +66,16 @@ def close_and_oversized_book_candidates(
         )
     return (
         MeshCandidate(
-            tmp_path, "close_match", ObjectType.BOOK, native_extents=(0.1, 0.05, 0.2)
+            tmp_path,
+            "close_match",
+            ObjectType.BOOK,
+            scale=Scale(x=0.05, y=0.1, z=0.2),
         ),
         MeshCandidate(
-            tmp_path, "oversized", ObjectType.BOOK, native_extents=(0.6, 0.25, 1.5)
+            tmp_path,
+            "oversized",
+            ObjectType.BOOK,
+            scale=Scale(x=0.25, y=0.6, z=1.5),
         ),
     )
 
@@ -139,11 +145,7 @@ def _slab_heights(shelf: RelationalCircuitExperimentShelf) -> list[float]:
     """
     shelf.spawn(World.create_with_root_body())
     return sorted(
-        float(
-            layer.annotation.root.parent_connection.origin.position
-            .to_np()[2]
-            .item()
-        )
+        float(layer.annotation.root.parent_connection.origin.position.to_np()[2].item())
         + shelf.scale.z / 2
         for layer in shelf.layers
     )
@@ -193,16 +195,14 @@ def test_content_frame_yaw_adds_the_offset_to_the_shelfs_own_yaw() -> None:
     of its own) -- both read this one method so they cannot drift apart from each other.
     """
     shelf_yaw_radians = math.radians(37.0)
+    offset_degrees = 30.0
 
     content_frame_yaw = RelationalCircuitExperimentShelf.content_frame_yaw(
-        shelf_yaw_radians
+        shelf_yaw_radians, offset_degrees=offset_degrees
     )
 
     assert content_frame_yaw == pytest.approx(
-        shelf_yaw_radians
-        + math.radians(
-            RelationalCircuitExperimentShelf.content_frame_yaw_offset_degrees
-        )
+        shelf_yaw_radians + math.radians(offset_degrees)
     )
 
 
@@ -211,9 +211,11 @@ def test_content_frame_yaw_defaults_to_the_offset_alone() -> None:
     :meth:`RelationalCircuitExperimentShelf.spawn` calls this with no shelf yaw, since a
     spawned shelf carries no pose of its own.
     """
-    assert RelationalCircuitExperimentShelf.content_frame_yaw() == pytest.approx(
-        math.radians(RelationalCircuitExperimentShelf.content_frame_yaw_offset_degrees)
-    )
+    offset_degrees = 30.0
+
+    assert RelationalCircuitExperimentShelf.content_frame_yaw(
+        offset_degrees=offset_degrees
+    ) == pytest.approx(math.radians(offset_degrees))
 
 
 def test_theme_dominant_type_survives_a_database_round_trip() -> None:
@@ -248,6 +250,18 @@ def test_every_slab_spawns_at_the_shelfs_own_footprint() -> None:
     assert footprints == {(shelf.scale.x, shelf.scale.y)}
 
 
+def test_every_slab_spawns_at_the_given_thickness() -> None:
+    shelf = _make_shelf(relative_heights=(0.2, 0.5, 0.8))
+    slab_thickness = 0.05
+
+    shelf.spawn(World.create_with_root_body(), slab_thickness=slab_thickness)
+
+    assert [
+        float(layer.annotation.root.collision.shapes[0].scale.z)
+        for layer in shelf.layers
+    ] == pytest.approx([slab_thickness] * len(shelf.layers))
+
+
 def test_the_corpus_interior_matches_the_shelfs_learned_dimensions() -> None:
     """
     The corpus used to be sized from the layers, so the shelf's own learned width and
@@ -259,13 +273,13 @@ def test_the_corpus_interior_matches_the_shelfs_learned_dimensions() -> None:
     wide = _make_shelf(scale=Scale(x=0.40, y=1.43, z=1.5))
 
     corpus_wall_thickness = 0.03
-    assert narrow.corpus_footprint.y == pytest.approx(
+    narrow_footprint = narrow.corpus_footprint(corpus_wall_thickness)
+    wide_footprint = wide.corpus_footprint(corpus_wall_thickness)
+    assert narrow_footprint.y == pytest.approx(
         0.62 + 2 * corpus_wall_thickness, abs=1e-6
     )
-    assert wide.corpus_footprint.y == pytest.approx(
-        1.43 + 2 * corpus_wall_thickness, abs=1e-6
-    )
-    assert narrow.corpus_footprint.y < wide.corpus_footprint.y
+    assert wide_footprint.y == pytest.approx(1.43 + 2 * corpus_wall_thickness, abs=1e-6)
+    assert narrow_footprint.y < wide_footprint.y
 
 
 def test_slabs_are_evenly_spaced_whatever_heights_were_drawn() -> None:
@@ -297,11 +311,7 @@ def test_each_slab_is_placed_at_its_own_layers_height_rank() -> None:
     shelf.spawn(World.create_with_root_body())
 
     spawned_heights = [
-        float(
-            layer.annotation.root.parent_connection.origin.position
-            .to_np()[2]
-            .item()
-        )
+        float(layer.annotation.root.parent_connection.origin.position.to_np()[2].item())
         + shelf.scale.z / 2
         for layer in shelf.layers
     ]
@@ -384,7 +394,7 @@ def test_an_object_on_the_shelfs_top_is_not_rejected_for_lack_of_headroom(
             chair_mesh_directory,
             "chair_src",
             ObjectType.BOOK,
-            native_extents=(0.1, 0.05, 0.2),
+            scale=Scale(x=0.05, y=0.1, z=0.2),
         )
     ]
 
@@ -454,16 +464,15 @@ def test_layer_geometry_reports_the_height_its_slab_spawns_at() -> None:
     geometry, so a geometry that disagreed with the spawn would aim at nothing.
     """
     shelf = _make_shelf(relative_heights=(0.9, 0.1, 0.5))
+    slab_thickness = 0.05
 
-    layers = shelf.layers_with_geometry()
+    layers = shelf.layers_with_geometry(slab_thickness=slab_thickness)
 
     # Reverses layers_with_geometry's own
     # slab_top_height = (height - corpus_height / 2) + slab_thickness / 2, since
     # corpus_height == shelf.scale.z (RelationalCircuitExperimentShelf.corpus_footprint pads x/y but not z).
     heights = [
-        layer.slab_top_height
-        - RelationalCircuitExperimentShelfLayer.slab_thickness / 2
-        + shelf.scale.z / 2
+        layer.slab_top_height - slab_thickness / 2 + shelf.scale.z / 2
         for layer in layers
     ]
     assert sorted(heights) == pytest.approx(_slab_heights(shelf))
