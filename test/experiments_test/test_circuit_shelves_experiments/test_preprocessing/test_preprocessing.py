@@ -1107,7 +1107,7 @@ def test_extracted_contents_spawn_within_the_layer_footprint(tmp_path: Path) -> 
     spawned.spawn(world, parent=root)
 
     body = spawned.layers[0].objects[0].annotation
-    corpus_x, corpus_y = body.parent_connection.origin.to_position().to_np()[:2]
+    corpus_x, corpus_y = body.parent_connection.origin.position.to_np()[:2]
     assert abs(corpus_x) <= shelf_depth / 2
     assert abs(corpus_y) <= shelf_face / 2
 

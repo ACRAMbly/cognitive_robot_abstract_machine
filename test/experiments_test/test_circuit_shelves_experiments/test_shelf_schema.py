@@ -140,7 +140,7 @@ def _slab_heights(shelf: RelationalCircuitExperimentShelf) -> list[float]:
     shelf.spawn(World.create_with_root_body())
     return sorted(
         float(
-            layer.annotation.root.parent_connection.origin.to_position()
+            layer.annotation.root.parent_connection.origin.position
             .to_np()[2]
             .item()
         )
@@ -175,11 +175,11 @@ def test_shelf_mounts_at_the_origin_of_the_parent_it_is_given(
     [corpus_body] = [body for body in world.bodies if body.name.name == "shelf_corpus"]
     assert corpus_body.parent_connection.parent is parent
 
-    translation = corpus_body.parent_connection.origin.to_position().to_np()
+    translation = corpus_body.parent_connection.origin.position.to_np()
     assert translation[0] == pytest.approx(0.0, abs=1e-6)
     assert translation[1] == pytest.approx(0.0, abs=1e-6)
 
-    yaw = corpus_body.parent_connection.origin.to_rotation_matrix().to_rpy()[2]
+    yaw = corpus_body.parent_connection.origin.rotation_matrix.rpy[2]
     assert float(yaw.to_np().item()) == pytest.approx(
         RelationalCircuitExperimentShelf.content_frame_yaw(), abs=1e-6
     )
@@ -298,7 +298,7 @@ def test_each_slab_is_placed_at_its_own_layers_height_rank() -> None:
 
     spawned_heights = [
         float(
-            layer.annotation.root.parent_connection.origin.to_position()
+            layer.annotation.root.parent_connection.origin.position
             .to_np()[2]
             .item()
         )
