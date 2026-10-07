@@ -179,13 +179,6 @@ class MeshCandidate:
         return Scale(x=length, y=width, z=height)
 
 
-MAXIMUM_SIZE_RATIO = 2.0
-"""
-Largest factor by which a mesh's real size may differ from the size it is matched to, on
-any axis, in either direction.
-"""
-
-
 @dataclass
 class MeshTypeMatcher:
     """
@@ -216,6 +209,7 @@ class MeshTypeMatcher:
         object_type: ObjectType,
         max_extents: Optional[Scale] = None,
         target_extents: Optional[Scale] = None,
+        maximum_size_ratio: float = 2.0,
     ) -> Optional[MeshCandidate]:
         """
         Return a candidate whose :attr:`MeshCandidate.object_type` equals *object_type*,
@@ -224,7 +218,7 @@ class MeshTypeMatcher:
         *max_extents* is an upper bound: candidates larger than it on any axis are
         ineligible, which is how shelf contents are kept from piercing the layer above.
         *target_extents* is a size to aim for: candidates further than
-        :data:`MAXIMUM_SIZE_RATIO` from it on any axis are ineligible, and the closest
+        *maximum_size_ratio* from it on any axis are ineligible, and the closest
         remaining one is returned rather than a random one.
 
         :param object_type: The category of the object a mesh is selected for.
@@ -232,6 +226,8 @@ class MeshTypeMatcher:
             width, height)`` on ``(x, y, z)``.
         :param target_extents: Size the mesh should match as closely as possible, in the
             same axis convention as *max_extents*.
+        :param maximum_size_ratio: Largest factor by which a candidate's real size may
+            differ from *target_extents* on any axis, in either direction.
         :return: The selected candidate, or ``None`` when nothing is eligible.
         """
         pool = [
@@ -253,7 +249,7 @@ class MeshTypeMatcher:
         eligible = [
             (mismatch, candidate)
             for mismatch, candidate in scored
-            if mismatch <= math.log(MAXIMUM_SIZE_RATIO)
+            if mismatch <= math.log(maximum_size_ratio)
         ]
         if not eligible:
             return None
