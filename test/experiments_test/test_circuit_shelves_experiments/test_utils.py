@@ -2,7 +2,14 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from experiments.shelf_generation_experiments.utils import build_source_id_to_path
+from experiments.shelf_generation_experiments.utils import (
+    MAXIMUM_SIZE_RATIO,
+    MeshCandidate,
+    MeshTypeMatcher,
+    ObjectType,
+    build_source_id_to_path,
+)
+from semantic_digital_twin.world_description.geometry import Scale
 
 
 def _scene_with_object(scenes_root: Path, scene_name: str, source_id: str) -> Path:
@@ -60,3 +67,36 @@ def test_an_unambiguous_source_id_survives_alongside_a_collision(
     _scene_with_object(tmp_path, "scene_2", "collided_src")
 
     assert build_source_id_to_path(tmp_path) == {"unique_src": scene_directory}
+
+
+# %% MeshTypeMatcher -- size-matched mesh selection
+def _book_candidate(source_id: str, size: float) -> MeshCandidate:
+    """
+    A book mesh candidate whose real size is *size* on every axis.
+    """
+    return MeshCandidate(
+        scene_directory=Path(),
+        source_id=source_id,
+        object_type=ObjectType.BOOK,
+        native_extents=(size, size, size),
+    )
+
+
+def test_a_candidate_at_the_maximum_size_ratio_is_still_matched() -> None:
+    at_limit = _book_candidate("at_limit", MAXIMUM_SIZE_RATIO)
+
+    match = MeshTypeMatcher(candidates=[at_limit]).random_match(
+        ObjectType.BOOK, target_extents=Scale(x=1.0, y=1.0, z=1.0)
+    )
+
+    assert match is at_limit
+
+
+def test_a_candidate_beyond_the_maximum_size_ratio_is_not_matched() -> None:
+    beyond_limit = _book_candidate("beyond_limit", MAXIMUM_SIZE_RATIO * 1.1)
+
+    match = MeshTypeMatcher(candidates=[beyond_limit]).random_match(
+        ObjectType.BOOK, target_extents=Scale(x=1.0, y=1.0, z=1.0)
+    )
+
+    assert match is None

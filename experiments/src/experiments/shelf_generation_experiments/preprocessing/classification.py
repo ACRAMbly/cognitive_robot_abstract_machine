@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import ClassVar
 
 from experiments.shelf_generation_experiments.utils import ObjectType
 
@@ -43,7 +42,7 @@ class ObjectTypeClassifier:
     plausible categories in an unusual order may be mapped to the "wrong" one.
     """
 
-    _rules: ClassVar[tuple[ClassificationRule, ...]] = (
+    rules: tuple[ClassificationRule, ...] = (
         # -- Furniture -----------------------------------------------------
         ClassificationRule(ObjectType.WORKBENCH, ("workbench",)),
         ClassificationRule(ObjectType.DISPLAYCASE, ("displaycase", "showcase")),
@@ -352,6 +351,10 @@ class ObjectTypeClassifier:
         ClassificationRule(ObjectType.WASHING_MACHINE, ("washingmachine", "washer")),
         ClassificationRule(ObjectType.DRYER, ("dryer",)),
     )
+    """
+    The rules tested in order against a raw type string; the first rule with a matching
+    keyword decides the category.
+    """
 
     def classify(self, raw_type: str) -> ObjectType:
         """
@@ -363,7 +366,7 @@ class ObjectTypeClassifier:
             no keyword matches.
         """
         normalized = raw_type.strip().lower()
-        for rule in self._rules:
+        for rule in self.rules:
             if any(keyword in normalized for keyword in rule.keywords):
                 return rule.object_type
         return ObjectType.OTHER
@@ -377,7 +380,7 @@ class ShelfMembershipClassifier:
     ``"bookshelf2"``, ``"storagecabinet"``) describes shelf-like storage furniture at
     all.
 
-    Matching is a case-insensitive substring lookup against a fixed keyword set. This
+    Matching is a case-insensitive substring lookup against :attr:`keywords`. This
     is the gate deciding which furniture enters training as a shelf -- a name outside
     the keyword set answers ``False`` rather than being admitted as some catch-all
     kind of shelf, which would let every table and chair in the dataset in.
@@ -387,7 +390,7 @@ class ShelfMembershipClassifier:
     which is derived from what is actually placed on the shelf instead.
     """
 
-    _KEYWORDS: ClassVar[tuple[str, ...]] = (
+    keywords: tuple[str, ...] = (
         "bookshelf",
         "bookcase",
         "book_shelf",
@@ -412,4 +415,4 @@ class ShelfMembershipClassifier:
         :return:``True`` when the name matches a modelled shelf-like keyword.
         """
         normalized_type = raw_type.lower()
-        return any(keyword in normalized_type for keyword in self._KEYWORDS)
+        return any(keyword in normalized_type for keyword in self.keywords)

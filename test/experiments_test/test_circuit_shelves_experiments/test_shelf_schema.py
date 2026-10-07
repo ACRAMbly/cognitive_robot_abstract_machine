@@ -413,6 +413,19 @@ def test_object_mesh_is_matched_to_its_sampled_size_not_just_its_type(
     assert shelf.layers[0].objects[0].source_id == "close_match"
 
 
+def test_a_shelf_without_mesh_candidates_matches_no_meshes() -> None:
+    """
+    A shelf that was given no candidate pool has nothing to match its objects against,
+    so every layer comes back without matches rather than failing.
+    """
+    shelf = _make_shelf(relative_heights=(0.3, 1.0))
+    shelf.source_ids = None
+
+    matches = shelf.match_meshes(shelf.layers_with_geometry())
+
+    assert matches == {layer_index: {} for layer_index in range(len(shelf.layers))}
+
+
 def test_only_one_layer_can_occupy_the_shelfs_top() -> None:
     """
     Layers are drawn independently, so several can come back recorded at the shelf's

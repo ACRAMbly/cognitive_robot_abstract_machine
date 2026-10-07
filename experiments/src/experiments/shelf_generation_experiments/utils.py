@@ -179,8 +179,15 @@ class MeshCandidate:
         return Scale(x=length, y=width, z=height)
 
 
+MAXIMUM_SIZE_RATIO = 2.0
+"""
+Largest factor by which a mesh's real size may differ from the size it is matched to, on
+any axis, in either direction.
+"""
+
+
 @dataclass
-class _MeshTypeMatcher:
+class MeshTypeMatcher:
     """
     Selects, from a pool of candidate meshes, a random one captured from an object of
     the same :class:`ObjectType`.
@@ -217,7 +224,7 @@ class _MeshTypeMatcher:
         *max_extents* is an upper bound: candidates larger than it on any axis are
         ineligible, which is how shelf contents are kept from piercing the layer above.
         *target_extents* is a size to aim for: candidates further than
-        :attr:`MAXIMUM_SIZE_RATIO` from it on any axis are ineligible, and the closest
+        :data:`MAXIMUM_SIZE_RATIO` from it on any axis are ineligible, and the closest
         remaining one is returned rather than a random one.
 
         :param object_type: The category of the object a mesh is selected for.
@@ -246,7 +253,7 @@ class _MeshTypeMatcher:
         eligible = [
             (mismatch, candidate)
             for mismatch, candidate in scored
-            if mismatch <= math.log(2.0)
+            if mismatch <= math.log(MAXIMUM_SIZE_RATIO)
         ]
         if not eligible:
             return None

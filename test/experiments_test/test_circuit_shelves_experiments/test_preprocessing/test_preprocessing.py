@@ -25,6 +25,7 @@ from semantic_digital_twin.orm.ormatic_interface import (
     Sage10kSizeDAO,
 )
 from experiments.shelf_generation_experiments.preprocessing.classification import (
+    ClassificationRule,
     ObjectTypeClassifier,
     ShelfMembershipClassifier,
 )
@@ -218,6 +219,12 @@ def test_classify_falls_back_to_other_for_unrecognized_type(
     )
 
 
+def test_an_object_type_classifier_classifies_by_the_rules_it_is_given() -> None:
+    rule = ClassificationRule(ObjectType.BOOK, ("tome",))
+
+    assert ObjectTypeClassifier(rules=(rule,)).classify("tome3") is rule.object_type
+
+
 # %% ShelfMembershipClassifier -- deciding which furniture names are shelf-like
 
 
@@ -269,6 +276,10 @@ def test_furniture_outside_the_modelled_types_is_not_classified(
     back in.
     """
     assert not shelf_membership_classifier.is_shelf_like(raw_type)
+
+
+def test_a_shelf_membership_classifier_matches_the_keywords_it_is_given() -> None:
+    assert ShelfMembershipClassifier(keywords=("crate",)).is_shelf_like("woodencrate")
 
 
 # %% MeshMeasurements -- correcting a recorded position to the mesh's centre

@@ -10,7 +10,7 @@ from experiments.shelf_generation_experiments.exceptions import PathError
 from experiments.shelf_generation_experiments.utils import (
     MeshCandidate,
     ObjectType,
-    _MeshTypeMatcher,
+    MeshTypeMatcher,
 )
 from semantic_digital_twin.api import SpawnSpecification
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
@@ -787,7 +787,7 @@ class RelationalCircuitExperimentShelf(SpawnSpecification[Cabinet]):
         :return: Per layer index, per object index, the matched candidate. An object
             with a non-constant pose or no eligible candidate is simply absent.
         """
-        mesh_matcher = _MeshTypeMatcher(candidates=self.source_ids or [])
+        mesh_matcher = MeshTypeMatcher(candidates=self.source_ids or [])
         matches: dict[int, dict[int, MeshCandidate]] = {}
         for layer_index, layer in enumerate(layers):
             max_object_extents = layer.maximum_object_extents
@@ -795,14 +795,10 @@ class RelationalCircuitExperimentShelf(SpawnSpecification[Cabinet]):
             for object_index, object_ in enumerate(layer.objects):
                 if not object_.pose.x.is_constant():
                     continue
-                candidate = (
-                    mesh_matcher.random_match(
-                        object_.object_type,
-                        max_extents=max_object_extents,
-                        target_extents=object_.scale,
-                    )
-                    if self.source_ids
-                    else None
+                candidate = mesh_matcher.random_match(
+                    object_.object_type,
+                    max_extents=max_object_extents,
+                    target_extents=object_.scale,
                 )
                 # No mesh of this type is small enough for the layer, or none is
                 # cached at all. The object is either too big for the shelf or
