@@ -5,9 +5,9 @@ The unit a query source offers the EQL runner: one named, typed set of objects.
 from __future__ import annotations
 
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
-from typing_extensions import Any, Optional, Type
+from typing_extensions import Any, Type
 
 
 @dataclass(frozen=True)
@@ -29,10 +29,9 @@ class QueryDomain:
     Type of the objects the variable ranges over; also in scope under its class name.
     """
 
-    objects: Optional[Iterable[Any]] = None
+    objects: Iterable[Any] = field(default_factory=list)
     """
-    The objects themselves, or None when the answer does not come from this process.
+    The objects available to in-memory queries, empty by default.
 
-    A re-iterable collection supplies current values on each query. With no collection,
-    :class:`~cramera.knowledge.queryable_knowledge.QueryEvaluation` supplies the answer.
+    A re-iterable collection supplies current values on each query.
     """

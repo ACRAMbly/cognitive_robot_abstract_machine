@@ -85,6 +85,33 @@ class TestDomainsBecomeVariables:
     A declared domain is all a caller needs to write a query against it.
     """
 
+    def test_a_domain_without_objects_has_no_answers(self) -> None:
+        """
+        An omitted object collection contributes no rows to an in-memory query.
+        """
+        domain = QueryDomain("record", NamedRecord)
+        runner = EqlQueryRunner(domains=[domain])
+
+        result = runner.run(an(entity(runner.namespace()[domain.name])))
+
+        assert result.rows == []
+        assert result.count == 0
+
+    def test_default_domain_collections_do_not_share_records(self) -> None:
+        """
+        Adding a record to one default collection leaves another domain empty.
+        """
+        first = QueryDomain("first", NamedRecord)
+        second = QueryDomain("second", NamedRecord)
+        assert isinstance(first.objects, list)
+        first.objects.append(make_records()[0])
+        runner = EqlQueryRunner(domains=[first, second])
+
+        result = runner.run(an(entity(runner.namespace()[second.name])))
+
+        assert second.objects == []
+        assert result.rows == []
+
     def test_a_domain_is_in_scope_under_its_own_name(self):
         result = make_runner().run_source("an(entity(record))")
 

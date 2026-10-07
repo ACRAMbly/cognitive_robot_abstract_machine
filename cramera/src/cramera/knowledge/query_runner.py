@@ -424,10 +424,8 @@ class EqlQueryRunner:
         for domain in self.domains:
             namespace[domain.entity_type.__name__] = domain.entity_type
         for domain in self.domains:
-            namespace[domain.name] = (
-                eql_factories.variable(domain.entity_type)
-                if domain.objects is None
-                else eql_factories.variable(domain.entity_type, domain=domain.objects)
+            namespace[domain.name] = eql_factories.variable(
+                domain.entity_type, domain=domain.objects
             )
         namespace.update(self.extra_names)
         return namespace
