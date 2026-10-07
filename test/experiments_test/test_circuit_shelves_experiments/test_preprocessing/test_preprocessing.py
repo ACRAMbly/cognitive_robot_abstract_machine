@@ -35,6 +35,7 @@ from experiments.shelf_generation_experiments.preprocessing.preprocess_sage10k i
     PreprocessedObject,
     Sage10kPreprocessingRun,
     ShelfContents,
+    ShelfExtractor,
 )
 from experiments.shelf_generation_experiments.utils import MeshCandidate, ObjectType
 from krrood.ormatic.utils import create_engine
@@ -153,7 +154,7 @@ def _layers_by_shelf(
     """
     return [
         shelf.layers
-        for shelf in Sage10kPreprocessingRun._shelves_with_layers(
+        for shelf in ShelfExtractor().extract(
             objects,
             {"room_1_shelf_1_src": _bounding_box(bottom=-1.0, top=1.0)},
             {"room_1_shelf_1"},
@@ -446,7 +447,7 @@ def test_conversion_flags_an_object_whose_mesh_was_unavailable() -> None:
     assert float(converted.pose.x) == pytest.approx(0.3)
 
 
-# %% Sage10kPreprocessingRun._shelves_with_layers -- grouping corrected objects into ordered layers
+# %% ShelfExtractor.extract -- grouping corrected objects into ordered layers
 
 
 def _rotated_shelf_and_book(local_x: float, local_y: float) -> list[PreprocessedObject]:
@@ -524,6 +525,47 @@ def test_objects_at_a_similar_height_share_one_layer() -> None:
         "left_src",
         "right_src",
     }
+
+
+def test_a_wider_clustering_tolerance_merges_nearby_heights_into_one_layer() -> None:
+    """
+    How far apart two heights may be and still count as one layer is the extractor's own
+    setting, so widening it must merge objects standing a little apart in height.
+    """
+    objects = [
+        _shelf(),
+        _eg_object("lower", "room_1_shelf_1", ObjectType.BOOK, x=-0.2, y=0.0, z=0.5),
+        _eg_object("upper", "room_1_shelf_1", ObjectType.BOOK, x=0.2, y=0.0, z=0.6),
+    ]
+
+    [shelf] = ShelfExtractor(layer_clustering_tolerance=0.2).extract(
+        objects,
+        {"room_1_shelf_1_src": _bounding_box(bottom=-1.0, top=1.0)},
+        {"room_1_shelf_1"},
+        MeshMeasurements(source_id_to_path={}),
+    )
+
+    assert len(shelf.layers) == 1
+
+
+def test_a_wider_edge_margin_excludes_an_object_near_the_shelf_edge() -> None:
+    """
+    How much of a shelf's edge is kept free is the extractor's own setting, so widening
+    it must drop an object a narrower margin would keep.
+    """
+    objects = [
+        _shelf(),
+        _eg_object("book_1", "room_1_shelf_1", ObjectType.BOOK, x=0.8, y=0.0),
+    ]
+
+    shelves = ShelfExtractor(edge_margin_fraction=0.5).extract(
+        objects,
+        {"room_1_shelf_1_src": _bounding_box(bottom=-1.0, top=1.0)},
+        {"room_1_shelf_1"},
+        MeshMeasurements(source_id_to_path={}),
+    )
+
+    assert shelves == []
 
 
 def test_a_shelf_whose_own_position_was_not_corrected_yields_no_layers() -> None:
@@ -658,7 +700,7 @@ def test_a_shelf_of_no_measurable_height_reads_as_sitting_at_its_base() -> None:
         _eg_object("book_1", "room_1_shelf_1", ObjectType.BOOK, x=0.0, y=0.0, z=1.0),
     ]
 
-    shelves = Sage10kPreprocessingRun._shelves_with_layers(
+    shelves = ShelfExtractor().extract(
         objects,
         {"room_1_shelf_1_src": _bounding_box(bottom=0.0, top=0.0)},
         {"room_1_shelf_1"},
@@ -681,7 +723,7 @@ def test_a_shelf_whose_mesh_was_never_measured_is_skipped() -> None:
     ]
 
     assert (
-        Sage10kPreprocessingRun._shelves_with_layers(
+        ShelfExtractor().extract(
             objects,
             {},
             {"room_1_shelf_1"},
@@ -696,7 +738,7 @@ def test_a_shelf_keeps_its_own_pose_and_measured_height() -> None:
     Keeping the shelf, not just loose layers, is what preserves which layers belong
     together and in what order.
     """
-    [shelf] = Sage10kPreprocessingRun._shelves_with_layers(
+    [shelf] = ShelfExtractor().extract(
         _three_layer_shelf(),
         {"room_1_shelf_1_src": _bounding_box(bottom=-1.0, top=1.0)},
         {"room_1_shelf_1"},
@@ -728,7 +770,7 @@ def test_a_shelfs_theme_is_the_object_type_its_objects_have_the_most_of() -> Non
         ),
     ]
 
-    [shelf] = Sage10kPreprocessingRun._shelves_with_layers(
+    [shelf] = ShelfExtractor().extract(
         objects,
         {"room_1_shelf_1_src": _bounding_box(bottom=-1.0, top=1.0)},
         {"room_1_shelf_1"},
@@ -752,7 +794,7 @@ def test_a_tied_theme_breaks_alphabetically_by_type_value() -> None:
         _eg_object("book_1", "room_1_shelf_1", ObjectType.BOOK, x=0.2, y=0.0, z=0.5),
     ]
 
-    [shelf] = Sage10kPreprocessingRun._shelves_with_layers(
+    [shelf] = ShelfExtractor().extract(
         objects,
         {"room_1_shelf_1_src": _bounding_box(bottom=-1.0, top=1.0)},
         {"room_1_shelf_1"},
@@ -846,7 +888,7 @@ def test_a_shelf_like_object_is_not_counted_as_another_shelfs_content() -> None:
     book = _eg_object("book_1", "room_1_shelf_1", ObjectType.BOOK, x=0.3, y=0.0)
     shelf_ids = {"room_1_shelf_1", "small_shelf_1"}
 
-    [extracted_shelf] = Sage10kPreprocessingRun._shelves_with_layers(
+    [extracted_shelf] = ShelfExtractor().extract(
         [shelf, nested_shelf_like_object, book],
         {"room_1_shelf_1_src": _bounding_box(bottom=-1.0, top=1.0)},
         shelf_ids,
@@ -952,7 +994,7 @@ def test_extraction_from_the_kept_objects_matches_extraction_from_all_of_them() 
     measurements = MeshMeasurements(source_id_to_path={})
     assert [
         _shelf_snapshot(shelf)
-        for shelf in Sage10kPreprocessingRun._shelves_with_layers(
+        for shelf in ShelfExtractor().extract(
             contents.objects,
             bounds_by_source_id,
             contents.shelf_ids,
@@ -960,7 +1002,7 @@ def test_extraction_from_the_kept_objects_matches_extraction_from_all_of_them() 
         )
     ] == [
         _shelf_snapshot(shelf)
-        for shelf in Sage10kPreprocessingRun._shelves_with_layers(
+        for shelf in ShelfExtractor().extract(
             every_object,
             bounds_by_source_id,
             contents.shelf_ids,
@@ -1118,6 +1160,42 @@ def test_sharded_object_pass_writes_every_object_exactly_once(tmp_path: Path) ->
     )
 
     assert sum(result.stored_count for result in results) == 3
+    with Session(processed_engine) as session:
+        stored_ids = set(session.execute(select(PreprocessedObjectDAO.id)).scalars())
+    assert stored_ids == {"book_1", "book_2", "book_3"}
+
+
+def test_reading_the_raw_dataset_in_chunks_smaller_than_it_stores_every_object(
+    tmp_path: Path,
+) -> None:
+    """
+    The raw dataset is read in chunks of the run's own configured size, so a chunk
+    smaller than the dataset must still let every object through.
+    """
+    objects = [
+        _sage10k_object(object_id="book_1", room_id="room_1", source_id="book_1_src"),
+        _sage10k_object(object_id="book_2", room_id="room_1", source_id="book_2_src"),
+        _sage10k_object(object_id="book_3", room_id="room_1", source_id="book_3_src"),
+    ]
+    _populated_sqlite_engine(tmp_path, objects)
+    raw_uri = f"sqlite:///{tmp_path}/raw.db"
+    processed_uri = f"sqlite:///{tmp_path}/processed.db"
+    processed_engine = create_engine(processed_uri)
+    Base.metadata.create_all(bind=processed_engine)
+
+    run = Sage10kPreprocessingRun(
+        sage10k_database_uri=raw_uri,
+        processed_database_uri=processed_uri,
+        scenes_root=tmp_path,
+        stream_chunk_size=1,
+    )
+    run._process_objects_in_parallel(
+        room_ids=["room_1"],
+        source_id_to_path={},
+        shelf_ids=set(),
+        worker_count=1,
+    )
+
     with Session(processed_engine) as session:
         stored_ids = set(session.execute(select(PreprocessedObjectDAO.id)).scalars())
     assert stored_ids == {"book_1", "book_2", "book_3"}

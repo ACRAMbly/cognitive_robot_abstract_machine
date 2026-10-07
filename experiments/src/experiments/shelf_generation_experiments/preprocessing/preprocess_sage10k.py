@@ -9,7 +9,7 @@ from collections.abc import Iterable, Iterator
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar, Optional
+from typing import TYPE_CHECKING, Optional
 
 import numpy as np
 from sklearn.cluster import DBSCAN
@@ -188,10 +188,10 @@ class ShelfContents:
     Source ids of the shelves and of the objects standing on them.
 
     Mesh measurement -- and so mesh-corrected positions -- only ever feeds layer
-    extraction (:meth:`Sage10kPreprocessingRun._shelves_with_layers`), which only ever
-    reads shelves and their own contents. Every other mesh in the raw dataset can be
-    measured for nothing, so this is the scope the object pass's mesh lookups should be
-    narrowed to instead of every distinct source id in the dataset.
+    extraction (:meth:`ShelfExtractor.extract`), which only ever reads shelves and their
+    own contents. Every other mesh in the raw dataset can be measured for nothing, so
+    this is the scope the object pass's mesh lookups should be narrowed to instead of
+    every distinct source id in the dataset.
     """
 
     objects: list[PreprocessedObject] = field(default_factory=list)
@@ -219,6 +219,7 @@ class ShelfContents:
 
         :param session: Session on the raw sage10k database.
         :param classifier: Decides whether a raw type string is shelf-like.
+        :param stream_chunk_size: Rows fetched per round trip.
         :return: Collector primed with the shelves it has to keep and the source ids
             worth measuring for them.
         """
@@ -261,7 +262,7 @@ class ShelfContents:
         Measure the kept shelves' meshes, which is what locates their base and top.
 
         Shelves whose mesh is not cached are absent, and are skipped by
-        :meth:`Sage10kPreprocessingRun._shelves_with_layers` in turn.
+        :meth:`ShelfExtractor.extract` in turn.
 
         :param measurements: Supplies each mesh's measurements.
         :return: The measurements, by mesh source id.
@@ -403,6 +404,354 @@ class PreprocessingSummary:
         print(f"Done in {self.elapsed_seconds:.1f}s.")
 
 
+# %% shelf layer extraction
+@dataclass
+class ShelfExtractor:
+    """
+    Groups the objects standing on each shelf into the shelf's horizontal layers, each
+    carrying where it sits in its shelf and its objects' poses in the shelf's content
+    frame.
+    """
+
+    layer_clustering_tolerance: float = 0.05
+    """
+    Largest height difference, in metres, between two objects still considered to be
+    standing on the same shelf layer.
+    """
+
+    edge_margin_fraction: float = 0.10
+    """
+    Fraction of a shelf's width and length kept free at its edges when deciding whether
+    an object really stands on it, so a learned layout never places an object where it
+    would protrude.
+    """
+
+    @staticmethod
+    def _wrap_angle_radians(angle: float) -> float:
+        """
+        Wrap *angle* into the half-open interval (-pi, pi] radians.
+
+        :param angle: Angle in radians.
+        :return: The equivalent angle in (-pi, pi].
+        """
+        return ((angle + math.pi) % (2 * math.pi)) - math.pi
+
+    @staticmethod
+    def _is_within_shelf_footprint(
+        position: Point2,
+        shelf: PreprocessedObject,
+        maximum_relative_x: float,
+        maximum_relative_y: float,
+    ) -> bool:
+        """
+        Whether *position* lies within the shelf's own footprint, inset by the caller's
+        edge margin.
+
+        The offset is rotated into the shelf's own frame first, since the bounds are
+        expressed along the shelf's width and length. Testing the raw world-frame offset
+        instead reads the wrong axes for any shelf whose orientation is not a multiple
+        of 180 degrees.
+
+        :param position: The candidate's world-frame position.
+        :param shelf: The shelf the position is tested against.
+        :param maximum_relative_x: Half the shelf's width, inset by the margin.
+        :param maximum_relative_y: Half the shelf's length, inset by the margin.
+        :return: Whether the position falls within the inset footprint.
+        """
+        world_offset = Point2(x=position.x - shelf.pose.x, y=position.y - shelf.pose.y)
+        shelf_T_world = HomogeneousTransformationMatrix.from_xyz_rpy(
+            yaw=-float(shelf.pose.yaw)
+        )
+        local_offset = world_offset.transform(shelf_T_world)
+        return (
+            abs(float(local_offset.x)) <= maximum_relative_x
+            and abs(float(local_offset.y)) <= maximum_relative_y
+        )
+
+    @staticmethod
+    def _dominant_object_type(objects: Iterable[PreprocessedObject]) -> ObjectType:
+        """
+        The object type that occurs most often among *objects*.
+
+        Ties break on the type's own value, ascending, so the result is deterministic
+        regardless of iteration order.
+
+        :param objects: The objects to find the mode of. Must be non-empty.
+        :return: The most frequent :class:`ObjectType` among *objects*.
+        """
+        counts = Counter(object_.object_type for object_ in objects)
+        return min(
+            counts, key=lambda object_type: (-counts[object_type], object_type.value)
+        )
+
+    @staticmethod
+    def _object_in_content_frame(
+        shelf: PreprocessedObject, object_: PreprocessedObject
+    ) -> RelationalCircuitExperimentObject2D:
+        """
+        Express *object_*'s pose relative to *shelf* in the shelf's content frame.
+
+        The content frame is the shelf's own yaw plus
+        :attr:`RelationalCircuitExperimentShelf.content_frame_yaw_offset_degrees`, the frame
+        :meth:`RelationalCircuitExperimentShelf.spawn` builds its corpus in. Storing the pose in any other frame
+        makes the contents' spread land on the corpus's shallow depth axis and overflow
+        front and back.
+
+        :param shelf: The shelf the object stands on.
+        :param object_: The object whose pose is converted.
+        :return: The object with a shelf-relative, content-frame pose.
+        """
+        content_frame_yaw_radians = RelationalCircuitExperimentShelf.content_frame_yaw(
+            float(shelf.pose.yaw)
+        )
+        world_offset = Point2(
+            x=object_.pose.x - shelf.pose.x, y=object_.pose.y - shelf.pose.y
+        )
+        content_T_world = HomogeneousTransformationMatrix.from_xyz_rpy(
+            yaw=-content_frame_yaw_radians
+        )
+        local_offset = world_offset.transform(content_T_world)
+        yaw_radians = ShelfExtractor._wrap_angle_radians(
+            float(object_.pose.yaw) - content_frame_yaw_radians
+        )
+        return RelationalCircuitExperimentObject2D(
+            object_type=object_.object_type,
+            scale=object_.scale,
+            pose=Pose2D(x=local_offset.x, y=local_offset.y, yaw=yaw_radians),
+            source_id=object_.source_id,
+        )
+
+    @staticmethod
+    def _object_bottom(
+        object_: PreprocessedObject, measurements: MeshMeasurements
+    ) -> float:
+        """
+        Height at which *object_* rests, which is the height of the slab beneath it.
+
+        Falls back to the object's own origin when its mesh is not cached, which reads
+        as an object of no height rather than inventing a reach for it.
+
+        :param object_: The object standing on a slab.
+        :param measurements: Supplies the mesh's measurements.
+        :return: The height of the object's underside.
+        """
+        bounds = measurements.bounds(object_.source_id)
+        if bounds is None:
+            return float(object_.pose.z)
+        return float(object_.pose.z) + bounds.min_z
+
+    @staticmethod
+    def _relative_height(
+        slab_height: float, base_height: float, shelf_height: float
+    ) -> float:
+        """
+        Where a slab sits between its shelf's base and top, as a fraction.
+
+        A shelf mesh of no measurable height leaves the fraction undefined, so it reads
+        as sitting at the base rather than dividing by zero.
+
+        :param slab_height: The slab's height in world coordinates.
+        :param base_height: The shelf's base in world coordinates.
+        :param shelf_height: The shelf's total height.
+        :return: The fraction, zero at the base and one at the top.
+        """
+        if shelf_height <= 0:
+            return 0.0
+        return (slab_height - base_height) / shelf_height
+
+    @staticmethod
+    def _vertical_clearance(
+        index: int, slab_heights: list[float], top_height: float
+    ) -> float:
+        """
+        Space above the slab at *index*, up to the next slab or, for the topmost, the
+        shelf's own top.
+
+        :param index: Position of the slab in *slab_heights*.
+        :param slab_heights: Every slab's height, lowest first.
+        :param top_height: The shelf's top in world coordinates.
+        :return: The clearance, never negative.
+        """
+        surface_above = (
+            slab_heights[index + 1] if index + 1 < len(slab_heights) else top_height
+        )
+        return max(surface_above - slab_heights[index], 0.0)
+
+    def _layers_of_shelf(
+        self,
+        shelf: PreprocessedObject,
+        members: list[PreprocessedObject],
+        shelf_bounds: VolumetricBoundingBox,
+        measurements: MeshMeasurements,
+    ) -> list[RelationalCircuitExperimentShelfLayer]:
+        """
+        Group the objects standing on *shelf* into its horizontal layers, ordered from
+        the bottom up and each carrying where it sits in the shelf.
+
+        Objects are assigned to a layer by clustering their heights, so the layer
+        structure comes from the arrangement itself rather than from a fixed assumption
+        about how many layers a shelf has.
+
+        Only mesh-centred positions take part. A layer records each object's offset from
+        the shelf's own origin, so an uncorrected *shelf* position shifts every offset
+        on it, and an uncorrected *object* position shifts that object's own. Unlike the
+        object table -- which keeps uncorrected rows and marks them -- layers are
+        training data whose whole content is those offsets, so admitting an uncorrected
+        one would teach a circuit an arrangement nobody built.
+
+        :param shelf: The shelf whose contents are grouped.
+        :param members: Objects declaring *shelf* as the place they stand on.
+        :param shelf_bounds: The shelf mesh's own measurements, whose vertical reach
+            locates its base and top and so gives the layers their heights.
+        :param measurements: Supplies each object mesh's reach, which locates the slab
+            an object rests on.
+        :return: The shelf's layers, lowest first; empty when nothing qualifies.
+        """
+        if not shelf.position_is_mesh_corrected:
+            return []
+
+        maximum_relative_x = shelf.scale.y / 2 * (1 - self.edge_margin_fraction)
+        maximum_relative_y = shelf.scale.x / 2 * (1 - self.edge_margin_fraction)
+        within_bounds = [
+            object_
+            for object_ in members
+            if object_.position_is_mesh_corrected
+            and ShelfExtractor._is_within_shelf_footprint(
+                Point2(x=object_.pose.x, y=object_.pose.y),
+                shelf,
+                maximum_relative_x,
+                maximum_relative_y,
+            )
+        ]
+        if not within_bounds:
+            return []
+
+        theme_dominant_type = ShelfExtractor._dominant_object_type(within_bounds)
+        heights = np.array(
+            [float(object_.pose.z) for object_ in within_bounds]
+        ).reshape(-1, 1)
+        labels = DBSCAN(eps=self.layer_clustering_tolerance, min_samples=1).fit_predict(
+            heights
+        )
+
+        objects_by_label: defaultdict[int, list[PreprocessedObject]] = defaultdict(list)
+        for object_, label in zip(within_bounds, labels):
+            objects_by_label[label].append(object_)
+
+        ordered_groups = sorted(
+            objects_by_label.values(),
+            key=lambda objects: sum(float(object_.pose.z) for object_ in objects)
+            / len(objects),
+        )
+        # The shelf's recorded position is its mesh's origin, so its real base and
+        # top follow from where the mesh reaches around that origin.
+        base_height = float(shelf.pose.z) + shelf_bounds.min_z
+        top_height = float(shelf.pose.z) + shelf_bounds.max_z
+        # A slab sits at the underside of what stands on it, not at those objects'
+        # centres. Averaging the centres would put every slab roughly half an object
+        # height too high, and since spawning places slabs at the height recorded
+        # here, that error compounds on each extract-and-regenerate round trip.
+        slab_heights = [
+            sum(
+                ShelfExtractor._object_bottom(object_, measurements)
+                for object_ in objects
+            )
+            / len(objects)
+            for objects in ordered_groups
+        ]
+
+        return [
+            RelationalCircuitExperimentShelfLayer(
+                objects=[
+                    ShelfExtractor._object_in_content_frame(shelf, object_)
+                    for object_ in layer_objects
+                ],
+                theme_dominant_type=theme_dominant_type,
+                height_above_shelf_base=slab_height - base_height,
+                relative_height=ShelfExtractor._relative_height(
+                    slab_height, base_height, shelf_bounds.height
+                ),
+                vertical_clearance=ShelfExtractor._vertical_clearance(
+                    index, slab_heights, top_height
+                ),
+            )
+            for index, (layer_objects, slab_height) in enumerate(
+                zip(ordered_groups, slab_heights)
+            )
+        ]
+
+    def extract(
+        self,
+        objects: list[PreprocessedObject],
+        bounds_by_source_id: dict[str, VolumetricBoundingBox],
+        shelf_ids: set[str],
+        measurements: MeshMeasurements,
+    ) -> list[RelationalCircuitExperimentShelf]:
+        """
+        Build one :class:`RelationalCircuitExperimentShelf` per shelf that holds
+        something, carrying its own pose and its layers in order from the bottom up.
+
+        Shelf membership comes from an object's ``place_id`` naming the shelf it stands
+        on, rather than from spatial containment. Keeping the shelf itself, rather than
+        loose layers, is what preserves both that grouping and the layers' order -- and
+        lets a caller draw how many layers a generated shelf should have from the real
+        distribution.
+
+        Objects whose position could not be centred on their mesh are left out; see
+        :meth:`_layers_of_shelf`. An object that is itself classified as a shelf-like
+        parent is also left out of *another* shelf's contents -- the raw dataset records
+        a smaller piece of shelf-like furniture standing on a bigger one this way, and
+        counting it as ordinary content teaches the circuit that shelves commonly hold
+        other shelves.
+
+        :param objects: Processed objects.
+        :param bounds_by_source_id: Each shelf mesh's own measurements, by source id. A
+            shelf with no entry is skipped, since its layers' heights would be
+            guesswork.
+        :param shelf_ids: Ids of the raw objects classified as shelf-like; an object
+            absent from it is not treated as a shelf, and one present in it is never
+            treated as another shelf's content.
+        :param measurements: Supplies each object mesh's reach, used to locate slabs.
+        :return: The shelves that hold at least one layer.
+        """
+        objects_by_place_id: defaultdict[str, list[PreprocessedObject]] = defaultdict(
+            list
+        )
+        for object_ in objects:
+            if object_.id in shelf_ids:
+                continue
+            objects_by_place_id[object_.place_id].append(object_)
+
+        shelves = []
+        for shelf in objects:
+            if shelf.id not in shelf_ids or not objects_by_place_id[shelf.id]:
+                continue
+            shelf_bounds = bounds_by_source_id.get(shelf.source_id)
+            if shelf_bounds is None:
+                continue
+            layers = self._layers_of_shelf(
+                shelf,
+                objects_by_place_id[shelf.id],
+                shelf_bounds,
+                measurements,
+            )
+            if not layers:
+                continue
+            shelves.append(
+                RelationalCircuitExperimentShelf(
+                    scale=Scale(
+                        x=shelf.scale.x,
+                        y=shelf.scale.y,
+                        z=shelf_bounds.height,
+                    ),
+                    layers=layers,
+                    theme_dominant_type=layers[0].theme_dominant_type,
+                )
+            )
+        return shelves
+
+
+# %% preprocessing run
 @dataclass
 class Sage10kPreprocessingRun:
     """
@@ -418,22 +767,17 @@ class Sage10kPreprocessingRun:
     own objects needs it, memoized by :class:`MeshMeasurements` for the rest of that
     shard's run, and never reports it back to this process or another shard.
 
-    Also carries the shelf-layer extraction algorithm itself
-    (:meth:`_shelves_with_layers` down through :meth:`_layers_of_shelf` and its smaller
-    geometry helpers) as staticmethods: each is used only from :meth:`_process_room_shard`
-    within this class's own object pass, so none of them are free functions elsewhere in
-    the module.
-
-    Holds only the run's own configuration -- URIs and worker-pool tuning -- never a
-    database session or engine: :meth:`_process_objects` delegates to
+    Holds only the run's own configuration -- URIs, read and worker-pool tuning, and
+    the :class:`ShelfExtractor` each shard groups its shelves with -- never a database
+    session or engine: :meth:`_process_objects` delegates to
     :meth:`_process_objects_in_parallel`, which submits :meth:`_process_room_shard` to
     its own worker pool -- each shard builds its own worker-local sessions from
     :attr:`sage10k_database_uri`/:attr:`processed_database_uri` rather than sharing a
     connection held here. :meth:`_process_objects_in_parallel` and
     :meth:`_process_room_shard` read those URIs straight off ``self`` instead of taking
     them as parameters: a bound instance method pickles by pickling the instance behind
-    it, and this dataclass holds nothing but URIs and worker-pool tuning, so it pickles
-    as cleanly as the staticmethods that submit to the same
+    it, and this dataclass holds nothing but plain configuration, so it pickles as
+    cleanly as the staticmethods that submit to the same
     ``spawn``-context :class:`~concurrent.futures.ProcessPoolExecutor`.
     """
 
@@ -461,33 +805,17 @@ class Sage10kPreprocessingRun:
     CPU, so this stays far below the host's core count.
     """
 
-    stream_chunk_size: ClassVar[int] = 2000
+    stream_chunk_size: int = 2000
     """
-    Rows fetched per round trip while :meth:`_streamed_raw_objects` reads the raw
-    dataset.
+    Rows fetched per round trip while the raw dataset is read.
 
     The dataset does not fit in memory as a whole, so it is walked in chunks and each
-    object is written out and let go of before the next arrives. A class attribute
-    rather than a run parameter: nothing about a single run ever has reason to tune
-    this independently of the others.
+    object is written out and let go of before the next arrives.
     """
 
-    layer_clustering_tolerance: ClassVar[float] = 0.05
+    shelf_extractor: ShelfExtractor = field(default_factory=ShelfExtractor)
     """
-    Largest height difference, in metres, between two objects :meth:`_layers_of_shelf`
-    still considers to be standing on the same shelf layer.
-    """
-
-    default_edge_margin_fraction: ClassVar[float] = 0.10
-    """
-    Fraction of a shelf's width and length :meth:`_shelves_with_layers` keeps free at
-    its edges when deciding whether an object really stands on it, so a learned layout
-    never places an object where it would protrude.
-
-    Named with the ``default_`` prefix, unlike its :attr:`layer_clustering_tolerance`
-    and :attr:`stream_chunk_size` siblings, because :meth:`_shelves_with_layers` takes
-    its own same-named ``edge_margin_fraction`` parameter -- naming this identically
-    would shadow that parameter in its own default-value expression.
+    Groups each shard's shelf contents into layers.
     """
 
     @staticmethod
@@ -605,7 +933,9 @@ class Sage10kPreprocessingRun:
         sage10k_engine = create_engine(self.sage10k_database_uri)
         sage10k_session = Session(sage10k_engine)
         shelf_contents = ShelfContents.from_raw_objects(
-            sage10k_session, ShelfMembershipClassifier()
+            sage10k_session,
+            ShelfMembershipClassifier(),
+            stream_chunk_size=self.stream_chunk_size,
         )
         room_ids = list(
             sage10k_session.execute(
@@ -635,9 +965,8 @@ class Sage10kPreprocessingRun:
             worker_count,
         )
 
-    @staticmethod
     def _streamed_raw_objects(
-        session: Session, room_ids: Optional[list[str]] = None
+        self, session: Session, room_ids: Optional[list[str]] = None
     ) -> Iterator[Sage10kObjectDAO]:
         """
         Walk raw objects, in chunks, with the pose relationships already loaded.
@@ -656,344 +985,11 @@ class Sage10kPreprocessingRun:
                 joinedload(Sage10kObjectDAO.rotation),
                 joinedload(Sage10kObjectDAO.dimensions),
             )
-            .execution_options(yield_per=Sage10kPreprocessingRun.stream_chunk_size)
+            .execution_options(yield_per=self.stream_chunk_size)
         )
         if room_ids is not None:
             statement = statement.where(Sage10kObjectDAO.room_id.in_(room_ids))
         return iter(session.scalars(statement))
-
-    @staticmethod
-    def _wrap_angle_radians(angle: float) -> float:
-        """
-        Wrap *angle* into the half-open interval (-pi, pi] radians.
-
-        :param angle: Angle in radians.
-        :return: The equivalent angle in (-pi, pi].
-        """
-        return ((angle + math.pi) % (2 * math.pi)) - math.pi
-
-    @staticmethod
-    def _is_within_shelf_footprint(
-        position: Point2,
-        shelf: PreprocessedObject,
-        maximum_relative_x: float,
-        maximum_relative_y: float,
-    ) -> bool:
-        """
-        Whether *position* lies within the shelf's own footprint, inset by the caller's
-        edge margin.
-
-        The offset is rotated into the shelf's own frame first, since the bounds are
-        expressed along the shelf's width and length. Testing the raw world-frame offset
-        instead reads the wrong axes for any shelf whose orientation is not a multiple
-        of 180 degrees.
-
-        :param position: The candidate's world-frame position.
-        :param shelf: The shelf the position is tested against.
-        :param maximum_relative_x: Half the shelf's width, inset by the margin.
-        :param maximum_relative_y: Half the shelf's length, inset by the margin.
-        :return: Whether the position falls within the inset footprint.
-        """
-        world_offset = Point2(x=position.x - shelf.pose.x, y=position.y - shelf.pose.y)
-        shelf_T_world = HomogeneousTransformationMatrix.from_xyz_rpy(
-            yaw=-float(shelf.pose.yaw)
-        )
-        local_offset = world_offset.transform(shelf_T_world)
-        return (
-            abs(float(local_offset.x)) <= maximum_relative_x
-            and abs(float(local_offset.y)) <= maximum_relative_y
-        )
-
-    @staticmethod
-    def _dominant_object_type(objects: Iterable[PreprocessedObject]) -> ObjectType:
-        """
-        The object type that occurs most often among *objects*.
-
-        Ties break on the type's own value, ascending, so the result is deterministic
-        regardless of iteration order.
-
-        :param objects: The objects to find the mode of. Must be non-empty.
-        :return: The most frequent :class:`ObjectType` among *objects*.
-        """
-        counts = Counter(object_.object_type for object_ in objects)
-        return min(
-            counts, key=lambda object_type: (-counts[object_type], object_type.value)
-        )
-
-    @staticmethod
-    def _object_in_content_frame(
-        shelf: PreprocessedObject, object_: PreprocessedObject
-    ) -> RelationalCircuitExperimentObject2D:
-        """
-        Express *object_*'s pose relative to *shelf* in the shelf's content frame.
-
-        The content frame is the shelf's own yaw plus
-        :attr:`RelationalCircuitExperimentShelf.content_frame_yaw_offset_degrees`, the frame
-        :meth:`RelationalCircuitExperimentShelf.spawn` builds its corpus in. Storing the pose in any other frame
-        makes the contents' spread land on the corpus's shallow depth axis and overflow
-        front and back.
-
-        :param shelf: The shelf the object stands on.
-        :param object_: The object whose pose is converted.
-        :return: The object with a shelf-relative, content-frame pose.
-        """
-        content_frame_yaw_radians = RelationalCircuitExperimentShelf.content_frame_yaw(
-            float(shelf.pose.yaw)
-        )
-        world_offset = Point2(
-            x=object_.pose.x - shelf.pose.x, y=object_.pose.y - shelf.pose.y
-        )
-        content_T_world = HomogeneousTransformationMatrix.from_xyz_rpy(
-            yaw=-content_frame_yaw_radians
-        )
-        local_offset = world_offset.transform(content_T_world)
-        yaw_radians = Sage10kPreprocessingRun._wrap_angle_radians(
-            float(object_.pose.yaw) - content_frame_yaw_radians
-        )
-        return RelationalCircuitExperimentObject2D(
-            object_type=object_.object_type,
-            scale=object_.scale,
-            pose=Pose2D(x=local_offset.x, y=local_offset.y, yaw=yaw_radians),
-            source_id=object_.source_id,
-        )
-
-    @staticmethod
-    def _object_bottom(
-        object_: PreprocessedObject, measurements: MeshMeasurements
-    ) -> float:
-        """
-        Height at which *object_* rests, which is the height of the slab beneath it.
-
-        Falls back to the object's own origin when its mesh is not cached, which reads
-        as an object of no height rather than inventing a reach for it.
-
-        :param object_: The object standing on a slab.
-        :param measurements: Supplies the mesh's measurements.
-        :return: The height of the object's underside.
-        """
-        bounds = measurements.bounds(object_.source_id)
-        if bounds is None:
-            return float(object_.pose.z)
-        return float(object_.pose.z) + bounds.min_z
-
-    @staticmethod
-    def _relative_height(
-        slab_height: float, base_height: float, shelf_height: float
-    ) -> float:
-        """
-        Where a slab sits between its shelf's base and top, as a fraction.
-
-        A shelf mesh of no measurable height leaves the fraction undefined, so it reads
-        as sitting at the base rather than dividing by zero.
-
-        :param slab_height: The slab's height in world coordinates.
-        :param base_height: The shelf's base in world coordinates.
-        :param shelf_height: The shelf's total height.
-        :return: The fraction, zero at the base and one at the top.
-        """
-        if shelf_height <= 0:
-            return 0.0
-        return (slab_height - base_height) / shelf_height
-
-    @staticmethod
-    def _vertical_clearance(
-        index: int, slab_heights: list[float], top_height: float
-    ) -> float:
-        """
-        Space above the slab at *index*, up to the next slab or, for the topmost, the
-        shelf's own top.
-
-        :param index: Position of the slab in *slab_heights*.
-        :param slab_heights: Every slab's height, lowest first.
-        :param top_height: The shelf's top in world coordinates.
-        :return: The clearance, never negative.
-        """
-        surface_above = (
-            slab_heights[index + 1] if index + 1 < len(slab_heights) else top_height
-        )
-        return max(surface_above - slab_heights[index], 0.0)
-
-    @staticmethod
-    def _layers_of_shelf(
-        shelf: PreprocessedObject,
-        members: list[PreprocessedObject],
-        shelf_bounds: VolumetricBoundingBox,
-        edge_margin_fraction: float,
-        measurements: MeshMeasurements,
-    ) -> list[RelationalCircuitExperimentShelfLayer]:
-        """
-        Group the objects standing on *shelf* into its horizontal layers, ordered from
-        the bottom up and each carrying where it sits in the shelf.
-
-        Objects are assigned to a layer by clustering their heights, so the layer
-        structure comes from the arrangement itself rather than from a fixed assumption
-        about how many layers a shelf has.
-
-        Only mesh-centred positions take part. A layer records each object's offset from
-        the shelf's own origin, so an uncorrected *shelf* position shifts every offset
-        on it, and an uncorrected *object* position shifts that object's own. Unlike the
-        object table -- which keeps uncorrected rows and marks them -- layers are
-        training data whose whole content is those offsets, so admitting an uncorrected
-        one would teach a circuit an arrangement nobody built.
-
-        :param shelf: The shelf whose contents are grouped.
-        :param members: Objects declaring *shelf* as the place they stand on.
-        :param shelf_bounds: The shelf mesh's own measurements, whose vertical reach
-            locates its base and top and so gives the layers their heights.
-        :param edge_margin_fraction: Fraction of the shelf's width and length kept free
-            at its edges.
-        :param measurements: Supplies each object mesh's reach, which locates the slab
-            an object rests on.
-        :return: The shelf's layers, lowest first; empty when nothing qualifies.
-        """
-        if not shelf.position_is_mesh_corrected:
-            return []
-
-        maximum_relative_x = shelf.scale.y / 2 * (1 - edge_margin_fraction)
-        maximum_relative_y = shelf.scale.x / 2 * (1 - edge_margin_fraction)
-        within_bounds = [
-            object_
-            for object_ in members
-            if object_.position_is_mesh_corrected
-            and Sage10kPreprocessingRun._is_within_shelf_footprint(
-                Point2(x=object_.pose.x, y=object_.pose.y),
-                shelf,
-                maximum_relative_x,
-                maximum_relative_y,
-            )
-        ]
-        if not within_bounds:
-            return []
-
-        theme_dominant_type = Sage10kPreprocessingRun._dominant_object_type(
-            within_bounds
-        )
-        heights = np.array(
-            [float(object_.pose.z) for object_ in within_bounds]
-        ).reshape(-1, 1)
-        labels = DBSCAN(
-            eps=Sage10kPreprocessingRun.layer_clustering_tolerance, min_samples=1
-        ).fit_predict(heights)
-
-        objects_by_label: defaultdict[int, list[PreprocessedObject]] = defaultdict(list)
-        for object_, label in zip(within_bounds, labels):
-            objects_by_label[label].append(object_)
-
-        ordered_groups = sorted(
-            objects_by_label.values(),
-            key=lambda objects: sum(float(object_.pose.z) for object_ in objects)
-            / len(objects),
-        )
-        # The shelf's recorded position is its mesh's origin, so its real base and
-        # top follow from where the mesh reaches around that origin.
-        base_height = float(shelf.pose.z) + shelf_bounds.min_z
-        top_height = float(shelf.pose.z) + shelf_bounds.max_z
-        # A slab sits at the underside of what stands on it, not at those objects'
-        # centres. Averaging the centres would put every slab roughly half an object
-        # height too high, and since spawning places slabs at the height recorded
-        # here, that error compounds on each extract-and-regenerate round trip.
-        slab_heights = [
-            sum(
-                Sage10kPreprocessingRun._object_bottom(object_, measurements)
-                for object_ in objects
-            )
-            / len(objects)
-            for objects in ordered_groups
-        ]
-
-        return [
-            RelationalCircuitExperimentShelfLayer(
-                objects=[
-                    Sage10kPreprocessingRun._object_in_content_frame(shelf, object_)
-                    for object_ in layer_objects
-                ],
-                theme_dominant_type=theme_dominant_type,
-                height_above_shelf_base=slab_height - base_height,
-                relative_height=Sage10kPreprocessingRun._relative_height(
-                    slab_height, base_height, shelf_bounds.height
-                ),
-                vertical_clearance=Sage10kPreprocessingRun._vertical_clearance(
-                    index, slab_heights, top_height
-                ),
-            )
-            for index, (layer_objects, slab_height) in enumerate(
-                zip(ordered_groups, slab_heights)
-            )
-        ]
-
-    @staticmethod
-    def _shelves_with_layers(
-        objects: list[PreprocessedObject],
-        bounds_by_source_id: dict[str, VolumetricBoundingBox],
-        shelf_ids: set[str],
-        measurements: MeshMeasurements,
-        edge_margin_fraction: float = default_edge_margin_fraction,
-    ) -> list[RelationalCircuitExperimentShelf]:
-        """
-        Build one :class:`RelationalCircuitExperimentShelf` per shelf that holds
-        something, carrying its own pose and its layers in order from the bottom up.
-
-        Shelf membership comes from an object's ``place_id`` naming the shelf it stands
-        on, rather than from spatial containment. Keeping the shelf itself, rather than
-        loose layers, is what preserves both that grouping and the layers' order -- and
-        lets a caller draw how many layers a generated shelf should have from the real
-        distribution.
-
-        Objects whose position could not be centred on their mesh are left out; see
-        :meth:`_layers_of_shelf`. An object that is itself classified as a shelf-like
-        parent is also left out of *another* shelf's contents -- the raw dataset records
-        a smaller piece of shelf-like furniture standing on a bigger one this way, and
-        counting it as ordinary content teaches the circuit that shelves commonly hold
-        other shelves.
-
-        :param objects: Processed objects.
-        :param bounds_by_source_id: Each shelf mesh's own measurements, by source id. A
-            shelf with no entry is skipped, since its layers' heights would be
-            guesswork.
-        :param shelf_ids: Ids of the raw objects classified as shelf-like; an object
-            absent from it is not treated as a shelf, and one present in it is never
-            treated as another shelf's content.
-        :param measurements: Supplies each object mesh's reach, used to locate slabs.
-        :param edge_margin_fraction: Fraction of each shelf's width and length kept free
-            at its edges.
-        :return: The shelves that hold at least one layer.
-        """
-        objects_by_place_id: defaultdict[str, list[PreprocessedObject]] = defaultdict(
-            list
-        )
-        for object_ in objects:
-            if object_.id in shelf_ids:
-                continue
-            objects_by_place_id[object_.place_id].append(object_)
-
-        shelves = []
-        for shelf in objects:
-            if shelf.id not in shelf_ids or not objects_by_place_id[shelf.id]:
-                continue
-            shelf_bounds = bounds_by_source_id.get(shelf.source_id)
-            if shelf_bounds is None:
-                continue
-            layers = Sage10kPreprocessingRun._layers_of_shelf(
-                shelf,
-                objects_by_place_id[shelf.id],
-                shelf_bounds,
-                edge_margin_fraction,
-                measurements,
-            )
-            if not layers:
-                continue
-            shelves.append(
-                RelationalCircuitExperimentShelf(
-                    scale=Scale(
-                        x=shelf.scale.x,
-                        y=shelf.scale.y,
-                        z=shelf_bounds.height,
-                    ),
-                    layers=layers,
-                    theme_dominant_type=layers[0].theme_dominant_type,
-                )
-            )
-        return shelves
 
     @staticmethod
     def _partition_round_robin(
@@ -1058,9 +1054,7 @@ class Sage10kPreprocessingRun:
             session=processed_session, label=f"objects[{shard_label}]"
         )
         corrected_count = 0
-        for sage10k_object in Sage10kPreprocessingRun._streamed_raw_objects(
-            sage10k_session, room_ids
-        ):
+        for sage10k_object in self._streamed_raw_objects(sage10k_session, room_ids):
             processed_object = PreprocessedObject.from_sage10k_object(
                 sage10k_object, classifier, measurements
             )
@@ -1069,7 +1063,7 @@ class Sage10kPreprocessingRun:
             object_writer.store(processed_object)
         object_writer.finish()
 
-        shelves = Sage10kPreprocessingRun._shelves_with_layers(
+        shelves = self.shelf_extractor.extract(
             shelf_contents.objects,
             shelf_contents.shelf_bounds(measurements),
             shelf_contents.shelf_ids,
