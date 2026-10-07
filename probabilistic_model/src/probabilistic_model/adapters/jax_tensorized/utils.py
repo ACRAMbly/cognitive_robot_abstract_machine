@@ -1,6 +1,6 @@
 """
-Functions that the converters of both directions between the ``jax`` package and the
-``tensorized`` package share.
+Functions that the converters between the ``jax`` package and the ``tensorized``
+package need. Some of them serve one direction of the conversion only.
 """
 
 from __future__ import annotations
@@ -10,12 +10,13 @@ import jax.numpy as jnp
 import numpy as np
 from jax.experimental.sparse import BCOO
 from random_events.variable import Symbolic
+from typing_extensions import Tuple
 
 from probabilistic_model.adapters.jax_tensorized.exceptions import (
     StatesAreNotColumnIndicesError,
 )
-from probabilistic_model.probabilistic_circuit.jax import (
-    discrete_layer as jax_discrete_layer,
+from probabilistic_model.probabilistic_circuit.jax.discrete_layer import (
+    DifferentiableDiscreteLayer,
 )
 from probabilistic_model.probabilistic_circuit.tensorized.array_types import (
     StateIndices,
@@ -39,7 +40,7 @@ def to_numpy(array: jax.Array) -> np.ndarray:
 
 
 def sparse_matrix(
-    values: np.ndarray, rows: np.ndarray, columns: np.ndarray, shape
+    values: np.ndarray, rows: np.ndarray, columns: np.ndarray, shape: Tuple[int, int]
 ) -> BCOO:
     """
     :param values: The value of every stored entry.
@@ -73,19 +74,17 @@ def columns_of_domain_elements(variable: Symbolic) -> StateIndices:
 
 def discrete_layer_of(
     data: DiscreteLayer, columns: StateIndices, number_of_columns: int
-) -> jax_discrete_layer.DiscreteLayer:
+) -> DifferentiableDiscreteLayer:
     """
     :param data: A discrete layer.
     :param columns: The column of the probability table that holds every state of the
         layer.
     :param number_of_columns: The number of columns of the probability table.
-    :return: The discrete layer of the ``jax`` package, impossible in every column
+    :return: The differentiable discrete layer, impossible in every column
         that holds no state.
     """
     probabilities = np.zeros((data.number_of_nodes, number_of_columns))
     probabilities[:, columns] = data.table.dense_probabilities()
     with np.errstate(divide="ignore"):
         log_probabilities = np.log(probabilities)
-    return jax_discrete_layer.DiscreteLayer(
-        data.variable, jnp.asarray(log_probabilities)
-    )
+    return DifferentiableDiscreteLayer(data.variable, jnp.asarray(log_probabilities))

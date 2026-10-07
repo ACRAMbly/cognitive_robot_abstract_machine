@@ -1,4 +1,5 @@
 import unittest
+from probabilistic_model.adapters.circuit_representations import CircuitRepresentations
 from enum import IntEnum
 
 import jax.numpy as jnp
@@ -9,8 +10,12 @@ from random_events.variable import Symbolic
 from sortedcontainers import SortedSet
 
 from probabilistic_model.distributions.distributions import SymbolicDistribution
-from probabilistic_model.probabilistic_circuit.jax.discrete_layer import DiscreteLayer
-from probabilistic_model.probabilistic_circuit.jax.inner_layer import SparseSumLayer
+from probabilistic_model.probabilistic_circuit.jax.discrete_layer import (
+    DifferentiableDiscreteLayer,
+)
+from probabilistic_model.probabilistic_circuit.jax.inner_layer import (
+    DifferentiableSparseSumLayer,
+)
 from probabilistic_model.probabilistic_circuit.jax.probabilistic_circuit import (
     DifferentiableLayeredCircuit,
 )
@@ -22,8 +27,6 @@ from probabilistic_model.probabilistic_circuit.rx.probabilistic_circuit import (
 )
 from probabilistic_model.utils import MissingDict
 
-from .circuit_conversion import jax_circuit_of, rustworkx_circuit_of
-
 
 class Animal(IntEnum):
     CAT = 0
@@ -32,12 +35,14 @@ class Animal(IntEnum):
 
 
 class DiscreteLayerTestCase(unittest.TestCase):
-    model: DiscreteLayer
+    model: DifferentiableDiscreteLayer
     x = Symbolic(name="x", domain=Set.from_iterable(Animal))
 
     @classmethod
     def setUpClass(cls):
-        cls.model = DiscreteLayer(0, jnp.log(jnp.array([[0, 1, 2], [3, 4, 0]])))
+        cls.model = DifferentiableDiscreteLayer(
+            0, jnp.log(jnp.array([[0, 1, 2], [3, 4, 0]]))
+        )
         cls.model.validate()
 
     def test_normalization(self):
@@ -78,10 +83,10 @@ class DiscreteLayerTestCase(unittest.TestCase):
 
         nx_pc = s.probabilistic_circuit
 
-        jax_pc = jax_circuit_of(nx_pc)
+        jax_pc = CircuitRepresentations().convert(nx_pc, DifferentiableLayeredCircuit)
         discrete_layer = jax_pc.root.child_layers[0]
 
-        self.assertIsInstance(discrete_layer, DiscreteLayer)
+        self.assertIsInstance(discrete_layer, DifferentiableDiscreteLayer)
         self.assertEqual(discrete_layer.variable, 0)
         self.assertEqual(discrete_layer.log_probabilities.shape, (2, 3))
 
@@ -90,12 +95,13 @@ class DiscreteLayerTestCase(unittest.TestCase):
         )
 
     def test_to_rx(self):
-        mixture = SparseSumLayer(
+        mixture = DifferentiableSparseSumLayer(
             [self.model],
             [BCOO((jnp.zeros(2), jnp.array([[0, 0], [0, 1]])), shape=(1, 2))],
         )
-        rx_circuit = rustworkx_circuit_of(
-            DifferentiableLayeredCircuit(SortedSet([self.x]), mixture)
+        rx_circuit = CircuitRepresentations().convert(
+            DifferentiableLayeredCircuit(SortedSet([self.x]), mixture),
+            NXProbabilisticCircuit,
         )
         leaves = [
             node

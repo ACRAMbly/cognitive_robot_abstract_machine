@@ -5,12 +5,14 @@ import jax
 from jax import numpy as jnp
 
 from probabilistic_model.exceptions import ShapeMismatchError
-from typing_extensions import Self
+from typing_extensions import Optional, Self
 
-from probabilistic_model.probabilistic_circuit.jax.input_layer import ContinuousLayer
+from probabilistic_model.probabilistic_circuit.jax.input_layer import (
+    DifferentiableContinuousLayer,
+)
 
 
-class GaussianLayer(ContinuousLayer):
+class DifferentiableGaussianLayer(DifferentiableContinuousLayer):
     """
     A layer that represents Gaussian distributions over a single variable.
     """
@@ -25,7 +27,7 @@ class GaussianLayer(ContinuousLayer):
     The logarithm of the scale of the Gaussian distributions.
     """
 
-    min_scale: jax.Array = eqx.field(static=True, default=0.01)
+    minimum_scale: jax.Array = eqx.field(static=True, default=0.01)
     """
     The minimum scale of the Gaussian distributions.
     """
@@ -35,21 +37,21 @@ class GaussianLayer(ContinuousLayer):
         variable: int,
         location: jax.Array,
         log_scale: jax.Array,
-        min_scale: jax.Array,
+        minimum_scale: jax.Array,
     ):
         super().__init__(variable)
         self.location = location
         self.log_scale = log_scale
-        self.min_scale = min_scale
+        self.minimum_scale = minimum_scale
 
-    def __deepcopy__(self, memo=None):
+    def __deepcopy__(self, memo: Optional[Dict[int, Any]] = None):
         if memo is None:
             memo = {}
         id_self = id(self)
         if id_self in memo:
             return memo[id_self]
-        result = GaussianLayer(
-            self.variable, self.location, self.log_scale, self.min_scale
+        result = DifferentiableGaussianLayer(
+            self.variable, self.location, self.log_scale, self.minimum_scale
         )
         memo[id_self] = result
         return result
@@ -57,9 +59,9 @@ class GaussianLayer(ContinuousLayer):
     def validate(self):
         if not self.location.shape == self.log_scale.shape:
             raise ShapeMismatchError(self.log_scale.shape, self.location.shape)
-        if not self.min_scale.shape == self.log_scale.shape:
-            raise ShapeMismatchError(self.log_scale.shape, self.min_scale.shape)
-        if not jnp.all(self.min_scale >= 0):
+        if not self.minimum_scale.shape == self.log_scale.shape:
+            raise ShapeMismatchError(self.log_scale.shape, self.minimum_scale.shape)
+        if not jnp.all(self.minimum_scale >= 0):
             raise ValueError("The minimum scale must be positive.")
 
     @property
@@ -68,7 +70,7 @@ class GaussianLayer(ContinuousLayer):
 
     @property
     def scale(self) -> jax.Array:
-        return jnp.exp(self.log_scale) + self.min_scale
+        return jnp.exp(self.log_scale) + self.minimum_scale
 
     def log_likelihood_of_nodes_of_value(self, value: jax.Array) -> jax.Array:
         return jax.scipy.stats.norm.logpdf(value, loc=self.location, scale=self.scale)
@@ -82,7 +84,7 @@ class GaussianLayer(ContinuousLayer):
             "variable": self.variable,
             "location": self.location.tolist(),
             "scale": self.log_scale.tolist(),
-            "min_scale": self.min_scale.tolist(),
+            "minimum_scale": self.minimum_scale.tolist(),
         }
 
     @classmethod
@@ -91,5 +93,5 @@ class GaussianLayer(ContinuousLayer):
             data["variable"],
             jnp.array(data["location"]),
             jnp.array(data["scale"]),
-            jnp.array(data["min_scale"]),
+            jnp.array(data["minimum_scale"]),
         )

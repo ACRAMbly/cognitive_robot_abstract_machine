@@ -1,25 +1,29 @@
 import unittest
 
 import jax.numpy as jnp
+from probabilistic_model.adapters.circuit_representations import CircuitRepresentations
+from probabilistic_model.probabilistic_circuit.jax.probabilistic_circuit import (
+    DifferentiableLayeredCircuit,
+)
 from random_events.variable import Continuous
 
 from probabilistic_model.distributions.gaussian import GaussianDistribution
-from probabilistic_model.probabilistic_circuit.jax.gaussian_layer import GaussianLayer
+from probabilistic_model.probabilistic_circuit.jax.gaussian_layer import (
+    DifferentiableGaussianLayer,
+)
 from probabilistic_model.probabilistic_circuit.rx.probabilistic_circuit import (
     SumUnit,
     UnivariateContinuousLeaf,
     ProbabilisticCircuit as NXProbabilisticCircuit,
 )
 
-from .circuit_conversion import jax_circuit_of
-
 
 class GaussianLayerTestCase(unittest.TestCase):
-    model: GaussianLayer
+    model: DifferentiableGaussianLayer
 
     @classmethod
     def setUpClass(cls):
-        cls.model = GaussianLayer(
+        cls.model = DifferentiableGaussianLayer(
             0, jnp.array([0.0, 1.0]), jnp.array([0.0, 0.0]), jnp.array([0.0, 0.01])
         )
         cls.model.validate()
@@ -47,9 +51,9 @@ class GaussianLayerTestCase(unittest.TestCase):
         s.add_subcircuit(g2, 0.5)
         s.add_subcircuit(g1, 0.5)
 
-        jax_pc = jax_circuit_of(nx_pc)
+        jax_pc = CircuitRepresentations().convert(nx_pc, DifferentiableLayeredCircuit)
         gaussian_layer = jax_pc.root.child_layers[0]
-        self.assertIsInstance(gaussian_layer, GaussianLayer)
+        self.assertIsInstance(gaussian_layer, DifferentiableGaussianLayer)
         gaussian_layer.validate()
         self.assertEqual(gaussian_layer.variable, 0)
         distributions = sorted(

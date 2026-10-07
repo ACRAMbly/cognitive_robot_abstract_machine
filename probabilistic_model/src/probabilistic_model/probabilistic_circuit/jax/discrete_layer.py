@@ -5,11 +5,13 @@ from jaxtyping import Array
 from typing_extensions import Self
 
 import jax
-from probabilistic_model.probabilistic_circuit.jax.inner_layer import InputLayer
+from probabilistic_model.probabilistic_circuit.jax.inner_layer import (
+    DifferentiableInputLayer,
+)
 import jax.numpy as jnp
 
 
-class DiscreteLayer(InputLayer):
+class DifferentiableDiscreteLayer(DifferentiableInputLayer):
     """
     A layer that represents discrete distributions over a single variable.
     """

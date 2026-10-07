@@ -139,15 +139,16 @@ print(probability)
 
 ## JAX Implementation
 
-The JAX implementation in `probabilistic_model.probabilistic_circuit.jax` calculates the log-likelihood and learns the
+The JAX implementation, the `DifferentiableLayeredCircuit` in `probabilistic_model.probabilistic_circuit.jax`, calculates the log-likelihood and learns the
 parameters of a circuit by gradient descent.
 It answers no other query; a trained JAX circuit is converted into a NumPy circuit for those.
 A JAX circuit is created from a NumPy circuit, so the example from above looks as follows:
 
 ```{code-cell} ipython3
-from probabilistic_model.adapters.jax_tensorized.tensorized_to_jax import LayeredCircuitToJaxCircuitConverter
+from probabilistic_model.adapters.circuit_representations import CircuitRepresentations
+from probabilistic_model.probabilistic_circuit.jax.probabilistic_circuit import DifferentiableLayeredCircuit
 
-jax_model = LayeredCircuitToJaxCircuitConverter.convert(numpy_model)
+jax_model = CircuitRepresentations().convert(numpy_model, DifferentiableLayeredCircuit)
 print(jax_model.root)
 ```
 
@@ -177,8 +178,10 @@ I would be happy to get support here if someone is interested in it.
 All three can be converted into each other, and every conversion goes through NumPy.
 `RustworkxCircuitToLayeredCircuitConverter` and `LayeredCircuitToRustworkxCircuitConverter` in
 `probabilistic_model.adapters.rustworkx_tensorized` convert between rustworkx and NumPy,
-`LayeredCircuitToJaxCircuitConverter` and `JaxCircuitToLayeredCircuitConverter` in
+`LayeredCircuitToDifferentiableLayeredCircuitConverter` and `DifferentiableLayeredCircuitToLayeredCircuitConverter` in
 `probabilistic_model.adapters.jax_tensorized` between NumPy and JAX.
+`CircuitRepresentations` in `probabilistic_model.adapters.circuit_representations` chains these converters,
+so that it converts a circuit into any representation, for instance rustworkx into JAX.
 Both layered circuits group their nodes the same way, so the conversion between them copies arrays layer by layer.
 To learn the parameters of a NumPy circuit, convert it to JAX, train it there and
 convert it back.

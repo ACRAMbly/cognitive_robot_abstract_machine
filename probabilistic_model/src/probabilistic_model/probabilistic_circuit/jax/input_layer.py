@@ -8,25 +8,29 @@ import jax
 from jax import numpy as jnp
 
 from probabilistic_model.exceptions import ShapeMismatchError
-from typing_extensions import Self
+from typing_extensions import Optional, Self
 
-from probabilistic_model.probabilistic_circuit.jax.inner_layer import InputLayer
+from probabilistic_model.probabilistic_circuit.jax.inner_layer import (
+    DifferentiableInputLayer,
+)
 
 
-class ContinuousLayer(InputLayer, ABC):
+class DifferentiableContinuousLayer(DifferentiableInputLayer, ABC):
     """
     Abstract base class for continuous univariate input units.
     """
 
 
-class ContinuousLayerWithFiniteSupport(ContinuousLayer, ABC):
+class DifferentiableContinuousLayerWithFiniteSupport(
+    DifferentiableContinuousLayer, ABC
+):
     """
     Abstract class for continuous univariate input units with finite support.
     """
 
     interval: jax.Array = eqx.field(static=True)
     """
-    The interval of the distribution as a array of shape (num_nodes, 2).
+    The interval of the distribution as a array of shape (#nodes, 2).
 
     The first column contains the lower bounds and the second column the upper bounds.
     The intervals are treated as open intervals (>/< comparator).
@@ -76,7 +80,7 @@ class ContinuousLayerWithFiniteSupport(ContinuousLayer, ABC):
         result["interval"] = self.interval.tolist()
         return result
 
-    def __deepcopy__(self, memo=None):
+    def __deepcopy__(self, memo: Optional[Dict[int, Any]] = None):
         if memo is None:
             memo = {}
         id_self = id(self)
@@ -87,7 +91,7 @@ class ContinuousLayerWithFiniteSupport(ContinuousLayer, ABC):
         return result
 
 
-class DiracDeltaLayer(ContinuousLayer):
+class DifferentiableDiracDeltaLayer(DifferentiableContinuousLayer):
     """
     A layer that represents Dirac delta distributions over a single variable.
     """
@@ -104,8 +108,8 @@ class DiracDeltaLayer(ContinuousLayer):
     This value will be used to replace infinity in likelihoods.
     """
 
-    def __init__(self, variable_index, location, density_cap):
-        super().__init__(variable_index)
+    def __init__(self, variable: int, location: jax.Array, density_cap: jax.Array):
+        super().__init__(variable)
         self.location = location
         self.density_cap = density_cap
 
@@ -114,7 +118,7 @@ class DiracDeltaLayer(ContinuousLayer):
             raise ShapeMismatchError(self.density_cap.shape, self.location.shape)
 
     @property
-    def number_of_nodes(self):
+    def number_of_nodes(self) -> int:
         return len(self.location)
 
     def log_likelihood_of_nodes(self, x: jax.Array) -> jax.Array:

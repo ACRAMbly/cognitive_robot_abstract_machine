@@ -6,12 +6,7 @@ from random_events.variable import Continuous
 
 from probabilistic_model.learning.jpt.jpt import JointProbabilityTree
 from probabilistic_model.learning.nyga_induction import NygaInduction
-from probabilistic_model.adapters.jax_tensorized.tensorized_to_jax import (
-    LayeredCircuitToJaxCircuitConverter,
-)
-from probabilistic_model.adapters.rustworkx_tensorized.rustworkx_to_tensorized import (
-    RustworkxCircuitToLayeredCircuitConverter,
-)
+from probabilistic_model.adapters.circuit_representations import CircuitRepresentations
 from probabilistic_model.probabilistic_circuit.jax.probabilistic_circuit import (
     DifferentiableLayeredCircuit,
 )
@@ -61,8 +56,8 @@ if not load_from_disc:
         variable, min_samples_per_quantile=min_samples_per_quantile
     )
     rustworkx_model.fit(data)
-    jax_model = LayeredCircuitToJaxCircuitConverter.convert(
-        RustworkxCircuitToLayeredCircuitConverter.convert(rustworkx_model)
+    jax_model = CircuitRepresentations().convert(
+        rustworkx_model, DifferentiableLayeredCircuit
     )
     if save_to_disc:
         with open(rustworkx_path, "w") as f:

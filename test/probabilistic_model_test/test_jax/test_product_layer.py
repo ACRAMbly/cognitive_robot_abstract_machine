@@ -2,10 +2,12 @@ import unittest
 from jax.experimental.sparse import BCOO
 from random_events.variable import Continuous
 import jax.numpy as jnp
-from probabilistic_model.probabilistic_circuit.jax.input_layer import DiracDeltaLayer
+from probabilistic_model.probabilistic_circuit.jax.input_layer import (
+    DifferentiableDiracDeltaLayer,
+)
 from probabilistic_model.probabilistic_circuit.jax.inner_layer import (
-    ProductLayer,
-    SparseSumLayer,
+    DifferentiableProductLayer,
+    DifferentiableSparseSumLayer,
 )
 
 import warnings
@@ -19,11 +21,11 @@ class DiracProductTestCase(unittest.TestCase):
     y = Continuous("y")
     z = Continuous("z")
 
-    p1_x = DiracDeltaLayer(0, jnp.array([0.0, 1.0]), jnp.array([1, 1]))
-    p2_x = DiracDeltaLayer(0, jnp.array([2.0, 3.0]), jnp.array([1, 1]))
-    p_y = DiracDeltaLayer(1, jnp.array([4.0, 5.0]), jnp.array([1, 1]))
-    p_z = DiracDeltaLayer(2, jnp.array([6.0]), jnp.array([1]))
-    product_layer: ProductLayer
+    p1_x = DifferentiableDiracDeltaLayer(0, jnp.array([0.0, 1.0]), jnp.array([1, 1]))
+    p2_x = DifferentiableDiracDeltaLayer(0, jnp.array([2.0, 3.0]), jnp.array([1, 1]))
+    p_y = DifferentiableDiracDeltaLayer(1, jnp.array([4.0, 5.0]), jnp.array([1, 1]))
+    p_z = DifferentiableDiracDeltaLayer(2, jnp.array([6.0]), jnp.array([1]))
+    product_layer: DifferentiableProductLayer
 
     def setUp(self):
         indices = jnp.array([[0, 0], [0, 1], [1, 0], [2, 1], [3, 0], [3, 1]])
@@ -33,7 +35,7 @@ class DiracProductTestCase(unittest.TestCase):
             .sum_duplicates(remove_zeros=False)
             .sort_indices()
         )
-        self.product_layer = ProductLayer(
+        self.product_layer = DifferentiableProductLayer(
             [
                 self.p_z,
                 self.p1_x,
@@ -64,18 +66,18 @@ class NestedProductTestCase(unittest.TestCase):
     """
 
     def test_inner_product_reads_its_own_variables(self):
-        y_delta = DiracDeltaLayer(1, jnp.array([4.0]), jnp.array([2.0]))
-        z_delta = DiracDeltaLayer(2, jnp.array([6.0]), jnp.array([3.0]))
+        y_delta = DifferentiableDiracDeltaLayer(1, jnp.array([4.0]), jnp.array([2.0]))
+        z_delta = DifferentiableDiracDeltaLayer(2, jnp.array([6.0]), jnp.array([3.0]))
         single_edges = BCOO(
             (jnp.array([0, 0]), jnp.array([[0, 0], [1, 0]])), shape=(2, 1)
         )
-        inner_product = ProductLayer([y_delta, z_delta], single_edges)
-        mixture = SparseSumLayer(
+        inner_product = DifferentiableProductLayer([y_delta, z_delta], single_edges)
+        mixture = DifferentiableSparseSumLayer(
             [inner_product],
             [BCOO((jnp.array([0.0]), jnp.array([[0, 0]])), shape=(1, 1))],
         )
-        x_delta = DiracDeltaLayer(0, jnp.array([1.0]), jnp.array([5.0]))
-        outer_product = ProductLayer([x_delta, mixture], single_edges)
+        x_delta = DifferentiableDiracDeltaLayer(0, jnp.array([1.0]), jnp.array([5.0]))
+        outer_product = DifferentiableProductLayer([x_delta, mixture], single_edges)
 
         likelihood = outer_product.log_likelihood_of_nodes(jnp.array([[1.0, 4.0, 6.0]]))
 

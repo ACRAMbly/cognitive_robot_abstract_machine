@@ -1,15 +1,16 @@
 from __future__ import annotations
 
 from abc import abstractmethod
-from dataclasses import dataclass, field
 
+import jax
 import numpy as np
+from jax.experimental.sparse import BCOO
 from random_events.interval import Bound
 from random_events.variable import Integer, Symbolic
 from scipy.sparse import coo_array
 from sortedcontainers import SortedSet
-from typing_extensions import Dict
 
+from probabilistic_model.adapters.converter import LayerConversion
 from probabilistic_model.adapters.exceptions import CannotConvertError
 from probabilistic_model.adapters.jax_tensorized.converter import (
     InputType,
@@ -19,13 +20,27 @@ from probabilistic_model.adapters.jax_tensorized.utils import (
     columns_of_domain_elements,
     to_numpy,
 )
-from probabilistic_model.probabilistic_circuit.jax import (
-    discrete_layer as jax_discrete_layer,
-    gaussian_layer as jax_gaussian_layer,
-    inner_layer as jax_inner_layer,
-    input_layer as jax_input_layer,
-    probabilistic_circuit as jax_probabilistic_circuit,
-    uniform_layer as jax_uniform_layer,
+from probabilistic_model.probabilistic_circuit.jax.discrete_layer import (
+    DifferentiableDiscreteLayer,
+)
+from probabilistic_model.probabilistic_circuit.jax.gaussian_layer import (
+    DifferentiableGaussianLayer,
+)
+from probabilistic_model.probabilistic_circuit.jax.inner_layer import (
+    DifferentiableDenseSumLayer,
+    DifferentiableLayer,
+    DifferentiableProductLayer,
+    DifferentiableSparseSumLayer,
+    DifferentiableSumLayer,
+)
+from probabilistic_model.probabilistic_circuit.jax.input_layer import (
+    DifferentiableDiracDeltaLayer,
+)
+from probabilistic_model.probabilistic_circuit.jax.probabilistic_circuit import (
+    DifferentiableLayeredCircuit,
+)
+from probabilistic_model.probabilistic_circuit.jax.uniform_layer import (
+    DifferentiableUniformLayer,
 )
 from probabilistic_model.probabilistic_circuit.tensorized.inner_layer.base import Layer
 from probabilistic_model.probabilistic_circuit.tensorized.inner_layer.product_layer import (
@@ -62,53 +77,30 @@ from probabilistic_model.probabilistic_circuit.tensorized.symbolic_encoding impo
     SymbolicEncoding,
 )
 
-
-@dataclass
-class LayeredCircuitBuilder:
-    """
-    The state of converting the layers of one circuit of the ``jax`` package into one
-    layered circuit, which converts every layer once so that a layer shared by several
-    parents stays shared.
-    """
-
-    variables: SortedSet
-    """
-    The variables of the circuit, in the order the layers index them.
-    """
-
-    layers_by_jax_layer: Dict[int, Layer] = field(default_factory=dict)
-    """
-    The layer created for every layer converted so far, keyed by the id of the layer of
-    the ``jax`` package.
-    """
-
-    def layer_of(self, jax_layer: jax_inner_layer.Layer) -> Layer:
-        """
-        :param jax_layer: A layer of the circuit.
-        :return: The layer of the ``tensorized`` package with the same nodes.
-        """
-        if id(jax_layer) not in self.layers_by_jax_layer:
-            self.layers_by_jax_layer[id(jax_layer)] = JaxToTensorizedConverter.convert(
-                jax_layer, self
-            )
-        return self.layers_by_jax_layer[id(jax_layer)]
+LayersToTensorized = LayerConversion[DifferentiableLayer, Layer]
+"""
+The conversion of the layers of one differentiable circuit into layers of the
+``tensorized`` package.
+"""
 
 
 # %% inner layers
 
 
-class JaxSumLayerToSumLayerConverter(JaxToTensorizedConverter[InputType, SumLayer]):
+class DifferentiableSumLayerToSumLayerConverter(
+    JaxToTensorizedConverter[InputType, SumLayer]
+):
     """
-    Base class for converters of the sum layers of the ``jax`` package, which keep one
-    weight matrix per child layer, into one sum layer with a single sparse weight matrix
-    whose columns are the nodes of all child layers in order.
+    Base class for converters of the differentiable sum layers, which keep one weight
+    matrix per child layer, into one sum layer with a single sparse weight matrix whose
+    columns are the nodes of all child layers in order.
 
     Training leaves the weights unnormalized, so the converted weights are normalized.
     """
 
     @staticmethod
     @abstractmethod
-    def entries_of(log_weights) -> SparseEntries:
+    def entries_of(log_weights: BCOO | jax.Array) -> SparseEntries:
         """
         :param log_weights: The logarithmic weights of the edges into one child layer.
         :return: The stored entries of the weights, the columns indexing the nodes of
@@ -118,10 +110,10 @@ class JaxSumLayerToSumLayerConverter(JaxToTensorizedConverter[InputType, SumLaye
 
     @classmethod
     def convert(
-        cls, data: jax_inner_layer.SumLayer, builder: LayeredCircuitBuilder
+        cls, data: DifferentiableSumLayer, conversion: LayersToTensorized
     ) -> SumLayer:
         child_layers = [
-            builder.layer_of(child_layer) for child_layer in data.child_layers
+            conversion.convert(child_layer) for child_layer in data.child_layers
         ]
         entries = []
         offset = 0
@@ -141,39 +133,38 @@ class JaxSumLayerToSumLayerConverter(JaxToTensorizedConverter[InputType, SumLaye
         return layer
 
 
-class SparseSumLayerToSumLayerConverter(
-    JaxSumLayerToSumLayerConverter[jax_inner_layer.SparseSumLayer]
+class DifferentiableSparseSumLayerToSumLayerConverter(
+    DifferentiableSumLayerToSumLayerConverter[DifferentiableSparseSumLayer]
 ):
 
     @staticmethod
-    def entries_of(log_weights) -> SparseEntries:
+    def entries_of(log_weights: BCOO) -> SparseEntries:
         indices = np.asarray(log_weights.indices, dtype=np.int64)
         return SparseEntries(to_numpy(log_weights.data), indices[:, 0], indices[:, 1])
 
 
-class DenseSumLayerToSumLayerConverter(
-    JaxSumLayerToSumLayerConverter[jax_inner_layer.DenseSumLayer]
+class DifferentiableDenseSumLayerToSumLayerConverter(
+    DifferentiableSumLayerToSumLayerConverter[DifferentiableDenseSumLayer]
 ):
 
     @staticmethod
-    def entries_of(log_weights) -> SparseEntries:
+    def entries_of(log_weights: jax.Array) -> SparseEntries:
         rows, columns = np.indices(log_weights.shape, dtype=np.int64)
         return SparseEntries(
             to_numpy(log_weights).ravel(), rows.ravel(), columns.ravel()
         )
 
 
-class ProductLayerToProductLayerConverter(
-    JaxToTensorizedConverter[jax_inner_layer.ProductLayer, ProductLayer]
+class DifferentiableProductLayerToProductLayerConverter(
+    JaxToTensorizedConverter[DifferentiableProductLayer, ProductLayer]
 ):
     """
-    Both packages store the edges of a product layer as the same sparse matrix of child
-    node indices.
+    Both layers store their edges as the same sparse matrix of child node indices.
     """
 
     @classmethod
     def convert(
-        cls, data: jax_inner_layer.ProductLayer, builder: LayeredCircuitBuilder
+        cls, data: DifferentiableProductLayer, conversion: LayersToTensorized
     ) -> ProductLayer:
         indices = np.asarray(data.edges.indices, dtype=np.int64)
         edges = coo_array(
@@ -184,39 +175,40 @@ class ProductLayerToProductLayerConverter(
             shape=data.edges.shape,
         )
         return ProductLayer(
-            [builder.layer_of(child_layer) for child_layer in data.child_layers], edges
+            [conversion.convert(child_layer) for child_layer in data.child_layers],
+            edges,
         )
 
 
 # %% input layers
 
 
-class GaussianLayerToGaussianLayerConverter(
-    JaxToTensorizedConverter[jax_gaussian_layer.GaussianLayer, GaussianLayer]
+class DifferentiableGaussianLayerToGaussianLayerConverter(
+    JaxToTensorizedConverter[DifferentiableGaussianLayer, GaussianLayer]
 ):
     """
-    The scale of a Gaussian layer of the ``jax`` package includes its minimum scale.
+    The scale of a differentiable Gaussian layer includes its minimum scale.
     """
 
     @classmethod
     def convert(
-        cls, data: jax_gaussian_layer.GaussianLayer, builder: LayeredCircuitBuilder
+        cls, data: DifferentiableGaussianLayer, conversion: LayersToTensorized
     ) -> GaussianLayer:
         return GaussianLayer(
             data.variable, to_numpy(data.location), to_numpy(data.scale)
         )
 
 
-class UniformLayerToUniformLayerConverter(
-    JaxToTensorizedConverter[jax_uniform_layer.UniformLayer, UniformLayer]
+class DifferentiableUniformLayerToUniformLayerConverter(
+    JaxToTensorizedConverter[DifferentiableUniformLayer, UniformLayer]
 ):
     """
-    A uniform layer of the ``jax`` package treats every interval as open.
+    A differentiable uniform layer treats every interval as open.
     """
 
     @classmethod
     def convert(
-        cls, data: jax_uniform_layer.UniformLayer, builder: LayeredCircuitBuilder
+        cls, data: DifferentiableUniformLayer, conversion: LayersToTensorized
     ) -> UniformLayer:
         interval = to_numpy(data.interval)
         return UniformLayer(
@@ -226,35 +218,35 @@ class UniformLayerToUniformLayerConverter(
         )
 
 
-class DiracDeltaLayerToDiracDeltaLayerConverter(
-    JaxToTensorizedConverter[jax_input_layer.DiracDeltaLayer, DiracDeltaLayer]
+class DifferentiableDiracDeltaLayerToDiracDeltaLayerConverter(
+    JaxToTensorizedConverter[DifferentiableDiracDeltaLayer, DiracDeltaLayer]
 ):
 
     @classmethod
     def convert(
-        cls, data: jax_input_layer.DiracDeltaLayer, builder: LayeredCircuitBuilder
+        cls, data: DifferentiableDiracDeltaLayer, conversion: LayersToTensorized
     ) -> DiracDeltaLayer:
         return DiracDeltaLayer(
             data.variable, to_numpy(data.location), to_numpy(data.density_cap)
         )
 
 
-class DiscreteLayerToDiscreteLayerConverter(
-    JaxToTensorizedConverter[jax_discrete_layer.DiscreteLayer, DiscreteLayer]
+class DifferentiableDiscreteLayerToDiscreteLayerConverter(
+    JaxToTensorizedConverter[DifferentiableDiscreteLayer, DiscreteLayer]
 ):
     """
-    A discrete layer of the ``jax`` package looks the probability of a value up in the
-    column with the value as its index: the value itself for an integer variable and the
-    hash of the domain element for a symbolic variable.
+    A differentiable discrete layer looks the probability of a value up in the column
+    with the value as its index: the value itself for an integer variable and the hash
+    of the domain element for a symbolic variable.
 
     The variable decides whether the layer becomes a symbolic or an integer layer.
     """
 
     @classmethod
     def convert(
-        cls, data: jax_discrete_layer.DiscreteLayer, builder: LayeredCircuitBuilder
+        cls, data: DifferentiableDiscreteLayer, conversion: LayersToTensorized
     ) -> DiscreteLayer:
-        variable = builder.variables[data.variable]
+        variable = conversion.variables[data.variable]
         log_probabilities = to_numpy(data.normalized_log_probabilities)
         if isinstance(variable, Symbolic):
             columns = columns_of_domain_elements(variable)
@@ -276,26 +268,21 @@ class DiscreteLayerToDiscreteLayerConverter(
 # %% circuit
 
 
-class JaxCircuitToLayeredCircuitConverter(
-    JaxToTensorizedConverter[
-        jax_probabilistic_circuit.DifferentiableLayeredCircuit,
-        LayeredProbabilisticCircuit,
-    ]
+class DifferentiableLayeredCircuitToLayeredCircuitConverter(
+    JaxToTensorizedConverter[DifferentiableLayeredCircuit, LayeredProbabilisticCircuit]
 ):
     """
-    Convert a circuit of the ``jax`` package, usually after training it, into a layered
-    circuit that answers every query.
+    Convert a differentiable circuit, usually after training it, into a layered circuit
+    that answers every query.
 
-    A classification circuit has one root node per class and stays in the ``jax``
-    package, so no subclass of a circuit is converted.
+    A classification circuit has one root node per class and stays differentiable, so
+    no subclass of a differentiable circuit is converted.
     """
 
     @classmethod
-    def convert(
-        cls, data: jax_probabilistic_circuit.DifferentiableLayeredCircuit
-    ) -> LayeredProbabilisticCircuit:
+    def convert(cls, data: DifferentiableLayeredCircuit) -> LayeredProbabilisticCircuit:
         if not cls.can_convert(data):
             raise CannotConvertError(data_type=type(data))
         variables = SortedSet(data.variables)
-        builder = LayeredCircuitBuilder(variables)
-        return LayeredProbabilisticCircuit(variables, builder.layer_of(data.root))
+        conversion = LayersToTensorized(JaxToTensorizedConverter, variables)
+        return LayeredProbabilisticCircuit(variables, conversion.convert(data.root))

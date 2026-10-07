@@ -10,10 +10,12 @@ without any registration.
 from __future__ import annotations
 
 from abc import ABC
+from dataclasses import dataclass, field
 
 from krrood.patterns.subclass_safe_generic import SubClassSafeGeneric
 from krrood.utils import recursive_subclasses
-from typing_extensions import Any, Generic, Type, TypeVar
+from sortedcontainers import SortedSet
+from typing_extensions import Any, Dict, Generic, Type, TypeVar
 
 from probabilistic_model.adapters.exceptions import (
     CannotConvertError,
@@ -78,3 +80,37 @@ class Converter(Generic[InputType, OutputType], SubClassSafeGeneric, ABC):
         :return: The converted object.
         """
         return cls.converter_for(data).convert(data, *context)
+
+
+@dataclass
+class LayerConversion(Generic[InputType, OutputType]):
+    """
+    The conversion of the layers of one circuit into the layers of another
+    representation, which converts every layer once, so that a layer shared by several
+    parents stays shared.
+    """
+
+    converter: Type[Converter[InputType, OutputType]]
+    """
+    The base class of the converters of the layers, which finds the converter of every
+    layer.
+    """
+
+    variables: SortedSet
+    """
+    The variables of the circuit, in the order the layers index them.
+    """
+
+    converted_layers: Dict[int, OutputType] = field(default_factory=dict)
+    """
+    The result of every layer converted so far, keyed by the id of the layer.
+    """
+
+    def convert(self, layer: InputType) -> OutputType:
+        """
+        :param layer: A layer of the circuit.
+        :return: The layer of the other representation with the same nodes.
+        """
+        if id(layer) not in self.converted_layers:
+            self.converted_layers[id(layer)] = self.converter.convert(layer, self)
+        return self.converted_layers[id(layer)]
