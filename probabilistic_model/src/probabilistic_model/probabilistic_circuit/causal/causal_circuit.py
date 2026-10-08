@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import copy
-import enum
 import itertools
 import math
 from dataclasses import dataclass, field
@@ -12,7 +11,7 @@ from scipy.special import logsumexp
 from random_events.interval import closed
 from random_events.product_algebra import SimpleEvent, Event
 from random_events.sigma_algebra import AbstractCompositeSet, AbstractSimpleSet
-from random_events.variable import Variable
+from random_events.variable import Variable, compatible_types
 from tabulate import tabulate
 
 
@@ -956,8 +955,8 @@ class CausalCircuit:
 
     @staticmethod
     def _split_into_atomic_values(
-        value: Union[AbstractCompositeSet, int, float, bool, enum.Enum],
-    ) -> List[Union[AbstractSimpleSet, int, float, bool, enum.Enum]]:
+        value: Union[AbstractCompositeSet, *compatible_types],
+    ) -> List[Union[AbstractSimpleSet, *compatible_types]]:
         """
         Split *value* into the elements it holds: the disjoint ranges of an
         :class:`~random_events.interval.Interval` or the values of a
