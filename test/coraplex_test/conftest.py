@@ -1,16 +1,26 @@
-import os
-from copy import deepcopy
+# %% ORM interfaces
+
+# Built before the imports below, which read a mapped datastructure: pytest imports every
+# conftest of a run before calling any hook, so a hook would fire too late. The build runs
+# once per process and never on an xdist worker.
+from ..orm_interface_build import regenerate_orm_interfaces
+
+regenerate_orm_interfaces()
+
+
 from functools import partial
 
 import pytest
+
+from semantic_digital_twin.predetermined_maps.building_floor import BuildingFloor
+from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix
+from semantic_digital_twin.world import World
 
 try:
     import rclpy
 except ModuleNotFoundError:
     pass
 from sqlalchemy.orm import sessionmaker
-import runpy
-from pathlib import Path
 
 from krrood.ormatic.utils import create_engine, drop_database
 
@@ -32,20 +42,28 @@ except ModuleNotFoundError:
 from semantic_digital_twin.robots.pr2 import PR2
 from semantic_digital_twin.robots.stretch import Stretch
 from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix
-from semantic_digital_twin.world_description.geometry import BoundingBox
+from semantic_digital_twin.world_description.geometry import VolumetricBoundingBox
+
+from .world_snapshot import WorldSnapshot
+from semantic_digital_twin.robots.robot_parts import AbstractRobot, Arm
+
+from ..conftest import SAMPLING_SEED
+
+# %% the arm a test runs with on any robot
 
 
-def pytest_configure(config):
-    # Only the xdist controller generates: workers run this hook too, and
-    # concurrent writers would truncate the file while another process formats it.
-    if os.environ.get("PYTEST_XDIST_WORKER"):
-        return
+def left_or_only_arm(robot: AbstractRobot) -> Arm:
+    """
+    :return: The left arm of a robot that names one, otherwise its first arm.
+    """
+    return robot.get_left_arm_if_specified() or robot.all_arms[0]
 
-    # Ensure ORM classes are generated before tests run
-    repo_root = Path(__file__).resolve().parents[2]
-    generate_orm_path = repo_root / "coraplex" / "scripts" / "generate_orm.py"
-    # Execute the ORM generation script as a standalone module
-    runpy.run_path(str(generate_orm_path), run_name="__main__")
+
+def right_or_only_arm(robot: AbstractRobot) -> Arm:
+    """
+    :return: The right arm of a robot that names one, otherwise its first arm.
+    """
+    return robot.get_right_arm_if_specified() or robot.all_arms[0]
 
 
 @pytest.fixture(scope="session")
@@ -57,38 +75,50 @@ def viz_marker_publisher():
     rclpy.shutdown()
 
 
-@pytest.fixture(scope="function")
-def mutable_model_world(pr2_apartment_world):
-    world = deepcopy(pr2_apartment_world)
-    pr2 = world.get_semantic_annotations_by_type(PR2)[0]
-    return world, pr2, Context(world, pr2)
+# %% world rollback
 
 
 @pytest.fixture(scope="function")
-def immutable_model_world(pr2_apartment_world):
-    world = pr2_apartment_world
+def pr2_apartment_context(pr2_apartment_world):
+    """
+    The shared PR2 apartment world, its robot and a context for both, returned to its
+    initial model and state after the test.
+    """
+    snapshot = WorldSnapshot.capture(pr2_apartment_world)
     pr2 = pr2_apartment_world.get_semantic_annotations_by_type(PR2)[0]
-    state = deepcopy(world.state._data)
-    yield world, pr2, Context(world, pr2)
-    world.state._data[:] = state
-    world.notify_state_change()
+    yield pr2_apartment_world, pr2, Context(
+        pr2_apartment_world, pr2, sampling_seed=SAMPLING_SEED
+    )
+    snapshot.restore()
 
 
-@pytest.fixture
-def immutable_simple_pr2_world(simple_pr2_world_setup):
+@pytest.fixture(scope="function")
+def simple_pr2_context(simple_pr2_world_setup):
+    """
+    The shared PR2 world in the simple apartment, its robot and a context for both,
+    returned to its initial model and state after the test.
+    """
     world, robot_view, context = simple_pr2_world_setup
-    state = deepcopy(world.state._data)
+    snapshot = WorldSnapshot.capture(world)
     yield world, robot_view, context
-    world.state._data[:] = state
-    world.notify_state_change()
+    snapshot.restore()
 
 
-@pytest.fixture
-def mutable_simple_pr2_world(simple_pr2_world_setup):
-    world, robot_view, context = simple_pr2_world_setup
-    copy_world = deepcopy(world)
-    robot_view = world.get_semantic_annotations_by_type(PR2)[0]
-    return world, robot_view, Context(copy_world, robot_view)
+@pytest.fixture(scope="function")
+def stretch_apartment_context(stretch_apartment_world):
+    """
+    The shared Stretch apartment world, its robot and a context for both, returned to
+    its initial model and state after the test.
+    """
+    snapshot = WorldSnapshot.capture(stretch_apartment_world)
+    robot = stretch_apartment_world.get_semantic_annotations_by_type(Stretch)[0]
+    yield stretch_apartment_world, robot, Context(
+        stretch_apartment_world, robot, sampling_seed=SAMPLING_SEED
+    )
+    snapshot.restore()
+
+
+# %% database session
 
 
 @pytest.fixture(scope="function")
@@ -103,27 +133,18 @@ def coraplex_testing_session():
     engine.dispose()
 
 
-@pytest.fixture(scope="function")
-def immutable_stretch_apartment_world(stretch_apartment_world):
-    robot = stretch_apartment_world.get_semantic_annotations_by_type(Stretch)[0]
-    context = Context(stretch_apartment_world, robot)
-    state = deepcopy(stretch_apartment_world.state._data)
-
-    yield stretch_apartment_world, robot, context
-
-    stretch_apartment_world.state._data[:] = state
-    stretch_apartment_world.notify_state_change()
+# %% perception regions
 
 
 @pytest.fixture
-def whole_scene_region(immutable_model_world) -> BoundingBox:
+def whole_scene_region(pr2_apartment_context) -> VolumetricBoundingBox:
     """
     A region large enough to contain everything in the apartment fixture.
 
     Lets a perception test say "look everywhere" without restating the extents.
     """
-    world, _, _ = immutable_model_world
-    return BoundingBox(
+    world, _, _ = pr2_apartment_context
+    return VolumetricBoundingBox(
         origin=HomogeneousTransformationMatrix(reference_frame=world.root),
         min_x=-10,
         min_y=-10,

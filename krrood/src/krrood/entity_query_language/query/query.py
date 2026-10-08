@@ -30,7 +30,11 @@ from typing_extensions import (
     Iterator,
 )
 
-from krrood.entity_query_language.core.mapped_variable import CanBehaveLikeAVariable
+from krrood.entity_query_language.core.mapped_variable import (
+    CanBehaveLikeAVariable,
+    Index,
+    MappedVariable,
+)
 from krrood.entity_query_language.core.expression_structure import chain_root
 from krrood.entity_query_language.query.builders import (
     WhereBuilder,
@@ -62,6 +66,7 @@ from krrood.entity_query_language.core.base_expressions import (
     UnificationDict,
 )
 from krrood.entity_query_language.evaluable import Evaluable
+from krrood.entity_query_language.query.query_modifiers import HasQueryModifiers
 from krrood.entity_query_language.cache_data import (
     SeenSet,
 )
@@ -72,6 +77,9 @@ from krrood.entity_query_language.core.variable import (
 )
 from krrood.entity_query_language.enums import DomainSource
 from krrood.entity_query_language.exceptions import (
+    AmbiguousQueryAttribute,
+    AmbiguousQuerySubject,
+    UnselectedQueryVariable,
     UnsupportedNegation,
     NonPositiveLimitValue,
 )
@@ -165,6 +173,7 @@ def modifies_query_structure(modifier):
 @dataclass(eq=False, repr=False)
 class Query(
     Evaluable,
+    HasQueryModifiers[T],
     MultiArityExpressionThatPerformsACartesianProduct,
     CanBehaveLikeAVariable[T],
     ABC,
@@ -180,6 +189,10 @@ class Query(
     )
     """
     The variables that are selected by the query.
+
+    Read through :meth:`_as_operand_`, so a value that only stands for an expression - a
+    match, whose query carries its pattern - selects that expression rather than itself,
+    which nothing binds a row to.
     """
 
     _distinct_on: Tuple[Selectable, ...] = field(default_factory=tuple, init=False)
@@ -242,6 +255,9 @@ class Query(
     """
 
     def __post_init__(self):
+        self._selected_variables_ = tuple(
+            self._as_operand_(selected) for selected in self._selected_variables_
+        )
         self._operation_children_ = tuple(self._selected_variables_)
         MultiArityExpressionThatPerformsACartesianProduct.__post_init__(self)
 
@@ -288,6 +304,122 @@ class Query(
             return self._expression_.evaluate()
         return MultiArityExpressionThatPerformsACartesianProduct.evaluate(self)
 
+    def _reroot_conditions_(
+        self, *conditions: ConditionType
+    ) -> Tuple[ConditionType, ...]:
+        """
+        Re-root the attribute chains that this query's own conditions take from the query
+        itself onto the variable it selects.
+
+        Such a chain names an attribute of the row the query yields, so within the query's
+        own conditions it has to follow the row being filtered. Left rooted at the query it
+        would instead range over the query's results, which passes every row that any result
+        satisfies.
+
+        :param conditions: The conditions being attached to this query.
+        :return: The conditions, with every chain rooted at this query re-rooted onto its
+            selection.
+        """
+        return tuple(self._reroot_condition_(condition) for condition in conditions)
+
+    def _reroot_condition_(self, condition: ConditionType) -> ConditionType:
+        """
+        Re-root every attribute chain that one condition takes from this query.
+
+        A nested subquery is a scope of its own, so chains inside one are left alone. A
+        condition that is not a symbolic expression is left to the filter builder, which
+        reports it.
+
+        :param condition: The condition being attached to this query.
+        :return: The condition, with its chains rooted at this query re-rooted.
+        """
+        if not isinstance(condition, SymbolicExpression):
+            return condition
+        if self._is_attribute_of_self_(condition):
+            return self._rerooted_on_selection_(condition)
+        visited: Set[uuid.UUID] = set()
+        pending = [condition]
+        while pending:
+            expression = pending.pop()
+            if expression._id_ in visited:
+                continue
+            visited.add(expression._id_)
+            for child in tuple(expression._children_):
+                if self._is_attribute_of_self_(child):
+                    expression._replace_child_(
+                        child, self._rerooted_on_selection_(child)
+                    )
+                elif self._is_self_(child):
+                    expression._replace_child_(
+                        child, self._selection_standing_for_self_()
+                    )
+                elif not isinstance(child, Query):
+                    pending.append(child)
+        return condition
+
+    def _is_self_(self, expression: SymbolicExpression) -> bool:
+        """
+        :param expression: An expression appearing in this query's conditions.
+        :return: Whether the expression is this query itself, rather than a nested
+            subquery that is a scope of its own. Matched by identifier for the reason
+            :meth:`_is_attribute_of_self_` records.
+        """
+        return isinstance(expression, Query) and expression._id_ == self._id_
+
+    def _selection_standing_for_self_(self) -> Selectable:
+        """
+        :return: The variable this query stands for where its own conditions use the
+            query as a value, as ``a(Robot) == some_robot`` does.
+        :raises AmbiguousQuerySubject: If the query selects several variables, so it
+            stands for no single one.
+        """
+        if len(self._selected_variables_) != 1:
+            raise AmbiguousQuerySubject(self)
+        return self._selected_variables_[0]
+
+    def _is_attribute_of_self_(self, expression: SymbolicExpression) -> bool:
+        """
+        .. note::
+            Attaching a chain to a query, and compiling a query into its product, both copy
+            the query node while preserving its identifier, so a chain is matched by
+            identifier rather than by object identity.
+
+        :param expression: An expression appearing in this query's conditions.
+        :return: Whether the expression is a mapping chain based on this query.
+        """
+        if not isinstance(expression, MappedVariable):
+            return False
+        base = expression._chain_root_
+        return isinstance(base, Query) and base._id_ == self._id_
+
+    def _rerooted_on_selection_(
+        self, attribute: MappedVariable
+    ) -> CanBehaveLikeAVariable:
+        """
+        :param attribute: A mapping chain based on this query.
+        :return: The same chain rebuilt on the variable it takes its subject from.
+        :raises AmbiguousQueryAttribute: If the chain neither names one of the selected
+            variables nor belongs to a query that selects a single one, so it has no
+            subject to follow.
+        """
+        first_step = attribute._access_path_[0]
+        indexed_selection = self._selection_indexed_by_(first_step)
+        if indexed_selection is not None:
+            return attribute._reroot_on_(indexed_selection, first_step)
+        if len(self._selected_variables_) != 1:
+            raise AmbiguousQueryAttribute(self, attribute)
+        return attribute._reroot_on_(self._selected_variables_[0], self)
+
+    def _selection_indexed_by_(self, step: MappedVariable) -> Optional[Selectable]:
+        """
+        A query stands for the value its selection takes, so indexing it indexes that
+        value rather than naming a variable.
+
+        :param step: The first mapping a chain applies to this query.
+        :return: ``None``, since no index of this query names one of its variables.
+        """
+        return None
+
     @modifies_query_structure
     def where(self, *conditions: ConditionType) -> Self:
         """
@@ -298,6 +430,7 @@ class Query(
             object.
         :return: This query.
         """
+        conditions = self._reroot_conditions_(*conditions)
         if self._where_builder_ is None:
             self._where_builder_ = WhereBuilder(conditions=conditions, query=self)
         else:
@@ -314,6 +447,7 @@ class Query(
             object.
         :return: This query.
         """
+        conditions = self._reroot_conditions_(*conditions)
         if self._having_builder_ is None:
             self._having_builder_ = HavingBuilder(conditions=conditions, query=self)
         else:
@@ -563,7 +697,7 @@ class Query(
             outermost query of the current evaluation. The first compiled query to evaluate claims the
             outermost role; any other is nested.
         """
-        return evaluation_context.outermost_query_claim.is_nested(self._id_)
+        return evaluation_context.outermost_query.is_nested(self)
 
     def _produce_results_(self, sources: OperationResult) -> Iterator[OperationResult]:
         """
@@ -907,6 +1041,47 @@ class SetOf(Query):
     A query over a set of variables.
     """
 
+    def __getitem__(self, key: Any) -> CanBehaveLikeAVariable:
+        """
+        :param key: The selected variable to name.
+        :return: A symbolic reference to what a row of this query binds that variable
+            to.
+        :raises UnselectedQueryVariable: If the key is not one of the selected
+            variables, since a row holds nothing else.
+        """
+        if self._selection_named_by_(key) is None:
+            raise UnselectedQueryVariable(self, key)
+        return super().__getitem__(key)
+
+    def _selection_indexed_by_(self, step: MappedVariable) -> Optional[Selectable]:
+        """
+        Indexing a query over several variables by one of them names that variable, the
+        same way indexing one of the query's results does.
+
+        :param step: The first mapping a chain applies to this query.
+        :return: The selected variable that step indexes this query by, or ``None`` if
+            the step is not an index.
+        """
+        if not isinstance(step, Index):
+            return None
+        return self._selection_named_by_(step._key_)
+
+    def _selection_named_by_(self, key: Any) -> Optional[Selectable]:
+        """
+        :param key: Something this query was indexed by.
+        :return: The selected variable it names, or ``None`` if it names none of them.
+        """
+        if not isinstance(key, SymbolicExpression):
+            return None
+        return next(
+            (
+                selected
+                for selected in self._selected_variables_
+                if selected._id_ == key._id_
+            ),
+            None,
+        )
+
     def _get_operation_result_(self, child_result: OperationResult) -> OperationResult:
         """
         Update the result bindings with this operation's bindings.
@@ -940,6 +1115,25 @@ class Entity(Query[T]):
     def selected_variable(self):
         return self._selected_variables_[0] if self._selected_variables_ else None
 
+    @cached_property
+    def _type__(self) -> Optional[Type[T]]:
+        """
+        A query over one variable stands for the value that variable takes, so it is of
+        that variable's type.
+
+        ..note:: An ``Attribute`` reads its owning class off its child, so this is also
+            what lets a chain taken from the query resolve its own type.
+
+        ..warning:: A selection that is not a :class:`Selectable` — a ``Comparator``, an
+            ``Aggregator`` — declares no ``_type_``, and reading one off it would be
+            captured as a symbolic attribute instead of raising, which reaches back into
+            this query while it is still being built.
+        """
+        selected = self.selected_variable
+        if not isinstance(selected, Selectable):
+            return None
+        return selected._type_
+
     @property
     def selected_aggregator(self) -> "Optional[Aggregator]":
         """
@@ -965,7 +1159,7 @@ class Entity(Query[T]):
         if isinstance(selected, InstantiatedVariable):
             return [
                 child
-                for child in selected._child_vars_.values()
+                for child in selected._child_variables_.values()
                 if chain_root(child)._id_ not in group_key_root_ids
             ]
         return super().aggregated_selections(group_key_root_ids)

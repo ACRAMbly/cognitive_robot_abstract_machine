@@ -2,7 +2,11 @@ from dataclasses import dataclass, field
 
 from giskardpy.motion_statechart.context import MotionStatechartContext
 from giskardpy.motion_statechart.data_types import DefaultWeights
-from giskardpy.motion_statechart.graph_node import Task, NodeArtifacts, DebugExpression
+from giskardpy.motion_statechart.graph_node import (
+    ConvergingTask,
+    NodeArtifacts,
+    DebugExpression,
+)
 from semantic_digital_twin.spatial_types import Vector3
 from semantic_digital_twin.world_description.geometry import Color
 from semantic_digital_twin.world_description.world_entity import (
@@ -11,7 +15,7 @@ from semantic_digital_twin.world_description.world_entity import (
 
 
 @dataclass(eq=False, repr=False)
-class AlignPlanes(Task):
+class AlignPlanes(ConvergingTask):
     """
     Will orient the tip plane to align with the goal plane.
 
@@ -55,9 +59,15 @@ class AlignPlanes(Task):
     Priority weight relative to other tasks.
     """
 
-    def build(self, context: MotionStatechartContext) -> NodeArtifacts:
-        artifacts = NodeArtifacts()
+    def build_artifacts(self, context: MotionStatechartContext) -> NodeArtifacts:
+        """
+        Build motion constraints that rotate the tip plane onto the goal plane.
 
+        :param context: Provides access to world model and kinematic expressions.
+        :return: The artifacts of this task, whose error is the angle between the two
+            plane normals.
+        """
+        artifacts = NodeArtifacts()
         tip_V_tip_normal = context.world.transform(
             target_frame=self.tip_link, spatial_object=self.tip_normal
         )
@@ -69,7 +79,7 @@ class AlignPlanes(Task):
 
         root_R_tip = context.world.compose_forward_kinematics_expression(
             self.root_link, self.tip_link
-        ).to_rotation_matrix()
+        ).rotation_matrix
         root_V_tip_normal = root_R_tip @ tip_V_tip_normal
         root_V_tip_normal.scale(1)
 
@@ -93,8 +103,5 @@ class AlignPlanes(Task):
             reference_velocity=self.reference_velocity,
             quadratic_weight=self.weight,
         )
-        artifacts.observation = (
-            root_V_tip_normal.angle_between(root_V_root_normal) <= self.threshold
-        )
-
+        artifacts.error = root_V_tip_normal.angle_between(root_V_root_normal)
         return artifacts

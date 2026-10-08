@@ -3,7 +3,6 @@ from pathlib import Path
 
 from krrood.entity_query_language.factories import entity, an, variable, count
 from coraplex.datastructures.dataclasses import Context
-from coraplex.datastructures.enums import Arms
 from coraplex.execution_environment import simulated_robot
 from coraplex.plans.factories import sequential
 from coraplex.robot_plans.actions.core.navigation import NavigateAction
@@ -67,7 +66,6 @@ try:
     rclpy.init()
     rclpy_node = rclpy.create_node("ros_node")
     viz = VizMarkerPublisher(_world=world, node=rclpy_node)
-    viz.with_tf_publisher()
 except ImportError:
     pass
 
@@ -82,6 +80,6 @@ milk_place_pose = Pose(Point3(x=2.2, y=7.6, z=0.865), reference_frame=world.root
 # print(number_of_arms)
 with simulated_robot:
     sequential(
-        [ParkArmsAction(arm=Arms.BOTH)],
+        [ParkArmsAction(garmi.all_arms)],
         context,
     ).perform()

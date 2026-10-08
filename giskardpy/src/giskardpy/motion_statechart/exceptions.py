@@ -5,6 +5,7 @@ from dataclasses import dataclass
 
 from typing_extensions import TYPE_CHECKING, Type
 
+from krrood.adapters.exceptions import JSONSerializationError
 from krrood.exceptions import DataclassException
 from krrood.symbolic_math.symbolic_math import FloatVariable, Scalar
 from semantic_digital_twin.collision_checking.collision_detector import ClosestPoints
@@ -12,8 +13,10 @@ from semantic_digital_twin.collision_checking.collision_detector import ClosestP
 if TYPE_CHECKING:
     from giskardpy.motion_statechart.graph_node import (
         MotionStatechartNode,
+        NodeStateVariable,
         TrinaryCondition,
     )
+    from giskardpy.motion_statechart.monitors.progress_monitors import StillProgressing
     from semantic_digital_twin.world_description.world_entity import (
         KinematicStructureEntity,
     )
@@ -21,8 +24,20 @@ if TYPE_CHECKING:
 
 @dataclass
 class CollisionViolatedError(DataclassException):
+    """
+    Raised when bodies came closer to each other than their collision threshold allows.
+    """
+
     violated_collisions: list[ClosestPoints]
+    """
+    The closest points of every body pair that violated its threshold.
+    """
+
     thresholds: list[float]
+    """
+    The minimum allowed distance of each violated collision, in the same order as
+    :attr:`violated_collisions`.
+    """
 
     def error_message(self) -> str:
         violations = "".join(
@@ -44,11 +59,22 @@ class MotionStatechartError(DataclassException, ABC):
 
 @dataclass
 class NodeInitializationError(MotionStatechartError, ABC):
+    """
+    Base class for errors that a single node raises while it is set up or built.
+    """
+
     node: MotionStatechartNode
+    """
+    The node that could not be initialized.
+    """
 
 
 @dataclass
 class EmptyMotionStatechartError(MotionStatechartError):
+    """
+    Raised when a motion statechart without any node is executed.
+    """
+
     def error_message(self) -> str:
         return "MotionStatechart is empty."
 
@@ -57,8 +83,48 @@ class EmptyMotionStatechartError(MotionStatechartError):
 
 
 @dataclass
+class WorldStateArrayReplacedError(MotionStatechartError):
+    """
+    Raised when the world replaced its state array while a motion statechart was
+    compiled against it.
+    """
+
+    compiled_degrees_of_freedom: int
+    """
+    Number of degrees of freedom the motion statechart was compiled against.
+    """
+
+    current_degrees_of_freedom: int
+    """
+    Number of degrees of freedom the world holds now.
+    """
+
+    def error_message(self) -> str:
+        return (
+            f"The world replaced its state array, which the compiled motion statechart "
+            f"still reads through a memory view of the previous one. It was compiled "
+            f"against {self.compiled_degrees_of_freedom} degrees of freedom and the "
+            f"world now has {self.current_degrees_of_freedom}."
+        )
+
+    def suggest_correction(self) -> str:
+        return (
+            "Adding or removing a degree of freedom replaces the state array. Avoid "
+            "such model changes while a motion is running, or re-compile afterwards. "
+            "Re-parenting a branch preserves the degrees of freedom and is safe."
+        )
+
+
+@dataclass
 class NodeAlreadyBelongsToDifferentNodeError(NodeInitializationError):
+    """
+    Raised when a node that is already part of the statechart is added a second time.
+    """
+
     new_node: MotionStatechartNode
+    """
+    The node that was about to be added again.
+    """
 
     def error_message(self) -> str:
         if self.new_node.parent_node is not None:
@@ -73,6 +139,9 @@ class NodeAlreadyBelongsToDifferentNodeError(NodeInitializationError):
 
 @dataclass
 class EndMotionInGoalError(NodeInitializationError):
+    """
+    Raised when a node that ends the motion is added as a child of a goal.
+    """
 
     def error_message(self) -> str:
         return "Goals are not allowed to have EndMotion as a child."
@@ -82,10 +151,40 @@ class EndMotionInGoalError(NodeInitializationError):
 
 
 @dataclass
+class GoalWithoutChildrenError(NodeInitializationError):
+    """
+    Raised when a goal that runs a list of child nodes is built without any.
+    """
+
+    def error_message(self) -> str:
+        return f'Goal "{self.node.unique_name}" was given no child nodes.'
+
+    def suggest_correction(self) -> str:
+        return "Pass at least one node to the goal, or leave the goal out entirely."
+
+
+@dataclass
 class UnexpectedWorldEntityCountError(NodeInitializationError):
+    """
+    Raised when a node searches the world for entities and finds a different number than
+    it can work with.
+    """
+
     expected_count: int | str
+    """
+    The number of entities the node needs, either as a number or as a textual
+    description of the accepted range.
+    """
+
     actual_count: int
+    """
+    The number of matching entities that were found in the world.
+    """
+
     entity_type: Type | str | tuple[Type, ...]
+    """
+    The type of entity that was searched for.
+    """
 
     def error_message(self) -> str:
         return f"Expected {self.expected_count} entities of type {self.entity_type}, but found {self.actual_count}."
@@ -96,6 +195,10 @@ class UnexpectedWorldEntityCountError(NodeInitializationError):
 
 @dataclass
 class EmptyGoalStateError(NodeInitializationError):
+    """
+    Raised when a node is given a goal state that names no degree of freedom.
+    """
+
     def error_message(self) -> str:
         return "Goal state is empty."
 
@@ -118,8 +221,20 @@ class EmptyDegreesOfFreedomError(NodeInitializationError):
 
 @dataclass
 class GoalPointsReferenceFrameMismatchError(NodeInitializationError):
+    """
+    Raised when the goal points of a node are expressed in more than one reference
+    frame.
+    """
+
     reference_frame_a: KinematicStructureEntity
+    """
+    The reference frame of the first goal point.
+    """
+
     reference_frame_b: KinematicStructureEntity
+    """
+    The reference frame that differs from :attr:`reference_frame_a`.
+    """
 
     def error_message(self) -> str:
         return f"All goal points must have the same reference frame, but got {self.reference_frame_a} and {self.reference_frame_b}."
@@ -129,8 +244,142 @@ class GoalPointsReferenceFrameMismatchError(NodeInitializationError):
 
 
 @dataclass
+class NodeNotBuiltError(NodeInitializationError):
+    """
+    Raised when the build artifacts of a node are read before it has been built.
+    """
+
+    def error_message(self) -> str:
+        return f'Node "{self.node.unique_name}" has not been built yet.'
+
+    def suggest_correction(self) -> str:
+        return "Compile the motion statechart before reading a node's build artifacts."
+
+
+@dataclass
+class MissingErrorSignalError(NodeInitializationError):
+    """
+    Raised when a converging task builds artifacts that carry no error signal.
+    """
+
+    def error_message(self) -> str:
+        return (
+            f'Converging task "{self.node.unique_name}" built artifacts without an error '
+            f"signal, so there is nothing to compare against its threshold."
+        )
+
+    def suggest_correction(self) -> str:
+        return (
+            "Set NodeArtifacts.error in build_artifacts to the error the task's constraints "
+            "drive to zero."
+        )
+
+
+@dataclass
+class CyclicNodeDependencyError(NodeInitializationError):
+    """
+    Raised when nodes depend on each other in a cycle, so no build order exists.
+    """
+
+    cycle: list[MotionStatechartNode]
+    """
+    The nodes forming the cycle, in the order in which they depend on each other.
+    """
+
+    def error_message(self) -> str:
+        cycle_str = " -> ".join(node.unique_name for node in self.cycle)
+        return f"Nodes depend on each other in a cycle: {cycle_str}."
+
+    def suggest_correction(self) -> str:
+        return "Break the cycle so the nodes can be expanded and built in some order."
+
+
+@dataclass
+class CyclicPredicateDependencyError(MotionStatechartError):
+    """
+    Raised when nodes read each other's life cycle predicates in a cycle, so no order
+    exists in which one control cycle could be evaluated.
+    """
+
+    cycle: list[MotionStatechartNode]
+    """
+    The nodes forming the cycle, in the order in which they read each other.
+    """
+
+    def error_message(self) -> str:
+        cycle_str = " -> ".join(node.unique_name for node in self.cycle)
+        return f"Nodes read each other's life cycle predicates in a cycle: {cycle_str}."
+
+    def suggest_correction(self) -> str:
+        return (
+            "Break the cycle, for example by reading the observation state of one of "
+            "the nodes instead of its verdict."
+        )
+
+
+@dataclass
+class UnsupportedObservationVariableError(NodeInitializationError):
+    """
+    Raised when the observation expression of a node reads a life cycle predicate.
+
+    Observations are computed before the life cycle state, so the state a predicate
+    reads does not exist yet at that point.
+    """
+
+    unsupported_variable: FloatVariable
+    """
+    The variable in the observation expression that a node may not read.
+    """
+
+    def error_message(self) -> str:
+        return (
+            f'Observation of "{self.node.unique_name}" contains '
+            f'"{self.unsupported_variable}", which an observation may not read.'
+        )
+
+    def suggest_correction(self) -> str:
+        return (
+            "Read the life cycle state itself, e.g. 'node.life_cycle_variable', or move "
+            "the test into a transition condition."
+        )
+
+
+@dataclass
+class NoProgressError(MotionStatechartError):
+    """
+    Raised when the watched tasks stopped approaching their goal for too long.
+    """
+
+    progress_monitor: StillProgressing
+    """
+    The monitor that detected the stall and knows which tasks are affected.
+    """
+
+    def error_message(self) -> str:
+        stalled_tasks = self.progress_monitor.stalled_tasks
+        names = ", ".join(task.unique_name for task in stalled_tasks)
+        return (
+            f"{names or self.progress_monitor.monitored_node.unique_name} stopped "
+            f"approaching a goal for {self.progress_monitor.timeout}."
+        )
+
+    def suggest_correction(self) -> str:
+        return (
+            "Check whether the goal is reachable, whether another task of equal or higher "
+            "weight is opposing it, or whether the robot is at a joint limit."
+        )
+
+
+@dataclass
 class InvalidConstraintExpressionShapeError(MotionStatechartError):
+    """
+    Raised when a constraint expression is not a scalar.
+    """
+
     actual_shape: list[int]
+    """
+    The shape of the offending expression.
+    """
 
     def error_message(self) -> str:
         shape_str = " ".join(map(str, self.actual_shape))
@@ -142,7 +391,14 @@ class InvalidConstraintExpressionShapeError(MotionStatechartError):
 
 @dataclass
 class NodeNotFoundError(MotionStatechartError):
+    """
+    Raised when a node is looked up by name and the statechart has no such node.
+    """
+
     name: str
+    """
+    The name that was looked up.
+    """
 
     def error_message(self) -> str:
         return f"Node '{self.name}' not found in MotionStatechart."
@@ -153,7 +409,15 @@ class NodeNotFoundError(MotionStatechartError):
 
 @dataclass
 class NotInMotionStatechartError(MotionStatechartError):
+    """
+    Raised when an operation that requires a surrounding statechart is performed on a
+    node that does not belong to one.
+    """
+
     name: str
+    """
+    The name of the node that does not belong to a statechart.
+    """
 
     def error_message(self) -> str:
         return f"Operation can't be performed because node '{self.name}' does not belong to a MotionStatechart."
@@ -164,10 +428,24 @@ class NotInMotionStatechartError(MotionStatechartError):
 
 @dataclass
 class InvalidConditionError(MotionStatechartError):
+    """
+    Base class for errors raised when a condition is set to an unusable expression.
+    """
+
     condition: TrinaryCondition
+    """
+    The condition that was about to be set.
+    """
+
     new_expression: Scalar
+    """
+    The rejected expression.
+    """
 
     def reason(self) -> str:
+        """
+        Returns why the expression is not a valid condition.
+        """
         raise NotImplementedError
 
     def error_message(self) -> str:
@@ -179,6 +457,10 @@ class InvalidConditionError(MotionStatechartError):
 
 @dataclass
 class InputNotExpressionError(InvalidConditionError):
+    """
+    Raised when a condition is set to something that is not a symbolic expression.
+    """
+
     def reason(self) -> str:
         return "Input is not an expression."
 
@@ -188,19 +470,36 @@ class InputNotExpressionError(InvalidConditionError):
 
 @dataclass
 class SelfInStartConditionError(InvalidConditionError):
+    """
+    Raised when the start condition of a node references the node itself.
+    """
+
     def reason(self) -> str:
         return "Start condition cannot contain the node itself."
 
 
 @dataclass
-class NonObservationVariableError(InvalidConditionError):
-    non_observation_variable: FloatVariable
+class UnsupportedConditionVariableError(InvalidConditionError):
+    """
+    Raised when a condition contains a variable that is neither the observation state
+    nor a life cycle predicate of a node.
+    """
+
+    unsupported_variable: FloatVariable
+    """
+    The variable in the condition that a transition may not read.
+    """
 
     def reason(self) -> str:
-        return f'Contains "{self.non_observation_variable}", which is not an observation variable.'
+        return (
+            f'Contains "{self.unsupported_variable}", which a transition may not read.'
+        )
 
     def suggest_correction(self) -> str:
-        return "Use an observation variable from a node instead, e.g. 'node.observation_variable'."
+        return (
+            "Use the observation state of a node, e.g. 'node.observation_variable', or one "
+            "of its life cycle predicates, e.g. 'node.is_failed'."
+        )
 
 
 @dataclass
@@ -243,8 +542,39 @@ class ConditionScopeError(InvalidConditionError):
 
 
 @dataclass
+class TerminalNodeInConditionError(InvalidConditionError):
+    """
+    Raised when a condition references a node that ends the motion.
+
+    Such a condition can never take effect, because the motion is already over by the
+    time the referenced node is true.
+    """
+
+    terminal_node: MotionStatechartNode
+    """
+    The referenced node that ends the motion when its observation state turns true.
+    """
+
+    def reason(self) -> str:
+        return (
+            f'References "{self.terminal_node.unique_name}", which ends the motion when '
+            "it turns true, so no transition can depend on it."
+        )
+
+    def suggest_correction(self) -> str:
+        return "Reference the node that makes it true instead."
+
+
+@dataclass
 class MissingContextExtensionError(MotionStatechartError):
+    """
+    Raised when a context extension is requested that was never added to the context.
+    """
+
     expected_extension: Type
+    """
+    The type of the requested extension.
+    """
 
     def error_message(self) -> str:
         return f'Missing context extension "{self.expected_extension.__name__}".'
@@ -255,7 +585,14 @@ class MissingContextExtensionError(MotionStatechartError):
 
 @dataclass
 class DuplicateContextExtensionError(MotionStatechartError):
+    """
+    Raised when an extension is added to a context that already holds one of that type.
+    """
+
     extension_type: Type
+    """
+    The type of the extension that is already present.
+    """
 
     def error_message(self) -> str:
         return f"Extension of type {self.extension_type.__name__} already exists. You cannot add it twice."
@@ -267,8 +604,8 @@ class DuplicateContextExtensionError(MotionStatechartError):
 @dataclass
 class ActionClientTypeMismatchError(MotionStatechartError):
     """
-    Raised when an action topic is requested with a different message type than the
-    one its cached action client was created with.
+    Raised when an action topic is requested with a different message type than the one
+    its cached action client was created with.
     """
 
     action_topic: str
@@ -328,3 +665,25 @@ class EmptyDebugExpressionTrajectoryError(MotionStatechartError):
 
     def suggest_correction(self) -> str:
         return "Call tick() at least once before plotting, or configure debug expressions to record."
+
+
+@dataclass
+class NodeStateVariableNotSerializableError(JSONSerializationError):
+    """
+    Raised when a node state variable is serialized to JSON, which has no way to refer
+    to the node the variable belongs to.
+    """
+
+    variable: NodeStateVariable
+    """
+    The variable that was serialized.
+    """
+
+    def error_message(self) -> str:
+        return (
+            f"Cannot serialize {self.variable}, since JSON cannot refer to the node it "
+            f"belongs to."
+        )
+
+    def suggest_correction(self) -> str:
+        return ""

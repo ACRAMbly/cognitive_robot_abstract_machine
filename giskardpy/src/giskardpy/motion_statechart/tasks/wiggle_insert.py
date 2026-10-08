@@ -13,16 +13,21 @@ from giskardpy.motion_statechart.data_types import (
     ObservationStateValues,
 )
 from giskardpy.motion_statechart.graph_node import (
+    ConvergingTask,
     DebugExpression,
     NodeArtifacts,
-    Task,
 )
-from semantic_digital_twin.spatial_types import Point3, Vector3, RotationMatrix
+from semantic_digital_twin.spatial_types import (
+    AxisAngle,
+    Point3,
+    Vector3,
+    RotationMatrix,
+)
 from semantic_digital_twin.world_description.world_entity import Body
 
 
 @dataclass(eq=False, repr=False)
-class WiggleInsert(Task):
+class WiggleInsert(ConvergingTask):
     """
     Presses the tip link down towards a hole while wiggling it with random translational
     and angular noise.
@@ -160,9 +165,15 @@ class WiggleInsert(Task):
     Auxiliary variable holding the current angular noise.
     """
 
-    def build(self, context: MotionStatechartContext) -> NodeArtifacts:
-        artifacts = NodeArtifacts()
+    def build_artifacts(self, context: MotionStatechartContext) -> NodeArtifacts:
+        """
+        Build motion constraints that press the tip into the hole while wiggling.
 
+        :param context: Provides access to world model and kinematic expressions.
+        :return: The artifacts of this task, whose error is the distance between the tip
+            and the hole.
+        """
+        artifacts = NodeArtifacts()
         # The previous default was a zero vector, which has no well-defined perpendicular plane;
         # the root z-axis is used instead so the default is usable.
         hole_normal = context.world.transform(
@@ -174,8 +185,8 @@ class WiggleInsert(Task):
             ),
         )
 
-        control_dt = context.qp_controller_config.control_dt
-        self._control_frequency = 1 / control_dt
+        control_time_step = context.qp_controller_config.control_time_step
+        self._control_frequency = 1 / control_time_step.total_seconds()
 
         self._current_angle = 0.0
         self._angular_momentum = 0.0
@@ -187,7 +198,7 @@ class WiggleInsert(Task):
 
         root_P_current = context.world.compose_forward_kinematics_expression(
             self.root_link, self.tip_link
-        ).to_position()
+        ).position
         root_P_hole = context.world.transform(
             target_frame=self.root_link, spatial_object=self.hole_point
         )
@@ -214,11 +225,11 @@ class WiggleInsert(Task):
             target_frame=self.tip_link, spatial_object=hole_normal
         )
         tip_R_hole_normal = RotationMatrix.from_axis_angle(
-            angle=self._random_angle, axis=tip_V_hole_normal
+            AxisAngle(angle=self._random_angle, axis=tip_V_hole_normal)
         )
         root_R_current = context.world.compose_forward_kinematics_expression(
             self.root_link, self.tip_link
-        ).to_rotation_matrix()
+        ).rotation_matrix
         root_R_goal = root_R_current.dot(tip_R_hole_normal)
 
         artifacts.geometry.add_rotation_goal_constraints(
@@ -235,8 +246,7 @@ class WiggleInsert(Task):
             DebugExpression(f"{self.name}/root_P_hole_wiggled", root_P_hole_wiggled)
         )
 
-        distance = root_P_current.euclidean_distance(root_P_hole)
-        artifacts.observation = distance <= self.threshold
+        artifacts.error = root_P_current.euclidean_distance(root_P_hole)
         return artifacts
 
     def on_tick(

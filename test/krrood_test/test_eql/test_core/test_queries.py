@@ -62,6 +62,7 @@ from krrood.entity_query_language.utils import (
     cartesian_product_while_passing_the_bindings_around,
 )
 from ...dataset.example_classes import (
+    KRROODPosition,
     KRROODVectorsWithProperty,
 )
 from ...dataset.semantic_world_like_classes import (
@@ -77,6 +78,7 @@ from ...dataset.semantic_world_like_classes import (
     Drawer,
     Cabinet,
 )
+from ...dataset.value_comparisons import IsGreaterThan, IsGreaterThanByMargin
 
 
 def test_variable_from_type_setting(handles_and_containers_world):
@@ -746,6 +748,48 @@ def test_literal_predicate(handles_and_containers_world):
         query = the(entity(variable(Body, world.bodies)).where(has_name))
 
 
+def test_predicate_taking_one_variable_attribute_twice():
+    """
+    An attribute filling two arguments of a predicate gives its value to both of them.
+    """
+    values = [0.0, 1.0, 2.0]
+    position = variable(KRROODPosition, [KRROODPosition(x, x, 0.0) for x in values])
+    query = entity(position).where(IsGreaterThan(position.x, position.x))
+
+    assert query.tolist() == []
+
+
+def test_predicate_taking_one_variable_attribute_twice_keeps_what_satisfies_it():
+    """
+    An attribute filling two arguments of a predicate is compared with itself, so a
+    predicate every value satisfies against itself keeps every candidate.
+    """
+    values = [0.0, 1.0, 2.0]
+    positions = [KRROODPosition(x, x, 0.0) for x in values]
+    position = variable(KRROODPosition, positions)
+    query = entity(position).where(
+        IsGreaterThanByMargin(position.x, position.x, margin=-1.0)
+    )
+
+    assert query.tolist() == positions
+
+
+def test_predicate_argument_left_out_takes_its_default():
+    """
+    A predicate argument the query does not pass takes the predicate's default.
+    """
+    values = [0.0, 1.0, 2.0]
+    positions = [KRROODPosition(x, y, 0.0) for x in values for y in values]
+    position = variable(KRROODPosition, positions)
+    query = entity(position).where(IsGreaterThanByMargin(position.x, position.y))
+
+    assert query.tolist() == [
+        candidate
+        for candidate in positions
+        if candidate.x > candidate.y + IsGreaterThanByMargin.margin
+    ]
+
+
 def test_contains_type():
     fb1_fruits = [Apple("apple"), Body("Body1")]
     fb2_fruits = [Body("Body3"), Body("Body2")]
@@ -1002,6 +1046,46 @@ def test_flatten_iterable_attribute(handles_and_containers_world):
     assert {row.handle.name for row in results} == {"Handle1", "Handle2", "Handle3"}
 
 
+def test_two_indexings_by_one_key_variable_follow_the_same_element(
+    handles_and_containers_world,
+):
+    """
+    Indexing names which element it means, so two indexings by one key variable follow
+    that key together rather than ranging over the elements independently.
+    """
+    world = handles_and_containers_world
+
+    cabinet = variable(Cabinet, world.views)
+    position = variable(int, domain=[0, 1])
+    query = entity(cabinet).where(
+        cabinet.drawers[position].handle.name != cabinet.drawers[position].handle.name
+    )
+
+    assert query.distinct().tolist() == []
+
+
+def test_two_flattenings_of_one_attribute_range_independently(
+    handles_and_containers_world,
+):
+    """
+    Each flattening is a variable of its own, so a condition can relate one element of a
+    collection to a different element of the same collection.
+    """
+    world = handles_and_containers_world
+    cabinets = [view for view in world.views if isinstance(view, Cabinet)]
+
+    cabinet = variable(Cabinet, world.views)
+    one_drawer = flat_variable(cabinet.drawers)
+    another_drawer = flat_variable(cabinet.drawers)
+    query = entity(cabinet).where(one_drawer.handle.name != another_drawer.handle.name)
+
+    assert query.distinct().tolist() == [
+        candidate
+        for candidate in cabinets
+        if len({drawer.handle.name for drawer in candidate.drawers}) > 1
+    ]
+
+
 def test_flatten_iterable_attribute_and_use_not_equal(handles_and_containers_world):
     world = handles_and_containers_world
 
@@ -1135,7 +1219,7 @@ def test_order_by_not_evaluated_variable(handles_and_containers_world):
 def test_ordering_the_query_by_the_query_itself(handles_and_containers_world):
     body = variable(Body, domain=handles_and_containers_world.bodies)
     query = entity(body).where(contains(body.name, "Handle"))
-    ordered_query = an(query.ordered_by(query.name[-1], descending=True))
+    ordered_query = a(query.ordered_by(query.name[-1], descending=True))
     filtered_values = [
         b for b in handles_and_containers_world.bodies if "Handle" in b.name
     ]
@@ -1311,7 +1395,7 @@ def test_embedded_subquery_captures_the_current_product_and_shares_variable_leav
     var1 = variable(int, [1, 2, 3])
     source = entity(var1).where(var1 == 2)
 
-    condition = var1 != an(source)
+    condition = var1 != a(source)
     source.build()
 
     embedded = condition.right

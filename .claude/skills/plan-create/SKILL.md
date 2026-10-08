@@ -91,6 +91,16 @@ they run in parallel?") — the same way the plan-dashboard system's own
 design was worked out via up-front questions before anything was written,
 not after.
 
+### Is it a new item, or a change to one already in flight?
+
+Ask this of every item before adding it, and prefer the change: an item that
+only modifies what an unlanded item introduces is that item's work, not a
+separate one. Follow `${SCOPE_DECISION_DOCUMENT}` — it holds the check and how
+to read it.
+
+For a single piece of work rather than a whole plan, `/add-plan-item` runs that
+same decision on its own and is the lighter-weight way in.
+
 If migrating a source doc: preserve its detail rather than compressing it
 away. Structured facts (branch, PR, base, status, blockers) become
 `plan.yaml` items; everything else (design rationale, history, "why",
@@ -109,7 +119,7 @@ written down rather than after: bulk-fetch `mcp__github__list_pull_requests`
 (`state: "all"`, paginated) for the repo, and use `mcp__github__pull_request_read`
 for anything outside that page window or referenced by number in the source
 doc. Set each item's `status` from what's actually true (open/draft →
-`in_progress` or `not_started` as appropriate, merged → `done`, closed
+`in progress` or `not started` as appropriate, merged → `done`, closed
 unmerged → `deferred` with a note), not from what a stale doc or a
 half-remembered conversation claims. If the source material and live
 GitHub disagree, that disagreement itself is worth a line in the item's
@@ -149,8 +159,8 @@ to it should check which kind it actually is rather than assuming
 Follow the schema in `plan-schema.md` exactly: `schema_version: 1`, `id`,
 `title`, `description`, `default_repository`, `tracking_issue` (if step 5 created
 one), `waves[]`, `tracks[]` (each tagged with a `wave`), `items[]` (flat,
-each tagged with a `track`, `status` from the thin enum `not_started |
-in_progress | blocked | deferred | done`, `depends_on` — a *list* of item
+each tagged with a `track`, `status` from the thin enum `not started |
+in progress | blocked | deferred | done`, `depends_on` — a *list* of item
 ids, so an item can depend on more than one prerequisite (e.g. a track that
 only starts once two other tracks have both landed) — and optional
 `pull_request_number`/`session`/`notes`/`blockers`).

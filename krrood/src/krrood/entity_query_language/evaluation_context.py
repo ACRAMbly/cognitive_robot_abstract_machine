@@ -11,6 +11,7 @@ from __future__ import annotations
 import uuid
 import weakref
 from abc import ABC
+from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field
 
@@ -216,7 +217,7 @@ class EvaluatedExpressionIds:
 
 
 @dataclass
-class OutermostQueryClaim:
+class OutermostQuery:
     """
     Tracks which compiled query node is the outermost query for the current evaluation
     pass.
@@ -227,24 +228,24 @@ class OutermostQueryClaim:
     inside it.
     """
 
-    _query_id: Optional[uuid.UUID] = field(default=None, init=False)
+    node: Optional[SymbolicExpression] = field(default=None, init=False)
     """
-    Identifier of the query node that claimed the outermost role, or ``None`` before any
-    node has.
+    The compiled query node holding the outermost role, or ``None`` before any node
+    takes it.
     """
 
-    def is_nested(self, query_id: uuid.UUID) -> bool:
+    def is_nested(self, query: SymbolicExpression) -> bool:
         """
-        Claim *query_id* as the outermost query if none is claimed yet, then report
-        whether *query_id* is nested inside some other, already-claimed outermost query.
+        Record *query* as the outermost query if none is recorded yet, then report
+        whether *query* is nested inside some other, already-recorded outermost query.
 
-        :param query_id: The compiled query node's identifier.
-        :return: Whether *query_id* is a nested subquery (``True``) or the outermost
-            query (``False``).
+        :param query: The compiled query node.
+        :return: Whether *query* is a nested subquery (``True``) or the outermost query
+            (``False``).
         """
-        if self._query_id is None:
-            self._query_id = query_id
-        return self._query_id != query_id
+        if self.node is None:
+            self.node = query
+        return self.node._id_ != query._id_
 
 
 @dataclass
@@ -338,9 +339,7 @@ class EvaluationContext:
     ``None`` if unset.
     """
 
-    outermost_query_claim: OutermostQueryClaim = field(
-        default_factory=OutermostQueryClaim
-    )
+    outermost_query: OutermostQuery = field(default_factory=OutermostQuery)
     """
     Tracks which compiled query node is the outermost query for the current evaluation
     pass.
@@ -360,6 +359,44 @@ class EvaluationContext:
             ``TruthValueOperator`` during the current evaluation pass.
         """
         return expression._id_ in self.truth_value_operator_children
+
+    @contextmanager
+    def as_current(self) -> Iterator[None]:
+        """
+        Make this context the current evaluation context for the duration of the block,
+        restoring the previous one afterwards.
+        """
+        context_token = set_evaluation_context(self)
+        try:
+            yield
+        finally:
+            _evaluation_context_var.reset(context_token)
+
+    def iterate_as_current(
+        self, results: Iterator[OperationResult]
+    ) -> Iterator[OperationResult]:
+        """
+        Iterate the given results with this context as the current evaluation context
+        while each of them is produced, and while they are closed.
+
+        The context is current only while the results advance or are closed, never while
+        the caller holds a result, so a caller that stops iterating part way does not
+        leave it set.
+
+        :param results: The results of an evaluation this context belongs to.
+        :return: The same results.
+        """
+        results_exhausted = object()
+        try:
+            while True:
+                with self.as_current():
+                    result = next(results, results_exhausted)
+                if result is results_exhausted:
+                    return
+                yield result
+        finally:
+            with self.as_current():
+                results.close()
 
     def on_evaluate_enter(
         self,

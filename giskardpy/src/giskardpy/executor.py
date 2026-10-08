@@ -1,10 +1,19 @@
+from __future__ import annotations
+
 import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
+from datetime import timedelta
+from typing import TYPE_CHECKING
+
+import numpy as np
 
 from giskardpy.data_types.exceptions import NonPositiveRealTimeFactorError
 from giskardpy.motion_statechart.context import MotionStatechartContext
-from giskardpy.motion_statechart.exceptions import PlotterNotConfiguredError
+from giskardpy.motion_statechart.exceptions import (
+    PlotterNotConfiguredError,
+    WorldStateArrayReplacedError,
+)
 from giskardpy.motion_statechart.motion_statechart import MotionStatechart
 from giskardpy.motion_statechart.plotters.debug_expression_trajectory_plotter import (
     DebugExpressionTrajectoryPlotter,
@@ -16,6 +25,9 @@ from krrood.symbolic_math.symbolic_math import FloatVariable
 from semantic_digital_twin.world_description.world_state_trajectory_plotter import (
     WorldStateTrajectoryPlotter,
 )
+
+if TYPE_CHECKING:
+    from semantic_digital_twin.adapters.multi_sim import MujocoSim
 
 
 @dataclass
@@ -113,6 +125,28 @@ class SimulationPacer(ScheduledPacer):
 
 
 @dataclass
+class SteppedSimulationPacer(Pacer):
+    """
+    Holds a loop by stepping a physically simulated world one cycle forward between two
+    ticks, so a controller ticking against the world runs in lockstep with its physics.
+
+    Every tick's command lands in the world state, the simulation's servos take it as
+    their set point, and the physics advances one cycle before the next tick reads the
+    world back.
+    """
+
+    simulation: MujocoSim
+    """
+    The simulation to step; it has to be started with
+    :meth:`~semantic_digital_twin.adapters.multi_sim.MujocoSim.start_stepped_simulation`
+    already.
+    """
+
+    def sleep(self) -> None:
+        self.simulation.step_simulation(timedelta(seconds=1 / self.target_frequency))
+
+
+@dataclass
 class Executor:
     """
     Represents the main execution entity that manages motion statecharts, collision
@@ -149,9 +183,20 @@ class Executor:
     Optional quadratic programming controller used for motion control.
     """
 
+    _compiled_world_state_data: np.ndarray | None = field(default=None, init=False)
+    """
+    The world state array the motion statechart was compiled against.
+
+    The compiled updaters read it through a memory view, so it must stay the very same
+    array for as long as they are in use.
+    """
+
     @property
-    def time(self) -> float:
-        return self.control_cycles * self.context.qp_controller_config.control_dt
+    def time(self) -> timedelta:
+        """
+        Simulated time of the control cycles executed since the last compile.
+        """
+        return self.control_cycles * self.context.qp_controller_config.control_time_step
 
     def __post_init__(self):
         self.pacer.target_frequency = self.context.qp_controller_config.target_frequency
@@ -181,25 +226,33 @@ class Executor:
         self.motion_statechart = motion_statechart
         self.control_cycles = 0
         self.motion_statechart.compile(self.context)
+        self._compiled_world_state_data = self.context.world.state._data
         self._compile_qp_controller(self.context.qp_controller_config)
         if self.trajectory_plotter is not None:
-            self.trajectory_plotter.reset(self.context.world.state, self.time)
+            self.trajectory_plotter.reset(
+                self.context.world.state, self.time.total_seconds()
+            )
         if self.debug_expression_plotter is not None:
             self.debug_expression_plotter.reset(
                 self.motion_statechart.collect_debug_expressions()
             )
-            self.debug_expression_plotter.debug_expression_trajectory.append(self.time)
+            self.debug_expression_plotter.debug_expression_trajectory.append(
+                self.time.total_seconds()
+            )
         self.context.collision_manager.update_collision_matrix()
         # do one tick to immediately active nodes whose start condition is constant true.
         self.motion_statechart.tick(self.context)
 
     def tick(self):
+        self._raise_if_world_state_array_was_replaced()
         self.control_cycles += 1
         if self.context.requires_collision_checking:
             self.context.collision_manager.compute_collisions()
         self.motion_statechart.tick(self.context)
         if self.debug_expression_plotter is not None:
-            self.debug_expression_plotter.debug_expression_trajectory.append(self.time)
+            self.debug_expression_plotter.debug_expression_trajectory.append(
+                self.time.total_seconds()
+            )
         if self.qp_controller is None:
             return
         next_cmd = self.qp_controller.compute_command(
@@ -209,12 +262,12 @@ class Executor:
         )
         self.context.world.apply_control_commands(
             next_cmd,
-            self.qp_controller.config.control_dt,
+            self.qp_controller.config.control_time_step.total_seconds(),
             self.qp_controller.config.max_derivative,
         )
         if self.trajectory_plotter is not None:
             self.trajectory_plotter.world_state_trajectory.append(
-                self.context.world.state, self.time
+                self.context.world.state, self.time.total_seconds()
             )
 
     def tick_until_end(self, timeout: int = 1_000):
@@ -234,6 +287,23 @@ class Executor:
             self.set_velocity_acceleration_jerk_to_zero()
             self.motion_statechart.cleanup_nodes(context=self.context)
             self.context.cleanup()
+
+    def _raise_if_world_state_array_was_replaced(self):
+        """
+        Ensures the world still holds the state array the motion statechart compiled
+        against.
+
+        :raises WorldStateArrayReplacedError: If the world replaced its state array,
+            which leaves the compiled updaters reading a detached copy of the state.
+        """
+        if self._compiled_world_state_data is None:
+            return
+        if self.context.world.state._data is self._compiled_world_state_data:
+            return
+        raise WorldStateArrayReplacedError(
+            compiled_degrees_of_freedom=self._compiled_world_state_data.shape[1],
+            current_degrees_of_freedom=self.context.world.state._data.shape[1],
+        )
 
     def set_velocity_acceleration_jerk_to_zero(self):
         """

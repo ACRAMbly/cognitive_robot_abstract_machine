@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import threading
+import uuid
 from dataclasses import dataclass, field
 from typing import Union, Iterator, Optional
 from uuid import UUID
@@ -253,6 +254,12 @@ class WorldState(MutableMapping[UUID, WorldStateEntryView]):
                 + " })"
             )
 
+    def to_uuid_position_dict(self) -> dict[uuid.UUID, float]:
+        """
+        :returns: A dictionary mapping each degree of freedom id to its current position.
+        """
+        return {dof_id: self[dof_id].position for dof_id in self._ids}
+
     def to_position_dict(self) -> Dict[PrefixedName, float]:
         with self.world_lock:
             return {
@@ -265,6 +272,21 @@ class WorldState(MutableMapping[UUID, WorldStateEntryView]):
     @property
     def world_lock(self) -> threading.RLock:
         return self._world._world_lock
+
+    @property
+    def data(self) -> List[float]:
+        """
+        :return: The derivatives of all degrees of freedom as one flat list, one
+            derivative after the other.
+        """
+        return self._data.ravel().tolist()
+
+    @property
+    def ids(self) -> List[UUID]:
+        """
+        :return: The ids of the degrees of freedom, in column order.
+        """
+        return self._ids
 
     @property
     def positions(self) -> np.ndarray:

@@ -5,11 +5,13 @@ import pytest
 from typing_extensions import List
 
 from krrood.entity_query_language.factories import variable
-from krrood.ormatic.data_access_objects.helper import to_dao
 from krrood.parametrization.feature_extraction.aggregations import (
     AggregationStatistic,
     aggregation_statistic,
     get_aggregation_class,
+)
+from krrood.parametrization.feature_extraction.exceptions import (
+    MissingFieldNameError,
 )
 from krrood.parametrization.feature_extraction.feature_extractor import (
     FeatureExtractor,
@@ -63,7 +65,7 @@ def test_single_aggregation(example_scenario):
 
 def test_feature_extraction_with_aggregation_statistics(example_scenario):
     room = example_scenario
-    extractor = FeatureExtractor.from_instances([to_dao(room)])
+    extractor = FeatureExtractor.from_instances([room])
 
     agg_features = [f for f in extractor.features if isinstance(f, Call)]
     assert len(agg_features) == 3
@@ -72,7 +74,7 @@ def test_feature_extraction_with_aggregation_statistics(example_scenario):
     assert any("table" in n for n in names)
     assert any("chair" in n for n in names)
 
-    values = extractor.apply_mapping(to_dao(room))
+    values = extractor.apply_mapping(room)
     assert 1 in values
 
 
@@ -91,9 +93,9 @@ def test_multiple_exchangeable_parts():
     )
     test_ex_parts = TestExParts(objects=[obj1, obj2], rooms=[room, room2])
 
-    extractor = FeatureExtractor.from_instances([to_dao(test_ex_parts)])
+    extractor = FeatureExtractor.from_instances([test_ex_parts])
     assert len([f for f in extractor.features if isinstance(f, Call)]) == 4
-    assert extractor.apply_mapping(to_dao(test_ex_parts)) == [1, 1, 2, 2]
+    assert extractor.apply_mapping(test_ex_parts) == [1, 1, 2, 2]
 
 
 def test_aggregation_count_values(example_scenario):
@@ -214,7 +216,7 @@ def test_feature_extraction_over_empty_exchangeable_part_does_not_raise():
         orientation=KRROODOrientation(0, 0, 0, 1),
         objects=[],
     )
-    extractor = FeatureExtractor.from_instances([to_dao(room)])
+    extractor = FeatureExtractor.from_instances([room])
     assert extractor is not None
     assert all(not isinstance(feature, Call) for feature in extractor.features)
 
@@ -354,3 +356,30 @@ def test_room_count_computes_correct_number_of_rooms():
     instance = TestExPartsAggregations(instance=test_ex_parts, field_name="rooms")
     [room_count] = instance.apply_mapping().values()
     assert room_count == 2
+
+
+def test_symbolic_features_are_derivable_without_a_domain_object():
+    """
+    The symbolic features of a field must be reconstructible from the class alone, so a
+    model that was persisted without its training data can still evaluate them.
+    """
+    room = SceneRoom(
+        position=KRROODPosition(0, 0, 0),
+        orientation=KRROODOrientation(0, 0, 0, 1),
+        objects=[],
+    )
+    instance = SceneRoomAggregations(instance=room, field_name="objects")
+    assert (
+        SceneRoomAggregations.symbolic_features_of_field("objects")
+        == instance.symbolic_aggregation_features()
+    )
+
+
+def test_symbolic_aggregation_features_require_a_field_name():
+    room = SceneRoom(
+        position=KRROODPosition(0, 0, 0),
+        orientation=KRROODOrientation(0, 0, 0, 1),
+        objects=[],
+    )
+    with pytest.raises(MissingFieldNameError):
+        SceneRoomAggregations(instance=room).symbolic_aggregation_features()

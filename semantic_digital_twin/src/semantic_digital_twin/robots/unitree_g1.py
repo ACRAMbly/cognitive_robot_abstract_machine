@@ -9,6 +9,7 @@ from importlib.resources import files
 from pathlib import Path
 from typing import Self, Union, List
 
+from krrood.ormatic.utils import classproperty
 from semantic_digital_twin.collision_checking.collision_matrix import (
     MaxAvoidedCollisionsOverride,
 )
@@ -45,7 +46,7 @@ from semantic_digital_twin.robots.robot_parts import (
     EndEffector,
 )
 from semantic_digital_twin.datastructures.field_of_view import FieldOfView
-from semantic_digital_twin.spatial_types import Quaternion, Vector3
+from semantic_digital_twin.spatial_types import Vector3
 from semantic_digital_twin.world_description.world_entity import (
     KinematicStructureEntity,
 )
@@ -274,6 +275,14 @@ class UnitreeG1LeftHand(
 
         return [gripper_open, gripper_close]
 
+    @property
+    def approach_axis(self) -> Vector3:
+        return Vector3.X(reference_frame=self.tool_frame)
+
+    @property
+    def closing_axis(self) -> Vector3:
+        return Vector3.Y(reference_frame=self.tool_frame)
+
     @classmethod
     def setup_default_configuration_in_world_below_robot_root(
         cls, robot_root: KinematicStructureEntity
@@ -285,7 +294,6 @@ class UnitreeG1LeftHand(
             tool_frame=robot_root._world.get_body_in_branch_by_name(
                 robot_root, "left_hand_tool_frame"
             ),
-            front_facing_orientation=Quaternion(),
         )
 
 
@@ -319,6 +327,14 @@ class UnitreeG1RightHand(
 
         return [gripper_open, gripper_close]
 
+    @property
+    def approach_axis(self) -> Vector3:
+        return Vector3.X(reference_frame=self.tool_frame)
+
+    @property
+    def closing_axis(self) -> Vector3:
+        return Vector3.Y(reference_frame=self.tool_frame)
+
     @classmethod
     def setup_default_configuration_in_world_below_robot_root(
         cls, robot_root: KinematicStructureEntity
@@ -330,7 +346,6 @@ class UnitreeG1RightHand(
             tool_frame=robot_root._world.get_body_in_branch_by_name(
                 robot_root, "right_hand_tool_frame"
             ),
-            front_facing_orientation=Quaternion(),
         )
 
 
@@ -397,13 +412,16 @@ class UnitreeG1RightArm(Arm[UnitreeG1RightHand]):
 @dataclass(eq=False)
 class D435(Camera):
 
+    @property
+    def forward_facing_axis(self) -> Vector3:
+        return Vector3.Z(reference_frame=self.root)
+
     @classmethod
     def setup_default_configuration_in_world_below_robot_root(
         cls, robot_root: KinematicStructureEntity
     ) -> Self:
         return cls(
             root=robot_root._world.get_body_in_branch_by_name(robot_root, "d435_link"),
-            forward_facing_axis=Vector3.Z(),
             field_of_view=FieldOfView(horizontal_angle=0.99483, vertical_angle=0.75049),
             minimal_height=1.27,
             maximal_height=1.60,
@@ -459,6 +477,10 @@ class UnitreeG1Torso(
 
 @dataclass(eq=False)
 class UnitreeG1MobileBase(MobileBase[OmniDrive]):
+
+    @classproperty
+    def forward_axis(cls) -> Vector3:
+        return Vector3.X()
 
     @classmethod
     def setup_default_configuration_in_world_below_robot_root(
