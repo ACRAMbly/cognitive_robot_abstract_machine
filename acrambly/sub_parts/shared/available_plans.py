@@ -118,6 +118,8 @@ def build_park_arms_plan(context: Context) -> Plan | None:
     return sequential(
         [
             ParkArmsAction(Arms.BOTH),
+            MoveGripperMotion(motion=GripperState.OPEN, gripper=Arms.RIGHT),
+            MoveGripperMotion(motion=GripperState.OPEN, gripper=Arms.LEFT),
         ],
         context=context,
     ).plan
@@ -200,7 +202,7 @@ def build_hand_over2_plan(
                 approach_direction=ApproachDirection.FRONT,
                 vertical_alignment=VerticalAlignment.TOP,
                 end_effector=end_effectors[1],
-                grasp_offset=Point3(0.016, -0.015, 0.03),
+                grasp_offset=Point3(0.016, -0.015, 0.04),
                 gripper_position=[0.35, -0.35],
             ),
             "red_handover_grasp": GraspDescription(
@@ -208,19 +210,19 @@ def build_hand_over2_plan(
                 vertical_alignment=VerticalAlignment.NoAlignment,
                 rotate_gripper=True,
                 end_effector=end_effectors[1],
-                grasp_offset=Point3(0.016, -0.015, 0.03),
+                grasp_offset=Point3(0.016, -0.015, 0.04),
             ),
             "blue_grasp": GraspDescription(
                 approach_direction=ApproachDirection.FRONT,
                 vertical_alignment=VerticalAlignment.BOTTOM,
                 end_effector=end_effectors[0],
-                grasp_offset=Point3(-0.09, -0.015, -0.04),
+                grasp_offset=Point3(-0.09, -0.015, -0.05),
             ),
             "blue_place_grasp": GraspDescription(
                 approach_direction=ApproachDirection.BACK,
                 vertical_alignment=VerticalAlignment.TOP,
                 end_effector=end_effectors[0],
-                grasp_offset=Point3(-0.09, -0.015, -0.04),
+                grasp_offset=Point3(-0.09, -0.015, -0.05),
             ),
         },
     }
@@ -232,8 +234,8 @@ def build_hand_over2_plan(
     }
 
     place_pose = {
-        "cube0": Pose.from_xyz_rpy(0.5, 0.4, 0.95, reference_frame=world.root),
-        "cube1": Pose.from_xyz_rpy(0.6, 0.4, 0.95, reference_frame=world.root),
+        "cube0": Pose.from_xyz_rpy(0.7, 0.4, 0.92, reference_frame=world.root),
+        "cube1": Pose.from_xyz_rpy(0.6, 0.4, 0.96, reference_frame=world.root),
         "cube2": Pose.from_xyz_rpy(1.0, 0.4, 0.95, reference_frame=world.root),
     }
 

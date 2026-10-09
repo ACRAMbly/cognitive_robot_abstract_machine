@@ -22,7 +22,7 @@ from sub_parts.shared.utils import spawn_body
 
 CUBES = {
     "child_cube_0": ("cube0", "child_cube_0_scaled.stl"),
-    "child_cube_1": ("cube1", "child_cube_1_scaled.stl"),
+    #"child_cube_1": ("cube1", "child_cube_1_scaled.stl"),
     "child_cube_2": ("cube2", "child_cube_2_scaled.stl"),
 }
 

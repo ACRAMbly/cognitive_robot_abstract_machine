@@ -40,7 +40,11 @@ def setup_and_build_plan(
     """Perceive the cube assemblies and build the right-to-left handover plan."""
     print("[Perception] querying perceived positions...")
     poses = query_cube_poses_from_robokudo(node, classnames=tuple(CUBES))
-
+    # poses = {
+    #     "child_cube_0": (0.5, -0.5, 0.93),
+    #     "child_cube_1": (0.8, -0.6, 0.93),
+    #     "child_cube_2": (1.0, -0.3, 0.93),
+    # }
     missing = [name for name in CUBES if name not in poses]
     if missing:
         raise RuntimeError(
@@ -58,7 +62,9 @@ def setup_and_build_plan(
         # assemblies are symmetric enough that FoundationPose's orientation may
         # be correct only up to a symmetry.  Pass the estimated quaternion here
         # only once the planners have been re-tuned for it.
-        bodies[grasp_key] = spawn_body(
-            world, position, (0.0, 0.0, 0.0), "mesh", mesh_filename=mesh)
 
+        bodies[grasp_key] = spawn_body(
+            world, (position[0]+0.02, position[1]+0.02, position[2]+0.03), (0.0, 0.0, 0.0), "mesh", mesh_filename=mesh)
+    # if input("Perception correct") != "y":
+    #     exit()
     return build_hand_over2_plan(world, tracy, context, bodies)
