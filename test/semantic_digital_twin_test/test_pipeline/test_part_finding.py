@@ -3,6 +3,7 @@ Finding an object's handle or rim in its shape and splitting it off.
 """
 
 import pytest
+from typing_extensions import Optional
 import trimesh
 
 from krrood.adapters.json_serializer import from_json, to_json
@@ -139,12 +140,13 @@ def test_the_rim_of_a_cup_is_the_band_below_its_top():
 # %% splitting a part off an annotation in a world
 
 
-def door_with_mug_shape() -> Door:
+def door_with_mug_shape(world: Optional[World] = None) -> Door:
     """
+    :param world: The empty world to put the door in; a new one if not given.
     :return: A door, alone in its world, shaped like the mug, so that it has a handle to
         split off.
     """
-    world = World()
+    world = world or World()
     body = Body(name=PrefixedName("door"))
     shapes = ShapeCollection(
         [

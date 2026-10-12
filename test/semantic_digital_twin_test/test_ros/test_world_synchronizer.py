@@ -51,6 +51,12 @@ from semantic_digital_twin.exceptions import (
 )
 from semantic_digital_twin.orm.ormatic_interface import WorldMappingDAO
 from semantic_digital_twin.robots.pr2 import PR2
+from test.semantic_digital_twin_test.test_pipeline.test_part_finding import (
+    BODY_OUTER_RADIUS,
+    door_with_mug_shape,
+    mug,
+    split_handle,
+)
 from semantic_digital_twin.semantic_annotations.semantic_annotations import (
     Handle,
     Door,
@@ -3080,6 +3086,50 @@ def test_all_blocks_received_when_subscribed_before_publishing(rclpy_node):
         )
         sender_ids, receiver_ids = wait_for_sync_kse_and_return_ids(sender, receiver)
         assert sender_ids == receiver_ids, "the hanger block did not arrive"
+    finally:
+        sender_synchronizer.close()
+        receiver_synchronizer.close()
+
+
+def test_a_split_part_and_its_rollback_reach_a_synchronized_world(rclpy_node):
+    sender = World(name="sender")
+    receiver = World(name="receiver")
+    receiver_synchronizer = WorldSynchronizer(node=rclpy_node, _world=receiver)
+    sender_synchronizer = WorldSynchronizer(node=rclpy_node, _world=sender)
+    try:
+        assert wait_for_condition(
+            lambda: sender_synchronizer.publisher.get_subscription_count() >= 2
+        ), "the synchronizers never discovered each other"
+        door = door_with_mug_shape(sender)
+        whole_faces = len(mug().faces)
+
+        def received_faces(shapes: str) -> int:
+            root = receiver.get_kinematic_structure_entity_by_id(door.root.id)
+            return len(getattr(root, shapes).combined_mesh.faces)
+
+        assert wait_for_condition(lambda: len(receiver.bodies) == 1)
+        assert received_faces("collision") == whole_faces
+
+        split_handle(door)
+
+        assert wait_for_condition(lambda: len(receiver.bodies) == 2)
+        root = receiver.get_kinematic_structure_entity_by_id(door.root.id)
+        assert root.collision.reference_frame is root
+        assert received_faces("collision") == len(
+            door.root.collision.combined_mesh.faces
+        )
+        assert received_faces("visual") == len(door.root.visual.combined_mesh.faces)
+        assert root.collision.combined_mesh.bounds[1][0] == pytest.approx(
+            BODY_OUTER_RADIUS
+        )
+
+        sender.rollback_modification_blocks()
+
+        assert wait_for_condition(lambda: len(receiver.bodies) == 1)
+        assert wait_for_condition(
+            lambda: received_faces("collision") == whole_faces
+        ), "the receiver kept the cut shape after the rollback"
+        assert received_faces("visual") == whole_faces
     finally:
         sender_synchronizer.close()
         receiver_synchronizer.close()
