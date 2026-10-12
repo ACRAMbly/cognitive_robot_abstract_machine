@@ -30,11 +30,11 @@ from probabilistic_model.probabilistic_circuit.relational.exchangeable_grounding
     WeightedAssignments,
 )
 from probabilistic_model.probabilistic_circuit.relational.layered_grounding import (
-    LayeredGrounding,
+    LayeredRelationalGrounding,
 )
 from probabilistic_model.probabilistic_circuit.relational.rustworkx_grounding import (
     RustworkxExchangeablePartGrounder,
-    RustworkxGrounding,
+    RustworkxRelationalGrounding,
 )
 from probabilistic_model.learning.learning_method import LayeredLearning
 from probabilistic_model.probabilistic_circuit.relational.rspn import (
@@ -1375,10 +1375,12 @@ def test_a_relational_circuit_is_grounded_in_the_circuit_type_it_was_fitted_in(
     nested_query_with_rooms_of_one_shape,
 ):
     assert isinstance(
-        nested_relational_probabilistic_circuit.grounding(), RustworkxGrounding
+        nested_relational_probabilistic_circuit.grounding(),
+        RustworkxRelationalGrounding,
     )
     assert isinstance(
-        layered_nested_relational_probabilistic_circuit.grounding(), LayeredGrounding
+        layered_nested_relational_probabilistic_circuit.grounding(),
+        LayeredRelationalGrounding,
     )
     assert isinstance(
         layered_nested_relational_probabilistic_circuit.ground(

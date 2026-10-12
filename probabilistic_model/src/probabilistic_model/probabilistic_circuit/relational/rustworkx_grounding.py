@@ -203,16 +203,13 @@ class RustworkxExchangeablePartGrounder(
         log_weights: List[float],
     ) -> None:
         """
-        Attach a normalized sum unit over exchangeable instances to one node.
+        Make a mounting node multiply a normalized sum unit over the instances it gives
+        a positive weight.
 
-        Instances whose node-local likelihood is zero are skipped; at least one has a
-        positive one, since :meth:`_node_local_assignments` draws a node's own samples
-        otherwise. The instances are already mounted in ``circuit`` and shared across
-        all mounting nodes; only the weighted sum-unit edges differ per node.
-
-        :param product_node: The mounting product node to extend.
-        :param instance_roots: The roots of the mounted exchangeable instances.
-        :param log_weights: The node-local log-likelihood weight of each instance.
+        :param product_node: The mounting node.
+        :param instance_roots: The roots of the instances, shared by every mounting
+            node.
+        :param log_weights: The weight of every instance at the node.
         """
         weighted_instances = [
             (instance_root, log_weight)
@@ -230,7 +227,7 @@ class RustworkxExchangeablePartGrounder(
 
 
 @dataclass
-class RustworkxGrounding(RelationalGrounding[ProbabilisticCircuit]):
+class RustworkxRelationalGrounding(RelationalGrounding[ProbabilisticCircuit]):
     """
     Grounds a relational probabilistic circuit fitted as rustworkx circuits.
     """

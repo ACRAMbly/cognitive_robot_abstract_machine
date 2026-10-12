@@ -563,7 +563,7 @@ class LayeredExchangeablePartGrounder(
 
 
 @dataclass
-class LayeredGrounding(RelationalGrounding[LayeredProbabilisticCircuit]):
+class LayeredRelationalGrounding(RelationalGrounding[LayeredProbabilisticCircuit]):
     """
     Grounds a relational probabilistic circuit fitted as layered circuits.
     """
