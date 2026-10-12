@@ -25,7 +25,6 @@ from probabilistic_model.learning.jpt.variables import (
     AnnotatedVariable,
     infer_variables_from_dataframe,
 )
-from probabilistic_model.learning.jpt.jpt import JointProbabilityTree
 from probabilistic_model.learning.learning_method import LearningMethod
 from probabilistic_model.probabilistic_circuit.rx.probabilistic_circuit import (
     ProbabilisticCircuit,
@@ -41,9 +40,6 @@ class GaussianMixtureLearningMethod(LearningMethod, ABC):
     A learning method whose circuit is a sum unit over one product per component: a
     multivariate Gaussian leaf times one leaf per discrete variable.
     """
-
-    def default_part_learning_method(self) -> JointProbabilityTree:
-        return JointProbabilityTree()
 
     @staticmethod
     def _variables(

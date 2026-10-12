@@ -48,6 +48,7 @@ from probabilistic_model.probabilistic_circuit.groundable_circuit import (
 from probabilistic_model.probabilistic_circuit.relational.exceptions import (
     MixedCircuitTypesError,
     PartCircuitGroundingFailedError,
+    UnknownExchangeablePartsError,
 )
 from probabilistic_model.probabilistic_circuit.relational.exchangeable_grounding import (
     CircuitType,
@@ -60,6 +61,9 @@ from probabilistic_model.probabilistic_circuit.relational.exchangeable_grounding
 from probabilistic_model.probabilistic_circuit.relational import (  # noqa: F401
     layered_grounding,
     rustworkx_grounding,
+)
+from probabilistic_model.probabilistic_circuit.relational.part_learning_methods import (
+    PartLearningMethods,
 )
 from probabilistic_model.probabilistic_circuit.relational.template import (
     RelationalDistributionTemplate,
@@ -243,14 +247,14 @@ class RelationalProbabilisticCircuit:
     What the class-level circuit is fitted with.
     """
 
-    part_learning_methods: dict[str, LearningMethod] = field(default_factory=dict)
+    part_learning_methods: PartLearningMethods = field(
+        default_factory=PartLearningMethods
+    )
     """
-    Per exchangeable-part field name, what that part's template distribution is fitted
-    with.
+    What the template distribution of every exchangeable part, nested ones included, is
+    fitted with, keyed by attribute accesses on a variable of :attr:`class_`.
 
-    A part absent from the mapping is fitted with the
-    :meth:`~probabilistic_model.learning.learning_method.LearningMethod.default_part_learning_method`
-    of :attr:`learning_method`.
+    Its default must fit the same circuit type as :attr:`learning_method`.
     """
 
     schema_information: Optional[DataAccessObjectSchema] = field(
@@ -392,9 +396,9 @@ class RelationalProbabilisticCircuit:
         template = ExchangeableDistributionTemplate(
             RelationalProbabilisticCircuit(
                 child_type,
-                learning_method=self.part_learning_methods.get(
-                    exchangeable_part,
-                    self.learning_method.default_part_learning_method(),
+                learning_method=self.part_learning_methods[exchangeable_part],
+                part_learning_methods=self.part_learning_methods.of_part(
+                    exchangeable_part
                 ),
             ),
             latent_variables,
@@ -444,10 +448,18 @@ class RelationalProbabilisticCircuit:
         self.schema_information = get_dao_schema(
             get_data_access_object_class(type(instances[0]))
         )
-        for collection_relationship in self.schema_information.collection_relationships:
-            exchangeable_part = collection_relationship.key
-            if exchangeable_part not in self.feature_extractor.exchangeable_features:
-                continue
+        exchangeable_parts = [
+            collection_relationship.key
+            for collection_relationship in self.schema_information.collection_relationships
+            if collection_relationship.key
+            in self.feature_extractor.exchangeable_features
+        ]
+        unknown_parts = {
+            path.split(".")[0] for path in self.part_learning_methods
+        } - set(exchangeable_parts)
+        if unknown_parts:
+            raise UnknownExchangeablePartsError(self.class_, sorted(unknown_parts))
+        for exchangeable_part in exchangeable_parts:
             self.exchangeable_distribution_templates[exchangeable_part] = (
                 self._fit_exchangeable_part(exchangeable_part, instances)
             )

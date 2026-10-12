@@ -10,7 +10,7 @@ from sortedcontainers import SortedSet
 from typing_extensions import Any
 
 from krrood.adapters.json_serializer import from_json, to_json
-from krrood.entity_query_language.factories import a, an
+from krrood.entity_query_language.factories import a, an, variable
 from probabilistic_model.distributions.distributions import IntegerDistribution
 from probabilistic_model.distributions.uniform import UniformDistribution
 from probabilistic_model.probabilistic_circuit.causal.causal_circuit import (
@@ -21,6 +21,7 @@ from probabilistic_model.probabilistic_circuit.relational.exceptions import (
     CircuitNotFittedError,
     InvalidMonteCarloSampleCountError,
     MixedCircuitTypesError,
+    UnknownExchangeablePartsError,
 )
 from probabilistic_model.learning.jpt.jpt import JointProbabilityTree
 from probabilistic_model.probabilistic_circuit.relational.exchangeable_grounding import (
@@ -39,6 +40,9 @@ from probabilistic_model.probabilistic_circuit.relational.rustworkx_grounding im
 from probabilistic_model.learning.learning_method import (
     LayeredLearning,
     StratifiedLearning,
+)
+from probabilistic_model.probabilistic_circuit.relational.part_learning_methods import (
+    PartLearningMethods,
 )
 from probabilistic_model.probabilistic_circuit.relational.rspn import (
     RelationalProbabilisticCircuit,
@@ -101,7 +105,11 @@ def relational_probabilistic_circuit(scenario):
 @pytest.fixture
 def layered_relational_probabilistic_circuit(scenario):
     return RelationalProbabilisticCircuit(
-        SceneRoom, learning_method=LayeredLearning(JointProbabilityTree())
+        SceneRoom,
+        learning_method=LayeredLearning(JointProbabilityTree()),
+        part_learning_methods=PartLearningMethods(
+            LayeredLearning(JointProbabilityTree())
+        ),
     ).fit(list(scenario))
 
 
@@ -292,6 +300,9 @@ def layered_relational_probabilistic_circuit_with_ambiguous_total_count_4():
     return RelationalProbabilisticCircuit(
         SceneRoom,
         learning_method=LayeredLearning(JointProbabilityTree(min_samples_per_leaf=2)),
+        part_learning_methods=PartLearningMethods(
+            LayeredLearning(JointProbabilityTree())
+        ),
     ).fit(_rooms_with_ambiguous_total_count_4())
 
 
@@ -676,7 +687,11 @@ def layered_correlated_relational_probabilistic_circuit() -> (
     RelationalProbabilisticCircuit
 ):
     return RelationalProbabilisticCircuit(
-        SceneRoom, learning_method=LayeredLearning(JointProbabilityTree())
+        SceneRoom,
+        learning_method=LayeredLearning(JointProbabilityTree()),
+        part_learning_methods=PartLearningMethods(
+            LayeredLearning(JointProbabilityTree())
+        ),
     ).fit(_correlated_rooms())
 
 
@@ -945,6 +960,9 @@ def layered_nested_relational_probabilistic_circuit() -> RelationalProbabilistic
     return RelationalProbabilisticCircuit(
         SceneWithExchangeableParts,
         learning_method=LayeredLearning(JointProbabilityTree()),
+        part_learning_methods=PartLearningMethods(
+            LayeredLearning(JointProbabilityTree())
+        ),
     ).fit(_nested_scenes())
 
 
@@ -1393,18 +1411,54 @@ def test_a_relational_circuit_is_grounded_in_the_circuit_type_it_was_fitted_in(
     )
 
 
-def test_the_parts_of_a_layered_fit_default_to_the_layered_part_learning_method():
-    method = LayeredLearning(StratifiedLearning(["type"], JointProbabilityTree()))
-    assert method.default_part_learning_method() == LayeredLearning(
-        JointProbabilityTree()
+def test_part_learning_methods_are_keyed_by_the_path_of_an_attribute_access():
+    stratified = StratifiedLearning(["type"], JointProbabilityTree())
+    methods = PartLearningMethods(
+        methods={variable(SceneBuilding).floors.rooms: stratified}
     )
+    assert methods[variable(SceneBuilding).floors.rooms] is stratified
+    assert variable(SceneBuilding).floors.rooms in methods
+    assert methods.of_part("floors")["rooms"] is stratified
+    assert methods[variable(SceneBuilding).floors] == JointProbabilityTree()
+
+
+def test_part_learning_methods_without_a_default_require_every_part():
+    with pytest.raises(KeyError):
+        PartLearningMethods(None)[variable(SceneRoom).objects]
+
+
+def test_the_default_part_learning_method_reaches_nested_parts():
+    model = RelationalProbabilisticCircuit(
+        SceneBuilding,
+        learning_method=LayeredLearning(JointProbabilityTree()),
+        part_learning_methods=PartLearningMethods(
+            LayeredLearning(JointProbabilityTree())
+        ),
+    ).fit(_buildings())
+    floors = model.exchangeable_distribution_templates["floors"].template_distribution
+    rooms = floors.exchangeable_distribution_templates["rooms"].template_distribution
+    assert isinstance(rooms.class_probabilistic_circuit, LayeredProbabilisticCircuit)
+
+
+def test_a_learning_method_for_an_unknown_part_raises():
+    model = RelationalProbabilisticCircuit(
+        SceneRoom,
+        part_learning_methods=PartLearningMethods(
+            methods={variable(SceneRoom).objekts: JointProbabilityTree()}
+        ),
+    )
+    with pytest.raises(UnknownExchangeablePartsError):
+        model.fit(_correlated_rooms())
 
 
 def test_fitting_parts_in_another_circuit_type_raises():
     model = RelationalProbabilisticCircuit(
         SceneWithExchangeableParts,
         learning_method=LayeredLearning(JointProbabilityTree()),
-        part_learning_methods={"rooms": JointProbabilityTree()},
+        part_learning_methods=PartLearningMethods(
+            LayeredLearning(JointProbabilityTree()),
+            {variable(SceneWithExchangeableParts).rooms: JointProbabilityTree()},
+        ),
     )
     with pytest.raises(MixedCircuitTypesError):
         model.fit(_nested_scenes())
@@ -1479,7 +1533,11 @@ def test_layered_grounding_of_three_levels_of_relations_is_the_grounding(
 ):
     model = RelationalProbabilisticCircuit(SceneBuilding).fit(_buildings())
     layered_model = RelationalProbabilisticCircuit(
-        SceneBuilding, learning_method=LayeredLearning(JointProbabilityTree())
+        SceneBuilding,
+        learning_method=LayeredLearning(JointProbabilityTree()),
+        part_learning_methods=PartLearningMethods(
+            LayeredLearning(JointProbabilityTree())
+        ),
     ).fit(_buildings())
     assert_same_distribution(
         *ground_with_the_same_samples(

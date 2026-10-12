@@ -53,14 +53,6 @@ class LearningMethod(ABC):
         :return: The fitted circuit.
         """
 
-    @abstractmethod
-    def default_part_learning_method(self) -> LearningMethod:
-        """
-        :return: What the templates of the exchangeable relations of a relational
-            circuit are fitted with when this method fits its class circuit and nothing
-            else is configured.
-        """
-
 
 @dataclass
 class StratifiedLearning(LearningMethod):
@@ -108,9 +100,6 @@ class StratifiedLearning(LearningMethod):
             )
         return result
 
-    def default_part_learning_method(self) -> LearningMethod:
-        return self.method.default_part_learning_method()
-
 
 @dataclass
 class LayeredLearning(LearningMethod):
@@ -131,6 +120,3 @@ class LayeredLearning(LearningMethod):
         return RustworkxCircuitToLayeredCircuitConverter.convert(
             self.method.fit(data, variables)
         )
-
-    def default_part_learning_method(self) -> LayeredLearning:
-        return LayeredLearning(self.method.default_part_learning_method())

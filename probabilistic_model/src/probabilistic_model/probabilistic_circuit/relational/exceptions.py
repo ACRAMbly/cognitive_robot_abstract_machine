@@ -118,6 +118,36 @@ class MixedCircuitTypesError(DataclassException):
 
 
 @dataclass
+class UnknownExchangeablePartsError(DataclassException):
+    """
+    Raised when learning methods are given for parts that are not exchangeable parts of
+    the class.
+    """
+
+    class_: Type
+    """
+    The domain class whose relational circuit is fitted.
+    """
+
+    parts: List[str]
+    """
+    The field names that name no exchangeable part of the class.
+    """
+
+    def error_message(self) -> str:
+        return (
+            f"{self.class_.__name__} has no exchangeable parts named "
+            f"{', '.join(map(repr, self.parts))}."
+        )
+
+    def suggest_correction(self) -> str:
+        return (
+            "Key the part learning methods by attribute accesses on a variable of the "
+            "class that end at a one-to-many relation."
+        )
+
+
+@dataclass
 class PartCircuitGroundingFailedError(DataclassException):
     """
     Raised when grounding one exchangeable part leaves its circuit with no nodes at all.
