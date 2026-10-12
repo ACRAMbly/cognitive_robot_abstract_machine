@@ -2,6 +2,7 @@
 Verify NumPy image inputs for open-vocabulary detection and mask prediction.
 """
 
+from dataclasses import fields, is_dataclass
 from unittest.mock import MagicMock
 
 import cv2
@@ -309,3 +310,84 @@ def test_visualize_objects_draws_roi_mask_without_mutating_source(
         numpy.broadcast_to(color.to_rgb()[::-1], image_region[foreground].shape),
     )
     numpy.testing.assert_array_equal(image, original_image)
+
+
+# %% Dataclass initialization
+
+
+def test_annotator_declares_dataclass_state(
+    numpy_image_annotator: OpenVocabularyObjectDetectionAnnotator,
+) -> None:
+    """
+    Declare model state as fields excluded from constructor arguments.
+    """
+    assert is_dataclass(numpy_image_annotator)
+    assert {item.name for item in fields(numpy_image_annotator) if item.init} == {
+        "name",
+        "descriptor",
+    }
+
+
+def test_default_descriptors_are_independent(
+    numpy_image_annotator: OpenVocabularyObjectDetectionAnnotator,
+) -> None:
+    """
+    Give each default-constructed annotator independent configuration.
+    """
+    first = OpenVocabularyObjectDetectionAnnotator()
+    second = OpenVocabularyObjectDetectionAnnotator()
+    assert first.descriptor is not second.descriptor
+    assert first.classes is not second.classes
+
+
+def test_dataclass_initializes_threaded_behaviour(
+    numpy_image_annotator: OpenVocabularyObjectDetectionAnnotator,
+) -> None:
+    """
+    Preserve configured models and the initial threaded behaviour state.
+    """
+    annotator = numpy_image_annotator
+    assert annotator.classes is annotator.descriptor.parameters.classes
+    assert annotator.model is Owlv2ForObjectDetection.from_pretrained.return_value
+    assert annotator.processor is Owlv2Processor.from_pretrained.return_value
+    assert annotator.compute_worker is None
+    assert annotator.compute_worker_started is False
+    assert annotator.compute_worker_thread is None
+    assert annotator.segment_anything_model is None
+
+
+def test_annotators_preserve_identity_equality(
+    numpy_image_annotator: OpenVocabularyObjectDetectionAnnotator,
+) -> None:
+    """
+    Keep distinct behaviour nodes unequal and usable as dictionary keys.
+    """
+    first = OpenVocabularyObjectDetectionAnnotator()
+    second = OpenVocabularyObjectDetectionAnnotator()
+    assert first != second
+    assert len({first: first, second: second}) == 2
+
+
+def test_precision_mode_loads_segmentation_model(
+    numpy_image_annotator: OpenVocabularyObjectDetectionAnnotator,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """
+    Load the configured segmentation checkpoint when precision mode is enabled.
+    """
+    constructor = MagicMock()
+    monkeypatch.setattr(
+        "robokudo.annotators.open_vocabulary_object_detection_annotator.SegmentAnythingModel",
+        constructor,
+    )
+    descriptor = OpenVocabularyObjectDetectionAnnotator.Descriptor()
+    descriptor.parameters.precision_mode = True
+    annotator = OpenVocabularyObjectDetectionAnnotator(
+        numpy_image_annotator.name, descriptor
+    )
+    assert annotator.name == numpy_image_annotator.name
+    assert annotator.descriptor is descriptor
+    assert annotator.segment_anything_model is constructor.return_value
+    constructor.assert_called_once_with(
+        descriptor.parameters.segment_anything_model_path
+    )

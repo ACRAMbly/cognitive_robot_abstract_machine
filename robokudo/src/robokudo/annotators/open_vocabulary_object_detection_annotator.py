@@ -1,7 +1,10 @@
-"""Open-vocabulary object detection with optional Segment Anything masks."""
+"""
+Open-vocabulary object detection with optional Segment Anything masks.
+"""
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from enum import IntEnum, StrEnum
 from timeit import default_timer
 
@@ -32,30 +35,43 @@ if TYPE_CHECKING:
 
 
 class DetectionResultField(StrEnum):
-    """Fields returned by the object detection postprocessor."""
+    """
+    Fields returned by the object detection postprocessor.
+    """
 
     BOXES = "boxes"
-    """Detected bounding boxes."""
+    """
+    Detected bounding boxes.
+    """
 
     SCORES = "scores"
-    """Detection confidence scores."""
+    """
+    Detection confidence scores.
+    """
 
     LABELS = "labels"
-    """Indices of the matching text labels."""
+    """
+    Indices of the matching text labels.
+    """
 
 
 class SegmentPromptLabel(IntEnum):
-    """Labels for segmentation prompts."""
+    """
+    Labels for segmentation prompts.
+    """
 
     FOREGROUND = 1
-    """Mark a prompt as belonging to the foreground."""
+    """
+    Mark a prompt as belonging to the foreground.
+    """
 
 
 # %% Bounding-box labels
 
 
 def get_box_text(object_hypothesis):
-    """Label a hypothesis with its most confident classification or ROI identifier.
+    """
+    Label a hypothesis with its most confident classification or ROI identifier.
 
     :param object_hypothesis: Hypothesis whose classifications determine the label.
     :return: Identifier, class name, and confidence, or an identifier-only label.
@@ -78,67 +94,108 @@ def get_box_text(object_hypothesis):
 # %% Open-vocabulary object detection
 
 
+@dataclass(eq=False)
 class OpenVocabularyObjectDetectionAnnotator(
     robokudo.annotators.core.ThreadedAnnotator
 ):
-    """Detect configured text classes and optionally segment their image regions."""
+    """
+    Detect configured text classes and optionally segment their image regions.
+    """
 
     class Descriptor(robokudo.annotators.core.BaseAnnotator.Descriptor):
         class Parameters:
             def __init__(self):
-                """Set default detection and segmentation settings."""
+                """
+                Set default detection and segmentation settings.
+                """
                 self.classes = ["Cat", "Dog"]
-                """Text labels to detect in the color image."""
+                """
+                Text labels to detect in the color image.
+                """
                 self.detection_model = "google/owlv2-base-patch16-ensemble"
-                """Pretrained OWLv2 model name or local checkpoint directory."""
+                """
+                Pretrained OWLv2 model name or local checkpoint directory.
+                """
                 self.detection_processor = "google/owlv2-base-patch16-ensemble"
-                """Pretrained OWLv2 processor name or local checkpoint directory."""
+                """
+                Pretrained OWLv2 processor name or local checkpoint directory.
+                """
                 self.detection_threshold = 0.2
-                """Confidence threshold for retaining detections."""
+                """
+                Confidence threshold for retaining detections.
+                """
 
                 self.segment_anything_model_path = "mobile_sam.pt"
-                """Checkpoint for the Segment Anything model."""
+                """
+                Checkpoint for the Segment Anything model.
+                """
                 self.precision_mode = False
-                """Whether to predict object masks with Segment Anything."""
+                """
+                Whether to predict object masks with Segment Anything.
+                """
                 self.refine_bounding_boxes = False
-                """Whether to refine boxes when ``precision_mode`` is enabled."""
+                """
+                Whether to refine boxes when ``precision_mode`` is enabled.
+                """
 
         parameters = Parameters()
-        """Detection and segmentation configuration defaults."""
-
-    def __init__(
-        self,
-        name="OpenVocabularyObjectDetectionAnnotator",
-        descriptor=Descriptor(),
-    ) -> None:
-        """Initialize the threaded annotator and load the configured models.
-
-        :param name: Name of the behaviour-tree node.
-        :param descriptor: Detection and segmentation configuration.
         """
-        super(OpenVocabularyObjectDetectionAnnotator, self).__init__(name, descriptor)
+        Detection and segmentation configuration defaults.
+        """
 
+    name: str = "OpenVocabularyObjectDetectionAnnotator"
+    """
+    Name of the behaviour-tree node.
+    """
+
+    descriptor: Descriptor = field(default_factory=Descriptor)
+    """
+    Detection and segmentation configuration.
+    """
+
+    classes: list[str] = field(init=False)
+    """
+    Text labels supplied to the detection processor.
+    """
+
+    model: Owlv2ForObjectDetection = field(init=False, repr=False)
+    """
+    Loaded OWLv2 object detection model.
+    """
+
+    processor: Owlv2Processor = field(init=False, repr=False)
+    """
+    Processor for text and image inputs.
+    """
+
+    segment_anything_model: SegmentAnythingModel | None = field(
+        init=False, default=None, repr=False
+    )
+    """
+    Segmentation model when precision mode is enabled.
+    """
+
+    def __post_init__(self) -> None:
+        """
+        Initialize the threaded behaviour and load the configured models.
+        """
+        super().__init__(self.name, self.descriptor)
         self.classes = self.descriptor.parameters.classes
-        """Text labels supplied to the detection processor."""
-
         self.model = Owlv2ForObjectDetection.from_pretrained(
             self.descriptor.parameters.detection_model
         )
-        """Loaded OWLv2 object detection model."""
         self.processor = Owlv2Processor.from_pretrained(
             self.descriptor.parameters.detection_processor
         )
-        """Processor for the detection model's text and image inputs."""
-
         if self.descriptor.parameters.precision_mode:
             self.segment_anything_model = SegmentAnythingModel(
                 self.descriptor.parameters.segment_anything_model_path
             )
-            """Segmentation model available when ``precision_mode`` is enabled."""
 
     @catch_and_raise_to_blackboard
     def compute(self) -> py_trees.common.Status:
-        """Main method: Detect objects based on configured classes and update the visualization.
+        """
+        Main method: Detect objects based on configured classes and update the visualization.
 
         :return: ``py_trees.common.Status.SUCCESS`` after processing the color image.
         """
@@ -154,7 +211,8 @@ class OpenVocabularyObjectDetectionAnnotator(
     def detect_objects(
         self, image: numpy_typing.NDArray[numpy.uint8]
     ) -> list[ObjectHypothesis]:
-        """Detect configured classes with optional masks cropped to their regions.
+        """
+        Detect configured classes with optional masks cropped to their regions.
 
         :param image: Color image in BGR channel order.
         :return: Classified hypotheses with bounding boxes and optional masks.
@@ -216,7 +274,8 @@ class OpenVocabularyObjectDetectionAnnotator(
     def predict_mask(
         self, image: numpy_typing.NDArray[numpy.uint8], box: list[float]
     ) -> numpy_typing.NDArray[numpy.uint8]:
-        """Predict a mask at the original color-image resolution.
+        """
+        Predict a mask at the original color-image resolution.
 
         :param image: Color image in BGR channel order.
         :param box: Bounding box as ``[left, top, right, bottom]`` in image pixels.
@@ -229,7 +288,8 @@ class OpenVocabularyObjectDetectionAnnotator(
         return mask * numpy.iinfo(numpy.uint8).max
 
     def refine_bounding_box(self, object_hypothesis: ObjectHypothesis) -> None:
-        """Adjust a hypothesis's bounding box to the first contour of its mask.
+        """
+        Adjust a hypothesis's bounding box to the first contour of its mask.
 
         Empty masks leave the bounding box unchanged.
 
@@ -253,7 +313,8 @@ class OpenVocabularyObjectDetectionAnnotator(
         image: numpy_typing.NDArray[numpy.uint8],
         object_hypotheses: list[ObjectHypothesis],
     ) -> numpy_typing.NDArray[numpy.uint8]:
-        """Draw detection labels, bounding boxes, and optional colored masks.
+        """
+        Draw detection labels, bounding boxes, and optional colored masks.
 
         :param image: Color image in BGR channel order.
         :param object_hypotheses: Hypotheses with optional masks cropped to their
