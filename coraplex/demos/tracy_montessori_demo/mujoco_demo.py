@@ -11,17 +11,14 @@ motion of a plan do.
 from __future__ import annotations
 
 from datetime import timedelta
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING
 
 import mujoco
 
 from coraplex.datastructures.dataclasses import Context
 from coraplex.execution_environment import PhysicallySimulatedRobot
-from semantic_digital_twin.adapters.multi_sim import (
-    ContactDimensionality,
-    MujocoGeom,
-    MujocoSim,
-)
+from semantic_digital_twin.adapters.multi_sim import MujocoSim
+from semantic_digital_twin.robots.tracy import Tracy
 from semantic_digital_twin.world import World
 from semantic_digital_twin.world_description.contact import (
     ContactFriction,
@@ -31,7 +28,7 @@ from semantic_digital_twin.world_description.contact import (
 )
 
 if TYPE_CHECKING:
-    from demo import MontessoriPiece, MontessoriScene
+    from demo import MontessoriEnvironment
 
 HEADLESS = False
 """
@@ -90,21 +87,21 @@ How little a contact gives way under load: nearly not at all, as between solid b
 """
 
 
-def run(scene: MontessoriScene) -> None:
+def run(environment: MontessoriEnvironment, world: World) -> None:
     """
     Carry the sorting plan out against MuJoCo physics.
 
-    :param scene: Tracy, the board and the pieces.
+    :param environment: The scene, with the plan that sorts its pieces.
+    :param world: The world the environment stood Tracy, the board and the pieces in.
     """
-    world = scene.world
-    _resist_turning_between_the_pads(scene.pieces)
     _make_every_contact_rigid(world)
+    [robot] = world.get_semantic_annotations_by_type(Tracy)
     context = Context(
         world=world,
-        robot=scene.robot,
+        robot=robot,
         evaluate_conditions=False,
     )
-    plan = scene.build_plan(context)
+    plan = environment.build_plan(context)
 
     simulation = MujocoSim(
         world=world,
@@ -121,24 +118,6 @@ def run(scene: MontessoriScene) -> None:
             plan.perform()
     finally:
         simulation.stop_simulation()
-
-
-def _resist_turning_between_the_pads(pieces: List[MontessoriPiece]) -> None:
-    """
-    Have MuJoCo resolve every piece's twisting friction.
-
-    A piece held between two pads touches them along a line, and without friction
-    against turning about the contact normals it swings about that line on the carry.
-
-    :param pieces: The pieces the gripper takes hold of.
-    """
-    for piece in pieces:
-        for shape in piece.body.collision.shapes:
-            shape.add_simulator_property(
-                MujocoGeom(
-                    contact_dimensionality=ContactDimensionality.SLIDING_AND_TWISTING
-                )
-            )
 
 
 def _make_every_contact_rigid(world: World) -> None:

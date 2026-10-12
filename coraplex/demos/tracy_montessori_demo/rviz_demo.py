@@ -20,9 +20,11 @@ from semantic_digital_twin.adapters.ros.tf_publisher import TFPublisher
 from semantic_digital_twin.adapters.ros.visualization.viz_marker import (
     VizMarkerPublisher,
 )
+from semantic_digital_twin.robots.tracy import Tracy
 
 if TYPE_CHECKING:
-    from demo import MontessoriScene
+    from demo import MontessoriEnvironment
+    from semantic_digital_twin.world import World
 
 NODE_NAME = "tracy_montessori_demo_rviz"
 """
@@ -30,13 +32,14 @@ Name the demo's own ROS node carries.
 """
 
 
-def run(scene: MontessoriScene) -> None:
+def run(environment: MontessoriEnvironment, world: World) -> None:
     """
     Draw the scene in RViz and carry the sorting plan out kinematically.
 
-    :param scene: Tracy, the board and the pieces.
+    :param environment: The scene, with the plan that sorts its pieces.
+    :param world: The world the environment stood Tracy, the board and the pieces in.
     """
-    world = scene.world
+    [robot] = world.get_semantic_annotations_by_type(Tracy)
 
     rclpy.init()
     node = rclpy.create_node(NODE_NAME)
@@ -45,7 +48,7 @@ def run(scene: MontessoriScene) -> None:
     world.notify_state_change()
 
     context = Context(
-        world=world, robot=scene.robot, ros_node=node, evaluate_conditions=False
+        world=world, robot=robot, ros_node=node, evaluate_conditions=False
     )
     with kinematically_simulated_robot:
-        scene.build_plan(context).perform()
+        environment.build_plan(context).perform()

@@ -55,7 +55,6 @@ from physics_simulators.base_simulator import SimulatorState
 from semantic_digital_twin.adapters.mjcf import MJCFParser
 from semantic_digital_twin.adapters.multi_sim import (
     ContactCategories,
-    ContactDimensionality,
     MujocoSim,
     MujocoActuator,
     MujocoBuilder,
@@ -534,11 +533,9 @@ def test_builder_writes_a_geoms_contact_bitmasks(tmp_path):
         root = Body(name=PrefixedName("root"))
         world.add_body(root)
         box_shape = Box(scale=Scale(1, 1, 1))
-        box_shape.add_simulator_property(
-            MujocoGeom(
-                contact_type=ContactCategories(2), contact_affinity=ContactCategories(4)
-            )
-        )
+        box_shape.add_simulator_property(MujocoGeom(
+            contact_type=ContactCategories(2), contact_affinity=ContactCategories(4)
+        ))
         link = Body(
             name=PrefixedName("link"),
             visual=ShapeCollection([box_shape]),
@@ -558,61 +555,6 @@ def test_builder_writes_a_geoms_contact_bitmasks(tmp_path):
     ]
     assert geom.contype == 2
     assert geom.conaffinity == 4
-
-
-def _world_with_one_twisting_box() -> World:
-    """
-    A world whose only link is a box resolving friction around its contact normals.
-    """
-    world = World()
-    with world.modify_world():
-        root = Body(name=PrefixedName("root"))
-        world.add_body(root)
-        box_shape = Box(scale=Scale(1, 1, 1))
-        box_shape.add_simulator_property(
-            MujocoGeom(
-                contact_dimensionality=ContactDimensionality.SLIDING_AND_TWISTING
-            )
-        )
-        link = Body(name=PrefixedName("link"), collision=ShapeCollection([box_shape]))
-        world.add_kinematic_structure_entity(link)
-        world.add_connection(FixedConnection(parent=root, child=link))
-    return world
-
-
-def test_builder_writes_a_geoms_contact_dimensionality(tmp_path):
-    """
-    MuJoCo resolves only the friction a geom's contact dimensionality covers, so a piece
-    held between two pads turns freely about the line between them unless its twisting
-    friction is resolved.
-    """
-    builder = MujocoBuilder()
-    builder.build_world(
-        world=_world_with_one_twisting_box(), file_path=str(tmp_path / "scene.xml")
-    )
-
-    [geom] = [
-        geom
-        for body in builder.spec.bodies
-        for geom in body.geoms
-        if body.name == "link"
-    ]
-    assert geom.condim == ContactDimensionality.SLIDING_AND_TWISTING
-
-
-def test_a_geoms_contact_dimensionality_survives_a_round_trip(tmp_path):
-    builder = MujocoBuilder()
-    builder.build_world(
-        world=_world_with_one_twisting_box(), file_path=str(tmp_path / "scene.xml")
-    )
-
-    parsed_world = MJCFParser(str(tmp_path / "scene.xml")).parse()
-
-    [parsed_shape] = parsed_world.get_body_by_name("link").collision.shapes
-    assert (
-        parsed_shape.get_simulator_property_of_type(MujocoGeom).contact_dimensionality
-        is ContactDimensionality.SLIDING_AND_TWISTING
-    )
 
 
 def _world_with_one_cylinder(cylinder: Cylinder) -> World:

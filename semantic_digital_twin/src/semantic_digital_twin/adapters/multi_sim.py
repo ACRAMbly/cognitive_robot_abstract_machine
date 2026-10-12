@@ -1281,35 +1281,6 @@ class ContactCategories(IntFlag):
     """
 
 
-class ContactDimensionality(IntEnum):
-    """
-    Which friction MuJoCo resolves in a geom's contacts; MuJoCo's ``condim``.
-
-    A friction coefficient a contact does not resolve has no effect, whatever its value.
-    """
-
-    FRICTIONLESS = 1
-    """
-    Only the push along the contact normal.
-    """
-
-    SLIDING = 3
-    """
-    Friction against sliding along the contact plane, MuJoCo's default.
-    """
-
-    SLIDING_AND_TWISTING = 4
-    """
-    Friction against sliding, and against turning about the contact normal, which is
-    what keeps a body held between two pads from turning between them.
-    """
-
-    SLIDING_TWISTING_AND_ROLLING = 6
-    """
-    Friction against sliding, turning and rolling.
-    """
-
-
 @dataclass(eq=False)
 class MujocoGeom(UniqueSimulatorProperty):
     """
@@ -1337,14 +1308,6 @@ class MujocoGeom(UniqueSimulatorProperty):
     """
     Which contact categories this geom accepts pressing into it; MuJoCo's
     ``conaffinity``. Clearing it makes nothing collide with the geom.
-    """
-
-    contact_dimensionality: ContactDimensionality = field(
-        default=ContactDimensionality.SLIDING,
-        metadata=SimulatorAttributeName("condim").as_dict(),
-    )
-    """
-    Which friction the geom's contacts resolve.
     """
 
 

@@ -26,10 +26,11 @@ from coraplex.datastructures.enums import ExecutionType
 from coraplex.execution_environment import ExecutionEnvironment
 from semantic_digital_twin.adapters.ros.world_fetcher import fetch_world_from_service
 from semantic_digital_twin.adapters.ros.world_synchronizer import WorldSynchronizer
+from semantic_digital_twin.robots.tracy import Tracy
 from semantic_digital_twin.world import World
 
 if TYPE_CHECKING:
-    from demo import MontessoriScene
+    from demo import MontessoriEnvironment
 
 GISKARD_LAUNCH_COMMAND = (
     "ros2",
@@ -119,16 +120,18 @@ def running_robot() -> Iterator[RunningRobot]:
         giskard_process.wait()
 
 
-def run(scene: MontessoriScene, robot: RunningRobot) -> None:
+def run(environment: MontessoriEnvironment, robot: RunningRobot) -> None:
     """
     Carry the sorting plan out on the real robot.
 
-    :param scene: Tracy, the board and the pieces, stood in the fetched world.
+    :param environment: The scene, its board and pieces already stood in the fetched
+        world.
     :param robot: The running robot the scene was built in.
     """
+    [tracy] = robot.world.get_semantic_annotations_by_type(Tracy)
     context = Context(
-        world=scene.world,
-        robot=scene.robot,
+        world=robot.world,
+        robot=tracy,
         ros_node=robot.node,
         evaluate_conditions=False,
     )
@@ -136,4 +139,4 @@ def run(scene: MontessoriScene, robot: RunningRobot) -> None:
         execution_type=ExecutionType.REAL,
         collision_avoidance=COLLISION_AVOIDANCE,
     ):
-        scene.build_plan(context).perform()
+        environment.build_plan(context).perform()
