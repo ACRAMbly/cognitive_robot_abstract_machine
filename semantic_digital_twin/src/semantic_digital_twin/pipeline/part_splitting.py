@@ -126,6 +126,11 @@ class SplitPartFromShape(Step):
 
     Each split is one block of the world's modification history, the root body's new
     shape included, so it is synchronized and rolling it back restores the whole shape.
+
+    The part can be split off when it is first needed, with :meth:`part_of`, or for
+    every annotation of the world at once, as a step of a pipeline. The latter suits a
+    world that is handed to a physics simulator afterwards, whose model is built once
+    from the world's bodies.
     """
 
     whole_type: Type[PartWholeRelationship]
@@ -145,12 +150,26 @@ class SplitPartFromShape(Step):
 
     def _apply(self, world: World) -> World:
         for whole in world.get_semantic_annotations_by_type(self.whole_type):
-            self.split(whole)
+            self.part_of(whole)
         return world
+
+    def part_of(self, whole: PartWholeRelationship) -> Optional[HasRootBody]:
+        """
+        The part of one annotation, split off its shape the first time it is asked for.
+
+        :param whole: The annotation whose part is wanted.
+        :return: The part the annotation already has, if any; otherwise the part split
+            off its shape, ``None`` if there is none to split off.
+        """
+        existing = [part for part in whole.parts if isinstance(part, self.part_type)]
+        if existing:
+            return existing[0]
+        return self.split(whole)
 
     def split(self, whole: PartWholeRelationship) -> Optional[HasRootBody]:
         """
-        Split the part off the shape of one annotation.
+        Split the part off the shape of one annotation, whether or not it has one
+        already.
 
         :param whole: The annotation whose root body's shape is split.
         :return: The part, added to the annotation and its world; ``None`` if the finder

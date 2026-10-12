@@ -18,9 +18,8 @@ import trimesh
 from scipy.spatial import ConvexHull
 from typing_extensions import Optional
 
-from semantic_digital_twin.datastructures.definitions import Axis
 from semantic_digital_twin.pipeline.part_splitting import PartFinder, ShapeSplit
-from semantic_digital_twin.spatial_types import Point2
+from semantic_digital_twin.spatial_types import Point2, Vector3
 
 # %% finding handles
 
@@ -80,53 +79,122 @@ class ProtrudingHandleFinder(HandleFinder):
     does.
 
     The body's outline, seen from above, is a circle; the handle is what lies outside of
-    it.
+    it. The circle is the one most of the outline follows, so that a long handle does not
+    pull it off the body, and every length that decides what sticks out is a fraction of
+    its radius, so that the same finder fits a cup and a pot. Each piece that sticks out
+    far enough belongs to the handle: both handles of a pot, but also a teapot's spout.
     """
 
-    clearance: float = 0.004
+    clearance: float = 0.1
     """
-    How far outside the round body a face has to lie to belong to the handle, in meters.
-    """
-
-    outline_tolerance: float = 0.002
-    """
-    How far outside the fitted circle a point of the outline may lie and still belong to
-    the round body, in meters.
+    How far outside the round body a face has to lie to belong to the handle, as a
+    fraction of the body's radius.
     """
 
-    maximum_refits: int = 10
+    minimum_reach: float = 0.2
     """
-    How often the circle is fitted again after leaving out the points outside of it.
+    How far a piece has to stick out of the round body to belong to the handle, as a
+    fraction of the body's radius. Smaller ones, such as a rolled lip, stay with the body.
+    """
+
+    outline_tolerance: float = 0.02
+    """
+    How far from the circle a point of the outline may lie and still follow it, as a
+    fraction of the circle's radius.
+    """
+
+    minimum_roundness: float = 0.3
+    """
+    How much of the outline has to follow the circle for the body to be round.
+    """
+
+    outline_points: int = 360
+    """
+    How many points, evenly spaced along the outline, the circle is fitted to.
+    """
+
+    trials: int = 200
+    """
+    How many circles through three points of the outline are tried.
     """
 
     def split(self, shape: trimesh.Trimesh) -> Optional[ShapeSplit]:
         outline = self._round_body_outline(shape)
-        outside = (
-            outline.distances(shape.triangles_center[:, :2])
-            > outline.radius + self.clearance
-        )
-        return ShapeSplit.by_faces(shape, outside)
+        if outline is None:
+            return None
+        beyond = (
+            outline.distances(shape.triangles_center[:, :2]) - outline.radius
+        ) / outline.radius
+        outside = beyond > self.clearance
+        connected = shape.copy()
+        connected.merge_vertices(merge_tex=True, merge_norm=True)
+        adjacency = connected.face_adjacency
+        in_handle = np.zeros(len(shape.faces), dtype=bool)
+        for piece in trimesh.graph.connected_components(
+            adjacency[outside[adjacency].all(axis=1)], nodes=np.flatnonzero(outside)
+        ):
+            in_handle[piece] = beyond[piece].max() >= self.minimum_reach
+        return ShapeSplit.by_faces(shape, in_handle)
 
-    def _round_body_outline(self, shape: trimesh.Trimesh) -> RoundOutline:
+    def _round_body_outline(self, shape: trimesh.Trimesh) -> Optional[RoundOutline]:
         """
-        Fit a circle to the outline of the shape seen from above, leaving out the points
-        that stick out of it, until none do.
+        Find the circle that most of the outline of the shape, seen from above, follows,
+        by trying circles through three of its points.
 
         :param shape: The object's shape.
-        :return: The outline of its round body.
+        :return: The outline of its round body; ``None`` if too little of the outline
+            follows a circle that fits into it.
+        """
+        outline = self._evenly_spaced_outline(shape)
+        largest_radius = (
+            np.ptp(outline, axis=0).max() / 2 * (1 + self.outline_tolerance)
+        )
+        generator = np.random.default_rng(0)
+        best_following = np.zeros(len(outline), dtype=bool)
+        for _ in range(self.trials):
+            three = outline[generator.choice(len(outline), size=3, replace=False)]
+            candidate = RoundOutline.fitted_to(three)
+            if not candidate.radius <= largest_radius:
+                continue
+            following = self._following(candidate, outline)
+            if following.sum() > best_following.sum():
+                best_following = following
+        if best_following.mean() < self.minimum_roundness:
+            return None
+        return RoundOutline.fitted_to(outline[best_following])
+
+    def _following(
+        self, circle: RoundOutline, outline: NDArray[np.float64]
+    ) -> NDArray[np.bool_]:
+        """
+        :param circle: A circle in the horizontal plane.
+        :param outline: Points of the outline, as rows of x and y.
+        :return: For each point, whether it lies on the circle.
+        """
+        return (
+            np.abs(circle.distances(outline) - circle.radius)
+            <= self.outline_tolerance * circle.radius
+        )
+
+    def _evenly_spaced_outline(self, shape: trimesh.Trimesh) -> NDArray[np.float64]:
+        """
+        :param shape: The object's shape.
+        :return: :attr:`outline_points` points, evenly spaced along the convex outline
+            of the shape seen from above, as rows of x and y.
         """
         horizontal = shape.vertices[:, :2]
-        points = horizontal[ConvexHull(horizontal).vertices]
-        outline = RoundOutline.fitted_to(points)
-        for _ in range(self.maximum_refits):
-            inside = (
-                outline.distances(points) <= outline.radius + self.outline_tolerance
-            )
-            if inside.all():
-                return outline
-            points = points[inside]
-            outline = RoundOutline.fitted_to(points)
-        return outline
+        corners = horizontal[ConvexHull(horizontal).vertices]
+        closed = np.vstack([corners, corners[:1]])
+        along = np.concatenate(
+            [[0.0], np.cumsum(np.linalg.norm(np.diff(closed, axis=0), axis=1))]
+        )
+        spaced = np.linspace(0.0, along[-1], self.outline_points, endpoint=False)
+        return np.column_stack(
+            [
+                np.interp(spaced, along, closed[:, 0]),
+                np.interp(spaced, along, closed[:, 1]),
+            ]
+        )
 
 
 @dataclass
@@ -141,14 +209,14 @@ class ElongatedShape:
     The shape.
     """
 
-    length_axis: Axis
+    length_axis: Vector3
     """
-    The axis the shape is longest along.
+    The direction the shape is longest along.
     """
 
-    width_axis: Axis
+    width_axis: Vector3
     """
-    The axis its width is measured along.
+    The direction its width is measured along.
     """
 
     end_fraction: float = 0.15
@@ -168,7 +236,7 @@ class ElongatedShape:
         """
         :return: Each point's distance from the end towards the negative length axis.
         """
-        coordinates = self.points[:, self.length_axis]
+        coordinates = self._coordinates(self.length_axis)
         return coordinates - coordinates.min()
 
     @property
@@ -176,14 +244,21 @@ class ElongatedShape:
         """
         :return: Each point's coordinate across the shape.
         """
-        return self.points[:, self.width_axis]
+        return self._coordinates(self.width_axis)
 
     @property
     def length(self) -> float:
         """
         :return: The shape's length.
         """
-        return float(np.ptp(self.points[:, self.length_axis]))
+        return float(np.ptp(self._coordinates(self.length_axis)))
+
+    def _coordinates(self, axis: Vector3) -> NDArray[np.float64]:
+        """
+        :param axis: A direction in the shape's frame.
+        :return: Each point's coordinate along it.
+        """
+        return self.points @ axis.to_np()[:3]
 
     def narrower_end_is_positive(self) -> bool:
         """
@@ -223,11 +298,15 @@ class NarrowEndHandleFinder(HandleFinder):
     def split(self, shape: trimesh.Trimesh) -> Optional[ShapeSplit]:
         lowest, highest = shape.bounds
         extents = highest - lowest
-        length_axis = Axis.X if extents[Axis.X] >= extents[Axis.Y] else Axis.Y
+        length_axis, width_axis = (
+            (Vector3.X(), Vector3.Y())
+            if extents[0] >= extents[1]
+            else (Vector3.Y(), Vector3.X())
+        )
         elongated = ElongatedShape(
             shape=shape,
             length_axis=length_axis,
-            width_axis=Axis.Y if length_axis == Axis.X else Axis.X,
+            width_axis=width_axis,
             end_fraction=self.end_fraction,
         )
         along = elongated.along
@@ -237,8 +316,9 @@ class NarrowEndHandleFinder(HandleFinder):
         handle_length = self._handle_length(elongated.across, along)
         if handle_length is None:
             return None
-        towards_narrow_end = np.zeros(3)
-        towards_narrow_end[length_axis] = 1.0 if narrow_end_is_positive else -1.0
+        towards_narrow_end = length_axis.to_np()[:3] * (
+            1.0 if narrow_end_is_positive else -1.0
+        )
         narrow_end = highest if narrow_end_is_positive else lowest
         return ShapeSplit.by_plane(
             shape, narrow_end - towards_narrow_end * handle_length, towards_narrow_end
