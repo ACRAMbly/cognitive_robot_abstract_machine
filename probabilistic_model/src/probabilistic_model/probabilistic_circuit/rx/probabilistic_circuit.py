@@ -36,6 +36,9 @@ from probabilistic_model.distributions.distributions import (
 )
 from probabilistic_model.distributions.helper import make_dirac
 from probabilistic_model.exceptions import IntractableError
+from probabilistic_model.probabilistic_circuit.groundable_circuit import (
+    GroundableCircuit,
+)
 from probabilistic_model.probabilistic_model import (
     ProbabilisticModel,
     OrderType,
@@ -960,7 +963,7 @@ class ProductUnit(InnerUnit):
 
 
 @dataclass
-class ProbabilisticCircuit(ProbabilisticModel, SubclassJSONSerializer):
+class ProbabilisticCircuit(GroundableCircuit, SubclassJSONSerializer):
     """
     Probabilistic Circuits as a directed, rooted, acyclic graph.
 

@@ -5,6 +5,7 @@ Grounding relational probabilistic circuits for queries, independent of the circ
 from __future__ import annotations
 
 import enum
+import inspect
 import itertools
 import logging
 from abc import ABC, abstractmethod
@@ -19,13 +20,15 @@ from krrood.parametrization.feature_extraction.aggregations import (
     compute_aggregation_statistics,
 )
 from krrood.patterns.subclass_safe_generic import SubClassSafeGeneric
-from probabilistic_model.probabilistic_model import (
-    PartialPointType,
-    ProbabilisticModel,
+from krrood.utils import recursive_subclasses
+from probabilistic_model.probabilistic_model import PartialPointType
+from probabilistic_model.probabilistic_circuit.groundable_circuit import (
+    GroundableCircuit,
 )
 from probabilistic_model.probabilistic_circuit.relational.exceptions import (
     CircuitNotFittedError,
     InvalidMonteCarloSampleCountError,
+    NoGroundingForCircuitTypeError,
     UndeterminedLatentsNotModeledError,
     UndeterminedLatentsNotPartitionedError,
 )
@@ -44,7 +47,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-CircuitType = TypeVar("CircuitType", bound=ProbabilisticModel)
+CircuitType = TypeVar("CircuitType", bound=GroundableCircuit)
 """
 The circuit type a relational circuit is fitted and grounded in.
 """
@@ -534,6 +537,33 @@ class RelationalGrounding(Generic[CircuitType], SubClassSafeGeneric, ABC):
     How to represent the aggregation statistics a query leaves undetermined, for the
     relations of the circuit and of every nested template.
     """
+
+    @classmethod
+    def of(
+        cls,
+        relational_circuit: RelationalProbabilisticCircuit,
+        grounding_mode: GroundingMode = GroundingMode.SAMPLED,
+    ) -> RelationalGrounding:
+        """
+        :param relational_circuit: A fitted relational circuit.
+        :param grounding_mode: How to represent the aggregation statistics a query
+            leaves undetermined.
+        :return: The grounding for the circuit type the relational circuit is fitted in.
+        :raises CircuitNotFittedError: If the relational circuit is not fitted.
+        :raises NoGroundingForCircuitTypeError: If no grounding grounds its circuit
+            type.
+        """
+        circuit = relational_circuit.class_probabilistic_circuit
+        if circuit is None:
+            raise CircuitNotFittedError(relational_circuit.class_)
+        for grounding_type in recursive_subclasses(cls):
+            if inspect.isabstract(grounding_type):
+                continue
+            if isinstance(
+                circuit, grounding_type.get_type_of_generic_parameter(CircuitType)
+            ):
+                return grounding_type(relational_circuit, grounding_mode)
+        raise NoGroundingForCircuitTypeError(type(circuit))
 
     @property
     @abstractmethod

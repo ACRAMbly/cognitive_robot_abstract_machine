@@ -36,7 +36,10 @@ from probabilistic_model.probabilistic_circuit.relational.rustworkx_grounding im
     RustworkxExchangeablePartGrounder,
     RustworkxRelationalGrounding,
 )
-from probabilistic_model.learning.learning_method import LayeredLearning
+from probabilistic_model.learning.learning_method import (
+    LayeredLearning,
+    StratifiedLearning,
+)
 from probabilistic_model.probabilistic_circuit.relational.rspn import (
     RelationalProbabilisticCircuit,
 )
@@ -1387,6 +1390,13 @@ def test_a_relational_circuit_is_grounded_in_the_circuit_type_it_was_fitted_in(
             nested_query_with_rooms_of_one_shape
         ),
         LayeredProbabilisticCircuit,
+    )
+
+
+def test_the_parts_of_a_layered_fit_default_to_the_layered_part_learning_method():
+    method = LayeredLearning(StratifiedLearning(["type"], JointProbabilityTree()))
+    assert method.default_part_learning_method() == LayeredLearning(
+        JointProbabilityTree()
     )
 
 

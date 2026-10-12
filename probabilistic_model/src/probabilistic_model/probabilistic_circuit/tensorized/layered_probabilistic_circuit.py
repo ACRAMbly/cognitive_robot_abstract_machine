@@ -58,18 +58,20 @@ from probabilistic_model.probabilistic_circuit.tensorized.structural_query impor
 from probabilistic_model.probabilistic_circuit.tensorized.symbolic_encoding import (
     SymbolicEncoding,
 )
+from probabilistic_model.probabilistic_circuit.groundable_circuit import (
+    GroundableCircuit,
+)
 from probabilistic_model.probabilistic_model import (
     CenterType,
     MomentType,
     OrderType,
     PartialPointType,
-    ProbabilisticModel,
 )
 from probabilistic_model.utils import logsumexp
 
 
 @dataclass(eq=False)
-class LayeredProbabilisticCircuit(ProbabilisticModel):
+class LayeredProbabilisticCircuit(GroundableCircuit):
     """
     A probabilistic circuit whose units are grouped into layers of numpy arrays.
 

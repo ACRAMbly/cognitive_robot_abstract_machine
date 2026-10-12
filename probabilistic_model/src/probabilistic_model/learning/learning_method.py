@@ -19,6 +19,9 @@ from probabilistic_model.learning.jpt.variables import (
 from probabilistic_model.adapters.rustworkx_tensorized.rustworkx_to_tensorized import (
     RustworkxCircuitToLayeredCircuitConverter,
 )
+from probabilistic_model.probabilistic_circuit.groundable_circuit import (
+    GroundableCircuit,
+)
 from probabilistic_model.probabilistic_circuit.rx.probabilistic_circuit import (
     ProbabilisticCircuit,
     SumUnit,
@@ -39,7 +42,7 @@ class LearningMethod(ABC):
         self,
         data: pd.DataFrame,
         variables: Optional[Iterable[AnnotatedVariable]] = None,
-    ) -> ProbabilisticCircuit:
+    ) -> GroundableCircuit:
         """
         Fit a circuit on the rows of a dataframe.
 
@@ -48,6 +51,14 @@ class LearningMethod(ABC):
             the annotation (mean, standard deviation, split thresholds) the fit is
             guided by. ``None`` infers them from the data.
         :return: The fitted circuit.
+        """
+
+    @abstractmethod
+    def default_part_learning_method(self) -> LearningMethod:
+        """
+        :return: What the templates of the exchangeable relations of a relational
+            circuit are fitted with when this method fits its class circuit and nothing
+            else is configured.
         """
 
 
@@ -97,6 +108,9 @@ class StratifiedLearning(LearningMethod):
             )
         return result
 
+    def default_part_learning_method(self) -> LearningMethod:
+        return self.method.default_part_learning_method()
+
 
 @dataclass
 class LayeredLearning(LearningMethod):
@@ -117,3 +131,6 @@ class LayeredLearning(LearningMethod):
         return RustworkxCircuitToLayeredCircuitConverter.convert(
             self.method.fit(data, variables)
         )
+
+    def default_part_learning_method(self) -> LayeredLearning:
+        return LayeredLearning(self.method.default_part_learning_method())

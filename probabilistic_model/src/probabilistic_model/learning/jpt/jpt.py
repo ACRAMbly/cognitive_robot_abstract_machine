@@ -554,6 +554,9 @@ class JointProbabilityTree(LearningMethod, SubclassJSONSerializer):
             for variable, dependencies in self.dependencies.items()
         }
 
+    def default_part_learning_method(self) -> LearningMethod:
+        return JointProbabilityTree()
+
     def empty_copy(self):
         result = self.__class__(
             annotated_variables=self.annotated_variables,

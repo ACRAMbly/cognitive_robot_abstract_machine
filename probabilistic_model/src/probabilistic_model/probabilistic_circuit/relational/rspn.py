@@ -37,14 +37,14 @@ from krrood.parametrization.feature_extraction.feature_extractor import FeatureE
 if TYPE_CHECKING:
     from krrood.entity_query_language.query.match import Match
 from probabilistic_model.learning.jpt.jpt import JointProbabilityTree
-from probabilistic_model.learning.learning_method import (
-    LayeredLearning,
-    LearningMethod,
-)
+from probabilistic_model.learning.learning_method import LearningMethod
 from probabilistic_model.learning.jpt.variables import (
     infer_variables_from_dataframe,
 )
 from probabilistic_model.probabilistic_model import PartialPointType
+from probabilistic_model.probabilistic_circuit.groundable_circuit import (
+    GroundableCircuit,
+)
 from probabilistic_model.probabilistic_circuit.relational.exceptions import (
     MixedCircuitTypesError,
     PartCircuitGroundingFailedError,
@@ -55,14 +55,11 @@ from probabilistic_model.probabilistic_circuit.relational.exchangeable_grounding
     GroundingMode,
     RelationalGrounding,
 )
-from probabilistic_model.probabilistic_circuit.relational.layered_grounding import (
-    LayeredRelationalGrounding,
-)
-from probabilistic_model.probabilistic_circuit.relational.rustworkx_grounding import (
-    RustworkxRelationalGrounding,
-)
-from probabilistic_model.probabilistic_circuit.tensorized.layered_probabilistic_circuit import (
-    LayeredProbabilisticCircuit,
+
+# the groundings of the circuit types, which RelationalGrounding.of chooses from
+from probabilistic_model.probabilistic_circuit.relational import (  # noqa: F401
+    layered_grounding,
+    rustworkx_grounding,
 )
 from probabilistic_model.probabilistic_circuit.relational.template import (
     RelationalDistributionTemplate,
@@ -216,9 +213,7 @@ class RelationalProbabilisticCircuit:
     The domain class whose instances this distribution models.
     """
 
-    class_probabilistic_circuit: Optional[
-        ProbabilisticCircuit | LayeredProbabilisticCircuit
-    ] = None
+    class_probabilistic_circuit: Optional[GroundableCircuit] = None
     """
     The fitted joint distribution over the class's scalar attributes and aggregation
     statistics, populated by ``fit``.
@@ -246,9 +241,6 @@ class RelationalProbabilisticCircuit:
     learning_method: LearningMethod = field(default_factory=JointProbabilityTree)
     """
     What the class-level circuit is fitted with.
-
-    A :class:`~probabilistic_model.learning.learning_method.LayeredLearning` fits the
-    relational circuit as layered circuits.
     """
 
     part_learning_methods: dict[str, LearningMethod] = field(default_factory=dict)
@@ -256,9 +248,9 @@ class RelationalProbabilisticCircuit:
     Per exchangeable-part field name, what that part's template distribution is fitted
     with.
 
-    A part absent from the mapping is fitted with a plain
-    :class:`~probabilistic_model.learning.jpt.jpt.JointProbabilityTree`, as a layered
-    circuit if :attr:`learning_method` fits layered circuits.
+    A part absent from the mapping is fitted with the
+    :meth:`~probabilistic_model.learning.learning_method.LearningMethod.default_part_learning_method`
+    of :attr:`learning_method`.
     """
 
     schema_information: Optional[DataAccessObjectSchema] = field(
@@ -400,7 +392,10 @@ class RelationalProbabilisticCircuit:
         template = ExchangeableDistributionTemplate(
             RelationalProbabilisticCircuit(
                 child_type,
-                learning_method=self._part_learning_method(exchangeable_part),
+                learning_method=self.part_learning_methods.get(
+                    exchangeable_part,
+                    self.learning_method.default_part_learning_method(),
+                ),
             ),
             latent_variables,
         )
@@ -418,17 +413,6 @@ class RelationalProbabilisticCircuit:
                 part_circuit_type,
             )
         return template
-
-    def _part_learning_method(self, exchangeable_part: str) -> LearningMethod:
-        """
-        :param exchangeable_part: Field name of the exchangeable relation.
-        :return: What the template of the relation is fitted with.
-        """
-        if exchangeable_part in self.part_learning_methods:
-            return self.part_learning_methods[exchangeable_part]
-        if isinstance(self.learning_method, LayeredLearning):
-            return LayeredLearning(JointProbabilityTree())
-        return JointProbabilityTree()
 
     def fit(
         self,
@@ -498,7 +482,7 @@ class RelationalProbabilisticCircuit:
         self,
         query: Match,
         grounding_mode: GroundingMode = GroundingMode.SAMPLED,
-    ) -> ProbabilisticCircuit | LayeredProbabilisticCircuit:
+    ) -> GroundableCircuit:
         """
         Ground the relational circuit for a specific query, in the circuit type it was
         fitted in.
@@ -521,6 +505,4 @@ class RelationalProbabilisticCircuit:
             undetermined.
         :return: What grounds this circuit in the circuit type it was fitted in.
         """
-        if isinstance(self.class_probabilistic_circuit, LayeredProbabilisticCircuit):
-            return LayeredRelationalGrounding(self, grounding_mode)
-        return RustworkxRelationalGrounding(self, grounding_mode)
+        return RelationalGrounding.of(self, grounding_mode)
