@@ -3,16 +3,17 @@ Tracy sorting the Montessori pieces from its table into the holes of the shape-s
 board.
 
 The scene and the plan are the same however the demo is carried out; only the execution
-type differs. Run this file from its own folder, naming the execution type::
+type differs. Choose it at the bottom of this file, then run the file from its own
+folder::
 
-    python demo.py PHYSICALLY_SIMULATED
+    python demo.py
 """
 
 from __future__ import annotations
 
-import argparse
 import copy
 from dataclasses import dataclass, field
+from datetime import timedelta
 from typing import Dict
 
 from coraplex.datastructures.dataclasses import Context
@@ -31,7 +32,13 @@ from semantic_digital_twin.semantic_annotations.semantic_annotations import (
 )
 from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix, Pose
 from semantic_digital_twin.world import World
-from semantic_digital_twin.world_description.contact import ContactParameters
+from semantic_digital_twin.datastructures.definitions import StaticJointState
+from semantic_digital_twin.world_description.contact import (
+    ContactFriction,
+    ContactImpedance,
+    ContactParameters,
+    ContactStiffness,
+)
 from semantic_digital_twin.world_description.connections import (
     Connection6DoF,
     FixedConnection,
@@ -167,6 +174,30 @@ class MontessoriEnvironment:
     How far the closed finger pads stay above what a grasped piece stands on.
     """
 
+    solid_contact_stiffness: ContactStiffness = field(
+        default_factory=lambda: ContactStiffness(
+            time_constant=timedelta(milliseconds=2), damping_ratio=1.0
+        )
+    )
+    """
+    How stiffly the solid bodies of the scene push back once something touches them: as
+    stiffly as a physics engine stepping every millisecond stays stable at, a time
+    constant of two steps.
+
+    The wooden pieces, the board and the robot are solid, so nothing may sink into them;
+    MuJoCo's default of 20 ms lets a firmly held piece sink several millimetres into the
+    pads.
+    """
+
+    solid_contact_impedance: ContactImpedance = field(
+        default_factory=lambda: ContactImpedance(
+            minimum=0.99, maximum=0.999, width=0.001
+        )
+    )
+    """
+    How little the solid bodies of the scene give way under load: nearly not at all.
+    """
+
     board_geometry: BoardGeometry = field(default_factory=BoardGeometry.from_mesh)
     """
     The board's holes and lid, read off its mesh.
@@ -230,13 +261,31 @@ class MontessoriEnvironment:
     def get_world(self) -> World:
         """
         Create a world holding Tracy, read from its own description, which also equips
-        its arms and grippers with the servos a physical simulation needs, and stand the
-        board and the pieces in it.
+        its arms and grippers with the servos a physical simulation needs, with its arms
+        parked and its body as solid as the pieces it holds, and stand the board and the
+        pieces in it.
+
+        A contact is as soft as the softer of the two shapes in it, so a solid piece held
+        between soft pads would still sink into them.
         """
         world = URDFParser.from_file(Tracy.get_ros_file_path()).parse()
-        Tracy.from_world(world)
+        robot = Tracy.from_world(world)
+        self.solid(ContactFriction()).apply_to(world.bodies_with_collision)
+        for arm in robot.all_arms:
+            arm.get_joint_state_by_type(StaticJointState.PARK).apply_to(world)
         self.populate(world)
         return world
+
+    def solid(self, friction: ContactFriction) -> ContactParameters:
+        """
+        :param friction: The friction the surface offers.
+        :return: The contact of a solid surface offering ``friction``.
+        """
+        return ContactParameters(
+            friction=friction,
+            stiffness=self.solid_contact_stiffness,
+            impedance=self.solid_contact_impedance,
+        )
 
     def populate(self, world: World) -> None:
         """
@@ -262,8 +311,8 @@ class MontessoriEnvironment:
         """
         Pick every piece up in turn and let it go over the hole it fits through.
 
-        The plan begins by parking the arms: a simulated Tracy starts where its
-        description leaves it, the real one wherever it was left.
+        The plan begins by parking the arms: a simulated Tracy starts parked already, the
+        real one wherever it was left.
 
         :param context: The context the actions are built in.
         :return: The plan that sorts the pieces.
@@ -304,6 +353,7 @@ class MontessoriEnvironment:
         self.board = board_body(
             PrefixedName("shape_sorting_board"), self.board_geometry
         )
+        self.solid(ContactFriction()).apply_to([self.board])
         world.add_kinematic_structure_entity(self.board)
         world.add_connection(
             FixedConnection.create_with_dofs(
@@ -349,7 +399,9 @@ class MontessoriEnvironment:
                 ),
             )
         )
-        ContactParameters.create_for_grasped_object().apply_to([body])
+        self.solid(ContactParameters.create_for_grasped_object().friction).apply_to(
+            [body]
+        )
         piece = ShapeSortingPiece(root=body, grasp_height=self.grasp_height)
         world.add_semantic_annotations([piece])
         return piece
@@ -388,16 +440,4 @@ def main(execution_type: ExecutionType) -> None:
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "execution_type",
-        choices=[
-            execution_type.name
-            for execution_type in (
-                ExecutionType.PHYSICALLY_SIMULATED,
-                ExecutionType.KINEMATICALLY_SIMULATED,
-                ExecutionType.REAL,
-            )
-        ],
-    )
-    main(ExecutionType[parser.parse_args().execution_type])
+    main(ExecutionType.PHYSICALLY_SIMULATED)

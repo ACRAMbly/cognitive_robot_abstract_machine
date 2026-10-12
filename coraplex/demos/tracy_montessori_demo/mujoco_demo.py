@@ -20,12 +20,6 @@ from coraplex.execution_environment import PhysicallySimulatedRobot
 from semantic_digital_twin.adapters.multi_sim import MujocoSim
 from semantic_digital_twin.robots.tracy import Tracy
 from semantic_digital_twin.world import World
-from semantic_digital_twin.world_description.contact import (
-    ContactFriction,
-    ContactImpedance,
-    ContactParameters,
-    ContactStiffness,
-)
 
 if TYPE_CHECKING:
     from demo import MontessoriEnvironment
@@ -69,23 +63,6 @@ How many passes MuJoCo spends removing the slip its soft contacts leave, so that
 held as firmly as the real gripper holds it stays where the pads hold it.
 """
 
-RIGID_CONTACT_STIFFNESS = ContactStiffness(
-    time_constant=timedelta(seconds=2 * STEP_SIZE), damping_ratio=1.0
-)
-"""
-How stiffly two bodies push back once they touch: as stiffly as MuJoCo stays stable at,
-a time constant of two physics steps.
-
-The wooden pieces, the board and the gripper's pads are solid, so they must not sink
-into each other; MuJoCo's default of 20 ms lets a firmly held piece sink several
-millimetres into the pads.
-"""
-
-RIGID_CONTACT_IMPEDANCE = ContactImpedance(minimum=0.99, maximum=0.999, width=0.001)
-"""
-How little a contact gives way under load: nearly not at all, as between solid bodies.
-"""
-
 
 def run(environment: MontessoriEnvironment, world: World) -> None:
     """
@@ -94,7 +71,6 @@ def run(environment: MontessoriEnvironment, world: World) -> None:
     :param environment: The scene, with the plan that sorts its pieces.
     :param world: The world the environment stood Tracy, the board and the pieces in.
     """
-    _make_every_contact_rigid(world)
     [robot] = world.get_semantic_annotations_by_type(Tracy)
     context = Context(
         world=world,
@@ -118,20 +94,3 @@ def run(environment: MontessoriEnvironment, world: World) -> None:
             plan.perform()
     finally:
         simulation.stop_simulation()
-
-
-def _make_every_contact_rigid(world: World) -> None:
-    """
-    Make every body of ``world`` push back as a solid does, keeping the friction each one
-    already has.
-
-    :param world: The world whose bodies are made rigid.
-    """
-    for body in world.bodies_with_collision:
-        for shape in body.collision.shapes:
-            contact = shape.get_simulator_property_of_type(ContactParameters)
-            if contact is None:
-                contact = ContactParameters(friction=ContactFriction())
-                shape.add_simulator_property(contact)
-            contact.stiffness = RIGID_CONTACT_STIFFNESS
-            contact.impedance = RIGID_CONTACT_IMPEDANCE

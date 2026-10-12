@@ -11,18 +11,24 @@ slicing through the lid (`montessori_board.py`), so every piece is released stra
 above the hole it actually fits. The pieces use the sizes and colours measured off the
 real set. There is no perception: where the board and the pieces start is hardcoded.
 
-Tracy starts with both arms parked (the `PARK` joint states of `TracyLeftArm` and
-`TracyRightArm`) and both grippers open. The plan still begins with `ParkArmsAction`,
-because the real robot starts wherever it was left.
+In both simulations Tracy starts with both arms parked: `get_world()` applies the `PARK`
+joint states of `TracyLeftArm` and `TracyRightArm`, and both grippers start open. The plan
+still begins with `ParkArmsAction`, because the real robot starts wherever it was left.
 
 Branch: `tracy-montessori-demo`, off `cram2/main` at `746302cd9b`.
 
 ## Running it
 
-Name the execution type, **from inside this folder**:
+Choose the execution type at the bottom of `demo.py`:
+
+```python
+main(ExecutionType.PHYSICALLY_SIMULATED)  # or KINEMATICALLY_SIMULATED, or REAL
+```
+
+Then, **from inside this folder**:
 
 ```bash
-python demo.py PHYSICALLY_SIMULATED     # or KINEMATICALLY_SIMULATED, or REAL
+python demo.py
 ```
 
 It has to be run from this folder. `coraplex/demos/` is not a package — `coraplex`'s
@@ -150,13 +156,18 @@ lid top at 0.96):
 
 | piece | ended at | release pose | |
 |---|---|---|---|
-| square_piece | `0.877, -0.099, 0.903` | `0.870, -0.087, 0.985` | through its hole, slid 14 mm along the drawer |
+| square_piece | `0.873, -0.087, 0.908` | `0.870, -0.087, 0.985` | through its hole |
 | circle_piece | `0.825, -0.088, 0.903` | `0.828, -0.087, 0.985` | through its hole |
-| rectangle_piece | `0.823, 0.001, 0.903` | `0.823, 0.000, 0.985` | through its hole |
-| triangle_piece | `0.864, 0.001, 0.903` | `0.869, 0.000, 0.985` | through its hole |
+| rectangle_piece | `0.824, 0.001, 0.903` | `0.823, 0.000, 0.985` | through its hole |
+| triangle_piece | `0.867, 0.004, 0.903` | `0.869, 0.000, 0.985` | through its hole |
 
-Every setting in `mujoco_demo.py` is load-bearing in some combination: removing the
-friction cone or the no-slip iterations alone costs the square piece. Which pieces land is
+Every body is made solid where it is created (`MontessoriEnvironment.solid`): Tracy's in
+`get_world()`, the board's and the pieces' in `populate()`. Their contacts resolve within
+2 ms and barely give way, where MuJoCo's soft defaults let a held piece sink into the
+pads. Making only the pieces and the board solid is not enough — a contact is as soft as
+the softer shape in it, and three of the four pieces then catch on the lid. Of the settings
+in `mujoco_demo.py`, removing the friction cone or the no-slip iterations alone costs the
+square piece. Which pieces land is
 sensitive to small changes — renaming the bodies alone moved one combination of settings
 from four pieces in to two — so judge a change over more than one configuration. A run of
 one configuration is deterministic: repeating it gives the same positions.
@@ -167,8 +178,8 @@ one configuration is deterministic: repeating it gives the same positions.
   Tracy montessori work on `icra_final` records that even with dedicated friction and
   solver tuning, typically only one or two of five shapes completed the task. None of that
   tuning exists on `main`. The pieces here carry `main`'s
-  `ContactParameters.create_for_grasped_object()` plus the settings in `mujoco_demo.py`,
-  and all four go in.
+  `ContactParameters.create_for_grasped_object()`'s friction, made solid, plus the
+  settings in `mujoco_demo.py`, and all four go in.
 - **`real_demo.py` is untested scaffolding.** It mirrors `coraplex_real_tracy/demo.py`,
   which is the one real-Tracy path in the repository. Per the `icra_final` notes, no
   `*_real.py` in this codebase has ever been run on hardware.
