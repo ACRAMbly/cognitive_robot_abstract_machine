@@ -304,11 +304,14 @@ class DiscreteLayer(UnivariateInputLayer, ABC):
     def has_equal_parameters(self, other: Self) -> bool:
         """
         Like :meth:`LeafLayer.has_equal_parameters`, but tables stored in different
-        types count as different, whatever they hold.
+        types count as different, whatever they hold. The states are compared too,
+        since equal tables over different states are different distributions.
         """
-        return type(self.table) is type(
-            other.table
-        ) and self.table.has_equal_probabilities(other.table)
+        return (
+            np.array_equal(self.states, other.states)
+            and type(self.table) is type(other.table)
+            and self.table.has_equal_probabilities(other.table)
+        )
 
     def sample_of_nodes(self, nodes: NodeIndices, variables: SortedSet) -> SampleColumn:
         indices = self.table.sample_state_indices(nodes)

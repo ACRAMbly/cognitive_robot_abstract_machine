@@ -501,8 +501,8 @@ class LayeredProbabilisticCircuit(ProbabilisticModel):
 
         for variable, value in point.items():
             children.append(
-                self.point_mass_layer(
-                    original_variables.index(variable), make_dirac(variable, value)
+                self.point_masses_layer(
+                    original_variables.index(variable), [make_dirac(variable, value)]
                 )
             )
 
@@ -511,33 +511,17 @@ class LayeredProbabilisticCircuit(ProbabilisticModel):
         return self, log_probability
 
     @staticmethod
-    def point_mass_layer(
-        variable_index: int, distribution: UnivariateDistribution
-    ) -> UnivariateInputLayer:
-        """
-        The layer that a conditioned variable is reattached with.
-
-        For a discrete variable this is a discrete layer, since a Dirac delta layer can
-        neither hold the symbolic or integer distribution that
-        :func:`~probabilistic_model.distributions.helper.make_dirac` creates for it nor
-        answer a set of symbols as an event.
-
-        :param variable_index: The index of the variable of the distribution.
-        :param distribution: A distribution that puts all of its mass on one value, as
-            :func:`~probabilistic_model.distributions.helper.make_dirac` creates it.
-        :return: The input layer with one node that holds the distribution.
-        """
-        return LayeredProbabilisticCircuit.point_masses_layer(
-            variable_index, [distribution]
-        )
-
-    @staticmethod
     def point_masses_layer(
         variable_index: int, distributions: List[UnivariateDistribution]
     ) -> UnivariateInputLayer:
         """
-        The layer of several point masses on one variable, of the kind
-        :meth:`point_mass_layer` creates.
+        The layer of several point masses on one variable, such as the one a
+        conditioned variable is reattached with.
+
+        For a discrete variable this is a discrete layer, since a Dirac delta layer can
+        neither hold the symbolic or integer distributions that
+        :func:`~probabilistic_model.distributions.helper.make_dirac` creates for it nor
+        answer a set of symbols as an event.
 
         :param variable_index: The index of the variable of the distributions.
         :param distributions: Distributions of one type that each put all of their mass
