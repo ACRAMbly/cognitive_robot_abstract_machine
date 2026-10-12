@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING
 import rclpy
 
 from coraplex.datastructures.dataclasses import Context
-from coraplex.execution_environment import simulated_robot
+from coraplex.execution_environment import kinematically_simulated_robot
 from semantic_digital_twin.adapters.ros.tf_publisher import TFPublisher
 from semantic_digital_twin.adapters.ros.visualization.viz_marker import (
     VizMarkerPublisher,
@@ -47,5 +47,5 @@ def run(scene: MontessoriScene) -> None:
     context = Context(
         world=world, robot=scene.robot, ros_node=node, evaluate_conditions=False
     )
-    with simulated_robot:
+    with kinematically_simulated_robot:
         scene.build_plan(context).perform()

@@ -440,7 +440,7 @@ def _stand_piece_on_the_table(
             position=Point3(
                 0.0, 0.0, GRASP_HEIGHT - PIECE_HEIGHT / 2, reference_frame=body
             ),
-            orientation=TOP_GRASP_ORIENTATION.to_quaternion(),
+            orientation=TOP_GRASP_ORIENTATION.quaternion,
             reference_frame=body,
         ),
     )

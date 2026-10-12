@@ -129,31 +129,15 @@ surface. That is harmless when the robot is moved kinematically, which is all th
 **These poses are a first pass.** They were measured and then confirmed by running, but
 they have not been tuned for margin. Treat them as a starting point.
 
-## Two changes outside this folder
+## Running under physics
 
-Both live in `coraplex/src/coraplex/`, both are additive, and both default to the existing
-behaviour, so nothing that does not opt in changes.
-
-**1. `Context.update_world_model_attachment` (default `True`)**
-`coraplex/src/coraplex/datastructures/dataclasses.py`, honoured by
-`MoveBranchExecutable.execute()` in `plans/executables.py`.
-
-Taking hold of a body normally moves it under the hand in the world model, because in a
-kinematically moved world nothing else would make it follow. Under physics the fingers
-already hold it through contact, and re-parenting it as well stacks a second set of
-degrees of freedom on it — MuJoCo rejects the model outright with
-`ValueError: more than 6 dofs in body 'cube'`. `mujoco_demo.py` sets this to `False`.
-
-**2. `GiskardExecutable.simulation_pacer` (default `None`)**
-`coraplex/src/coraplex/plans/executables.py`.
-
-`giskardpy` already has `SteppedSimulationPacer`, which steps a MuJoCo world one control
-cycle at a time so the controller and the physics advance in lockstep. There was no way to
-reach it from a plan: `_execute_simulation()` built its `Ros2Executor` with no pacer, and
-its tick loop never called `pacer.sleep()` (the base `Executor` only calls it inside
-`tick_until_end`, which coraplex does not use). The class attribute plus one
-`executor.pacer.sleep()` in that loop is the whole hook; with the default `None` it
-resolves to `NoPacing`, whose `sleep()` does nothing.
+`mujoco_demo.py` performs the plan inside coraplex's `PhysicallySimulatedRobot`
+(`coraplex/src/coraplex/execution_environment.py`). That environment hands the stepped
+MuJoCo world to `GiskardExecutable`, which then steps the physics one control cycle per
+tick through `giskardpy`'s `SteppedSimulationPacer`, and makes `MoveBranchExecutable`
+leave a grasped body where the physics holds it instead of re-parenting it under the hand
+— MuJoCo would otherwise reject the model with `ValueError: more than 6 dofs in body
+'cube'`.
 
 ## What has actually been run
 
