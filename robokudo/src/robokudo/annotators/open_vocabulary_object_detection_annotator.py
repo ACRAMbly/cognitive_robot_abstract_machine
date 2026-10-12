@@ -69,7 +69,7 @@ class SegmentPromptLabel(IntEnum):
 # %% Bounding-box labels
 
 
-def get_box_text(object_hypothesis: ObjectHypothesis):
+def get_box_text(object_hypothesis: ObjectHypothesis) -> str:
     """
     Label a hypothesis with its most confident classification or ROI identifier.
 
