@@ -30,7 +30,7 @@ from probabilistic_model.probabilistic_circuit.tensorized.inner_layer.sum_layer 
     SumLayer,
 )
 from probabilistic_model.probabilistic_circuit.tensorized.input_layer.base import (
-    InputLayer,
+    UnivariateInputLayer,
 )
 from probabilistic_model.probabilistic_circuit.tensorized.input_layer.dirac_delta_layer import (
     DiracDeltaLayer,
@@ -513,7 +513,7 @@ class LayeredProbabilisticCircuit(ProbabilisticModel):
     @staticmethod
     def point_mass_layer(
         variable_index: int, distribution: UnivariateDistribution
-    ) -> InputLayer:
+    ) -> UnivariateInputLayer:
         """
         The layer that a conditioned variable is reattached with.
 
@@ -534,7 +534,7 @@ class LayeredProbabilisticCircuit(ProbabilisticModel):
     @staticmethod
     def point_masses_layer(
         variable_index: int, distributions: List[UnivariateDistribution]
-    ) -> InputLayer:
+    ) -> UnivariateInputLayer:
         """
         The layer of several point masses on one variable, of the kind
         :meth:`point_mass_layer` creates.

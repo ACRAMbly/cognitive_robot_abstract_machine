@@ -34,7 +34,7 @@ from probabilistic_model.probabilistic_circuit.tensorized.exceptions import (
 )
 from probabilistic_model.probabilistic_circuit.tensorized.inner_layer.base import Layer
 from probabilistic_model.probabilistic_circuit.tensorized.input_layer.base import (
-    InputLayer,
+    UnivariateInputLayer,
 )
 from probabilistic_model.probabilistic_circuit.tensorized.input_layer.probability_table import (
     DenseProbabilityTable,
@@ -54,7 +54,7 @@ from probabilistic_model.utils import MissingDict
 
 
 @dataclass(eq=False, repr=False)
-class DiscreteLayer(InputLayer, ABC):
+class DiscreteLayer(UnivariateInputLayer, ABC):
     """
     Abstract base class for the input layers of discrete univariate distributions.
 

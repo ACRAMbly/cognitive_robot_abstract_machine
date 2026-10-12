@@ -53,9 +53,9 @@ from probabilistic_model.probabilistic_circuit.tensorized.structural_query impor
 
 
 @dataclass(eq=False, repr=False)
-class InputLayer(LeafLayer, ABC):
+class UnivariateInputLayer(LeafLayer, ABC):
     """
-    Abstract base class for the input layers of a layered circuit.
+    Abstract base class for the univariate input layers of a layered circuit.
 
     An input layer holds univariate distributions of one single type over one single
     variable, so that the likelihood of all of its nodes is evaluated without any
@@ -306,7 +306,7 @@ class InputLayer(LeafLayer, ABC):
             self.type_of_truncated_layer(event[variable], query.singleton_allowed)
             for event in events
         }
-        return len(types) == 1 and issubclass(types.pop(), InputLayer)
+        return len(types) == 1 and issubclass(types.pop(), UnivariateInputLayer)
 
     @memoized
     def log_truncated_of_simple_events(
@@ -374,7 +374,7 @@ class InputLayer(LeafLayer, ABC):
 
 
 @dataclass(eq=False, repr=False)
-class AbstractContinuousLayer(InputLayer, ABC):
+class AbstractContinuousLayer(UnivariateInputLayer, ABC):
     """
     Abstract base class for the input layers of continuous univariate distributions.
     """
