@@ -32,44 +32,6 @@ from semantic_digital_twin.world import World
 if TYPE_CHECKING:
     from demo import MontessoriEnvironment
 
-GISKARD_LAUNCH_COMMAND = (
-    "ros2",
-    "launch",
-    "giskardpy_ros",
-    "giskardpy_tracy_standalone.launch.py",
-)
-"""
-What brings the robot's controllers up.
-"""
-
-GISKARD_STARTUP_SECONDS = 8
-"""
-How long the launch file is given before anything talks to it.
-"""
-
-WORLD_FETCH_TIMEOUT_SECONDS = 300
-"""
-How long the world is waited for.
-
-This matches giskardpy's own client, which waits as long for the same race: the server is
-still parsing the robot's description and starting up while a shorter budget would expire.
-"""
-
-NODE_NAME = "tracy_montessori_demo_real"
-"""
-Name the demo's own ROS node carries.
-"""
-
-EXECUTOR_THREAD_NAME = "rclpy-executor"
-"""
-Name of the thread the node is spun on.
-"""
-
-COLLISION_AVOIDANCE = False
-"""
-Whether the robot avoids collisions while it sorts.
-"""
-
 
 @dataclass
 class RunningRobot:
@@ -98,21 +60,23 @@ def running_robot() -> Iterator[RunningRobot]:
     :return: The running robot, for as long as the context lasts.
     """
     giskard_process = subprocess.Popen(
-        list(GISKARD_LAUNCH_COMMAND), start_new_session=True
+        ["ros2", "launch", "giskardpy_ros", "giskardpy_tracy_standalone.launch.py"],
+        start_new_session=True,
     )
-    time.sleep(GISKARD_STARTUP_SECONDS)
+    # Give the controllers time to come up before anything talks to them.
+    time.sleep(8)
     try:
         rclpy.init()
-        node = rclpy.create_node(NODE_NAME)
+        node = rclpy.create_node("tracy_montessori_demo_real")
         executor = MultiThreadedExecutor()
         executor.add_node(node)
         threading.Thread(
-            target=executor.spin, daemon=True, name=EXECUTOR_THREAD_NAME
+            target=executor.spin, daemon=True, name="rclpy-executor"
         ).start()
 
-        world = fetch_world_from_service(
-            node=node, timeout_seconds=WORLD_FETCH_TIMEOUT_SECONDS
-        )
+        # As long as giskardpy's own client waits: the server may still be parsing the
+        # robot's description, and a shorter budget would expire.
+        world = fetch_world_from_service(node=node, timeout_seconds=300)
         WorldSynchronizer(_world=world, node=node)
         yield RunningRobot(world=world, node=node)
     finally:
@@ -137,6 +101,6 @@ def run(environment: MontessoriEnvironment, robot: RunningRobot) -> None:
     )
     with ExecutionEnvironment(
         execution_type=ExecutionType.REAL,
-        collision_avoidance=COLLISION_AVOIDANCE,
+        collision_avoidance=False,
     ):
         environment.build_plan(context).perform()

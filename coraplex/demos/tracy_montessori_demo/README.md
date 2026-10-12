@@ -42,7 +42,7 @@ RViz one, or ROS to run the MuJoCo one.
 | Execution type | What you need | What you see |
 |---|---|---|
 | `KINEMATICALLY_SIMULATED` | ROS 2, RViz2 | A `MarkerArray` display on `/semworld/viz_marker`, durability set to transient local. The robot is moved kinematically. |
-| `PHYSICALLY_SIMULATED` | `mujoco` | A MuJoCo viewer. Set `HEADLESS = True` in `mujoco_demo.py` to run without one. The viewer stays open after the plan ends until you close it. |
+| `PHYSICALLY_SIMULATED` | `mujoco` | A MuJoCo viewer. Pass `headless=True` to the `MujocoSim` in `mujoco_demo.py` to run without one. The viewer stays open after the plan ends until you close it. |
 | `REAL` | The robot, its ROS stack | It launches `giskardpy_tracy_standalone.launch.py` itself and fetches the world from the running stack. |
 
 ## File layout

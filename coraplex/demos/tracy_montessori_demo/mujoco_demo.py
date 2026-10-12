@@ -24,45 +24,6 @@ from semantic_digital_twin.world import World
 if TYPE_CHECKING:
     from demo import MontessoriEnvironment
 
-HEADLESS = False
-"""
-Whether the simulation runs without a viewer.
-"""
-
-STEP_SIZE = 1e-3
-"""
-How much simulated time one physics step covers, in seconds.
-"""
-
-SETTLING_DURATION = timedelta(seconds=1)
-"""
-How long the scene is left to settle before the robot starts, so the pieces come to rest
-on the table rather than being grasped mid-fall.
-"""
-
-FRICTION_CONE = mujoco.mjtCone.mjCONE_ELLIPTIC
-"""
-How MuJoCo bounds a contact's friction.
-
-The elliptic cone is the exact one; the default pyramid only approximates it and lets a
-squeezed piece creep between the pads.
-"""
-
-IMPEDANCE_RATIO = 10.0
-"""
-How much stiffer MuJoCo makes friction than the push along the contact normal
-(``impratio``).
-
-MuJoCo's own guidance for grasping with an elliptic cone; at the default of 1 a held
-piece slides out under its own weight despite a firm squeeze.
-"""
-
-NO_SLIP_ITERATIONS = 10
-"""
-How many passes MuJoCo spends removing the slip its soft contacts leave, so that a piece
-held as firmly as the real gripper holds it stays where the pads hold it.
-"""
-
 
 def run(environment: MontessoriEnvironment, world: World) -> None:
     """
@@ -81,15 +42,22 @@ def run(environment: MontessoriEnvironment, world: World) -> None:
 
     simulation = MujocoSim(
         world=world,
-        headless=HEADLESS,
-        step_size=STEP_SIZE,
-        cone=FRICTION_CONE,
-        impratio=IMPEDANCE_RATIO,
-        noslip_iterations=NO_SLIP_ITERATIONS,
+        headless=False,
+        step_size=1e-3,
+        # The elliptic cone is the exact one; the default pyramid only approximates it
+        # and lets a squeezed piece creep between the pads.
+        cone=mujoco.mjtCone.mjCONE_ELLIPTIC,
+        # MuJoCo's own guidance for grasping with an elliptic cone; at the default of 1
+        # a held piece slides out under its own weight despite a firm squeeze.
+        impratio=10.0,
+        # Passes spent removing the slip soft contacts leave, so a held piece stays
+        # where the pads hold it.
+        noslip_iterations=10,
     )
     simulation.start_stepped_simulation()
     try:
-        simulation.step_simulation(SETTLING_DURATION)
+        # Let the pieces come to rest on the table before the robot reaches for them.
+        simulation.step_simulation(timedelta(seconds=1))
         with PhysicallySimulatedRobot(simulation=simulation):
             plan.perform()
     finally:

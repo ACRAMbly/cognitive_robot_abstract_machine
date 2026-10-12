@@ -26,11 +26,6 @@ if TYPE_CHECKING:
     from demo import MontessoriEnvironment
     from semantic_digital_twin.world import World
 
-NODE_NAME = "tracy_montessori_demo_rviz"
-"""
-Name the demo's own ROS node carries.
-"""
-
 
 def run(environment: MontessoriEnvironment, world: World) -> None:
     """
@@ -42,7 +37,7 @@ def run(environment: MontessoriEnvironment, world: World) -> None:
     [robot] = world.get_semantic_annotations_by_type(Tracy)
 
     rclpy.init()
-    node = rclpy.create_node(NODE_NAME)
+    node = rclpy.create_node("tracy_montessori_demo_rviz")
     TFPublisher(node=node, _world=world)
     VizMarkerPublisher(_world=world, node=node)
     world.notify_state_change()
