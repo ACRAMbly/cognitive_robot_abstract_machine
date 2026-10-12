@@ -123,6 +123,9 @@ class SplitPartFromShape(Step):
     The root body keeps its inertial properties, which describe the whole object, and
     the part's body is given a negligible one, so the object weighs and turns as it did
     before the split.
+
+    Each split is one block of the world's modification history, the root body's new
+    shape included, so it is synchronized and rolling it back restores the whole shape.
     """
 
     whole_type: Type[PartWholeRelationship]
@@ -161,9 +164,6 @@ class SplitPartFromShape(Step):
         if split is None:
             return None
         collides = bool(root.collision)
-        root.visual = self._shapes(split.rest, root)
-        if collides:
-            root.collision = self._shapes(split.rest, root)
         body = Body(
             name=PrefixedName(
                 f"{root.name.name}_{self.part_type.__name__.lower()}",
@@ -177,6 +177,12 @@ class SplitPartFromShape(Step):
         part = self.part_type(root=body)
         world = root._world
         with world.modify_world():
+            root.update_shapes(
+                visual=self._shapes(split.rest, root),
+                collision=(
+                    self._shapes(split.rest, root) if collides else ShapeCollection()
+                ),
+            )
             world.add_connection(FixedConnection(parent=root, child=body))
             world.add_semantic_annotation(part)
             whole.add(part)

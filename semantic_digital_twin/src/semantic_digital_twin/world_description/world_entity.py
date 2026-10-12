@@ -578,6 +578,23 @@ class Body(KinematicStructureEntity):
             name=name, collision=shape_collection, visual=visuals_shape_collection
         )
 
+    @synchronized_attribute_modification
+    def update_shapes(
+        self, visual: ShapeCollection, collision: ShapeCollection
+    ) -> None:
+        """
+        Replace the shapes of this body and record the change in the world's
+        modification history, so that it is synchronized and can be rolled back.
+
+        :param visual: The shapes that represent how the body looks, relative to it.
+        :param collision: The shapes that represent how the body collides, relative to
+            it.
+        """
+        visual.reference_frame = self
+        collision.reference_frame = self
+        self.visual = visual
+        self.collision = collision
+
     @property
     def combined_mesh(self) -> Optional[trimesh.Trimesh]:
         """
