@@ -17,7 +17,7 @@ from coraplex.datastructures.dataclasses import Context
 
 from coraplex.locations.locations import ReachabilityLocation, VisibilityLocation
 from semantic_digital_twin.spatial_types.spatial_types import Pose
-from coraplex.execution_environment import simulated_robot
+from coraplex.execution_environment import kinematically_simulated_robot
 from coraplex.plans.factories import sequential
 from coraplex.robot_plans.actions.core.robot_body import ParkArmsAction, MoveTorsoAction
 from semantic_digital_twin.datastructures.definitions import TorsoState
@@ -162,7 +162,7 @@ def _floor_distance(pose: Pose, body) -> float:
     """
     :return: How far `pose` stands from `body` along the floor.
     """
-    offset = body.global_pose.to_position().to_np()[:2] - pose.to_position().to_np()[:2]
+    offset = body.global_pose.position.to_np()[:2] - pose.position.to_np()[:2]
     return float(np.linalg.norm(offset))
 
 
@@ -170,8 +170,8 @@ def _assert_faces(pose: Pose, body) -> None:
     """
     Assert that a robot standing at `pose` has `body` straight ahead.
     """
-    offset = body.global_pose.to_position().to_np()[:2] - pose.to_position().to_np()[:2]
-    heading = pose.to_rotation_matrix().to_np()[:2, 0]
+    offset = body.global_pose.position.to_np()[:2] - pose.position.to_np()[:2]
+    heading = pose.rotation_matrix.to_np()[:2, 0]
     np.testing.assert_allclose(heading, offset / np.linalg.norm(offset), atol=0.05)
 
 
@@ -184,7 +184,7 @@ def test_new_reachability_location_body(
         [ParkArmsAction(context.robot.all_arms), MoveTorsoAction(TorsoState.HIGH)],
         context,
     )
-    with simulated_robot:
+    with kinematically_simulated_robot:
         plan.perform()
 
         world.notify_state_change()
@@ -209,7 +209,7 @@ def test_visibility_location_pose(multiple_robot_simple_apartment_context):
         [ParkArmsAction(context.robot.all_arms), MoveTorsoAction(TorsoState.HIGH)],
         context,
     )
-    with simulated_robot:
+    with kinematically_simulated_robot:
         plan.perform()
 
         world.notify_state_change()
@@ -231,7 +231,7 @@ def test_visibility_location_body(multiple_robot_simple_apartment_context):
         [ParkArmsAction(context.robot.all_arms), MoveTorsoAction(TorsoState.HIGH)],
         context,
     )
-    with simulated_robot:
+    with kinematically_simulated_robot:
         plan.perform()
 
         world.notify_state_change()
