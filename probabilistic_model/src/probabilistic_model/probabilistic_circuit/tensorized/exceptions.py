@@ -3,9 +3,14 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import numpy as np
-from typing_extensions import Tuple, Type
+from typing_extensions import TYPE_CHECKING, Tuple, Type
 
 from krrood.exceptions import DataclassException
+
+if TYPE_CHECKING:
+    from probabilistic_model.probabilistic_circuit.tensorized.inner_layer.base import (
+        Layer,
+    )
 
 
 @dataclass
@@ -81,21 +86,54 @@ class CopiesNotAlignedError(DataclassException, ValueError):
     structure.
     """
 
-    layer_types: Tuple[Type, ...]
+    copies: Tuple[Layer, ...]
     """
-    The type of the layer at the same position in every copy.
+    The layer at the same position in every copy of the layer graph, in the order of
+    the copies.
     """
 
-    numbers_of_nodes: Tuple[int, ...]
+    path: Tuple[int, ...]
     """
-    The number of nodes of the layer at the same position in every copy.
+    The index of the child layer taken at every step from the roots of the copies down
+    to :attr:`copies`. Empty if the roots themselves differ.
     """
+
+    @property
+    def misaligned_copies(self) -> Tuple[int, ...]:
+        """
+        :return: The index of every copy whose layer differs from the one of the first
+            copy in its type, its number of nodes or its number of child layers.
+        """
+        structures = [
+            (type(copy), copy.number_of_nodes, len(copy.child_layers))
+            for copy in self.copies
+        ]
+        return tuple(
+            index
+            for index, structure in enumerate(structures)
+            if structure != structures[0]
+        )
+
+    def structure_of_copy(self, index: int) -> str:
+        """
+        :param index: The index of a copy.
+        :return: The type, number of nodes and number of child layers of the layer in
+            that copy.
+        """
+        copy = self.copies[index]
+        return (
+            f"copy {index} has a {type(copy).__name__} with "
+            f"{copy.number_of_nodes} nodes and {len(copy.child_layers)} child layers"
+        )
 
     def error_message(self) -> str:
         return (
-            f"The copies have layers of types "
-            f"{[layer_type.__name__ for layer_type in self.layer_types]} with "
-            f"{list(self.numbers_of_nodes)} nodes at the same position."
+            f"The layers reached from the roots through the child layers "
+            f"{list(self.path)} differ in their structure: "
+            + "; ".join(
+                self.structure_of_copy(index) for index in (0, *self.misaligned_copies)
+            )
+            + "."
         )
 
     def suggest_correction(self) -> str:

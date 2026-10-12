@@ -8,7 +8,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 import numpy as np
-from typing_extensions import TYPE_CHECKING, Dict, List
+from typing_extensions import TYPE_CHECKING
 
 from probabilistic_model.probabilistic_circuit.tensorized.array_types import (
     NodeIndices,
@@ -24,7 +24,10 @@ if TYPE_CHECKING:
     from probabilistic_model.probabilistic_circuit.tensorized.inner_layer.base import (
         InnerLayer,
         Layer,
+        LeafLayer,
     )
+
+# %% stacked layers
 
 
 @dataclass
@@ -70,20 +73,19 @@ class StackedLayer:
         return nodes + copy * self.nodes_per_copy
 
     @classmethod
-    def of_input_layer_copies(cls, copies: List[Layer]) -> StackedLayer:
+    def of_leaf_layer_copies(cls, copies: list[LeafLayer]) -> StackedLayer:
         """
-        :param copies: The copies of a layer without child layers.
+        :param copies: The copies of a leaf layer.
         :return: The copies as one layer, shared if they are all equal.
         """
         first = copies[0]
-        parameters = first.to_json()
-        if all(copy.to_json() == parameters for copy in copies[1:]):
+        if all(copy.has_equal_parameters(first) for copy in copies[1:]):
             return cls.shared(first)
         return cls(type(first).concatenate(copies), first.number_of_nodes, False)
 
     @classmethod
     def of_inner_layer_copies(
-        cls, copies: List[InnerLayer], stacked_child_layers: List[StackedLayer]
+        cls, copies: list[InnerLayer], stacked_child_layers: list[StackedLayer]
     ) -> StackedLayer:
         """
         :param copies: The copies of an inner layer, one per copy of the graph.
@@ -125,7 +127,7 @@ class StackedLayer:
 
     @staticmethod
     def child_nodes_of_copy(
-        copy: int, edges: InnerLayerEdges, stacked_child_layers: List[StackedLayer]
+        copy: int, edges: InnerLayerEdges, stacked_child_layers: list[StackedLayer]
     ) -> NodeIndices:
         """
         :param copy: The index of a copy.
@@ -140,6 +142,9 @@ class StackedLayer:
         return result
 
 
+# %% stacking
+
+
 @dataclass
 class AlignedCopiesStacker:
     """
@@ -152,26 +157,32 @@ class AlignedCopiesStacker:
     that is equal in every copy is shared rather than repeated.
     """
 
-    stacked_layers: Dict[int, StackedLayer] = field(default_factory=dict)
+    stacked_by_first_copy: dict[Layer, StackedLayer] = field(default_factory=dict)
     """
-    The result for every layer stacked so far, by the identity of its first copy, so
-    that a layer with several parents is stacked once.
+    The result for every layer stacked so far, by its copy in the first graph.
+
+    The copies are aligned, so the copy in the first graph determines the copies in all
+    other graphs: they are the layers at the same position. Keying by it alone lets a
+    layer with several parents be stacked once, however it is reached.
     """
 
-    def stack(self, copies: List[Layer]) -> StackedLayer:
+    def stack(self, copies: list[Layer], path: tuple[int, ...] = ()) -> StackedLayer:
         """
         :param copies: The copies of a layer, one per copy of the graph.
+        :param path: The index of the child layer taken at every step from the roots
+            of the copies down to ``copies``, to report where copies are not aligned.
         :return: The copies, and the copies of everything below them, as one layer.
         :raises CopiesNotAlignedError: If the copies differ in their structure.
         """
-        key = id(copies[0])
-        if key not in self.stacked_layers:
-            self.stacked_layers[key] = self.stack_unseen(copies)
-        return self.stacked_layers[key]
+        first_copy = copies[0]
+        if first_copy not in self.stacked_by_first_copy:
+            self.stacked_by_first_copy[first_copy] = self.stack_unseen(copies, path)
+        return self.stacked_by_first_copy[first_copy]
 
-    def stack_unseen(self, copies: List[Layer]) -> StackedLayer:
+    def stack_unseen(self, copies: list[Layer], path: tuple[int, ...]) -> StackedLayer:
         """
         :param copies: The copies of a layer that was not stacked yet.
+        :param path: The path of :meth:`stack` to the copies.
         :return: The copies as one layer.
         """
         first = copies[0]
@@ -181,12 +192,9 @@ class AlignedCopiesStacker:
             or len(copy.child_layers) != len(first.child_layers)
             for copy in copies
         ):
-            raise CopiesNotAlignedError(
-                tuple(type(copy) for copy in copies),
-                tuple(copy.number_of_nodes for copy in copies),
-            )
+            raise CopiesNotAlignedError(tuple(copies), path)
         stacked_child_layers = [
-            self.stack([copy.child_layers[index] for copy in copies])
+            self.stack([copy.child_layers[index] for copy in copies], (*path, index))
             for index in range(len(first.child_layers))
         ]
         return type(first).stacked(copies, stacked_child_layers)
