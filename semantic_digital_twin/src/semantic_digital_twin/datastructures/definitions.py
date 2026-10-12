@@ -1,4 +1,4 @@
-from enum import Enum, auto
+from enum import Enum, IntEnum, auto
 
 
 class JointStateType(Enum): ...
@@ -18,3 +18,14 @@ class TorsoState(JointStateType):
 
 class StaticJointState(JointStateType):
     PARK = auto()
+
+
+class MeshArrayAxis(IntEnum):
+    """
+    An axis of a frame, as the column that holds the coordinates along it in an array of
+    points, such as a mesh's vertices.
+    """
+
+    X = 0
+    Y = 1
+    Z = 2

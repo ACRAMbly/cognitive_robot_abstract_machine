@@ -10,11 +10,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+import numpy as np
 import trimesh
 from typing_extensions import Optional
 
+from semantic_digital_twin.datastructures.definitions import MeshArrayAxis
 from semantic_digital_twin.pipeline.part_splitting import PartFinder, ShapeSplit
-from semantic_digital_twin.spatial_types import Vector3
 
 
 @dataclass
@@ -32,6 +33,7 @@ class RimFinder(PartFinder):
     def split(self, shape: trimesh.Trimesh) -> Optional[ShapeSplit]:
         if shape.is_empty:
             return None
-        up = Vector3.Z().to_np()[:3]
+        up = np.zeros(3)
+        up[MeshArrayAxis.Z] = 1.0
         lowest_rim_point = shape.bounds[1] - up * self.depth
         return ShapeSplit.by_plane(shape, lowest_rim_point, up)

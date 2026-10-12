@@ -18,8 +18,9 @@ import trimesh
 from scipy.spatial import ConvexHull
 from typing_extensions import Optional
 
+from semantic_digital_twin.datastructures.definitions import MeshArrayAxis
 from semantic_digital_twin.pipeline.part_splitting import PartFinder, ShapeSplit
-from semantic_digital_twin.spatial_types import Point2, Vector3
+from semantic_digital_twin.spatial_types import Point2
 
 # %% finding handles
 
@@ -209,14 +210,14 @@ class ElongatedShape:
     The shape.
     """
 
-    length_axis: Vector3
+    length_axis: MeshArrayAxis
     """
-    The direction the shape is longest along.
+    The axis the shape is longest along.
     """
 
-    width_axis: Vector3
+    width_axis: MeshArrayAxis
     """
-    The direction its width is measured along.
+    The axis its width is measured along.
     """
 
     end_fraction: float = 0.15
@@ -236,7 +237,7 @@ class ElongatedShape:
         """
         :return: Each point's distance from the end towards the negative length axis.
         """
-        coordinates = self._coordinates(self.length_axis)
+        coordinates = self.points[:, self.length_axis]
         return coordinates - coordinates.min()
 
     @property
@@ -244,21 +245,14 @@ class ElongatedShape:
         """
         :return: Each point's coordinate across the shape.
         """
-        return self._coordinates(self.width_axis)
+        return self.points[:, self.width_axis]
 
     @property
     def length(self) -> float:
         """
         :return: The shape's length.
         """
-        return float(np.ptp(self._coordinates(self.length_axis)))
-
-    def _coordinates(self, axis: Vector3) -> NDArray[np.float64]:
-        """
-        :param axis: A direction in the shape's frame.
-        :return: Each point's coordinate along it.
-        """
-        return self.points @ axis.to_np()[:3]
+        return float(np.ptp(self.points[:, self.length_axis]))
 
     def narrower_end_is_positive(self) -> bool:
         """
@@ -299,9 +293,9 @@ class NarrowEndHandleFinder(HandleFinder):
         lowest, highest = shape.bounds
         extents = highest - lowest
         length_axis, width_axis = (
-            (Vector3.X(), Vector3.Y())
-            if extents[0] >= extents[1]
-            else (Vector3.Y(), Vector3.X())
+            (MeshArrayAxis.X, MeshArrayAxis.Y)
+            if extents[MeshArrayAxis.X] >= extents[MeshArrayAxis.Y]
+            else (MeshArrayAxis.Y, MeshArrayAxis.X)
         )
         elongated = ElongatedShape(
             shape=shape,
@@ -316,9 +310,8 @@ class NarrowEndHandleFinder(HandleFinder):
         handle_length = self._handle_length(elongated.across, along)
         if handle_length is None:
             return None
-        towards_narrow_end = length_axis.to_np()[:3] * (
-            1.0 if narrow_end_is_positive else -1.0
-        )
+        towards_narrow_end = np.zeros(3)
+        towards_narrow_end[length_axis] = 1.0 if narrow_end_is_positive else -1.0
         narrow_end = highest if narrow_end_is_positive else lowest
         return ShapeSplit.by_plane(
             shape, narrow_end - towards_narrow_end * handle_length, towards_narrow_end
