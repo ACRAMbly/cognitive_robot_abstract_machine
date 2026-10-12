@@ -91,13 +91,8 @@ class ContainmentDetector(AbstractDetector):
 
     The detector reports a :class:`ContainmentEvent` when a body ends up inside
     something and a :class:`LossOfContainmentEvent` when it leaves something it was
-    inside.
-
-    A body is put into something by being set down in it, so what a body is inside is
-    looked for only when it comes to rest on something new; from then on, only whether
-    it is still inside what it was found in is checked. What a body rests on is read
-    from a :class:`SupportDetector` ticked before this one; without one, no containment
-    is ever found.
+    inside. Containment is only looked for once a body comes to rest on something new,
+    as read from a :class:`SupportDetector`.
     """
 
     containment_threshold: float = 0.9
@@ -105,7 +100,7 @@ class ContainmentDetector(AbstractDetector):
     The threshold for the containment ratio between two bodies to be considered containment.
     """
 
-    _supporters_seen: IndexedBodyPairs = field(
+    _supports_seen: IndexedBodyPairs = field(
         default_factory=dict, init=False, repr=False
     )
     """
@@ -121,7 +116,7 @@ class ContainmentDetector(AbstractDetector):
     ) -> List[Body]:
         """
         The tracked objects resting on something they did not rest on when their
-        supporters were last remembered (see :meth:`remember_supporters`).
+        supports were last remembered (see :meth:`remember_supports`).
 
         :param segmind_context: The shared SegmindContext holding what each body rests on.
         :param tracked_objects: Bodies that should be checked.
@@ -130,10 +125,10 @@ class ContainmentDetector(AbstractDetector):
             tracked_object
             for tracked_object in tracked_objects
             if segmind_context.latest_support.get(tracked_object, set())
-            - self._supporters_seen.get(tracked_object, set())
+            - self._supports_seen.get(tracked_object, set())
         ]
 
-    def remember_supporters(
+    def remember_supports(
         self, segmind_context: SegmindContext, tracked_objects: List[Body]
     ) -> None:
         """
@@ -141,10 +136,10 @@ class ContainmentDetector(AbstractDetector):
         to compare against at the next tick.
 
         :param segmind_context: The shared SegmindContext holding what each body rests on.
-        :param tracked_objects: Bodies whose supporters are remembered.
+        :param tracked_objects: Bodies whose supports are remembered.
         """
         for tracked_object in tracked_objects:
-            self._supporters_seen[tracked_object] = set(
+            self._supports_seen[tracked_object] = set(
                 segmind_context.latest_support.get(tracked_object, set())
             )
 
@@ -215,7 +210,7 @@ class ContainmentDetector(AbstractDetector):
         """
         latest_containments = segmind_context.latest_containments
         come_to_rest = self.bodies_come_to_rest(segmind_context, objects_to_check)
-        self.remember_supporters(segmind_context, objects_to_check)
+        self.remember_supports(segmind_context, objects_to_check)
         containments_now = self.get_containment_pairs(context, come_to_rest)
         inside_something = [
             body
