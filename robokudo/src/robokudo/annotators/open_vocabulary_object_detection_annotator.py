@@ -143,7 +143,7 @@ class OpenVocabularyObjectDetectionAnnotator(
         Detection and segmentation configuration defaults.
         """
 
-    name: str = "OpenVocabularyObjectDetectionAnnotator"
+    name: str = __qualname__
     """
     Name of the behaviour-tree node.
     """
