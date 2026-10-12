@@ -52,7 +52,7 @@ from probabilistic_model.probabilistic_circuit.relational.exchangeable_grounding
     RelationalGrounding,
 )
 from probabilistic_model.probabilistic_circuit.relational.rustworkx_grounding import (
-    RustworkxGrounding,
+    RustworkxRelationalGrounding,
 )
 from probabilistic_model.probabilistic_circuit.relational.template import (
     RelationalDistributionTemplate,
@@ -482,4 +482,4 @@ class RelationalProbabilisticCircuit:
             undetermined.
         :return: What grounds this circuit.
         """
-        return RustworkxGrounding(self, grounding_mode)
+        return RustworkxRelationalGrounding(self, grounding_mode)

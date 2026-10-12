@@ -227,7 +227,7 @@ class RustworkxExchangeablePartGrounder(
 
 
 @dataclass
-class RustworkxGrounding(RelationalGrounding[ProbabilisticCircuit]):
+class RustworkxRelationalGrounding(RelationalGrounding[ProbabilisticCircuit]):
     """
     Grounds a relational probabilistic circuit fitted as rustworkx circuits.
     """
