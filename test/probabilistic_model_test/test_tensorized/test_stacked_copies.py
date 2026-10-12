@@ -237,7 +237,7 @@ class TestCopiesNotAligned:
             )
         assert error.value.path == (0,)
         assert error.value.misaligned_copies == (1,)
-        assert error.value.numbers_of_nodes == (2, 3)
+        assert [copy.number_of_nodes for copy in error.value.copies] == [2, 3]
         assert "through the child layers [0]" in str(error.value)
 
 

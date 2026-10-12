@@ -99,35 +99,15 @@ class CopiesNotAlignedError(DataclassException, ValueError):
     """
 
     @property
-    def layer_types(self) -> Tuple[Type[Layer], ...]:
-        """
-        :return: The type of the layer in every copy.
-        """
-        return tuple(type(copy) for copy in self.copies)
-
-    @property
-    def numbers_of_nodes(self) -> Tuple[int, ...]:
-        """
-        :return: The number of nodes of the layer in every copy.
-        """
-        return tuple(copy.number_of_nodes for copy in self.copies)
-
-    @property
-    def numbers_of_child_layers(self) -> Tuple[int, ...]:
-        """
-        :return: The number of child layers of the layer in every copy.
-        """
-        return tuple(len(copy.child_layers) for copy in self.copies)
-
-    @property
     def misaligned_copies(self) -> Tuple[int, ...]:
         """
         :return: The index of every copy whose layer differs from the one of the first
             copy in its type, its number of nodes or its number of child layers.
         """
-        structures = list(
-            zip(self.layer_types, self.numbers_of_nodes, self.numbers_of_child_layers)
-        )
+        structures = [
+            (type(copy), copy.number_of_nodes, len(copy.child_layers))
+            for copy in self.copies
+        ]
         return tuple(
             index
             for index, structure in enumerate(structures)
@@ -140,10 +120,10 @@ class CopiesNotAlignedError(DataclassException, ValueError):
         :return: The type, number of nodes and number of child layers of the layer in
             that copy.
         """
+        copy = self.copies[index]
         return (
-            f"copy {index} has a {self.layer_types[index].__name__} with "
-            f"{self.numbers_of_nodes[index]} nodes and "
-            f"{self.numbers_of_child_layers[index]} child layers"
+            f"copy {index} has a {type(copy).__name__} with "
+            f"{copy.number_of_nodes} nodes and {len(copy.child_layers)} child layers"
         )
 
     def error_message(self) -> str:
