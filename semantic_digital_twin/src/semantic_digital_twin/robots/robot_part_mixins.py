@@ -4,12 +4,14 @@ import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from functools import cached_property
+from itertools import product
 from types import NoneType
 from typing import Union, get_args, get_origin
 
 from typing_extensions import (
     Optional,
     TYPE_CHECKING,
+    Tuple,
     Type,
     TypeVar,
     Generic,
@@ -24,6 +26,7 @@ from krrood.patterns.subclass_safe_generic import (
 from krrood.utils import get_existing_field_by_name, get_generic_type_parameters
 from semantic_digital_twin.datastructures.lidar_reading import LidarReading
 from semantic_digital_twin.reasoning.predicates import LeftOf, RightOf
+from semantic_digital_twin.spatial_types.spatial_types import Point3, Pose
 from semantic_digital_twin.robots.exceptions import (
     MissingEndEffectorError,
     MissingInputSourceError,
@@ -43,6 +46,8 @@ from semantic_digital_twin.robots.input_source import InputSource
 
 if TYPE_CHECKING:
     from rclpy.node import Node
+    from semantic_digital_twin.world_description.geometry import BoundingBox
+    from semantic_digital_twin.world_description.world_entity import Body
 
 logger = logging.getLogger("semantic_digital_twin")
 
@@ -163,6 +168,170 @@ class HasTwoFingers(
             if not isinstance(finger, concrete_thumb_class)
         ]
         return finger
+
+    # %% where the fingers meet
+
+    @property
+    def fingertips(self) -> Tuple[Body, Body]:
+        """
+        The two bodies that meet an object: the tips of the thumb and of the finger.
+        """
+        return self.thumb.tip, self.finger.tip
+
+    @property
+    def tool_P_grasp(self) -> Point3:
+        """
+        Where the fingertips meet, in
+        :attr:`~semantic_digital_twin.robots.robot_parts.EndEffector.tool_frame`: the
+        translation completing the orientation
+        :attr:`~semantic_digital_twin.robots.robot_parts.EndEffector.tool_R_grasp`
+        states.
+
+        A gripper's tool frame need not sit where its fingers close, and aiming the tool
+        frame itself at an object then closes the fingers beside it rather than on it.
+        Each fingertip's own collision bounding box centre stands in for where that
+        finger is, since a fingertip's link origin may sit at an edge of its mesh rather
+        than at its centre.
+        """
+        thumb_tip, finger_tip = (
+            self._fingertip_bounding_box(fingertip).center
+            for fingertip in self.fingertips
+        )
+        return thumb_tip.midpoint(finger_tip)
+
+    def grasp_frame_goal(self, grasp_pose: Pose) -> Pose:
+        """
+        Express a grasp frame as the goal that puts :attr:`tool_P_grasp` on it, where
+        :meth:`~semantic_digital_twin.robots.robot_parts.EndEffector.tool_frame_goal`
+        puts the tool frame there.
+
+        :param grasp_pose: The grasp frame to meet.
+        :return: The pose the tool frame has to reach, in ``grasp_pose``'s frame.
+        """
+        oriented = self.tool_frame_goal(grasp_pose)
+        return Pose(
+            position=grasp_pose.position
+            - oriented.rotation_matrix @ self.tool_P_grasp.vector3,
+            orientation=oriented.quaternion,
+            reference_frame=grasp_pose.reference_frame,
+        )
+
+    # %% how wide the fingers stand
+
+    @property
+    def fingertip_separation(self) -> float:
+        """
+        How far apart the fingertips' facing surfaces stand right now, in metres,
+        measured along
+        :attr:`~semantic_digital_twin.robots.robot_parts.EndEffector.closing_axis`: the
+        widest object the gripper could close on as it stands.
+
+        Negative where the surfaces already overlap, as a fully closed gripper's may.
+        """
+        thumb_reach, finger_reach = (
+            self._reach_along_closing_axis(fingertip) for fingertip in self.fingertips
+        )
+        if thumb_reach[0] > finger_reach[0]:
+            return thumb_reach[0] - finger_reach[1]
+        return finger_reach[0] - thumb_reach[1]
+
+    @property
+    def fingertip_surface_depth(self) -> float:
+        """
+        How far a fingertip's facing surface lies inside its own frame, in metres, along
+        :attr:`~semantic_digital_twin.robots.robot_parts.EndEffector.closing_axis`: a
+        goal stated between the fingertip frames stands this much wider than the
+        surfaces do on either side.
+        """
+        return (self._fingertip_frame_distance - self.fingertip_separation) / 2
+
+    def fingertip_frame_distance_for(self, separation: float) -> float:
+        """
+        :param separation: How far apart the fingertips' facing surfaces are to stand,
+            in metres.
+        :return: The distance the fingertip frames have to stand apart to leave them
+            there.
+        """
+        return separation + 2 * self.fingertip_surface_depth
+
+    def thumb_tip_goal_for(self, separation: float) -> Point3:
+        """
+        Where the thumb's tip has to reach, in the finger's tip frame, to leave the
+        fingertips a given distance apart.
+
+        The surfaces stay parallel, so one fingertip frame moves purely along the
+        other's closing axis and the distance between them is a one-dimensional goal.
+
+        :param separation: How far apart the fingertips' facing surfaces are to stand,
+            in metres.
+        :return: The goal for the thumb's tip.
+        """
+        thumb_tip, finger_tip = self.fingertips
+        finger_tip_V_thumb_tip = (
+            self._world.compute_forward_kinematics(finger_tip, self.tool_frame)
+            @ self.closing_axis
+        )
+        if self._reach_along_closing_axis(thumb_tip)[0] < (
+            self._reach_along_closing_axis(finger_tip)[0]
+        ):
+            finger_tip_V_thumb_tip = -finger_tip_V_thumb_tip
+        return (
+            finger_tip_V_thumb_tip * self.fingertip_frame_distance_for(separation)
+        ).point3
+
+    @property
+    def _fingertip_frame_distance(self) -> float:
+        """
+        How far apart the fingertips' own frames stand right now, along
+        :attr:`~semantic_digital_twin.robots.robot_parts.EndEffector.closing_axis`.
+        """
+        thumb, finger = (
+            self._closing_axis_coordinate(
+                self._world.compute_forward_kinematics(
+                    self.tool_frame, fingertip
+                ).position
+            )
+            for fingertip in self.fingertips
+        )
+        return abs(thumb - finger)
+
+    def _fingertip_bounding_box(self, fingertip: Body) -> BoundingBox:
+        """
+        :param fingertip: One of the :attr:`fingertips`.
+        :return: Its collision bounding box, in
+            :attr:`~semantic_digital_twin.robots.robot_parts.EndEffector.tool_frame`.
+        """
+        return fingertip.collision.as_bounding_box_collection_in_frame(
+            self.tool_frame
+        ).bounding_box()
+
+    def _reach_along_closing_axis(self, fingertip: Body) -> Tuple[float, float]:
+        """
+        :param fingertip: One of the :attr:`fingertips`.
+        :return: How far its bounding box reaches along
+            :attr:`~semantic_digital_twin.robots.robot_parts.EndEffector.closing_axis`,
+            as its nearest and furthest coordinate on that axis.
+        """
+        box = self._fingertip_bounding_box(fingertip)
+        corners = product(
+            (box.min_x, box.max_x), (box.min_y, box.max_y), (box.min_z, box.max_z)
+        )
+        coordinates = [
+            self._closing_axis_coordinate(
+                Point3(*corner, reference_frame=self.tool_frame)
+            )
+            for corner in corners
+        ]
+        return min(coordinates), max(coordinates)
+
+    def _closing_axis_coordinate(self, tool_P_point: Point3) -> float:
+        """
+        :param tool_P_point: A point in
+            :attr:`~semantic_digital_twin.robots.robot_parts.EndEffector.tool_frame`.
+        :return: Where it lies along
+            :attr:`~semantic_digital_twin.robots.robot_parts.EndEffector.closing_axis`.
+        """
+        return float(tool_P_point.vector3.dot(self.closing_axis).to_np().item())
 
 
 @dataclass(eq=False)
