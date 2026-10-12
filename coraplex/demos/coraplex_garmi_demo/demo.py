@@ -344,7 +344,7 @@ class GarmiApartmentDemonstration(RobotDemonstration):
         ).plan
 
 
-def main(execution_type: ExecutionType = ExecutionType.SIMULATED) -> None:
+def main(execution_type: ExecutionType = ExecutionType.KINEMATICALLY_SIMULATED) -> None:
     """
     Run the demonstration.
 
