@@ -160,11 +160,11 @@ class MoveFingersToWidthMotion(BaseMotion):
         execution_type = GiskardExecutable.execution_type
         if execution_type is None or not execution_type.objects_push_back:
             raise FingerWidthNeedsPhysics(execution_type)
-        thumb_tip, finger_tip = self.gripper.fingertips
+        fingertips = self.gripper.fingertips
         return CartesianPosition(
-            root_link=finger_tip,
-            tip_link=thumb_tip,
-            goal_point=self.gripper.finger_tip_P_thumb_tip(
+            root_link=fingertips.finger,
+            tip_link=fingertips.thumb,
+            goal_point=fingertips.finger_P_thumb(
                 max(0.0, self.width - 2 * self.squeeze)
             ),
             name="MoveFingersToWidth",
