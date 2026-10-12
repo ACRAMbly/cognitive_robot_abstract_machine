@@ -24,6 +24,7 @@ from krrood.patterns.subclass_safe_generic import (
     SubClassSafeGeneric,
 )
 from krrood.utils import get_existing_field_by_name, get_generic_type_parameters
+from semantic_digital_twin.datastructures.definitions import GripperState
 from semantic_digital_twin.datastructures.lidar_reading import LidarReading
 from semantic_digital_twin.reasoning.predicates import LeftOf, RightOf
 from semantic_digital_twin.spatial_types.spatial_types import Point3, Pose, Vector3
@@ -348,6 +349,29 @@ class HasTwoFingers(
             tool_frame=self.tool_frame,
             closing_axis=self.closing_axis,
         )
+
+    @property
+    def travel_when_closing(self) -> float:
+        """
+        How much further along
+        :attr:`~semantic_digital_twin.robots.robot_parts.EndEffector.approach_axis` the
+        fingers meet once they are closed than they do now, in metres.
+
+        A gripper whose fingers swing rather than slide carries the point they meet at
+        further out as it closes, so a grasp aimed at where they meet while open has
+        them meet somewhere else by the time they hold anything. Zero for a gripper
+        whose fingers only slide.
+
+        Read by putting the gripper's own closed state on the world and taking it back
+        off again, so nothing is left moved.
+        """
+        open_P_grasp = self.fingertips.tool_P_grasp
+        with self._world.reset_state_context():
+            self.get_joint_state_by_type(GripperState.CLOSE).apply_to(self._world)
+            self._world.notify_state_change()
+            closed_P_grasp = self.fingertips.tool_P_grasp
+            travelled = closed_P_grasp - open_P_grasp
+            return float(travelled.dot(self.approach_axis))
 
     def tool_frame_goal_for_grasp(self, grasp_pose: Pose) -> Pose:
         """

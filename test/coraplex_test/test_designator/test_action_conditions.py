@@ -47,19 +47,22 @@ def test_get_bound_variables(pr2_apartment_context):
 
     bound_variables = pick_action._create_variables()
 
-    assert len(bound_variables) == 14
+    assert len(bound_variables) == 17
     assert list(bound_variables.keys()) == [
         "position_threshold",
         "orientation_threshold",
         "grasp_detection_threshold",
         "pre_approach_linear_velocity",
         "final_approach_linear_velocity",
+        "grasp_width",
+        "grasp_squeeze",
         "grasp_closing_velocity",
         "lift_linear_velocity",
         "grasp_stall_minimum_time",
         "object_friction",
         "approach_clearance",
         "retreat_distance",
+        "aimed_frame",
         "grasp",
         "arm",
         "tolerate_grasp_stall",

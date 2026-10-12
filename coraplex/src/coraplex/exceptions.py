@@ -17,7 +17,7 @@ if TYPE_CHECKING:
     from coraplex.plans.designator import Designator
     from coraplex.plans.plan_node import PlanNode
     from coraplex.robot_plans.actions.base import ActionDescription
-    from semantic_digital_twin.robots.robot_parts import AbstractRobot, Arm
+    from semantic_digital_twin.robots.robot_parts import AbstractRobot, Arm, EndEffector
     from semantic_digital_twin.grasping.grasp_candidates import HasGraspCandidates
     from semantic_digital_twin.world_description.world_entity import (
         SemanticAnnotation,
@@ -310,6 +310,25 @@ class FingerWidthNeedsPhysics(DataclassException):
             "kinematically, a held object hangs off the tool frame and a gripper state "
             "of its own is enough: use MoveGripperMotion instead."
         )
+
+
+@dataclass
+class GripperCannotAimItsFingertips(DataclassException):
+    """
+    Raised when a grasp is to be aimed at where a gripper's fingers meet, on a gripper
+    that does not have two of them.
+    """
+
+    gripper: EndEffector
+    """
+    The gripper that was asked.
+    """
+
+    def error_message(self) -> str:
+        return f"{self.gripper.name} has no two fingers to meet at a point"
+
+    def suggest_correction(self) -> str:
+        return "Aim the tool frame instead, which every gripper has."
 
 
 @dataclass

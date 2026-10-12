@@ -394,3 +394,45 @@ def test_the_thumb_tip_goal_is_read_in_the_other_fingertips_frame(pr2_gripper):
     goal = pr2_gripper.fingertips.finger_P_thumb(0.04)
 
     assert goal.reference_frame is pr2_gripper.finger.tip
+
+
+# %% how far closing carries the point the fingers meet at
+
+
+def test_sliding_fingers_meet_at_the_same_place_however_far_they_are_closed(
+    pr2_gripper,
+):
+    """
+    A PR2's fingers slide straight towards each other, so closing them does not carry
+    the point they meet at anywhere.
+    """
+    assert pr2_gripper.travel_when_closing == pytest.approx(0.0, abs=1e-9)
+
+
+def test_swinging_fingers_carry_the_point_they_meet_at_further_out(tracy_world):
+    """
+    Tracy's fingers swing on hinges, so the point they meet at travels along the
+    approach axis as they close.
+    """
+    gripper = tracy_world.get_semantic_annotations_by_type(Tracy)[
+        0
+    ].left_arm.end_effector
+
+    assert gripper.travel_when_closing > POSITION_TOLERANCE
+
+
+def test_reading_the_travel_leaves_the_fingers_where_they_were(tracy_world):
+    """
+    The closed state is only borrowed to measure against, so nothing of it is left
+    behind on the world.
+    """
+    gripper = tracy_world.get_semantic_annotations_by_type(Tracy)[
+        0
+    ].left_arm.end_effector
+    before = gripper.fingertips.tool_P_grasp.to_np()
+
+    gripper.travel_when_closing
+
+    np.testing.assert_allclose(
+        gripper.fingertips.tool_P_grasp.to_np(), before, atol=1e-9
+    )

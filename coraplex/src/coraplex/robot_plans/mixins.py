@@ -6,8 +6,11 @@ from typing_extensions import Optional
 
 from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix
 from semantic_digital_twin.spatial_types.spatial_types import Pose
+from semantic_digital_twin.robots.robot_part_mixins import HasTwoFingers
 from semantic_digital_twin.robots.robot_parts import EndEffector
 from semantic_digital_twin.grasping.grasp_candidates import GraspCandidate
+from coraplex.datastructures.enums import AimedGripperFrame
+from coraplex.exceptions import GripperCannotAimItsFingertips
 
 
 @dataclass
@@ -89,6 +92,22 @@ class PickUpTuningParameters(ReachTuningParameters):
     the internal :class:`~coraplex.robot_plans.actions.core.pick_up.ReachAction` it
     builds, so both fields are literally the same value under the same name in both
     places rather than two similarly-named-but-distinct fields.
+    """
+
+    grasp_width: Optional[float] = field(default=None, kw_only=True)
+    """
+    How wide the object stands where the fingers meet it, in metres.
+
+    Given, the fingers are sent to that width rather than the gripper simply being
+    shut, which is what an object held by contact alone needs: closing all the way onto
+    something that is not centred between the fingers wedges it sideways instead of
+    holding it. ``None`` shuts the gripper.
+    """
+
+    grasp_squeeze: float = field(default=0.0, kw_only=True)
+    """
+    How far past :attr:`grasp_width` each finger is sent, in metres, so they press into
+    the object rather than merely touching it.
     """
 
     grasp_closing_velocity: Optional[float] = field(default=None, kw_only=True)
@@ -300,6 +319,18 @@ class HasApproachesGraspPoses:
     How far in meters the gripper rises when it leaves a grasp or a placed object.
     """
 
+    aimed_frame: AimedGripperFrame = field(
+        default=AimedGripperFrame.TOOL_FRAME, kw_only=True
+    )
+    """
+    Which part of the gripper is put on the grasp.
+
+    A gripper's tool frame need not sit where its fingers meet, so a grasp aimed at the
+    tool frame closes the fingers beside the object rather than on it. Aiming
+    :attr:`~coraplex.datastructures.enums.AimedGripperFrame.FINGERTIPS` instead corrects
+    for that, which only a gripper with two fingers can answer.
+    """
+
     def grasp_pose_sequence(
         self,
         reference_T_grasp: Pose,
@@ -314,18 +345,33 @@ class HasApproachesGraspPoses:
             ``None`` keeps only :attr:`approach_clearance`.
         :return: The tool frame goals around the grasp.
         """
-        tool_goal = end_effector.tool_frame_goal(reference_T_grasp)
+        tool_goal = self._goal_for(end_effector, reference_T_grasp)
         grasp_T_pre_grasp = HomogeneousTransformationMatrix.from_xyz_rpy(
             x=-self._approach_distance(grasp)
         )
-        pre_grasp_pose = end_effector.tool_frame_goal(
-            (reference_T_grasp.homogeneous_matrix @ grasp_T_pre_grasp).pose
+        pre_grasp_pose = self._goal_for(
+            end_effector,
+            (reference_T_grasp.homogeneous_matrix @ grasp_T_pre_grasp).pose,
         )
         return GraspPoseSequence(
             pre_grasp=pre_grasp_pose,
             grasp=tool_goal,
             retreat=self._retreat_pose(reference_T_grasp, tool_goal),
         )
+
+    def _goal_for(self, end_effector: EndEffector, reference_T_grasp: Pose) -> Pose:
+        """
+        :param end_effector: The end effector that is to reach the grasp.
+        :param reference_T_grasp: The grasp frame to reach.
+        :return: The tool frame goal that puts :attr:`aimed_frame` on it.
+        :raises GripperCannotAimItsFingertips: If the fingertips are to be aimed on a
+            gripper that does not have two fingers.
+        """
+        if self.aimed_frame is AimedGripperFrame.TOOL_FRAME:
+            return end_effector.tool_frame_goal(reference_T_grasp)
+        if not isinstance(end_effector, HasTwoFingers):
+            raise GripperCannotAimItsFingertips(end_effector)
+        return end_effector.tool_frame_goal_for_grasp(reference_T_grasp)
 
     def _approach_distance(self, grasp: Optional[GraspCandidate]) -> float:
         """

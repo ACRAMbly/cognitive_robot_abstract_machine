@@ -154,6 +154,23 @@ class ExecutionType(Enum):
         return self in (ExecutionType.REAL, ExecutionType.PHYSICALLY_SIMULATED)
 
 
+class AimedGripperFrame(Enum):
+    """
+    Which part of a gripper a reach puts on its target.
+    """
+
+    TOOL_FRAME = auto()
+    """
+    The gripper's own tool frame, wherever its description places it.
+    """
+
+    FINGERTIPS = auto()
+    """
+    The point where the fingers meet, for a reach that has to land the fingers on
+    something rather than the frame they are measured from.
+    """
+
+
 class VisualizationBackend(StrEnum):
     """The renderer selected for a simulated world."""
 

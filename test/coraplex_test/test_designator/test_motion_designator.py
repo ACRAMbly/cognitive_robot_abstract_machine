@@ -1,7 +1,11 @@
+from __future__ import annotations
+
 from copy import deepcopy
+from dataclasses import dataclass
 
 import numpy as np
 import pytest
+from typing_extensions import List
 
 from coraplex.alternative_motion_mappings.stretch_motion_mapping import (
     StretchMoveReal,
@@ -21,7 +25,7 @@ from coraplex.exceptions import FingerWidthNeedsPhysics
 from coraplex.plans.executables import MoveBranchExecutable
 from giskardpy.motion_statechart.monitors.overwrite_state_monitors import SetOdometry
 from coraplex.plans.factories import sequential, execute_single
-from coraplex.plans.plan_node import MotionNode, ActionNode
+from coraplex.plans.plan_node import DesignatorNode, MotionNode, ActionNode
 from coraplex.robot_plans.actions.core.navigation import NavigateAction
 from coraplex.robot_plans.actions.core.pick_up import GraspingAction, PickUpAction
 from coraplex.robot_plans.actions.core.placing import PlaceAction
@@ -1014,3 +1018,78 @@ def test_fingers_are_not_sent_to_a_width_where_nothing_pushes_back(
 
         with pytest.raises(FingerWidthNeedsPhysics):
             motion.motion_chart
+
+
+# %% what a grasp closes with
+
+
+@dataclass
+class ClosingMotions:
+    """
+    The motions a grasping action takes hold of its object with.
+    """
+
+    to_width: List[DesignatorNode]
+    """
+    The nodes that send the fingers to a width.
+    """
+
+    shut: List[DesignatorNode]
+    """
+    The nodes that simply shut the gripper, leaving aside the one that opens it on the
+    way in.
+    """
+
+    @classmethod
+    def of(cls, grasping: GraspingAction, context: Context) -> ClosingMotions:
+        """
+        :param grasping: The grasping action to read.
+        :param context: The context to ground it in.
+        :return: The closing motions its plan holds.
+        """
+        sequential([grasping], context=context)
+        grasping.plan_node.notify()
+        plan = grasping.plan_node.plan
+        return cls(
+            to_width=plan.get_nodes_by_designator_type(MoveFingersToWidthMotion),
+            shut=[
+                node
+                for node in plan.get_nodes_by_designator_type(MoveGripperMotion)
+                if node.designator.motion is GripperState.CLOSE
+            ],
+        )
+
+
+def test_a_grasp_without_a_width_shuts_the_gripper(pr2_apartment_context):
+    world, _, context = pr2_apartment_context
+    milk = world.get_semantic_annotations_by_type(Milk)[0]
+    grasping = GraspingAction(
+        GraspCandidate.from_body_origin(milk), left_or_only_arm(context.robot)
+    )
+
+    closing = ClosingMotions.of(grasping, context)
+
+    assert closing.to_width == []
+    assert [node.designator.motion for node in closing.shut] == [GripperState.CLOSE]
+
+
+def test_a_grasp_given_a_width_sends_the_fingers_to_it(pr2_apartment_context):
+    """
+    An object held by friction alone is taken hold of at its own width: shutting the
+    gripper onto it would wedge it aside rather than hold it.
+    """
+    world, _, context = pr2_apartment_context
+    milk = world.get_semantic_annotations_by_type(Milk)[0]
+    width, squeeze = 0.06, 0.002
+    grasping = GraspingAction(
+        GraspCandidate.from_body_origin(milk),
+        left_or_only_arm(context.robot),
+        grasp_width=width,
+        grasp_squeeze=squeeze,
+    )
+
+    closing = ClosingMotions.of(grasping, context)
+
+    assert closing.shut == []
+    assert [node.designator.width for node in closing.to_width] == [width]
+    assert [node.designator.squeeze for node in closing.to_width] == [squeeze]
