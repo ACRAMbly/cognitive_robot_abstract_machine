@@ -19,7 +19,10 @@ from krrood.parametrization.feature_extraction.aggregations import (
     compute_aggregation_statistics,
 )
 from krrood.patterns.subclass_safe_generic import SubClassSafeGeneric
-from probabilistic_model.probabilistic_model import PartialPointType
+from probabilistic_model.probabilistic_model import (
+    PartialPointType,
+    ProbabilisticModel,
+)
 from probabilistic_model.probabilistic_circuit.relational.exceptions import (
     CircuitNotFittedError,
     InvalidMonteCarloSampleCountError,
@@ -41,12 +44,12 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-TCircuit = TypeVar("TCircuit")
+CircuitType = TypeVar("CircuitType", bound=ProbabilisticModel)
 """
 The circuit type a relational circuit is fitted and grounded in.
 """
 
-TMountingNode = TypeVar("TMountingNode")
+MountingNodeType = TypeVar("MountingNodeType")
 """
 A node of the class circuit that the instances of an exchangeable relation are mounted
 at.
@@ -71,12 +74,12 @@ class GroundingMode(enum.IntEnum):
 
 
 @dataclass
-class GroundedPartTemplate(Generic[TCircuit], SubClassSafeGeneric):
+class GroundedPartTemplate(Generic[CircuitType], SubClassSafeGeneric):
     """
     The grounded template of one child object.
     """
 
-    circuit: TCircuit
+    circuit: CircuitType
     """
     The grounded template, shared by every child object whose query has the same shape.
     """
@@ -169,13 +172,13 @@ class InstanceMixture:
 
 
 @dataclass
-class PartitionMixture(InstanceMixture, Generic[TCircuit], SubClassSafeGeneric):
+class PartitionMixture(InstanceMixture, Generic[CircuitType], SubClassSafeGeneric):
     """
     A mixture with one instance per branch of the exact partition over the undetermined
     latents.
     """
 
-    branches: list[TCircuit] = field(default_factory=list)
+    branches: list[CircuitType] = field(default_factory=list)
     """
     The branch of every instance, as a circuit over the undetermined latents.
     """
@@ -183,7 +186,7 @@ class PartitionMixture(InstanceMixture, Generic[TCircuit], SubClassSafeGeneric):
 
 @dataclass
 class ExchangeablePartGrounder(
-    Generic[TCircuit, TMountingNode], SubClassSafeGeneric, ABC
+    Generic[CircuitType, MountingNodeType], SubClassSafeGeneric, ABC
 ):
     """
     Grounds one exchangeable part into the class circuit, in place.
@@ -191,7 +194,7 @@ class ExchangeablePartGrounder(
     Subclasses implement the operations on the nodes of one circuit type.
     """
 
-    circuit: TCircuit
+    circuit: CircuitType
     """
     The working class circuit.
     """
@@ -201,7 +204,7 @@ class ExchangeablePartGrounder(
     The fitted template whose exchangeable relation is being grounded.
     """
 
-    part_templates: list[GroundedPartTemplate[TCircuit]]
+    part_templates: list[GroundedPartTemplate[CircuitType]]
     """
     The grounded template of every child object of the relation.
     """
@@ -221,7 +224,7 @@ class ExchangeablePartGrounder(
     Number of samples drawn of ``undetermined_latents``.
     """
 
-    product_nodes_to_extend: list[TMountingNode] = field(
+    product_nodes_to_extend: list[MountingNodeType] = field(
         init=False, default_factory=list
     )
     """
@@ -265,7 +268,7 @@ class ExchangeablePartGrounder(
         raise NotImplementedError
 
     @abstractmethod
-    def mounting_nodes(self) -> list[TMountingNode]:
+    def mounting_nodes(self) -> list[MountingNodeType]:
         """
         :return: The lowest product nodes that model every latent variable of the
             template, none of them an ancestor of another.
@@ -273,7 +276,7 @@ class ExchangeablePartGrounder(
         raise NotImplementedError
 
     @abstractmethod
-    def circuit_below(self, node: TMountingNode) -> TCircuit:
+    def circuit_below(self, node: MountingNodeType) -> CircuitType:
         """
         :param node: A node of the class circuit.
         :return: The subcircuit rooted at the node.
@@ -290,7 +293,7 @@ class ExchangeablePartGrounder(
 
     @staticmethod
     @abstractmethod
-    def partition_branches(proposal: TCircuit) -> list[TCircuit]:
+    def partition_branches(proposal: CircuitType) -> list[CircuitType]:
         """
         :param proposal: A circuit over the undetermined latents.
         :return: The subcircuits that the root of the circuit mixes, or nothing if the
@@ -319,7 +322,7 @@ class ExchangeablePartGrounder(
         raise NotImplementedError
 
     @abstractmethod
-    def partition_mixture(self, mixture: PartitionMixture[TCircuit]):
+    def partition_mixture(self, mixture: PartitionMixture[CircuitType]):
         """
         Mount the part as a mixture of one instance per branch of the exact partition,
         each carrying its branch.
@@ -346,7 +349,7 @@ class ExchangeablePartGrounder(
             node_local_assignments, self.undetermined_latents
         )
 
-    def exact_partition_mixture(self) -> PartitionMixture[TCircuit]:
+    def exact_partition_mixture(self) -> PartitionMixture[CircuitType]:
         """
         Weigh the branches of the fitted partition over the undetermined statistics and
         remove the statistics from the class circuit.
@@ -387,7 +390,7 @@ class ExchangeablePartGrounder(
         return PartitionMixture(assignments, log_weights, branches)
 
     def _sample_undetermined_latents(
-        self, node: Optional[TMountingNode] = None
+        self, node: Optional[MountingNodeType] = None
     ) -> list[PartialPointType]:
         """
         :param node: A mounting node to sample below, instead of the whole class
@@ -415,7 +418,7 @@ class ExchangeablePartGrounder(
         ]
 
     def _node_local_latent_log_likelihoods(
-        self, node: TMountingNode, latent_assignments: list[PartialPointType]
+        self, node: MountingNodeType, latent_assignments: list[PartialPointType]
     ) -> list[float]:
         """
         :param node: A mounting node.
@@ -436,7 +439,7 @@ class ExchangeablePartGrounder(
         ]
 
     def _node_local_assignments(
-        self, node: TMountingNode, sampled_assignments: list[PartialPointType]
+        self, node: MountingNodeType, sampled_assignments: list[PartialPointType]
     ) -> WeightedAssignments:
         """
         :param node: A mounting node.
@@ -456,7 +459,7 @@ class ExchangeablePartGrounder(
 
     @staticmethod
     def _branch_log_probabilities(
-        subcircuit: TCircuit,
+        subcircuit: CircuitType,
         undetermined_latents: SortedSet[Variable],
         branch_regions: list[Event],
     ) -> list[float]:
@@ -491,7 +494,7 @@ class ExchangeablePartGrounder(
 
     @staticmethod
     def _representative_value(
-        branch: TCircuit, undetermined_latents: SortedSet[Variable]
+        branch: CircuitType, undetermined_latents: SortedSet[Variable]
     ) -> PartialPointType:
         """
         :param branch: A branch of the exact partition.
@@ -515,7 +518,7 @@ class ExchangeablePartGrounder(
 
 
 @dataclass
-class RelationalGrounding(Generic[TCircuit], SubClassSafeGeneric, ABC):
+class RelationalGrounding(Generic[CircuitType], SubClassSafeGeneric, ABC):
     """
     Grounds a relational probabilistic circuit for queries, in the circuit type it was
     fitted in.
@@ -534,13 +537,13 @@ class RelationalGrounding(Generic[TCircuit], SubClassSafeGeneric, ABC):
 
     @property
     @abstractmethod
-    def part_grounder_type(self) -> Type[ExchangeablePartGrounder[TCircuit, Any]]:
+    def part_grounder_type(self) -> Type[ExchangeablePartGrounder[CircuitType, Any]]:
         """
         :return: What grounds one exchangeable relation.
         """
         raise NotImplementedError
 
-    def ground(self, query: Match) -> TCircuit:
+    def ground(self, query: Match) -> CircuitType:
         """
         :param query: An underspecified, resolved query whose structure determines which
             parts are grounded and how many child objects every exchangeable relation
@@ -564,12 +567,12 @@ class RelationalGrounding(Generic[TCircuit], SubClassSafeGeneric, ABC):
 
     def part_grounder(
         self,
-        circuit: TCircuit,
+        circuit: CircuitType,
         exchangeable_part_name: str,
         template: ExchangeableDistributionTemplate,
         query: Match,
         instance: Any,
-    ) -> ExchangeablePartGrounder[TCircuit, Any]:
+    ) -> ExchangeablePartGrounder[CircuitType, Any]:
         """
         :param circuit: The working class circuit.
         :param exchangeable_part_name: Field name of the exchangeable relation.

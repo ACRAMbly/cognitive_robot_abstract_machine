@@ -46,7 +46,7 @@ from probabilistic_model.probabilistic_circuit.relational.exceptions import (
     PartCircuitGroundingFailedError,
 )
 from probabilistic_model.probabilistic_circuit.relational.exchangeable_grounding import (
-    TCircuit,
+    CircuitType,
     GroundedPartTemplate,
     GroundingMode,
     RelationalGrounding,
@@ -81,15 +81,15 @@ class ExchangeableDistributionTemplate(RelationalDistributionTemplate):
     """
 
     def grounded_templates_of_parts(
-        self, parts: list[Match], ground: Callable[[Match], TCircuit]
-    ) -> list[GroundedPartTemplate[TCircuit]]:
+        self, parts: list[Match], ground: Callable[[Match], CircuitType]
+    ) -> list[GroundedPartTemplate[CircuitType]]:
         """
         :param parts: The query parts, one per child object of the relation.
         :param ground: Grounds the template for one query part.
         :return: The grounded template of every part. Parts whose queries have the same
             shape share one grounding.
         """
-        groundings: dict[Hashable, tuple[TCircuit, str]] = {}
+        groundings: dict[Hashable, tuple[CircuitType, str]] = {}
         result = []
         for index, part in enumerate(parts):
             prefix = self._prefix_for_part(part, index)
