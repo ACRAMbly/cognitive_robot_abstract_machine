@@ -198,3 +198,6 @@ basstler/src/basstler/board.json
 # basstler's own virtual environment, created by every session start that finds it
 # missing (see create_basstler_environment in .claude/hooks/resolve-personal-notes-config.sh).
 basstler/.venv/
+# The uv such a start installs for itself, where it finds neither uv nor a supported
+# interpreter (see install_uv in the same file).
+basstler/.uv/
