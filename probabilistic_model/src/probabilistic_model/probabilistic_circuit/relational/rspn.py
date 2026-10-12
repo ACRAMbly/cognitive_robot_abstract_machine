@@ -46,7 +46,7 @@ from probabilistic_model.probabilistic_circuit.relational.exceptions import (
     PartCircuitGroundingFailedError,
 )
 from probabilistic_model.probabilistic_circuit.relational.exchangeable_grounding import (
-    Circuit,
+    TCircuit,
     GroundedPartTemplate,
     GroundingMode,
     RelationalGrounding,
@@ -81,15 +81,15 @@ class ExchangeableDistributionTemplate(RelationalDistributionTemplate):
     """
 
     def grounded_templates_of_parts(
-        self, parts: list[Match], ground: Callable[[Match], Circuit]
-    ) -> list[GroundedPartTemplate[Circuit]]:
+        self, parts: list[Match], ground: Callable[[Match], TCircuit]
+    ) -> list[GroundedPartTemplate[TCircuit]]:
         """
         :param parts: The query parts, one per child object of the relation.
         :param ground: Grounds the template for one query part.
         :return: The grounded template of every part. Parts whose queries have the same
             shape share one grounding.
         """
-        groundings: dict[Hashable, tuple[Circuit, str]] = {}
+        groundings: dict[Hashable, tuple[TCircuit, str]] = {}
         result = []
         for index, part in enumerate(parts):
             prefix = self._prefix_for_part(part, index)
@@ -106,11 +106,7 @@ class ExchangeableDistributionTemplate(RelationalDistributionTemplate):
         """
         :param variable: A variable of the grounded template of a part.
         :param part: The grounded template of the part.
-        :return: The variable of the part. A variable of the template's class circuit
-            is put under the namespace of the part. A variable of an exchangeable
-            relation of the template, which its grounding names by its full query path,
-            is moved from the namespace the template was grounded for to that of the
-            part.
+        :return: The variable under the namespace of the part.
         """
         if variable in self.template_distribution.class_probabilistic_circuit.variables:
             return type(variable)(
