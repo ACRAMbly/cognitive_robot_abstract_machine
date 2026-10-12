@@ -317,15 +317,15 @@ def test_every_two_finger_gripper_can_measure_where_its_fingers_meet(
                 continue
             assert gripper.tool_P_grasp.reference_frame is gripper.tool_frame
             assert gripper.fingertip_surface_depth >= 0.0
-            assert gripper.fingertip_frame_distance_for(
-                0.05
-            ) > gripper.fingertip_frame_distance_for(0.02)
+            assert np.linalg.norm(
+                gripper.finger_tip_P_thumb_tip(0.05).to_np()[:3].ravel()
+            ) > np.linalg.norm(gripper.finger_tip_P_thumb_tip(0.02).to_np()[:3].ravel())
 
 
 # %% aiming the fingers rather than the tool frame
 
 
-def test_the_grasp_frame_goal_puts_the_grasp_point_on_the_grasp(
+def test_the_tool_frame_goal_for_a_grasp_puts_the_grasp_point_on_it(
     pr2_gripper, graspable_box
 ):
     """
@@ -334,7 +334,7 @@ def test_the_grasp_frame_goal_puts_the_grasp_point_on_the_grasp(
     """
     grasp = graspable_box.grasp_candidates()[0].grasp_pose
 
-    goal = pr2_gripper.grasp_frame_goal(grasp)
+    goal = pr2_gripper.tool_frame_goal_for_grasp(grasp)
 
     reached = goal.homogeneous_matrix.to_np()
     grasp_point_once_reached = (
@@ -345,13 +345,13 @@ def test_the_grasp_frame_goal_puts_the_grasp_point_on_the_grasp(
     )
 
 
-def test_the_grasp_frame_goal_turns_the_gripper_the_same_way_as_the_tool_frame_goal(
+def test_the_goal_for_a_grasp_turns_the_gripper_the_same_way_as_the_tool_frame_goal(
     pr2_gripper, graspable_box
 ):
     grasp = graspable_box.grasp_candidates()[0].grasp_pose
 
     np.testing.assert_allclose(
-        pr2_gripper.grasp_frame_goal(grasp).rotation_matrix.to_np(),
+        pr2_gripper.tool_frame_goal_for_grasp(grasp).rotation_matrix.to_np(),
         pr2_gripper.tool_frame_goal(grasp).rotation_matrix.to_np(),
         atol=1e-9,
     )
@@ -361,8 +361,10 @@ def test_the_grasp_frame_goal_turns_the_gripper_the_same_way_as_the_tool_frame_g
 
 
 def test_a_wider_object_sends_the_fingertip_frames_further_apart(pr2_gripper):
-    narrower = pr2_gripper.fingertip_frame_distance_for(0.02)
-    wider = pr2_gripper.fingertip_frame_distance_for(0.05)
+    narrower = np.linalg.norm(
+        pr2_gripper.finger_tip_P_thumb_tip(0.02).to_np()[:3].ravel()
+    )
+    wider = np.linalg.norm(pr2_gripper.finger_tip_P_thumb_tip(0.05).to_np()[:3].ravel())
 
     assert wider - narrower == pytest.approx(0.03)
 
@@ -374,7 +376,9 @@ def test_the_separation_a_goal_is_built_for_is_the_one_asked_for(pr2_gripper):
     """
     separation = 0.04
 
-    frames_apart = pr2_gripper.fingertip_frame_distance_for(separation)
+    frames_apart = np.linalg.norm(
+        pr2_gripper.finger_tip_P_thumb_tip(separation).to_np()[:3].ravel()
+    )
 
     assert frames_apart - 2 * pr2_gripper.fingertip_surface_depth == pytest.approx(
         separation
@@ -382,6 +386,6 @@ def test_the_separation_a_goal_is_built_for_is_the_one_asked_for(pr2_gripper):
 
 
 def test_the_thumb_tip_goal_is_read_in_the_other_fingertips_frame(pr2_gripper):
-    goal = pr2_gripper.thumb_tip_goal_for(0.04)
+    goal = pr2_gripper.finger_tip_P_thumb_tip(0.04)
 
     assert goal.reference_frame is pr2_gripper.finger.tip

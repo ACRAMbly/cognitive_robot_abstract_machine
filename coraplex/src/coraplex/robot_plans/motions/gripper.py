@@ -164,7 +164,7 @@ class MoveFingersToWidthMotion(BaseMotion):
         return CartesianPosition(
             root_link=finger_tip,
             tip_link=thumb_tip,
-            goal_point=self.gripper.thumb_tip_goal_for(
+            goal_point=self.gripper.finger_tip_P_thumb_tip(
                 max(0.0, self.width - 2 * self.squeeze)
             ),
             name="MoveFingersToWidth",

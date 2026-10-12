@@ -199,7 +199,7 @@ class HasTwoFingers(
         )
         return thumb_tip.midpoint(finger_tip)
 
-    def grasp_frame_goal(self, grasp_pose: Pose) -> Pose:
+    def tool_frame_goal_for_grasp(self, grasp_pose: Pose) -> Pose:
         """
         Express a grasp frame as the goal that puts :attr:`tool_P_grasp` on it, where
         :meth:`~semantic_digital_twin.robots.robot_parts.EndEffector.tool_frame_goal`
@@ -245,7 +245,7 @@ class HasTwoFingers(
         """
         return (self._fingertip_frame_distance - self.fingertip_separation) / 2
 
-    def fingertip_frame_distance_for(self, separation: float) -> float:
+    def _fingertip_frame_distance_for(self, separation: float) -> float:
         """
         :param separation: How far apart the fingertips' facing surfaces are to stand,
             in metres.
@@ -254,7 +254,7 @@ class HasTwoFingers(
         """
         return separation + 2 * self.fingertip_surface_depth
 
-    def thumb_tip_goal_for(self, separation: float) -> Point3:
+    def finger_tip_P_thumb_tip(self, separation: float) -> Point3:
         """
         Where the thumb's tip has to reach, in the finger's tip frame, to leave the
         fingertips a given distance apart.
@@ -276,7 +276,7 @@ class HasTwoFingers(
         ):
             finger_tip_V_thumb_tip = -finger_tip_V_thumb_tip
         return (
-            finger_tip_V_thumb_tip * self.fingertip_frame_distance_for(separation)
+            finger_tip_V_thumb_tip * self._fingertip_frame_distance_for(separation)
         ).point3
 
     @property
