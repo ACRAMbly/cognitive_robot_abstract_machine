@@ -42,7 +42,7 @@ so users who do not need them are spared the download. They are bundled in the `
 
 | Package | Annotators that need it                                                                 |
 |---------|-----------------------------------------------------------------------------------------|
-| `torch` | `ZeroShotClassifierAnnotator` (`robokudo.annotators.zero_shot_classifier_annotator`) |
+| `torch` | `ZeroShotClassificationAnnotator` (`robokudo.annotators.zero_shot_classification_annotator`) |
 
 Install them together with RoboKudo:
 
