@@ -20,8 +20,10 @@ from transformers import BatchEncoding, BatchFeature
 from transformers.modeling_outputs import BaseModelOutputWithPooling
 from typing_extensions import List, Sequence, Union
 
-import robokudo.annotators.clip_annotator
-from robokudo.annotators.clip_annotator import ClipAnnotator
+import robokudo.annotators.zero_shot_classifier_annotator
+from robokudo.annotators.zero_shot_classifier_annotator import (
+    ZeroShotClassifierAnnotator,
+)
 from robokudo.cas import CASViews
 from robokudo.pipeline import Pipeline
 from robokudo.types.annotation import Classification
@@ -175,12 +177,12 @@ def color_embedding_clip(monkeypatch) -> ColorEmbeddingClip:
     """
     clip = ColorEmbeddingClip()
     monkeypatch.setattr(
-        robokudo.annotators.clip_annotator.CLIPModel,
+        robokudo.annotators.zero_shot_classifier_annotator.CLIPModel,
         "from_pretrained",
         lambda model_name: clip.model,
     )
     monkeypatch.setattr(
-        robokudo.annotators.clip_annotator.CLIPProcessor,
+        robokudo.annotators.zero_shot_classifier_annotator.CLIPProcessor,
         "from_pretrained",
         lambda model_name: clip.processor,
     )
@@ -209,11 +211,11 @@ def _object_hypothesis(x: int, y: int, width: int, height: int) -> ObjectHypothe
     return object_hypothesis
 
 
-def _color_descriptor() -> ClipAnnotator.Descriptor:
+def _color_descriptor() -> ZeroShotClassifierAnnotator.Descriptor:
     """
     :return: A descriptor classifying against the color vocabulary on the CPU.
     """
-    descriptor = ClipAnnotator.Descriptor()
+    descriptor = ZeroShotClassifierAnnotator.Descriptor()
     descriptor.parameters.device = torch.device("cpu")
     descriptor.parameters.vocabulary = COLOR_VOCABULARY
     descriptor.parameters.save_top_k = len(COLOR_VOCABULARY)
@@ -221,12 +223,12 @@ def _color_descriptor() -> ClipAnnotator.Descriptor:
 
 
 def _annotator_in_pipeline(
-    descriptor: ClipAnnotator.Descriptor, color_image: np.ndarray
-) -> ClipAnnotator:
+    descriptor: ZeroShotClassifierAnnotator.Descriptor, color_image: np.ndarray
+) -> ZeroShotClassifierAnnotator:
     """
     :return: An annotator whose CAS holds the given color image.
     """
-    annotator = ClipAnnotator(descriptor=descriptor)
+    annotator = ZeroShotClassifierAnnotator(descriptor=descriptor)
     pipeline = Pipeline("Sequence")
     pipeline.add_child(annotator)
     pipeline.setup()
@@ -234,7 +236,9 @@ def _annotator_in_pipeline(
     return annotator
 
 
-def _scene_classifications(annotator: ClipAnnotator) -> List[Classification]:
+def _scene_classifications(
+    annotator: ZeroShotClassifierAnnotator,
+) -> List[Classification]:
     return annotator.get_cas().filter_annotations_by_type(Classification)
 
 
@@ -257,9 +261,9 @@ def test_annotator_without_descriptor_indexes_default_vocabulary(
     """
     An annotator built without a descriptor falls back to the default parameters.
     """
-    default_vocabulary = ClipAnnotator.Descriptor().parameters.vocabulary
+    default_vocabulary = ZeroShotClassifierAnnotator.Descriptor().parameters.vocabulary
 
-    annotator = ClipAnnotator()
+    annotator = ZeroShotClassifierAnnotator()
 
     assert annotator.vocabulary_index.ntotal == len(default_vocabulary)
 
@@ -268,7 +272,7 @@ def test_vocabulary_is_encoded_through_the_template(color_embedding_clip):
     descriptor = _color_descriptor()
     descriptor.parameters.vocabulary_template = "A photo of something {}"
 
-    ClipAnnotator(descriptor=descriptor)
+    ZeroShotClassifierAnnotator(descriptor=descriptor)
 
     assert color_embedding_clip.processor.tokenizer.received_texts == [
         descriptor.parameters.vocabulary_template.format(word)
@@ -382,7 +386,7 @@ def _two_color_scene() -> np.ndarray:
     return image
 
 
-def _object_hypothesis_descriptor() -> ClipAnnotator.Descriptor:
+def _object_hypothesis_descriptor() -> ZeroShotClassifierAnnotator.Descriptor:
     descriptor = _color_descriptor()
     descriptor.parameters.analysis_scope = ObjectHypothesis
     return descriptor

@@ -22,15 +22,15 @@ if TYPE_CHECKING:
 FONT = cv2.FONT_HERSHEY_COMPLEX
 
 
-class ClipAnnotator(ThreadedAnnotator):
+class ZeroShotClassifierAnnotator(ThreadedAnnotator):
     """
-    A simple CLIP annotator that uses a given vocabulary to annotate all incoming object
-    hypothesis.
+    Classifies the whole image or each object hypothesis with CLIP against a freely
+    chosen vocabulary of class names, without training on those classes.
     """
 
     class Descriptor(ThreadedAnnotator.Descriptor):
         """
-        Descriptor for the ClipAnnotator.
+        Descriptor for the ZeroShotClassifierAnnotator.
         """
 
         class Parameters:
@@ -90,8 +90,8 @@ class ClipAnnotator(ThreadedAnnotator):
 
     def __init__(
         self,
-        name: str = "ClipAnnotator",
-        descriptor: ClipAnnotator.Descriptor | None = None,
+        name: str = "ZeroShotClassifierAnnotator",
+        descriptor: ZeroShotClassifierAnnotator.Descriptor | None = None,
     ) -> None:
         super().__init__(name=name, descriptor=descriptor)
 
@@ -208,7 +208,7 @@ class ClipAnnotator(ThreadedAnnotator):
         :return: The py_trees status.
         """
         cas = self.get_cas()
-        parameters: ClipAnnotator.Descriptor.Parameters = self.parameters
+        parameters: ZeroShotClassifierAnnotator.Descriptor.Parameters = self.parameters
 
         vocabulary: List[str] = parameters.vocabulary
         use_softmax: bool = parameters.use_softmax
@@ -266,7 +266,7 @@ class ClipAnnotator(ThreadedAnnotator):
             self.rk_logger.info("Found 0 object hypotheses to analyze")
             return Status.SUCCESS
 
-        parameters: ClipAnnotator.Descriptor.Parameters = self.parameters
+        parameters: ZeroShotClassifierAnnotator.Descriptor.Parameters = self.parameters
         if parameters.filter_fn is not None:
             filter_fn = parameters.filter_fn
             ohs = list(filter(filter_fn, ohs))
