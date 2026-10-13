@@ -5,12 +5,9 @@ from typing_extensions import Optional
 
 
 from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix
-from semantic_digital_twin.spatial_types.spatial_types import Pose
-from semantic_digital_twin.robots.robot_part_mixins import HasTwoFingers
+from semantic_digital_twin.spatial_types.spatial_types import Point3, Pose
 from semantic_digital_twin.robots.robot_parts import EndEffector
 from semantic_digital_twin.grasping.grasp_candidates import GraspCandidate
-from coraplex.datastructures.enums import AimedGripperFrame
-from coraplex.exceptions import GripperCannotAimItsFingertips
 
 
 @dataclass
@@ -96,12 +93,8 @@ class PickUpTuningParameters(ReachTuningParameters):
 
     grasp_width: Optional[float] = field(default=None, kw_only=True)
     """
-    How wide the object stands where the fingers meet it, in metres.
-
-    Given, the fingers are sent to that width rather than the gripper simply being
-    shut, which is what an object held by contact alone needs: closing all the way onto
-    something that is not centred between the fingers wedges it sideways instead of
-    holding it. ``None`` shuts the gripper.
+    How wide the object stands where the fingers meet it, in metres. Given, the fingers
+    are sent to that width rather than the gripper being shut onto the object.
     """
 
     grasp_squeeze: float = field(default=0.0, kw_only=True)
@@ -319,16 +312,13 @@ class HasApproachesGraspPoses:
     How far in meters the gripper rises when it leaves a grasp or a placed object.
     """
 
-    aimed_frame: AimedGripperFrame = field(
-        default=AimedGripperFrame.TOOL_FRAME, kw_only=True
-    )
+    aimed_point: Optional[Point3] = field(default=None, kw_only=True)
     """
-    Which part of the gripper is put on the grasp.
+    The point of the gripper, read in its tool frame, that is put on the grasp; the tool
+    frame itself when not given.
 
-    A gripper's tool frame need not sit where its fingers meet, so a grasp aimed at the
-    tool frame closes the fingers beside the object rather than on it. Aiming
-    :attr:`~coraplex.datastructures.enums.AimedGripperFrame.FINGERTIPS` instead corrects
-    for that, which only a gripper with two fingers can answer.
+    Aimed at ``end_effector.fingertips.tool_P_grasp`` for a gripper whose tool frame
+    does not sit where its fingers meet.
     """
 
     def grasp_pose_sequence(
@@ -363,15 +353,13 @@ class HasApproachesGraspPoses:
         """
         :param end_effector: The end effector that is to reach the grasp.
         :param reference_T_grasp: The grasp frame to reach.
-        :return: The tool frame goal that puts :attr:`aimed_frame` on it.
-        :raises GripperCannotAimItsFingertips: If the fingertips are to be aimed on a
-            gripper that does not have two fingers.
+        :return: The tool frame goal that puts :attr:`aimed_point` on it.
         """
-        if self.aimed_frame is AimedGripperFrame.TOOL_FRAME:
+        if self.aimed_point is None:
             return end_effector.tool_frame_goal(reference_T_grasp)
-        if not isinstance(end_effector, HasTwoFingers):
-            raise GripperCannotAimItsFingertips(end_effector)
-        return end_effector.tool_frame_goal_for_grasp(reference_T_grasp)
+        return end_effector.tool_frame_goal_for_point(
+            self.aimed_point, reference_T_grasp
+        )
 
     def _approach_distance(self, grasp: Optional[GraspCandidate]) -> float:
         """

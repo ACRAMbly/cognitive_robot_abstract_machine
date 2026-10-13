@@ -56,8 +56,7 @@ class Pacer(ABC):
         """
         Wait until the world has caught up with what the loop commanded.
 
-        There is nothing to wait for unless the loop drives a physics in lockstep: a
-        joint is otherwise simply at the position it was written to.
+        Nothing to wait for unless the loop drives a physics in lockstep.
         """
 
 
@@ -171,14 +170,12 @@ class SteppedSimulationPacer(Pacer):
 
     def wait_for_standstill(self) -> None:
         """
-        Step the physics until none of the servo-driven joints is moving any more, or
+        Step the physics until no servo-driven joint is moving any more, or
         :attr:`standstill_time_limit` passes.
 
-        A controller stops ticking once it is satisfied with the command it is sending,
-        which is before the joints have got there: the servos are still travelling, so
-        whatever runs next would read the world while the robot is still moving. A joint
-        held up by something it has run into also comes to a standstill, short of the
-        position it was commanded to.
+        A controller stops ticking once its command satisfies it, which is before the
+        joints have got there. A joint held up by something it has run into counts as
+        stopped too.
         """
         joint_names = [
             dof.name.name

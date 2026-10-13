@@ -353,17 +353,11 @@ class HasTwoFingers(
     @property
     def travel_when_closing(self) -> float:
         """
-        How much further along
-        :attr:`~semantic_digital_twin.robots.robot_parts.EndEffector.approach_axis` the
-        fingers meet once they are closed than they do now, in metres.
+        How much further along :attr:`EndEffector.approach_axis` the fingers meet once
+        closed than they do now, in metres. Zero for fingers that only slide.
 
-        A gripper whose fingers swing rather than slide carries the point they meet at
-        further out as it closes, so a grasp aimed at where they meet while open has
-        them meet somewhere else by the time they hold anything. Zero for a gripper
-        whose fingers only slide.
-
-        Read by putting the gripper's own closed state on the world and taking it back
-        off again, so nothing is left moved.
+        ..note:: Reads the gripper's closed state onto the world and takes it back off
+            again, so this is not to be read while a plan is driving the robot.
         """
         open_P_grasp = self.fingertips.tool_P_grasp
         with self._world.reset_state_context():
@@ -375,22 +369,13 @@ class HasTwoFingers(
 
     def tool_frame_goal_for_grasp(self, grasp_pose: Pose) -> Pose:
         """
-        Express a grasp frame as the goal that puts
-        :attr:`~semantic_digital_twin.robots.robot_part_mixins.Fingertips.tool_P_grasp` on it,
-        where
-        :meth:`~semantic_digital_twin.robots.robot_parts.EndEffector.tool_frame_goal`
-        puts the tool frame there.
+        Express a grasp frame as the goal that puts :attr:`Fingertips.tool_P_grasp` on
+        it.
 
         :param grasp_pose: The grasp frame to meet.
         :return: The pose the tool frame has to reach, in ``grasp_pose``'s frame.
         """
-        oriented = self.tool_frame_goal(grasp_pose)
-        return Pose(
-            position=grasp_pose.position
-            - oriented.rotation_matrix @ self.fingertips.tool_P_grasp.vector3,
-            orientation=oriented.quaternion,
-            reference_frame=grasp_pose.reference_frame,
-        )
+        return self.tool_frame_goal_for_point(self.fingertips.tool_P_grasp, grasp_pose)
 
 
 @dataclass(eq=False)

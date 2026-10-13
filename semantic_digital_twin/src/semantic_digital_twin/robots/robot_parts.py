@@ -77,7 +77,7 @@ from semantic_digital_twin.spatial_types import (
     RotationMatrix,
     HomogeneousTransformationMatrix,
 )
-from semantic_digital_twin.spatial_types.spatial_types import Pose
+from semantic_digital_twin.spatial_types.spatial_types import Point3, Pose
 from semantic_digital_twin.spatial_types.derivatives import DerivativeMap
 from semantic_digital_twin.world_description.connections import (
     ActiveConnection,
@@ -702,6 +702,23 @@ class EndEffector(AbstractRobotPart, ABC):
         return Pose(
             position=grasp_pose.position,
             orientation=(grasp_pose.rotation_matrix @ grasp_R_tool).quaternion,
+            reference_frame=grasp_pose.reference_frame,
+        )
+
+    def tool_frame_goal_for_point(self, tool_P_point: Point3, grasp_pose: Pose) -> Pose:
+        """
+        Express a grasp frame as the goal that puts a point of this gripper on it, where
+        :meth:`tool_frame_goal` puts the tool frame itself there.
+
+        :param tool_P_point: The point to put on the grasp, read in the tool frame.
+        :param grasp_pose: The grasp frame to reach.
+        :return: The pose the tool frame has to reach, in ``grasp_pose``'s frame.
+        """
+        oriented = self.tool_frame_goal(grasp_pose)
+        return Pose(
+            position=grasp_pose.position
+            - oriented.rotation_matrix @ tool_P_point.vector3,
+            orientation=oriented.quaternion,
             reference_frame=grasp_pose.reference_frame,
         )
 

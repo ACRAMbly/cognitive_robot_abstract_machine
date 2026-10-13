@@ -1,15 +1,8 @@
-from dataclasses import dataclass
-
 import numpy as np
 import pytest
-from typing_extensions import List
 
-from coraplex.datastructures.enums import AimedGripperFrame
-from coraplex.exceptions import GripperCannotAimItsFingertips
 from coraplex.robot_plans.mixins import HasApproachesGraspPoses
-from semantic_digital_twin.datastructures.joint_state import JointState
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
-from semantic_digital_twin.robots.robot_parts import EndEffector
 from semantic_digital_twin.robots.tracy import Tracy
 from semantic_digital_twin.grasping.grasp_candidates import GraspCandidate
 from semantic_digital_twin.semantic_annotations.semantic_annotations import Milk
@@ -25,10 +18,7 @@ from semantic_digital_twin.world_description.connections import (
 )
 from semantic_digital_twin.world_description.geometry import Box, Scale
 from semantic_digital_twin.world_description.shape_collection import ShapeCollection
-from semantic_digital_twin.world_description.world_entity import (
-    Body,
-    KinematicStructureEntity,
-)
+from semantic_digital_twin.world_description.world_entity import Body
 
 # %% fixtures
 
@@ -314,37 +304,10 @@ def test_a_tracy_gripper_approaches_along_the_grasp(tracy_world):
     )
 
 
-# %% which part of the gripper the sequence is aimed at
+# %% which point of the gripper the sequence is aimed at
 
 
-@dataclass(eq=False)
-class GripperWithoutTwoFingers(EndEffector):
-    """
-    An end effector that has no pair of fingers to meet at a point.
-    """
-
-    @property
-    def approach_axis(self) -> Vector3:
-        return Vector3.X(reference_frame=self.tool_frame)
-
-    @property
-    def closing_axis(self) -> Vector3:
-        return Vector3.Y(reference_frame=self.tool_frame)
-
-    def setup_hardware_interfaces(self):
-        pass
-
-    def setup_joint_states(self) -> List[JointState]:
-        return []
-
-    @classmethod
-    def setup_default_configuration_in_world_below_robot_root(
-        cls, robot_root: KinematicStructureEntity
-    ):
-        raise NotImplementedError
-
-
-def test_a_grasp_is_aimed_at_the_tool_frame_unless_asked_otherwise(boxed_pr2_world):
+def test_a_grasp_is_aimed_at_the_tool_frame_unless_a_point_is_given(boxed_pr2_world):
     _, robot, graspable = boxed_pr2_world
     end_effector = robot.left_arm.end_effector
     grasp = grasp_at_origin(graspable)
@@ -366,7 +329,7 @@ def test_aiming_the_fingertips_puts_the_fingers_on_the_grasp(boxed_pr2_world):
     grasp = grasp_at_origin(graspable)
 
     poses = HasApproachesGraspPoses(
-        aimed_frame=AimedGripperFrame.FINGERTIPS
+        aimed_point=end_effector.fingertips.tool_P_grasp
     ).grasp_pose_sequence(grasp.grasp_pose, end_effector, grasp)
 
     np.testing.assert_allclose(
@@ -376,10 +339,35 @@ def test_aiming_the_fingertips_puts_the_fingers_on_the_grasp(boxed_pr2_world):
     )
 
 
-def test_aiming_the_fingertips_moves_the_pre_grasp_pose_with_it(boxed_pr2_world):
+def test_the_aimed_point_is_what_lands_on_the_grasp(boxed_pr2_world):
     """
-    The whole approach is aimed at the same part of the gripper, so the gripper travels
-    the approach distance it was given rather than that distance plus the offset.
+    Any point of the gripper can be aimed, not only the one its fingers meet at, and
+    reaching the returned pose leaves that point on the grasp frame.
+    """
+    _, robot, graspable = boxed_pr2_world
+    end_effector = robot.left_arm.end_effector
+    grasp = grasp_at_origin(graspable)
+    tool_P_point = Vector3(
+        0.01, 0.02, 0.03, reference_frame=end_effector.tool_frame
+    ).point3
+
+    poses = HasApproachesGraspPoses(aimed_point=tool_P_point).grasp_pose_sequence(
+        grasp.grasp_pose, end_effector, grasp
+    )
+
+    reached = poses.grasp.homogeneous_matrix.to_np()
+    point_once_reached = (
+        reached[:3, :3] @ tool_P_point.to_np()[:3].ravel() + reached[:3, 3]
+    )
+    np.testing.assert_allclose(
+        point_once_reached, grasp.grasp_pose.position.to_np()[:3].ravel(), atol=1e-9
+    )
+
+
+def test_aiming_a_point_moves_the_pre_grasp_pose_with_it(boxed_pr2_world):
+    """
+    The whole approach is aimed at the same point, so the gripper travels the approach
+    distance it was given rather than that distance plus the offset.
     """
     _, robot, graspable = boxed_pr2_world
     end_effector = robot.left_arm.end_effector
@@ -389,7 +377,7 @@ def test_aiming_the_fingertips_moves_the_pre_grasp_pose_with_it(boxed_pr2_world)
         grasp.grasp_pose, end_effector, grasp
     )
     at_fingertips = HasApproachesGraspPoses(
-        aimed_frame=AimedGripperFrame.FINGERTIPS
+        aimed_point=end_effector.fingertips.tool_P_grasp
     ).grasp_pose_sequence(grasp.grasp_pose, end_effector, grasp)
 
     np.testing.assert_allclose(
@@ -397,19 +385,3 @@ def test_aiming_the_fingertips_moves_the_pre_grasp_pose_with_it(boxed_pr2_world)
         at_fingertips.grasp.to_np()[:3, 3] - at_tool_frame.grasp.to_np()[:3, 3],
         atol=1e-9,
     )
-
-
-def test_a_gripper_without_two_fingers_cannot_aim_them(boxed_pr2_world):
-    _, robot, graspable = boxed_pr2_world
-    tool_frame = robot.left_arm.end_effector.tool_frame
-    gripper = GripperWithoutTwoFingers(
-        name=PrefixedName("gripper_without_two_fingers"),
-        root=tool_frame,
-        tool_frame=tool_frame,
-    )
-    grasp = grasp_at_origin(graspable)
-
-    with pytest.raises(GripperCannotAimItsFingertips):
-        HasApproachesGraspPoses(
-            aimed_frame=AimedGripperFrame.FINGERTIPS
-        ).grasp_pose_sequence(grasp.grasp_pose, gripper, grasp)

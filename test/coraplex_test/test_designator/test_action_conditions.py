@@ -62,7 +62,7 @@ def test_get_bound_variables(pr2_apartment_context):
         "object_friction",
         "approach_clearance",
         "retreat_distance",
-        "aimed_frame",
+        "aimed_point",
         "grasp",
         "arm",
         "tolerate_grasp_stall",
