@@ -12,7 +12,6 @@ from rclpy.node import Node
 from semantic_digital_twin.adapters.ros.node_registry import ROSNodeRegistry
 
 import robokudo.defs
-import robokudo.pipeline  # Work around circular import
 from robokudo.annotators.outputs import AnnotatorOutputPerPipelineMap
 from robokudo.descriptors.camera_configs.config_mongodb_playback import (
     MongoCameraConfig,

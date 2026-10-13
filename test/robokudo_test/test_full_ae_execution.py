@@ -69,7 +69,7 @@ class TestFullAEExecution(object):
         seq = robokudo.pipeline.Pipeline("TestPipeline")
         seq.add_children(
             [
-                robokudo.annotators.outputs.ClearAnnotatorOutputs(),
+                robokudo.pipeline.ClearAnnotatorOutputs(),
                 CollectionReaderAnnotator(descriptor=cr_fr_config),
                 ImagePreprocessorAnnotator("ImagePreprocessor"),
                 PointcloudCropAnnotator(descriptor=pc_crop_config),
@@ -111,7 +111,7 @@ class TestFullAEExecution(object):
         seq = robokudo.pipeline.Pipeline("SemanticDigitalTwinFileReaderTestPipeline")
         seq.add_children(
             [
-                robokudo.annotators.outputs.ClearAnnotatorOutputs(),
+                robokudo.pipeline.ClearAnnotatorOutputs(),
                 CollectionReaderAnnotator(descriptor=cr_fr_config),
                 ImagePreprocessorAnnotator("ImagePreprocessor"),
                 PointcloudCropAnnotator(descriptor=pc_crop_config),
@@ -271,7 +271,7 @@ class TestFullAEExecution(object):
         seq = robokudo.pipeline.Pipeline("SemDTRayTracerTestPipeline")
         seq.add_children(
             [
-                robokudo.annotators.outputs.ClearAnnotatorOutputs(),
+                robokudo.pipeline.ClearAnnotatorOutputs(),
                 CollectionReaderAnnotator(descriptor=raytracer_config),
                 ImagePreprocessorAnnotator("ImagePreprocessor"),
                 PointcloudCropAnnotator(),
@@ -341,7 +341,7 @@ class TestFullAEExecution(object):
         seq = robokudo.pipeline.Pipeline("SemDTRayTracerTabletopTestPipeline")
         seq.add_children(
             [
-                robokudo.annotators.outputs.ClearAnnotatorOutputs(),
+                robokudo.pipeline.ClearAnnotatorOutputs(),
                 CollectionReaderAnnotator(descriptor=raytracer_config),
                 ImagePreprocessorAnnotator("ImagePreprocessor"),
                 PointcloudCropAnnotator(),
