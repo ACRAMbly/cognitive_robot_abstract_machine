@@ -6,6 +6,7 @@ from probabilistic_model.distributions.distributions import (
 )
 from probabilistic_model.distributions.gaussian import GaussianDistribution
 from probabilistic_model.distributions.uniform import UniformDistribution
+from probabilistic_model.exceptions import EventWithoutUniformMeasureError
 from probabilistic_model.utils import MissingDict
 
 
@@ -15,14 +16,19 @@ def uniform_measure_of_event(event: Event) -> ProbabilisticCircuit:
 
     :param event: The event
     :return: The circuit describing the uniform measure
+    :raises EventWithoutUniformMeasureError: If the event has no volume in the box
+        bounding it.
     """
     # calculate the bounding box of the event
     bounding_box = event.bounding_box()
 
     # create a uniform measure for the bounding box
     uniform_model = uniform_measure_of_simple_event(bounding_box)
-    # condition the uniform measure on the event, which may pin variables to points
-    uniform_model, _ = uniform_model.truncated(event, singleton_allowed=True)
+    # condition the uniform measure on the event
+    uniform_model, _ = uniform_model.truncated(event)
+
+    if uniform_model is None:
+        raise EventWithoutUniformMeasureError(event)
 
     return uniform_model
 
@@ -35,31 +41,37 @@ def _uniform_measure_of_intervals(
     """
     The uniform measure of a union of intervals, each weighted by its width.
 
-    Points have no width, so they take part only when the union holds nothing else, in
-    which case each point is equally likely and certain once the measure is restricted
-    to it.
+    Points have no width, so they have no mass next to an interval that has. Only a
+    union of nothing but points is measured by its points, each equally likely.
 
     :param variable: The variable the intervals are over.
     :param intervals: The union of intervals.
     :param probabilistic_circuit: The circuit to build the measure in.
-    :return: A sum over one leaf per interval.
+    :return: A sum over one leaf per interval that has mass.
     """
     distribution = SumUnit(probabilistic_circuit=probabilistic_circuit)
-    widths = [interval.upper - interval.lower for interval in intervals.simple_sets]
-    has_width = any(width > 0 for width in widths)
-    for interval, width in zip(intervals.simple_sets, widths):
-        if width > 0:
-            leaf_distribution = UniformDistribution(
-                variable=variable, interval=interval
+    intervals_with_width = [
+        interval for interval in intervals.simple_sets if not interval.is_singleton()
+    ]
+    if intervals_with_width:
+        leaves_and_log_weights = [
+            (
+                UniformDistribution(variable=variable, interval=interval),
+                np.log(interval.upper - interval.lower),
             )
-            log_weight = np.log(width)
-        elif has_width:
-            continue
-        else:
-            leaf_distribution = DiracDeltaDistribution(
-                variable=variable, location=interval.lower, density_cap=1.0
+            for interval in intervals_with_width
+        ]
+    else:
+        leaves_and_log_weights = [
+            (
+                DiracDeltaDistribution(
+                    variable=variable, location=point.lower, density_cap=1.0
+                ),
+                0.0,
             )
-            log_weight = 0.0
+            for point in intervals.simple_sets
+        ]
+    for leaf_distribution, log_weight in leaves_and_log_weights:
         distribution.add_subcircuit(
             UnivariateContinuousLeaf(
                 leaf_distribution, probabilistic_circuit=probabilistic_circuit

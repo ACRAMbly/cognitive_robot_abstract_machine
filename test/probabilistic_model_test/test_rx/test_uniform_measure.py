@@ -6,6 +6,7 @@ from random_events.interval import closed, closed_open, singleton
 from random_events.product_algebra import SimpleEvent
 from random_events.variable import Continuous
 
+from probabilistic_model.exceptions import EventWithoutUniformMeasureError
 from probabilistic_model.probabilistic_circuit.rx.helper import (
     uniform_measure_of_event,
 )
@@ -66,6 +67,45 @@ def test_the_uniform_measure_of_pieces_sharing_a_point_samples_inside_them() -> 
     assert all(event.contains(sample) for sample in samples)
 
 
+def test_a_piece_pinned_inside_another_piece_has_no_mass() -> None:
+    """
+    A piece that pins a variable to a point within the range another piece spans has no
+    volume next to that piece, so no sample lands in it.
+    """
+    x, y = Continuous("x"), Continuous("y")
+    event = (
+        SimpleEvent.from_data(
+            {x: singleton(0.5), y: closed(2.0, 3.0)}
+        ).as_composite_set()
+        | SimpleEvent.from_data(
+            {x: closed(0.0, 1.0), y: closed(0.0, 1.0)}
+        ).as_composite_set()
+    )
+
+    samples = uniform_measure_of_event(event).sample(200)
+
+    assert np.all(samples[:, 1] <= 1.0)
+
+
+def test_an_event_whose_pieces_all_lack_volume_has_no_uniform_measure() -> None:
+    """
+    Each piece pins a variable the other piece leaves free, so every piece has no volume
+    in the box bounding the event.
+    """
+    x, y = Continuous("x"), Continuous("y")
+    event = (
+        SimpleEvent.from_data(
+            {x: singleton(0.5), y: closed(0.0, 1.0)}
+        ).as_composite_set()
+        | SimpleEvent.from_data(
+            {x: closed(2.0, 3.0), y: singleton(5.0)}
+        ).as_composite_set()
+    )
+
+    with pytest.raises(EventWithoutUniformMeasureError):
+        uniform_measure_of_event(event)
+
+
 # %% weights of pieces
 def test_pieces_are_drawn_in_proportion_to_their_width() -> None:
     x = Continuous("x")
@@ -77,3 +117,30 @@ def test_pieces_are_drawn_in_proportion_to_their_width() -> None:
     samples = uniform_measure_of_event(event).sample(4000)
 
     assert np.mean(samples[:, 0] >= 2.0) == pytest.approx(0.75, abs=0.03)
+
+
+def test_points_beside_an_interval_have_no_mass() -> None:
+    x = Continuous("x")
+    event = SimpleEvent.from_data(
+        {x: closed(0.0, 1.0) | singleton(5.0)}
+    ).as_composite_set()
+
+    samples = uniform_measure_of_event(event).sample(200)
+
+    assert np.all(samples[:, 0] <= 1.0)
+
+
+def test_a_set_of_only_points_draws_each_point_equally_often() -> None:
+    x = Continuous("x")
+    points = [0.25, 0.5, 0.75]
+    event = SimpleEvent.from_data(
+        {x: singleton(points[0]) | singleton(points[1]) | singleton(points[2])}
+    ).as_composite_set()
+
+    np.random.seed(0)
+    samples = uniform_measure_of_event(event).sample(3000)
+
+    for point in points:
+        assert np.mean(samples[:, 0] == point) == pytest.approx(
+            1 / len(points), abs=0.03
+        )
