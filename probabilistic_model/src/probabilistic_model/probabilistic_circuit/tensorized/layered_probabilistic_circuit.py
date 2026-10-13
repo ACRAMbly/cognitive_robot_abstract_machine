@@ -8,16 +8,10 @@ from random_events.variable import Symbolic, Variable
 from sortedcontainers import SortedSet
 from typing_extensions import Dict, Iterable, List, Optional, Self, Tuple, Type
 
-from probabilistic_model.distributions.distributions import (
-    IntegerDistribution,
-    SymbolicDistribution,
-    UnivariateDistribution,
-)
 from probabilistic_model.distributions.helper import make_dirac
 from probabilistic_model.exceptions import IntractableError
 from probabilistic_model.probabilistic_circuit.tensorized.array_types import (
     DenseEdgeValues,
-    NodeIndices,
     NodeMask,
     SampleArray,
     SampleValues,
@@ -26,7 +20,6 @@ from probabilistic_model.probabilistic_circuit.tensorized.forward_sample_assignm
     ForwardSampleAssignment,
 )
 from probabilistic_model.probabilistic_circuit.tensorized.inner_layer.base import (
-    InnerLayer,
     Layer,
 )
 from probabilistic_model.probabilistic_circuit.tensorized.inner_layer.inner_layer_edge import (
@@ -38,28 +31,22 @@ from probabilistic_model.probabilistic_circuit.tensorized.inner_layer.product_la
 from probabilistic_model.probabilistic_circuit.tensorized.inner_layer.sum_layer import (
     SumLayer,
 )
-from probabilistic_model.probabilistic_circuit.tensorized.input_layer.base import (
-    UnivariateInputLayer,
-)
-from probabilistic_model.probabilistic_circuit.tensorized.input_layer.dirac_delta_layer import (
-    DiracDeltaLayer,
-)
 from probabilistic_model.probabilistic_circuit.tensorized.input_layer.discrete_layer import (
     DiscreteLayer,
-    IntegerLayer,
-    SymbolicLayer,
 )
 from probabilistic_model.probabilistic_circuit.tensorized.input_layer.probability_table import (
     ProbabilityTable,
+)
+from probabilistic_model.probabilistic_circuit.tensorized.input_layer.point_masses import (
+    point_masses_layer,
+)
+from probabilistic_model.probabilistic_circuit.tensorized.layered_products import (
+    LayeredProducts,
 )
 from probabilistic_model.probabilistic_circuit.tensorized.moment_query import (
     MomentQuery,
 )
 from probabilistic_model.probabilistic_circuit.tensorized.query_cache import QueryCache
-from probabilistic_model.probabilistic_circuit.tensorized.stacked_copies import (
-    AlignedCopiesStacker,
-    StackedLayer,
-)
 from probabilistic_model.probabilistic_circuit.tensorized.row_grouped_sparse_array import (
     RowGroupedSparseArray,
     SparseEntries,
@@ -72,7 +59,6 @@ from probabilistic_model.probabilistic_circuit.tensorized.symbolic_encoding impo
     SymbolicEncoding,
 )
 from probabilistic_model.probabilistic_circuit.groundable_circuit import (
-    ConditionedCopies,
     GroundableCircuit,
     ProductsOfCopies,
 )
@@ -552,7 +538,7 @@ class LayeredProbabilisticCircuit(GroundableCircuit):
 
         for variable, value in point.items():
             children.append(
-                self.point_masses_layer(
+                point_masses_layer(
                     original_variables.index(variable), [make_dirac(variable, value)]
                 )
             )
@@ -560,32 +546,6 @@ class LayeredProbabilisticCircuit(GroundableCircuit):
         self.root = ProductLayer.product_of(children).simplify()
         self.root.normalize()
         return self, log_probability
-
-    @staticmethod
-    def point_masses_layer(
-        variable_index: int, distributions: List[UnivariateDistribution]
-    ) -> UnivariateInputLayer:
-        """
-        The layer of several point masses on one variable, such as the one a
-        conditioned variable is reattached with.
-
-        For a discrete variable this is a discrete layer, since a Dirac delta layer can
-        neither hold the symbolic or integer distributions that
-        :func:`~probabilistic_model.distributions.helper.make_dirac` creates for it nor
-        answer a set of symbols as an event.
-
-        :param variable_index: The index of the variable of the distributions.
-        :param distributions: Distributions of one type that each put all of their mass
-            on one value, as :func:`~probabilistic_model.distributions.helper.make_dirac`
-            creates them.
-        :return: The input layer with one node per distribution.
-        """
-        first = distributions[0]
-        if isinstance(first, SymbolicDistribution):
-            return SymbolicLayer.from_distributions(variable_index, distributions)
-        if isinstance(first, IntegerDistribution):
-            return IntegerLayer.from_distributions(variable_index, distributions)
-        return DiracDeltaLayer.from_distributions(variable_index, distributions)
 
     def restore_variables(self, variables: SortedSet):
         """
@@ -731,42 +691,13 @@ class LayeredProbabilisticCircuit(GroundableCircuit):
     ) -> List[LayerNode]:
         variable_indices = [self.variables.index(variable) for variable in variables]
         result = []
-        contains_found: Dict[int, NodeMask] = {}
+        found_at_or_below: Dict[int, NodeMask] = {}
         # children before parents
         for layer in reversed(self.layers):
-            if not isinstance(layer, InnerLayer):
-                contains_found[id(layer)] = np.zeros(layer.number_of_nodes, dtype=bool)
-                continue
-            edges = layer.inner_layer_edges
-            found_below = np.zeros(len(edges), dtype=bool)
-            for child_layer_index, child_layer in enumerate(layer.child_layers):
-                of_child = edges.child_layer_indices == child_layer_index
-                found_below[of_child] = contains_found[id(child_layer)][
-                    edges.child_nodes[of_child]
-                ]
-            below = np.zeros(layer.number_of_nodes, dtype=bool)
-            below[edges.nodes[found_below]] = True
-            if isinstance(layer, ProductLayer):
-                covers = np.ones(layer.number_of_nodes, dtype=bool)
-                for variable_index in variable_indices:
-                    models_variable = np.array(
-                        [
-                            variable_index in child_layer.variables
-                            for child_layer in layer.child_layers
-                        ],
-                        dtype=bool,
-                    )
-                    covers_variable = np.zeros(layer.number_of_nodes, dtype=bool)
-                    covers_variable[
-                        edges.nodes[models_variable[edges.child_layer_indices]]
-                    ] = True
-                    covers &= covers_variable
-                found = covers & ~below
-                result.extend(
-                    LayerNode(layer, int(node)) for node in np.flatnonzero(found)
-                )
-                below |= found
-            contains_found[id(layer)] = below
+            below = layer.nodes_with_child_in(found_at_or_below)
+            found = layer.products_over(variable_indices) & ~below
+            result.extend(LayerNode(layer, int(node)) for node in np.flatnonzero(found))
+            found_at_or_below[id(layer)] = below | found
         return result
 
     def subcircuit_at(self, node: LayerNode) -> Self:
@@ -784,17 +715,9 @@ class LayeredProbabilisticCircuit(GroundableCircuit):
         ]
 
     def root_mixture_components(self) -> List[Self]:
-        root = self.root
-        if not isinstance(root, SumLayer) or root.number_of_nodes != 1:
-            return []
-        edges = root.inner_layer_edges
         return [
-            LayerNode(root.child_layers[child_layer_index], int(child_node)).as_circuit(
-                self.variables
-            )
-            for child_layer_index, child_node in zip(
-                edges.child_layer_indices, edges.child_nodes
-            )
+            LayerNode(layer, node).as_circuit(self.variables)
+            for layer, node in self.root.mixture_components()
         ]
 
     def multiply_nodes_by_mixtures(
@@ -845,149 +768,3 @@ class LayeredProbabilisticCircuit(GroundableCircuit):
 
     def __copy__(self) -> Self:
         return self.__deepcopy__()
-
-
-# %% products of copies as layers
-
-
-@dataclass
-class ProductFactor:
-    """
-    One child layer of a product layer, with the node every product multiplies.
-    """
-
-    layer: Layer
-    """
-    The child layer.
-    """
-
-    products: NodeIndices
-    """
-    The products that multiply a node of the child layer.
-    """
-
-    nodes: NodeIndices
-    """
-    The node of the child layer every one of ``products`` multiplies.
-    """
-
-
-@dataclass
-class LayeredProducts:
-    """
-    Products of copies as one product layer, with node ``i`` the ``i``-th product.
-
-    The conditioned copies of one circuit only differ in their weights, so they are
-    stacked into one layer graph instead of being built one copy at a time.
-    """
-
-    products: ProductsOfCopies
-    """
-    The products.
-    """
-
-    @property
-    def variables(self) -> SortedSet[Variable]:
-        """
-        :return: The variables of the products.
-        """
-        result = SortedSet(self.products.point_masses)
-        for component in self.products.components:
-            result.update(component.variables)
-        for copies in self.products.conditioned_copies:
-            result.update(copies.renaming[variable] for variable in copies.variables)
-        return result
-
-    def stacked_copies(self, copies: ConditionedCopies) -> StackedLayer:
-        """
-        :param copies: Conditioned copies of a circuit.
-        :return: The copies stacked, with node ``i`` of the root belonging to the
-            ``i``-th product, over the variables of the circuit.
-        """
-        circuit = copies.circuit
-        kept = np.array(
-            [variable in copies.variables for variable in circuit.variables]
-        )
-        layers = []
-        for point in self.products.points:
-            conditioned = circuit.root.log_conditional_of_point(
-                circuit.encoded_point(point),
-                StructuralQuery(circuit.variables),
-                cache=QueryCache(),
-            )
-            # a point the circuit deems impossible leaves the copy unconditioned
-            impossible = conditioned.log_probabilities[0] == -np.inf
-            source = circuit.root if impossible else conditioned.layer
-            layers.append(source.marginal(kept))
-        stacked = AlignedCopiesStacker().stack(layers)
-        stacked.layer.normalize()
-        return stacked
-
-    def product_layer(self, variables: SortedSet[Variable]) -> ProductLayer:
-        """
-        :param variables: The variables of the circuit the layer is attached to.
-        :return: The product layer.
-        """
-        number_of_products = len(self.products.points)
-        products = np.arange(number_of_products)
-        stacked_of_copies: Dict[Tuple[int, Tuple[Variable, ...]], StackedLayer] = {}
-
-        factors = []
-        for copies in self.products.conditioned_copies:
-            circuit = copies.circuit
-            key = (id(circuit), tuple(copies.variables))
-            if key not in stacked_of_copies:
-                stacked_of_copies[key] = self.stacked_copies(copies)
-            stacked = stacked_of_copies[key]
-            remap = np.array(
-                [
-                    (
-                        variables.index(copies.renaming[variable])
-                        if variable in copies.variables
-                        else -1
-                    )
-                    for variable in circuit.variables
-                ],
-                dtype=np.int64,
-            )
-            layer = stacked.layer.__deepcopy__({})
-            layer.remap_variables(remap)
-            roots = stacked.nodes_of_copy(
-                products, np.zeros(number_of_products, dtype=np.int64)
-            )
-            factors.append(ProductFactor(layer, products, roots))
-        for variable, values in self.products.point_masses.items():
-            factors.append(
-                ProductFactor(
-                    LayeredProbabilisticCircuit.point_masses_layer(
-                        variables.index(variable),
-                        [make_dirac(variable, value) for value in values],
-                    ),
-                    products,
-                    products,
-                )
-            )
-        for index, component in enumerate(self.products.components):
-            component = component.__deepcopy__()
-            component.restore_variables(variables)
-            factors.append(
-                ProductFactor(
-                    component.root,
-                    np.array([index]),
-                    np.zeros(1, dtype=np.int64),
-                )
-            )
-
-        edges = InnerLayerEdges(
-            np.concatenate([factor.products for factor in factors]),
-            np.concatenate(
-                [
-                    np.full(len(factor.products), factor_index, dtype=np.int64)
-                    for factor_index, factor in enumerate(factors)
-                ]
-            ),
-            np.concatenate([factor.nodes for factor in factors]),
-        )
-        return ProductLayer.from_edges(
-            [factor.layer for factor in factors], edges, number_of_products
-        )

@@ -151,6 +151,19 @@ class Unit(SubclassJSONSerializer, ABC):
     def variables(self) -> SortedSet:
         raise NotImplementedError
 
+    def is_product_over(self, variables: SortedSet[Variable]) -> bool:
+        """
+        :param variables: Variables.
+        :return: Whether this unit is a product unit that models all of the variables.
+        """
+        return False
+
+    def mixture_components(self) -> List[Unit]:
+        """
+        :return: The subcircuits this unit mixes if it is a sum unit, otherwise nothing.
+        """
+        return []
+
     @property
     def leaves(self) -> List[LeafUnit]:
         """
@@ -494,6 +507,9 @@ class SumUnit(InnerUnit):
     @property
     def representation(self) -> str:
         return "+"
+
+    def mixture_components(self) -> List[Unit]:
+        return self.subcircuits
 
     @property
     def log_weighted_subcircuits(self) -> List[Tuple[float, Unit]]:
@@ -861,6 +877,9 @@ class ProductUnit(InnerUnit):
         for subcircuit in self.subcircuits:
             result = result.union(subcircuit.variables)
         return result
+
+    def is_product_over(self, variables: SortedSet[Variable]) -> bool:
+        return variables.issubset(self.variables)
 
     def support(self):
         support: Event = self.subcircuits[0].result_of_current_query
@@ -1544,11 +1563,9 @@ class ProbabilisticCircuit(GroundableCircuit, SubclassJSONSerializer):
         ancestor_indices: set[int] = set()
         for layer in reversed(self.layers):
             for node in layer:
-                if not isinstance(node, ProductUnit):
-                    continue
                 if node.index in ancestor_indices:
                     continue
-                if not variables.issubset(node.variables):
+                if not node.is_product_over(variables):
                     continue
                 found_nodes.append(node)
                 ancestor_indices.add(node.index)
@@ -1567,10 +1584,10 @@ class ProbabilisticCircuit(GroundableCircuit, SubclassJSONSerializer):
         return nodes
 
     def root_mixture_components(self) -> List[Self]:
-        root = self.root
-        if not isinstance(root, SumUnit):
-            return []
-        return [self.subcircuit_at(subcircuit) for subcircuit in root.subcircuits]
+        return [
+            self.subcircuit_at(subcircuit)
+            for subcircuit in self.root.mixture_components()
+        ]
 
     def multiply_nodes_by_mixtures(
         self,
