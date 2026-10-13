@@ -5,10 +5,7 @@ prism) off its own table and drops each through its hole in the shape-sorting bo
 only how the plan is carried out differs, by coraplex's `ExecutionType`: physically
 simulated in MuJoCo, kinematically simulated in RViz, or on the real robot.
 
-The board is the real board's mesh (`resources/board.stl`, taken from the ICRA
-branch's `experiments/montessori/resources/`). Its six holes are read off that mesh by
-slicing through the lid (`montessori_board.py`), so every piece is released straight
-above the hole it actually fits. The pieces use the sizes and colours measured off the
+The pieces use the sizes and colours measured off the
 real set. There is no perception: where the board and the pieces start is hardcoded.
 
 In both simulations Tracy starts with both arms parked: `get_world()` applies the `PARK`
@@ -31,13 +28,6 @@ Then, **from inside this folder**:
 python demo.py
 ```
 
-It has to be run from this folder. `coraplex/demos/` is not a package — `coraplex`'s
-`pyproject.toml` ships only `src/coraplex*` — so the demo relies on its own directory
-being on `sys.path` to find its sibling modules. This is the same mechanism the other
-demo folders' `test_demo.py` files rely on for their bare `import demo`.
-
-Runners are imported only once chosen, so you do not need MuJoCo installed to run the
-RViz one, or ROS to run the MuJoCo one.
 
 | Execution type | What you need | What you see |
 |---|---|---|
@@ -82,12 +72,6 @@ height from how far Tracy's Robotiq pads swing down as they close. Which hole ea
 goes into is a plain mapping the environment keeps as it makes the pieces. The left arm
 sorts, as in every Tracy demo in this repository.
 
-Note this does **not** use `TransportAction` the way the bullet world demo does. Tracy is
-fixed-base and has no torso, so the bullet demo's three staples are all unusable here:
-`NavigateAction` (and therefore `TransportAction`, which navigates) requires
-`context.robot.drive is not None`, and `MoveTorsoAction` calls `robot.get_torso()`. Plain
-`PickUpAction` + `PlaceAction` is what the other Tracy code in the repo does too.
-
 ## Where the numbers come from
 
 `table_top_z = 0.88` is measured, not guessed. Tracy's kinematic root *is* its table, and
@@ -124,24 +108,13 @@ with the convex hull of a mesh, which would close every hole, so the board's col
 geometry is boxes: the walls and the base are boxes in the mesh already, and the lid is
 tiled around the holes' bounding boxes. The drawer handles are only drawn.
 
-Worth knowing: `coraplex/demos/coraplex_real_tracy/demo.py` and
-`test/coraplex_test/test_designator/test_multi_stationary_robot_action_designator.py` put
-their boxes at `z = 0.92` and `0.93`. Those float a few centimetres above the real
-surface. That is harmless when the robot is moved kinematically, which is all those two do
-— but it would matter under physics, which is why this demo uses the measured 0.88.
-
 **These poses are a first pass.** They were measured and then confirmed by running, but
 they have not been tuned for margin. Treat them as a starting point.
 
 ## Running under physics
 
 `mujoco_demo.py` performs the plan inside coraplex's `PhysicallySimulatedRobot`
-(`coraplex/src/coraplex/execution_environment.py`). That environment hands the stepped
-MuJoCo world to `GiskardExecutable`, which then steps the physics one control cycle per
-tick through `giskardpy`'s `SteppedSimulationPacer`, and makes `MoveBranchExecutable`
-leave a grasped body where the physics holds it instead of re-parenting it under the hand
-— MuJoCo would otherwise reject the model with `ValueError: more than 6 dofs in body
-'square_piece'`.
+(`coraplex/src/coraplex/execution_environment.py`).
 
 ## What has actually been run
 
@@ -171,19 +144,3 @@ square piece. Which pieces land is
 sensitive to small changes — renaming the bodies alone moved one combination of settings
 from four pieces in to two — so judge a change over more than one configuration. A run of
 one configuration is deterministic: repeating it gives the same positions.
-
-## Open points for whoever picks this up
-
-- **Grasp reliability under physics is the known weak spot for this task.** The earlier
-  Tracy montessori work on `icra_final` records that even with dedicated friction and
-  solver tuning, typically only one or two of five shapes completed the task. None of that
-  tuning exists on `main`. The pieces here carry `main`'s
-  `ContactParameters.create_for_grasped_object()`'s friction, made solid, plus the
-  settings in `mujoco_demo.py`, and all four go in.
-- **`real_demo.py` is untested scaffolding.** It mirrors `coraplex_real_tracy/demo.py`,
-  which is the one real-Tracy path in the repository. Per the `icra_final` notes, no
-  `*_real.py` in this codebase has ever been run on hardware.
-- **No CI entry and no `test_demo.py`**, by choice. The other demo folders each have a
-  `test_demo.py` that just imports the demo, wired into
-  `.github/workflows/examples_and_demos.yml`. That would not work unchanged here, since
-  importing `demo` does not run anything — `main()` is guarded by `__name__ == "__main__"`.
