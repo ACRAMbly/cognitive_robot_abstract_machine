@@ -586,12 +586,15 @@ class Body(KinematicStructureEntity):
         Replace the shapes of this body and record the change in the world's
         modification history, so that it is synchronized and can be rolled back.
 
-        :param visual: The shapes that represent how the body looks, relative to it.
-        :param collision: The shapes that represent how the body collides, relative to
-            it.
+        :param visual: The shapes that represent how the body looks. Shapes whose origin
+            has no reference frame are taken relative to the body; the others are
+            expressed relative to it.
+        :param collision: The shapes that represent how the body collides, taken like
+            ``visual``.
         """
-        visual.reference_frame = self
-        collision.reference_frame = self
+        for shapes in (visual, collision):
+            shapes.reference_frame = self
+            shapes.transform_all_shapes_to_own_frame()
         self.visual = visual
         self.collision = collision
 
