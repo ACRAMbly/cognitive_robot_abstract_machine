@@ -1180,9 +1180,6 @@ class Scalar(SerializableSymbolicMathType):
             return not ca.is_equal(ca.simplify(left), ca.simplify(right), 5)
         raise HasFreeVariablesError(self.free_variables())
 
-    # The operators below call ca.SX.unary and ca.SX.binary directly: casadi's
-    # overloaded functions and operators spend about ten times as long choosing the
-    # overload as building the expression.
     def __neg__(self) -> Scalar:
         return Scalar.from_casadi_sx(ca.SX.unary(ca.OP_NEG, self.casadi_sx))
 
