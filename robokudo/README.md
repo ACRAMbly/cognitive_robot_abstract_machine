@@ -47,8 +47,8 @@ so users who do not need them are spared the download. They are bundled in the `
 Install them together with RoboKudo:
 
 ```bash
-# From the root of the CRAM workspace; its dev extra includes robokudo[dev]
-uv sync --extra dev --active
+# From the root of the CRAM workspace
+uv pip install -e "./robokudo[dev]"
 
 # Or for a standalone RoboKudo installation
 pip install "robokudo[dev]"
