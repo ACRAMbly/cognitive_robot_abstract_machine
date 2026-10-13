@@ -6,7 +6,11 @@ from probabilistic_model.distributions.distributions import (
 )
 from probabilistic_model.distributions.gaussian import GaussianDistribution
 from probabilistic_model.distributions.uniform import UniformDistribution
-from probabilistic_model.utils import MissingDict
+from probabilistic_model.exceptions import EventMixesPointsAndIntervalsError
+from probabilistic_model.utils import (
+    MissingDict,
+    event_compatible_for_truncation_with_singletons,
+)
 
 
 def uniform_measure_of_event(event: Event) -> ProbabilisticCircuit:
@@ -15,6 +19,8 @@ def uniform_measure_of_event(event: Event) -> ProbabilisticCircuit:
 
     :param event: The event
     :return: The circuit describing the uniform measure
+    :raises EventMixesPointsAndIntervalsError: If a continuous variable takes points and
+        intervals in the box bounding the event.
     """
     # calculate the bounding box of the event
     bounding_box = event.bounding_box()
@@ -22,7 +28,10 @@ def uniform_measure_of_event(event: Event) -> ProbabilisticCircuit:
     # create a uniform measure for the bounding box
     uniform_model = uniform_measure_of_simple_event(bounding_box)
     # condition the uniform measure on the event
-    uniform_model, _ = uniform_model.truncated(event)
+    uniform_model, _ = uniform_model.truncated(
+        event,
+        singleton_allowed=event_compatible_for_truncation_with_singletons(event),
+    )
 
     return uniform_model
 
@@ -33,6 +42,8 @@ def uniform_measure_of_simple_event(simple_event: SimpleEvent) -> ProbabilisticC
 
     :param simple_event: The simple event
     :return: The circuit describing the uniform measure over the simple event
+    :raises EventMixesPointsAndIntervalsError: If a continuous variable takes points and
+        intervals.
     """
     # initialize the root of the circuit
     result = ProbabilisticCircuit()
@@ -42,8 +53,12 @@ def uniform_measure_of_simple_event(simple_event: SimpleEvent) -> ProbabilisticC
         # handle different variables
         if isinstance(variable, Continuous):
 
+            singletons = [assignment_.is_singleton() for assignment_ in assignment]
+            if any(singletons) and not all(singletons):
+                raise EventMixesPointsAndIntervalsError(variable, assignment)
+
             distribution = SumUnit(probabilistic_circuit=result)
-            if all(assignment_.is_singleton() for assignment_ in assignment):
+            if all(singletons):
                 # a variable pinned to points has no width, so every point is equally likely
                 for assignment_ in assignment:
                     dirac = DiracDeltaDistribution(

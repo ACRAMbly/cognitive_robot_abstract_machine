@@ -6,6 +6,7 @@ from random_events.interval import closed, closed_open, singleton
 from random_events.product_algebra import SimpleEvent
 from random_events.variable import Continuous
 
+from probabilistic_model.exceptions import EventMixesPointsAndIntervalsError
 from probabilistic_model.probabilistic_circuit.rx.helper import (
     uniform_measure_of_event,
 )
@@ -93,3 +94,34 @@ def test_a_set_of_only_points_draws_each_point_equally_often() -> None:
         assert np.mean(samples[:, 0] == point) == pytest.approx(
             1 / len(points), abs=0.03
         )
+
+
+# %% events mixing points and intervals in one variable
+def test_a_piece_pinning_a_variable_another_piece_spans_gets_no_samples() -> None:
+    """
+    A point has no width next to an interval, as in the edge piece that closed boxes
+    sharing a side produce.
+    """
+    x, y = Continuous("x"), Continuous("y")
+    event = (
+        SimpleEvent.from_data(
+            {x: singleton(0.5), y: closed(2.0, 3.0)}
+        ).as_composite_set()
+        | SimpleEvent.from_data(
+            {x: closed(0.0, 1.0), y: closed(0.0, 1.0)}
+        ).as_composite_set()
+    )
+
+    samples = uniform_measure_of_event(event).sample(200)
+
+    assert np.all(samples[:, 1] <= 1.0)
+
+
+def test_a_variable_that_is_a_point_beside_an_interval_is_rejected() -> None:
+    x = Continuous("x")
+    event = SimpleEvent.from_data(
+        {x: closed(0.0, 1.0) | singleton(5.0)}
+    ).as_composite_set()
+
+    with pytest.raises(EventMixesPointsAndIntervalsError):
+        uniform_measure_of_event(event)
