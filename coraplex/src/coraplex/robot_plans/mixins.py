@@ -5,7 +5,7 @@ from typing_extensions import Optional
 
 
 from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix
-from semantic_digital_twin.spatial_types.spatial_types import Point3, Pose
+from semantic_digital_twin.spatial_types.spatial_types import Pose
 from semantic_digital_twin.robots.robot_parts import EndEffector
 from semantic_digital_twin.grasping.grasp_candidates import GraspCandidate
 
@@ -300,15 +300,6 @@ class HasApproachesGraspPoses:
     How far in meters the gripper rises when it leaves a grasp or a placed object.
     """
 
-    aimed_point: Optional[Point3] = field(default=None, kw_only=True)
-    """
-    The point of the gripper, read in its tool frame, that is put on the grasp; the tool
-    frame itself when not given.
-
-    Aimed at ``end_effector.fingertips.tool_P_grasp`` for a gripper whose tool frame
-    does not sit where its fingers meet.
-    """
-
     def grasp_pose_sequence(
         self,
         reference_T_grasp: Pose,
@@ -341,13 +332,9 @@ class HasApproachesGraspPoses:
         """
         :param end_effector: The end effector that is to reach the grasp.
         :param reference_T_grasp: The grasp frame to reach.
-        :return: The tool frame goal that puts :attr:`aimed_point` on it.
+        :return: The tool frame goal that puts the point the fingers meet at on it.
         """
-        if self.aimed_point is None:
-            return end_effector.tool_frame_goal(reference_T_grasp)
-        return end_effector.tool_frame_goal_for_point(
-            self.aimed_point, reference_T_grasp
-        )
+        return end_effector.tool_frame_goal_for_grasp(reference_T_grasp)
 
     def _approach_distance(self, grasp: Optional[GraspCandidate]) -> float:
         """

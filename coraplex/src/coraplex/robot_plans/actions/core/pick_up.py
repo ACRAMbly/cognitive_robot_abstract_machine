@@ -85,7 +85,7 @@ class ReachAction(
 
     grasp: GraspCandidate
     """
-    The grasp the tool frame should reach, which also names the object it is on.
+    The grasp the fingers should close on, which also names the object it is on.
     """
 
     reverse_reach_order: bool = False
@@ -193,7 +193,6 @@ class PickUpAction(
                     arm=self.arm,
                     approach_clearance=self.approach_clearance,
                     retreat_distance=self.retreat_distance,
-                    aimed_point=self.aimed_point,
                     pre_approach_linear_velocity=self.pre_approach_linear_velocity,
                     final_approach_linear_velocity=self.final_approach_linear_velocity,
                     grasp_closing_velocity=self.grasp_closing_velocity,
@@ -289,7 +288,6 @@ class GraspingAction(
                     arm=self.arm,
                     approach_clearance=self.approach_clearance,
                     retreat_distance=self.retreat_distance,
-                    aimed_point=self.aimed_point,
                     pre_approach_linear_velocity=self.pre_approach_linear_velocity,
                     final_approach_linear_velocity=self.final_approach_linear_velocity,
                     open_gripper_at_pre_pose=True,
