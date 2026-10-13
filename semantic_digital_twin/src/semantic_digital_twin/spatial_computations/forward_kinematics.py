@@ -24,6 +24,7 @@ from semantic_digital_twin.world_description.world_entity import (
 )
 
 if TYPE_CHECKING:
+    from semantic_digital_twin.datastructures.joint_state import JointState
     from semantic_digital_twin.world import ModelRevision
 
 
@@ -186,6 +187,26 @@ class ForwardKinematicsManager(ModelChangeCallback):
             data=self.compute_np(root, tip), reference_frame=root
         )
 
+    def compute_at(
+        self,
+        joint_state: JointState,
+        root: KinematicStructureEntity,
+        tip: KinematicStructureEntity,
+    ) -> HomogeneousTransformationMatrix:
+        """
+        Compute root_T_tip as it would stand with the given joint positions, without
+        putting them on the world.
+
+        :param joint_state: The joint positions to compute at.
+        :param root: Root KinematicStructureEntity for which the kinematics are
+            computed.
+        :param tip: Tip KinematicStructureEntity to which the kinematics are computed.
+        :return: The pose of the tip relative to the root, at those positions.
+        """
+        return HomogeneousTransformationMatrix(
+            data=self.compute_np_at(joint_state, root, tip), reference_frame=root
+        )
+
     @memoize
     def compute_np(
         self, root: KinematicStructureEntity, tip: KinematicStructureEntity
@@ -201,6 +222,41 @@ class ForwardKinematicsManager(ModelChangeCallback):
         :return: Transformation matrix representing the relative pose of the tip body
             with respect to the root body.
         """
+        return self._compose_np(
+            self.forward_kinematics_for_all_bodies, root=root, tip=tip
+        )
+
+    def compute_np_at(
+        self,
+        joint_state: JointState,
+        root: KinematicStructureEntity,
+        tip: KinematicStructureEntity,
+    ) -> NpMatrix4x4:
+        """
+        Computes root_T_tip as it would stand with the given joint positions, without
+        putting them on the world.
+
+        :param joint_state: The joint positions to compute at.
+        :param root: Root body for which the kinematics are computed.
+        :param tip: Tip body to which the kinematics are computed.
+        :return: Transformation matrix representing the relative pose of the tip body
+            with respect to the root body, at those positions.
+        """
+        all_fks = self.compiled_all_fks(self._world.state.positions_with(joint_state))
+        return self._compose_np(all_fks, root=root, tip=tip)
+
+    def _compose_np(
+        self,
+        all_fks: np.ndarray,
+        root: KinematicStructureEntity,
+        tip: KinematicStructureEntity,
+    ) -> NpMatrix4x4:
+        """
+        :param all_fks: Every body's transform from the world root, stacked.
+        :param root: Root body for which the kinematics are composed.
+        :param tip: Tip body to which the kinematics are composed.
+        :return: root_T_tip, read out of the stack.
+        """
         root = root.id
         tip = tip.id
         root_is_world = root == self._world.root.id
@@ -208,13 +264,13 @@ class ForwardKinematicsManager(ModelChangeCallback):
 
         if not tip_is_world:
             i = self.body_id_to_all_fk_index[tip]
-            map_T_tip = self.forward_kinematics_for_all_bodies[i : i + 4]
+            map_T_tip = all_fks[i : i + 4]
             if root_is_world:
                 return map_T_tip
 
         if not root_is_world:
             i = self.body_id_to_all_fk_index[root]
-            map_T_root = self.forward_kinematics_for_all_bodies[i : i + 4]
+            map_T_root = all_fks[i : i + 4]
             root_T_map = inverse_frame(map_T_root)
             if tip_is_world:
                 return root_T_map

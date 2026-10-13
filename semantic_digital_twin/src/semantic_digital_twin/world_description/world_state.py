@@ -24,6 +24,7 @@ from semantic_digital_twin.exceptions import (
 from semantic_digital_twin.spatial_types.derivatives import Derivatives
 
 if TYPE_CHECKING:
+    from semantic_digital_twin.datastructures.joint_state import JointState
     from semantic_digital_twin.world import World
 
 
@@ -291,6 +292,24 @@ class WorldState(MutableMapping[UUID, WorldStateEntryView]):
     @property
     def positions(self) -> np.ndarray:
         return self.get_derivative(Derivatives.position)
+
+    def positions_with(self, joint_state: JointState) -> np.ndarray:
+        """
+        :param joint_state: The joint positions to stand in for the ones held.
+        :return: A copy of the positions held, with that state's connections standing
+            at its target values.
+
+        ..note:: A connection is driven through its own multiplier and offset, the way
+            :attr:`~semantic_digital_twin.world_description.connections.ActiveConnection1DOF.position`
+            writes it, so a mimicking connection and the one it mimics agree on the
+            degree of freedom they share.
+        """
+        positions = self.positions.copy()
+        for connection, target_value in joint_state.items():
+            positions[self._index[connection.raw_dof.id]] = (
+                target_value - connection.offset
+            ) / connection.multiplier
+        return positions
 
     @property
     def velocities(self) -> np.ndarray:

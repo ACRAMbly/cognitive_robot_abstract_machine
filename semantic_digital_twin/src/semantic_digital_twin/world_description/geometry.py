@@ -57,6 +57,7 @@ if TYPE_CHECKING:
     )
 
 if TYPE_CHECKING:
+    from semantic_digital_twin.datastructures.joint_state import JointState
     from semantic_digital_twin.world import World
     from semantic_digital_twin.world_description.shape_collection import (
         ShapeCollection,
@@ -1427,12 +1428,16 @@ class AxisAlignedBox(Generic[PointT], SubClassSafeGeneric, ABC):
         return cls(*lower, *upper, origin)
 
     def transform_to_origin(
-        self, reference_T_new_origin: HomogeneousTransformationMatrix
+        self,
+        reference_T_new_origin: HomogeneousTransformationMatrix,
+        at_state: Optional[JointState] = None,
     ) -> Self:
         """
         Transform the bounding box to a different reference frame.
 
         :param reference_T_new_origin: The origin to express the box relative to.
+        :param at_state: Joint positions to transform as if they held; the ones the
+            world holds are used when not given.
         :return: The box, re-expressed relative to ``reference_T_new_origin``.
         """
         reference_T_new_origin = HomogeneousTransformationMatrix(
@@ -1441,7 +1446,7 @@ class AxisAlignedBox(Generic[PointT], SubClassSafeGeneric, ABC):
         )
 
         new_origin_reference_T_self = self.origin.reference_frame._world.transform(
-            self.origin, reference_T_new_origin.reference_frame
+            self.origin, reference_T_new_origin.reference_frame, at_state=at_state
         )
 
         self_T_new_pose = reference_T_new_origin.inverse() @ new_origin_reference_T_self

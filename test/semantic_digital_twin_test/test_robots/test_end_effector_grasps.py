@@ -397,6 +397,55 @@ def test_the_thumb_tip_goal_is_read_in_the_other_fingertips_frame(pr2_gripper):
     assert goal.reference_frame is pr2_gripper.finger.tip
 
 
+# %% where the fingers meet at a state the world does not stand in
+
+
+def test_the_meeting_point_at_a_state_matches_putting_that_state_on_the_world(
+    pr2_gripper,
+):
+    """
+    Computing at a state and actually standing in it have to agree, or the two ways of
+    asking the same question would drift apart.
+    """
+    closed = pr2_gripper.get_joint_state_by_type(GripperState.CLOSE)
+
+    computed = pr2_gripper.fingertips.tool_P_grasp_at(closed)
+
+    with pr2_gripper._world.reset_state_context():
+        closed.apply_to(pr2_gripper._world)
+        pr2_gripper._world.notify_state_change()
+        stood_in = pr2_gripper.fingertips.tool_P_grasp
+
+    np.testing.assert_allclose(computed.to_np(), stood_in.to_np(), atol=1e-9)
+
+
+def test_the_meeting_point_at_a_state_ignores_how_the_gripper_stands_now(pr2_gripper):
+    closed = pr2_gripper.get_joint_state_by_type(GripperState.CLOSE)
+    while_open = pr2_gripper.fingertips.tool_P_grasp_at(closed)
+
+    pr2_gripper.get_joint_state_by_type(GripperState.OPEN).apply_to(pr2_gripper._world)
+    pr2_gripper._world.notify_state_change()
+
+    np.testing.assert_allclose(
+        pr2_gripper.fingertips.tool_P_grasp_at(closed).to_np(),
+        while_open.to_np(),
+        atol=1e-9,
+    )
+
+
+def test_reading_at_a_state_leaves_the_world_standing_where_it_was(pr2_gripper):
+    world = pr2_gripper._world
+    positions_before = world.state.positions.copy()
+    version_before = world.state.version
+
+    pr2_gripper.fingertips.tool_P_grasp_at(
+        pr2_gripper.get_joint_state_by_type(GripperState.CLOSE)
+    )
+
+    np.testing.assert_array_equal(world.state.positions, positions_before)
+    assert world.state.version == version_before
+
+
 # %% how far closing carries the point the fingers meet at
 
 
@@ -415,39 +464,27 @@ def test_the_travel_is_read_between_the_grippers_own_open_and_closed_states(
     It is the distance the meeting point covers over the gripper's whole range, which
     is what a grasp aimed while the gripper is open has to correct for.
     """
-    with pr2_gripper._world.reset_state_context():
-        open_P_grasp = pr2_gripper._grasp_point_at(GripperState.OPEN)
-        closed_P_grasp = pr2_gripper._grasp_point_at(GripperState.CLOSE)
-        expected = (closed_P_grasp - open_P_grasp).dot(pr2_gripper.approach_axis)
+    fingertips = pr2_gripper.fingertips
+    open_P_grasp, closed_P_grasp = (
+        fingertips.tool_P_grasp_at(pr2_gripper.get_joint_state_by_type(state_type))
+        for state_type in (GripperState.OPEN, GripperState.CLOSE)
+    )
+    expected = (closed_P_grasp - open_P_grasp).dot(pr2_gripper.approach_axis)
 
     assert pr2_gripper.travel_when_closing == pytest.approx(float(expected))
 
 
-def test_the_travel_stays_the_same_once_the_gripper_has_moved(pr2_gripper):
+def test_reading_the_travel_leaves_the_world_standing_where_it_was(tracy_world):
     """
-    A constant of the gripper's description, so it does not depend on how the fingers
-    happen to stand when it is read.
-    """
-    travel = pr2_gripper.travel_when_closing
-
-    pr2_gripper.get_joint_state_by_type(GripperState.CLOSE).apply_to(pr2_gripper._world)
-    pr2_gripper._world.notify_state_change()
-
-    assert pr2_gripper.travel_when_closing == pytest.approx(travel)
-
-
-def test_reading_the_travel_leaves_the_fingers_where_they_were(tracy_world):
-    """
-    The open and closed states are only borrowed to measure against, so nothing of
-    them is left behind on the world.
+    The open and closed states are only computed at, never put on the world.
     """
     gripper = tracy_world.get_semantic_annotations_by_type(Tracy)[
         0
     ].left_arm.end_effector
-    before = gripper.fingertips.tool_P_grasp.to_np()
+    positions_before = tracy_world.state.positions.copy()
+    version_before = tracy_world.state.version
 
     gripper.travel_when_closing
 
-    np.testing.assert_allclose(
-        gripper.fingertips.tool_P_grasp.to_np(), before, atol=1e-9
-    )
+    np.testing.assert_array_equal(tracy_world.state.positions, positions_before)
+    assert tracy_world.state.version == version_before
