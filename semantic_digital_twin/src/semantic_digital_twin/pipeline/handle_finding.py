@@ -1,7 +1,7 @@
 """
 Finding the piece of an object's shape that is its handle, so that it can be split off
 into a :class:`~semantic_digital_twin.semantic_annotations.semantic_annotations.Handle`
-of its own by :class:`~semantic_digital_twin.pipeline.part_splitting.SplitPartFromShape`.
+of its own by :class:`~semantic_digital_twin.pipeline.part_splitting.PartSplitter`.
 
 Shapes are taken in the frame of the object's root body, its z-axis pointing up.
 """

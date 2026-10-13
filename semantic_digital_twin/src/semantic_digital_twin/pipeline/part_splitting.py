@@ -2,26 +2,28 @@
 Splitting a part, such as a handle or a rim, off the shape of an object into a body of
 its own, annotated as that part of the object's annotation.
 
-A finder decides which piece of the object's shape the part is; the pipeline step cuts
-the shape there and gives each piece its own body. Shapes are taken in the frame of the object's root body, its z-axis
-pointing up.
+A finder decides which piece of the object's shape the part is; a splitter cuts the shape
+there and gives each piece its own body, on its own or as a step of a pipeline. Shapes are
+taken in the frame of the object's root body, its z-axis pointing up.
 """
 
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from itertools import count
 
 import numpy as np
 import trimesh
 from numpy.typing import NDArray
-from typing_extensions import TYPE_CHECKING, Optional, Type
+from trimesh.visual.texture import TextureVisuals
+from typing_extensions import TYPE_CHECKING, Callable, Optional, Type, TypeVar
 
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 from semantic_digital_twin.pipeline.pipeline import Step
 from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix
 from semantic_digital_twin.world_description.connections import FixedConnection
-from semantic_digital_twin.world_description.geometry import Mesh
+from semantic_digital_twin.world_description.geometry import Mesh, Shape
 from semantic_digital_twin.world_description.inertial_properties import Inertial
 from semantic_digital_twin.world_description.shape_collection import ShapeCollection
 from semantic_digital_twin.world_description.world_entity import Body
@@ -32,6 +34,8 @@ if TYPE_CHECKING:
         PartWholeRelationship,
     )
     from semantic_digital_twin.world import World
+
+T = TypeVar("T")
 
 # %% splitting a shape
 
@@ -107,51 +111,38 @@ class PartFinder(ABC):
         """
 
 
-# %% the pipeline step
+# %% splitting a part off a body
 
 
 @dataclass
-class SplitPartFromShape(Step):
+class PartSplitter:
     """
-    Gives every annotation of a type the part its shape has, as a body of its own.
+    Splits a part off the shape of a single body, or of the root body of an annotation,
+    when it is needed.
 
-    The piece of the annotation's root body that the finder finds is moved to a new
-    body, fixed to the root body at its origin, and annotated as the part. Both bodies
-    look and collide as their own piece of the shape; a physics simulator that needs
-    convex collision shapes decomposes them afterwards.
+    The piece of the body's shape that the finder finds is moved to a new body, fixed to
+    the body at its origin. Both bodies look and collide as their own piece of the
+    shape; a physics simulator that needs convex collision shapes decomposes them
+    afterwards. Each piece keeps the colors the shape had there, and the surface finish
+    and simulator properties all of the body's shapes share.
 
-    The root body keeps its inertial properties, which describe the whole object, and
-    the part's body is given a negligible one, so the object weighs and turns as it did
+    The body keeps its inertial properties, which describe the whole object, and the
+    part's body is given a negligible one, so the object weighs and turns as it did
     before the split.
 
-    Each split is one block of the world's modification history, the root body's new
-    shape included, so it is synchronized and rolling it back restores the whole shape.
-
-    The part can be split off when it is first needed, with :meth:`part_of`, or for
-    every annotation of the world at once, as a step of a pipeline. The latter suits a
-    world that is handed to a physics simulator afterwards, whose model is built once
-    from the world's bodies.
-    """
-
-    whole_type: Type[PartWholeRelationship]
-    """
-    The type of annotation whose shapes are split.
+    Each split is one block of the world's modification history, the body's new shape
+    included, so it is synchronized and rolling it back restores the whole shape.
     """
 
     part_type: Type[HasRootBody]
     """
-    The type of annotation the part is given.
+    The type of annotation the part is given, which also names the part's body.
     """
 
     finder: PartFinder
     """
-    Finds the part in each annotation's shape.
+    Finds the part in a body's shape.
     """
-
-    def _apply(self, world: World) -> World:
-        for whole in world.get_semantic_annotations_by_type(self.whole_type):
-            self.part_of(whole)
-        return world
 
     def part_of(self, whole: PartWholeRelationship) -> Optional[HasRootBody]:
         """
@@ -168,58 +159,203 @@ class SplitPartFromShape(Step):
 
     def split(self, whole: PartWholeRelationship) -> Optional[HasRootBody]:
         """
-        Split the part off the shape of one annotation, whether or not it has one
-        already.
+        Split the part off the shape of one annotation's root body and add it to the
+        annotation, whether or not the annotation has such a part already.
 
         :param whole: The annotation whose root body's shape is split.
         :return: The part, added to the annotation and its world; ``None`` if the finder
             finds none or the root body has no shape.
         """
-        root = whole.root
-        geometry = root.visual or root.collision
-        if not geometry:
+        cut = self._cut(whole.root)
+        if cut is None:
             return None
-        split = self.finder.split(geometry.combined_mesh)
-        if split is None:
-            return None
-        collides = bool(root.collision)
-        body = Body(
-            name=PrefixedName(
-                f"{root.name.name}_{self.part_type.__name__.lower()}",
-                root.name.prefix,
-            ),
-            inertial=Inertial.negligible(),
-        )
-        body.visual = self._shapes(split.part, body)
-        if collides:
-            body.collision = self._shapes(split.part, body)
-        part = self.part_type(root=body)
-        world = root._world
+        world = whole.root._world
         with world.modify_world():
-            root.update_shapes(
-                visual=self._shapes(split.rest, root),
-                collision=(
-                    self._shapes(split.rest, root) if collides else ShapeCollection()
-                ),
-            )
-            world.add_connection(FixedConnection(parent=root, child=body))
+            part = self.part_type(root=cut.apply())
             world.add_semantic_annotation(part)
             whole.add(part)
         return part
 
-    @staticmethod
-    def _shapes(mesh: trimesh.Trimesh, body: Body) -> ShapeCollection:
+    def split_body(self, body: Body) -> Optional[Body]:
         """
-        :param mesh: A piece of the shape, in the frame of ``body``.
-        :param body: The body the piece belongs to.
-        :return: The piece as the shapes of ``body``.
+        Split the part off the shape of a body, without annotating either of them.
+
+        :param body: The body whose shape is split; it keeps the rest of its shape.
+        :return: The new body of the part, fixed to ``body`` in its world; ``None`` if
+            the finder finds none or the body has no shape.
         """
-        return ShapeCollection(
-            [
-                Mesh.from_trimesh(
-                    mesh=mesh,
-                    origin=HomogeneousTransformationMatrix(reference_frame=body),
-                )
-            ],
-            reference_frame=body,
+        cut = self._cut(body)
+        if cut is None:
+            return None
+        with body._world.modify_world():
+            return cut.apply()
+
+    def _cut(self, body: Body) -> Optional[_Cut]:
+        """
+        :param body: The body whose shape is split.
+        :return: The part's body and the rest of the shape, not yet in the world;
+            ``None`` if the finder finds no part or the body has no shape.
+        """
+        shapes = body.visual or body.collision
+        if not shapes:
+            return None
+        colored = _colored_mesh(shapes)
+        split = self.finder.split(colored)
+        if split is None:
+            return None
+        part = Body(name=self._part_name(body), inertial=Inertial.negligible())
+        part.visual = _piece(split.part, part, shapes, colored)
+        rest = _piece(split.rest, body, shapes, colored)
+        if body.collision:
+            part.collision = _piece(split.part, part, shapes, colored)
+            rest_collision = _piece(split.rest, body, shapes, colored)
+        else:
+            rest_collision = ShapeCollection()
+        return _Cut(body=body, part=part, visual=rest, collision=rest_collision)
+
+    def _part_name(self, body: Body) -> PrefixedName:
+        """
+        :param body: The body the part is split off.
+        :return: The part's type, under the body's name, numbered if the world has an
+            entity of that name already.
+        """
+        taken = {
+            str(entity.name) for entity in body._world.kinematic_structure_entities
+        }
+        base = self.part_type.__name__.lower()
+        names = (
+            PrefixedName(f"{base}_{number}" if number else base, str(body.name))
+            for number in count()
         )
+        return next(name for name in names if str(name) not in taken)
+
+
+@dataclass
+class _Cut:
+    """
+    A body's shape cut into the part's body and the rest, to be applied to the world.
+    """
+
+    body: Body
+    """
+    The body whose shape is cut.
+    """
+
+    part: Body
+    """
+    The part's body, not yet in the world.
+    """
+
+    visual: ShapeCollection
+    """
+    What the body looks like without the part.
+    """
+
+    collision: ShapeCollection
+    """
+    How the body collides without the part.
+    """
+
+    def apply(self) -> Body:
+        """
+        Give the body the rest of its shape and fix the part's body to it. Must be
+        called while the world is being modified.
+
+        :return: The part's body.
+        """
+        self.body.update_shapes(visual=self.visual, collision=self.collision)
+        self.body._world.add_connection(
+            FixedConnection(parent=self.body, child=self.part)
+        )
+        return self.part
+
+
+def _colored_mesh(shapes: ShapeCollection) -> trimesh.Trimesh:
+    """
+    :param shapes: Shapes of a body.
+    :return: The shapes as one mesh in the body's frame, each face colored as its shape
+        looks there, so that the colors survive cutting the mesh.
+    """
+    meshes = []
+    for shape in shapes:
+        mesh = shape.mesh.copy()
+        if isinstance(mesh.visual, TextureVisuals):
+            mesh.visual = mesh.visual.to_color()
+        if mesh.visual.kind is None:
+            mesh.visual.face_colors = trimesh.visual.color.to_rgba(
+                shape.color.to_rgba()
+            )
+        mesh.apply_transform(shape.origin.to_np())
+        meshes.append(mesh)
+    return trimesh.util.concatenate(meshes)
+
+
+def _piece(
+    mesh: trimesh.Trimesh,
+    body: Body,
+    original: ShapeCollection,
+    colored: trimesh.Trimesh,
+) -> ShapeCollection:
+    """
+    :param mesh: A piece of the shape, in the frame of ``body``.
+    :param body: The body the piece belongs to.
+    :param original: The shapes the piece was cut from.
+    :param colored: The mesh the piece was cut from, as :func:`_colored_mesh` made it.
+    :return: The piece as the shapes of ``body``, colored like the faces of ``colored``
+        it was cut from, and with the surface finish and simulator properties that all
+        of ``original`` share.
+    """
+    mesh = mesh.copy()
+    _, _, faces = trimesh.proximity.closest_point(colored, mesh.triangles_center)
+    mesh.visual = trimesh.visual.ColorVisuals(
+        mesh, face_colors=colored.visual.face_colors[faces]
+    )
+    shape = Mesh.from_trimesh(
+        mesh=mesh,
+        origin=HomogeneousTransformationMatrix(reference_frame=body),
+        finish=_shared(original, lambda shape: shape.finish),
+    )
+    shape.simulator_additional_properties = list(
+        _shared(original, lambda shape: shape.simulator_additional_properties) or []
+    )
+    return ShapeCollection([shape], reference_frame=body)
+
+
+def _shared(shapes: ShapeCollection, attribute: Callable[[Shape], T]) -> Optional[T]:
+    """
+    :param shapes: Some shapes.
+    :param attribute: Reads an attribute of a shape.
+    :return: The attribute's value, if all ``shapes`` have the same; otherwise ``None``.
+    """
+    values = [attribute(shape) for shape in shapes]
+    return values[0] if all(value == values[0] for value in values) else None
+
+
+# %% the pipeline step
+
+
+@dataclass
+class SplitPartFromShape(Step):
+    """
+    Gives every annotation of a type the part its shape has, as a body of its own,
+    by applying a :class:`PartSplitter` to each annotation that has no such part yet.
+
+    This suits a world that is handed to a physics simulator afterwards, whose model is
+    built once from the world's bodies; otherwise, split the part off when it is first
+    needed with :meth:`PartSplitter.part_of`.
+    """
+
+    whole_type: Type[PartWholeRelationship]
+    """
+    The type of annotation whose shapes are split.
+    """
+
+    splitter: PartSplitter
+    """
+    Splits the part off each annotation's shape.
+    """
+
+    def _apply(self, world: World) -> World:
+        for whole in world.get_semantic_annotations_by_type(self.whole_type):
+            self.splitter.part_of(whole)
+        return world
