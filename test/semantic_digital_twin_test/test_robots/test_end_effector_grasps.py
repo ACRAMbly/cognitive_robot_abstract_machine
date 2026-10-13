@@ -6,6 +6,7 @@ from typing_extensions import List
 
 from semantic_digital_twin.adapters.urdf import URDFParser
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
+from semantic_digital_twin.datastructures.definitions import GripperState
 from semantic_digital_twin.datastructures.joint_state import JointState
 from semantic_digital_twin.exceptions import (
     GripperAxesNotPerpendicular,
@@ -399,32 +400,46 @@ def test_the_thumb_tip_goal_is_read_in_the_other_fingertips_frame(pr2_gripper):
 # %% how far closing carries the point the fingers meet at
 
 
-def test_sliding_fingers_meet_at_the_same_place_however_far_they_are_closed(
+def test_swinging_fingers_carry_the_point_they_meet_at_further_out(pr2_gripper):
+    """
+    A PR2's jaws swing on a linkage rather than sliding, so the point they meet at
+    travels along the approach axis as they close.
+    """
+    assert pr2_gripper.travel_when_closing > POSITION_TOLERANCE
+
+
+def test_the_travel_is_read_between_the_grippers_own_open_and_closed_states(
     pr2_gripper,
 ):
     """
-    A PR2's fingers slide straight towards each other, so closing them does not carry
-    the point they meet at anywhere.
+    It is the distance the meeting point covers over the gripper's whole range, which
+    is what a grasp aimed while the gripper is open has to correct for.
     """
-    assert pr2_gripper.travel_when_closing == pytest.approx(0.0, abs=1e-9)
+    with pr2_gripper._world.reset_state_context():
+        open_P_grasp = pr2_gripper._grasp_point_at(GripperState.OPEN)
+        closed_P_grasp = pr2_gripper._grasp_point_at(GripperState.CLOSE)
+        expected = (closed_P_grasp - open_P_grasp).dot(pr2_gripper.approach_axis)
+
+    assert pr2_gripper.travel_when_closing == pytest.approx(float(expected))
 
 
-def test_swinging_fingers_carry_the_point_they_meet_at_further_out(tracy_world):
+def test_the_travel_stays_the_same_once_the_gripper_has_moved(pr2_gripper):
     """
-    Tracy's fingers swing on hinges, so the point they meet at travels along the
-    approach axis as they close.
+    A constant of the gripper's description, so it does not depend on how the fingers
+    happen to stand when it is read.
     """
-    gripper = tracy_world.get_semantic_annotations_by_type(Tracy)[
-        0
-    ].left_arm.end_effector
+    travel = pr2_gripper.travel_when_closing
 
-    assert gripper.travel_when_closing > POSITION_TOLERANCE
+    pr2_gripper.get_joint_state_by_type(GripperState.CLOSE).apply_to(pr2_gripper._world)
+    pr2_gripper._world.notify_state_change()
+
+    assert pr2_gripper.travel_when_closing == pytest.approx(travel)
 
 
 def test_reading_the_travel_leaves_the_fingers_where_they_were(tracy_world):
     """
-    The closed state is only borrowed to measure against, so nothing of it is left
-    behind on the world.
+    The open and closed states are only borrowed to measure against, so nothing of
+    them is left behind on the world.
     """
     gripper = tracy_world.get_semantic_annotations_by_type(Tracy)[
         0

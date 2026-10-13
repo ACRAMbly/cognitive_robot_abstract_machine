@@ -350,22 +350,30 @@ class HasTwoFingers(
             closing_axis=self.closing_axis,
         )
 
-    @property
+    @cached_property
     def travel_when_closing(self) -> float:
         """
-        How much further along :attr:`EndEffector.approach_axis` the fingers meet once
-        closed than they do now, in metres. Zero for fingers that only slide.
+        How much further along :attr:`EndEffector.approach_axis` the fingers meet when
+        closed than when open, in metres. Zero for fingers that only slide.
 
-        ..note:: Reads the gripper's closed state onto the world and takes it back off
-            again, so this is not to be read while a plan is driving the robot.
+        A constant of the gripper's description, read once by putting its own open and
+        closed states on the world in turn and taking them back off again.
         """
-        open_P_grasp = self.fingertips.tool_P_grasp
         with self._world.reset_state_context():
-            self.get_joint_state_by_type(GripperState.CLOSE).apply_to(self._world)
-            self._world.notify_state_change()
-            closed_P_grasp = self.fingertips.tool_P_grasp
-            travelled = closed_P_grasp - open_P_grasp
-            return float(travelled.dot(self.approach_axis))
+            open_P_grasp = self._grasp_point_at(GripperState.OPEN)
+            closed_P_grasp = self._grasp_point_at(GripperState.CLOSE)
+        travelled = closed_P_grasp - open_P_grasp
+        return float(travelled.dot(self.approach_axis))
+
+    def _grasp_point_at(self, state_type: GripperState) -> Point3:
+        """
+        :param state_type: The gripper state to read at.
+        :return: Where the fingers meet once the gripper stands in that state, in its
+            tool frame.
+        """
+        self.get_joint_state_by_type(state_type).apply_to(self._world)
+        self._world.notify_state_change()
+        return self.fingertips.tool_P_grasp
 
     def tool_frame_goal_for_grasp(self, grasp_pose: Pose) -> Pose:
         """

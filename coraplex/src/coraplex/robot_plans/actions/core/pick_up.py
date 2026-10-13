@@ -31,9 +31,7 @@ from coraplex.robot_plans.mixins import (
     PickUpTuningParameters,
     ReachTuningParameters,
 )
-from coraplex.robot_plans.motions.base import BaseMotion
 from coraplex.robot_plans.motions.gripper import (
-    MoveFingersToWidthMotion,
     MoveGripperMotion,
     MoveToolCenterPointMotion,
 )
@@ -196,8 +194,6 @@ class PickUpAction(
                     approach_clearance=self.approach_clearance,
                     retreat_distance=self.retreat_distance,
                     aimed_point=self.aimed_point,
-                    grasp_width=self.grasp_width,
-                    grasp_squeeze=self.grasp_squeeze,
                     pre_approach_linear_velocity=self.pre_approach_linear_velocity,
                     final_approach_linear_velocity=self.final_approach_linear_velocity,
                     grasp_closing_velocity=self.grasp_closing_velocity,
@@ -301,28 +297,15 @@ class GraspingAction(
                     orientation_threshold=self.orientation_threshold,
                     grasp_detection_threshold=self.grasp_detection_threshold,
                 ),
-                self._closing_motion(),
+                MoveGripperMotion(
+                    motion=GripperState.CLOSE,
+                    gripper=self.arm.end_effector,
+                    allow_gripper_collision=True,
+                    finger_velocity=self.grasp_closing_velocity,
+                    stall_minimum_time=self.grasp_stall_minimum_time,
+                    tolerate_stall=self.tolerate_grasp_stall,
+                ),
             ]
-        )
-
-    def _closing_motion(self) -> BaseMotion:
-        """
-        :return: The motion that takes hold of the object: the fingers sent to its own
-            width where one was given, and the gripper simply shut otherwise.
-        """
-        if self.grasp_width is not None:
-            return MoveFingersToWidthMotion(
-                gripper=self.arm.end_effector,
-                width=self.grasp_width,
-                squeeze=self.grasp_squeeze,
-            )
-        return MoveGripperMotion(
-            motion=GripperState.CLOSE,
-            gripper=self.arm.end_effector,
-            allow_gripper_collision=True,
-            finger_velocity=self.grasp_closing_velocity,
-            stall_minimum_time=self.grasp_stall_minimum_time,
-            tolerate_stall=self.tolerate_grasp_stall,
         )
 
     @staticmethod

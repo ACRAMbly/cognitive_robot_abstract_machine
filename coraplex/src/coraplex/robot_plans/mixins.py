@@ -91,18 +91,6 @@ class PickUpTuningParameters(ReachTuningParameters):
     places rather than two similarly-named-but-distinct fields.
     """
 
-    grasp_width: Optional[float] = field(default=None, kw_only=True)
-    """
-    How wide the object stands where the fingers meet it, in metres. Given, the fingers
-    are sent to that width rather than the gripper being shut onto the object.
-    """
-
-    grasp_squeeze: float = field(default=0.0, kw_only=True)
-    """
-    How far past :attr:`grasp_width` each finger is sent, in metres, so they press into
-    the object rather than merely touching it.
-    """
-
     grasp_closing_velocity: Optional[float] = field(default=None, kw_only=True)
     """
     Maximum finger joint velocity (in m/s) used while closing onto the object, enforced
