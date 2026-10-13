@@ -7,7 +7,8 @@ from robokudo.annotators.testing import SlowAnnotator, EmptyAnnotator
 from robokudo.descriptors.factories.cr_descriptor_factory import (
     CollectionReaderDescriptorFactory,
 )
-from robokudo.pipeline import ClearAnnotatorOutputs, Pipeline
+from robokudo.behaviours.clear_annotator_outputs import ClearAnnotatorOutputs
+from robokudo.pipeline import Pipeline
 from robokudo.tree_components.task_scheduler import IterativeTaskScheduler
 from robokudo.utils.tree import add_children_to_parent
 
