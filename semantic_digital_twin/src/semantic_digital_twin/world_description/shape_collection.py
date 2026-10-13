@@ -46,7 +46,6 @@ for a planar one.
 """
 
 if TYPE_CHECKING:
-    from semantic_digital_twin.datastructures.joint_state import JointState
     from semantic_digital_twin.world_description.world_entity import (
         KinematicStructureEntity,
     )
@@ -173,17 +172,13 @@ class ShapeCollection(SubclassJSONSerializer):
         return concatenate(transformed_meshes)
 
     def as_bounding_box_collection_at_origin(
-        self,
-        origin: HomogeneousTransformationMatrix,
-        at_state: Optional[JointState] = None,
+        self, origin: HomogeneousTransformationMatrix
     ) -> BoundingBoxCollection:
         """
         Provides the bounding box collection for this entity given a transformation
         matrix as origin.
 
         :param origin: The origin to express the bounding boxes from.
-        :param at_state: Joint positions to express them as if they held; the ones the
-            world holds are used when not given.
         :returns: A collection of bounding boxes in world-space coordinates.
         """
         world_bboxes = []
@@ -192,7 +187,7 @@ class ShapeCollection(SubclassJSONSerializer):
             if shape.origin.reference_frame is None:
                 continue
             local_bb: VolumetricBoundingBox = shape.local_frame_bounding_box
-            world_bb = local_bb.transform_to_origin(origin, at_state=at_state)
+            world_bb = local_bb.transform_to_origin(origin)
             world_bboxes.append(world_bb)
 
         return BoundingBoxCollection(
@@ -201,22 +196,17 @@ class ShapeCollection(SubclassJSONSerializer):
         )
 
     def as_bounding_box_collection_in_frame(
-        self,
-        reference_frame: KinematicStructureEntity,
-        at_state: Optional[JointState] = None,
+        self, reference_frame: KinematicStructureEntity
     ) -> BoundingBoxCollection:
         """
         Provides the bounding box collection for this entity in the given reference
         frame.
 
         :param reference_frame: The reference frame to express the bounding boxes in.
-        :param at_state: Joint positions to express them as if they held; the ones the
-            world holds are used when not given.
         :returns: A collection of bounding boxes in world-space coordinates.
         """
         return self.as_bounding_box_collection_at_origin(
-            HomogeneousTransformationMatrix(reference_frame=reference_frame),
-            at_state=at_state,
+            HomogeneousTransformationMatrix(reference_frame=reference_frame)
         )
 
     def to_json(self, **kwargs) -> Dict[str, Any]:

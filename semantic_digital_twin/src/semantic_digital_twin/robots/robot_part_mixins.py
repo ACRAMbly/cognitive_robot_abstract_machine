@@ -24,8 +24,10 @@ from krrood.patterns.subclass_safe_generic import (
     SubClassSafeGeneric,
 )
 from krrood.utils import get_existing_field_by_name, get_generic_type_parameters
-from semantic_digital_twin.datastructures.definitions import GripperState
-from semantic_digital_twin.datastructures.joint_state import JointState
+from semantic_digital_twin.datastructures.definitions import (
+    GripperState,
+    JointStateType,
+)
 from semantic_digital_twin.datastructures.lidar_reading import LidarReading
 from semantic_digital_twin.reasoning.predicates import LeftOf, RightOf
 from semantic_digital_twin.spatial_types.spatial_types import Point3, Pose, Vector3
@@ -180,25 +182,18 @@ class Fingertips:
     @property
     def tool_P_grasp(self) -> Point3:
         """
-        Where the tips meet, in :attr:`tool_frame`.
+        Where the tips meet as the gripper stands, in :attr:`tool_frame`.
 
         A gripper's tool frame need not sit there, and aiming the tool frame itself at
         an object then closes the fingers beside it rather than on it. Each tip's own
         collision bounding box centre stands in for where that finger is, since a tip's
         link origin may sit at an edge of its mesh rather than at its centre.
-        """
-        return self.tool_P_grasp_at(None)
 
-    def tool_P_grasp_at(self, joint_state: Optional[JointState]) -> Point3:
+        Read it inside a
+        :meth:`~semantic_digital_twin.world.World.reset_state_context` to read it for a
+        state the gripper is not standing in.
         """
-        :param joint_state: The joint positions to read at, leaving the ones the world
-            holds untouched; ``None`` reads the held ones.
-        :return: Where the tips meet with the gripper standing in that state, in
-            :attr:`tool_frame`.
-        """
-        thumb, finger = (
-            self._bounding_box(tip, at_state=joint_state).center for tip in self.both
-        )
+        thumb, finger = (self._bounding_box(tip).center for tip in self.both)
         return thumb.midpoint(finger)
 
     # %% how wide they stand
@@ -278,17 +273,13 @@ class Fingertips:
         """
         return separation + 2 * self.surface_depth
 
-    def _bounding_box(
-        self, tip: Body, at_state: Optional[JointState] = None
-    ) -> BoundingBox:
+    def _bounding_box(self, tip: Body) -> BoundingBox:
         """
         :param tip: One of the two tips.
-        :param at_state: Joint positions to read at; the ones the world holds are used
-            when not given.
         :return: Its collision bounding box, in :attr:`tool_frame`.
         """
         return tip.collision.as_bounding_box_collection_in_frame(
-            self.tool_frame, at_state=at_state
+            self.tool_frame
         ).bounding_box()
 
     def _reach_along_closing_axis(self, tip: Body) -> Tuple[float, float]:
@@ -372,17 +363,33 @@ class HasTwoFingers(
         How much further along :attr:`EndEffector.approach_axis` the fingers meet when
         closed than when open, in metres. Zero for fingers that only slide.
 
-        A constant of the gripper's description, read once and kept. The two states are
-        only computed at, never put on the world, so this is safe to read while a plan
-        is driving the robot.
+        A constant of the gripper's description, read once and kept. The gripper is put
+        through its own open and closed states to read it, inside a
+        :meth:`~semantic_digital_twin.world.World.reset_state_context` that stands the
+        world back up afterwards.
         """
         fingertips = self.fingertips
-        open_P_grasp, closed_P_grasp = (
-            fingertips.tool_P_grasp_at(self.get_joint_state_by_type(state_type))
-            for state_type in (GripperState.OPEN, GripperState.CLOSE)
-        )
+        with self._world.reset_state_context():
+            open_P_grasp, closed_P_grasp = (
+                self._meeting_point_in_state(fingertips, state_type)
+                for state_type in (GripperState.OPEN, GripperState.CLOSE)
+            )
         travelled = closed_P_grasp - open_P_grasp
         return float(travelled.dot(self.approach_axis))
+
+    def _meeting_point_in_state(
+        self, fingertips: Fingertips, state_type: JointStateType
+    ) -> Point3:
+        """
+        :param fingertips: The tips to read.
+        :param state_type: The state to stand the gripper in.
+        :return: Where the tips meet with the gripper standing in that state.
+
+        ..warning:: This leaves the gripper standing in that state. Call it inside a
+            :meth:`~semantic_digital_twin.world.World.reset_state_context`.
+        """
+        self.get_joint_state_by_type(state_type).apply_to(self._world)
+        return fingertips.tool_P_grasp
 
     def tool_frame_goal_for_grasp(self, grasp_pose: Pose) -> Pose:
         """

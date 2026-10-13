@@ -125,7 +125,6 @@ from semantic_digital_twin.pipeline.mesh_decomposition.base import MeshDecompose
 from semantic_digital_twin.pipeline.mesh_decomposition.vhacd import VHACDMeshDecomposer
 
 if TYPE_CHECKING:
-    from semantic_digital_twin.datastructures.joint_state import JointState
     from semantic_digital_twin.spatial_types import GenericSpatialType
     from semantic_digital_twin.robots.robot_parts import AbstractRobot
 
@@ -2446,24 +2445,6 @@ class World(HasSimulatorProperties):
         """
         return self._forward_kinematic_manager.compose_expression(root, tip)
 
-    def compute_forward_kinematics_at(
-        self,
-        joint_state: JointState,
-        root: KinematicStructureEntity,
-        tip: KinematicStructureEntity,
-    ) -> HomogeneousTransformationMatrix:
-        """
-        Compute root_T_tip as it would stand with the given joint positions, without
-        putting them on the world.
-
-        :param joint_state: The joint positions to compute at.
-        :param root: Root KinematicStructureEntity for which the kinematics are
-            computed.
-        :param tip: Tip KinematicStructureEntity to which the kinematics are computed.
-        :return: The pose of the tip relative to the root, at those positions.
-        """
-        return self._forward_kinematic_manager.compute_at(joint_state, root, tip)
-
     def compute_forward_kinematics_np(
         self, root: KinematicStructureEntity, tip: KinematicStructureEntity
     ) -> NpMatrix4x4:
@@ -2643,7 +2624,6 @@ class World(HasSimulatorProperties):
         self,
         spatial_object: GenericSpatialType,
         target_frame: KinematicStructureEntity,
-        at_state: Optional[JointState] = None,
     ) -> GenericSpatialType:
         """
         Transform a given spatial object from its reference frame to a target frame.
@@ -2655,22 +2635,15 @@ class World(HasSimulatorProperties):
         :param spatial_object: The spatial object to be transformed.
         :param target_frame: The target KinematicStructureEntity frame to which the spatial object should
             be transformed.
-        :param at_state: Joint positions to transform as if they held, leaving the ones
-            the world holds untouched; the held ones are used when not given.
         :return: The spatial object, of the same type, expressed in the target frame.
         """
         if spatial_object.reference_frame is None:
             raise MissingReferenceFrameError(spatial_object)
         if spatial_object.reference_frame == target_frame:
             return spatial_object
-        if at_state is None:
-            target_frame_T_reference_frame = self.compute_forward_kinematics(
-                root=target_frame, tip=spatial_object.reference_frame
-            )
-        else:
-            target_frame_T_reference_frame = self.compute_forward_kinematics_at(
-                at_state, root=target_frame, tip=spatial_object.reference_frame
-            )
+        target_frame_T_reference_frame = self.compute_forward_kinematics(
+            root=target_frame, tip=spatial_object.reference_frame
+        )
 
         return spatial_object.transform(target_frame_T_reference_frame)
 
