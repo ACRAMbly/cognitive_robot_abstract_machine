@@ -1,12 +1,15 @@
 import py_trees
+import pytest
 
 from robokudo.annotators.core import BaseAnnotator
+from robokudo.annotators.outputs import AnnotatorOutputPerPipelineMap
 from robokudo.annotators.testing import (
     FakeCollectionReaderAnnotator,
     FailingAnnotator,
     SlowAnnotator,
 )
-from robokudo.pipeline import Pipeline
+from robokudo.exceptions import ParentPipelineMissing
+from robokudo.pipeline import ClearAnnotatorOutputs, Pipeline
 
 
 def create_test_tree():
@@ -117,3 +120,15 @@ class TestPipeline(object):
         root.add_child(sub_pipeline)
 
         assert root.pipeline_children() == [annotator1, annotator3]
+
+
+class TestClearAnnotatorOutputs:
+    def test_raises_without_parent_pipeline(
+        self, annotator_output_buffer: AnnotatorOutputPerPipelineMap
+    ):
+        root = py_trees.composites.Sequence("Sequence", memory=True)
+        clear_outputs = ClearAnnotatorOutputs()
+        root.add_child(clear_outputs)
+
+        with pytest.raises(ParentPipelineMissing):
+            clear_outputs.update()

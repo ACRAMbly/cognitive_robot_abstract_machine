@@ -20,9 +20,9 @@ from transformers import BatchEncoding, BatchFeature
 from transformers.modeling_outputs import BaseModelOutputWithPooling
 from typing_extensions import List, Sequence, Union
 
-import robokudo.annotators.zero_shot_classifier_annotator
-from robokudo.annotators.zero_shot_classifier_annotator import (
-    ZeroShotClassifierAnnotator,
+import robokudo.annotators.zero_shot_classification_annotator
+from robokudo.annotators.zero_shot_classification_annotator import (
+    ZeroShotClassificationAnnotator,
 )
 from robokudo.cas import CASViews
 from robokudo.pipeline import Pipeline
@@ -177,12 +177,12 @@ def color_embedding_clip(monkeypatch) -> ColorEmbeddingClip:
     """
     clip = ColorEmbeddingClip()
     monkeypatch.setattr(
-        robokudo.annotators.zero_shot_classifier_annotator.CLIPModel,
+        robokudo.annotators.zero_shot_classification_annotator.CLIPModel,
         "from_pretrained",
         lambda model_name: clip.model,
     )
     monkeypatch.setattr(
-        robokudo.annotators.zero_shot_classifier_annotator.CLIPProcessor,
+        robokudo.annotators.zero_shot_classification_annotator.CLIPProcessor,
         "from_pretrained",
         lambda model_name: clip.processor,
     )
@@ -211,11 +211,11 @@ def _object_hypothesis(x: int, y: int, width: int, height: int) -> ObjectHypothe
     return object_hypothesis
 
 
-def _color_descriptor() -> ZeroShotClassifierAnnotator.Descriptor:
+def _color_descriptor() -> ZeroShotClassificationAnnotator.Descriptor:
     """
     :return: A descriptor classifying against the color vocabulary on the CPU.
     """
-    descriptor = ZeroShotClassifierAnnotator.Descriptor()
+    descriptor = ZeroShotClassificationAnnotator.Descriptor()
     descriptor.parameters.device = torch.device("cpu")
     descriptor.parameters.vocabulary = COLOR_VOCABULARY
     descriptor.parameters.save_top_k = len(COLOR_VOCABULARY)
@@ -223,12 +223,12 @@ def _color_descriptor() -> ZeroShotClassifierAnnotator.Descriptor:
 
 
 def _annotator_in_pipeline(
-    descriptor: ZeroShotClassifierAnnotator.Descriptor, color_image: np.ndarray
-) -> ZeroShotClassifierAnnotator:
+    descriptor: ZeroShotClassificationAnnotator.Descriptor, color_image: np.ndarray
+) -> ZeroShotClassificationAnnotator:
     """
     :return: An annotator whose CAS holds the given color image.
     """
-    annotator = ZeroShotClassifierAnnotator(descriptor=descriptor)
+    annotator = ZeroShotClassificationAnnotator(descriptor=descriptor)
     pipeline = Pipeline("Sequence")
     pipeline.add_child(annotator)
     pipeline.setup()
@@ -237,7 +237,7 @@ def _annotator_in_pipeline(
 
 
 def _scene_classifications(
-    annotator: ZeroShotClassifierAnnotator,
+    annotator: ZeroShotClassificationAnnotator,
 ) -> List[Classification]:
     return annotator.get_cas().filter_annotations_by_type(Classification)
 
@@ -261,9 +261,11 @@ def test_annotator_without_descriptor_indexes_default_vocabulary(
     """
     An annotator built without a descriptor falls back to the default parameters.
     """
-    default_vocabulary = ZeroShotClassifierAnnotator.Descriptor().parameters.vocabulary
+    default_vocabulary = (
+        ZeroShotClassificationAnnotator.Descriptor().parameters.vocabulary
+    )
 
-    annotator = ZeroShotClassifierAnnotator()
+    annotator = ZeroShotClassificationAnnotator()
 
     assert annotator.vocabulary_index.ntotal == len(default_vocabulary)
 
@@ -272,7 +274,7 @@ def test_vocabulary_is_encoded_through_the_template(color_embedding_clip):
     descriptor = _color_descriptor()
     descriptor.parameters.vocabulary_template = "A photo of something {}"
 
-    ZeroShotClassifierAnnotator(descriptor=descriptor)
+    ZeroShotClassificationAnnotator(descriptor=descriptor)
 
     assert color_embedding_clip.processor.tokenizer.received_texts == [
         descriptor.parameters.vocabulary_template.format(word)
@@ -386,7 +388,7 @@ def _two_color_scene() -> np.ndarray:
     return image
 
 
-def _object_hypothesis_descriptor() -> ZeroShotClassifierAnnotator.Descriptor:
+def _object_hypothesis_descriptor() -> ZeroShotClassificationAnnotator.Descriptor:
     descriptor = _color_descriptor()
     descriptor.parameters.analysis_scope = ObjectHypothesis
     return descriptor

@@ -2,8 +2,8 @@ from robokudo.world import world_instance
 from semantic_digital_twin.adapters.ros.node_registry import ROSNodeRegistry
 from semantic_digital_twin.adapters.ros.tf_publisher import TFPublisher
 from robokudo.analysis_engine import AnalysisEngineInterface
-from robokudo.annotators.zero_shot_classifier_annotator import (
-    ZeroShotClassifierAnnotator,
+from robokudo.annotators.zero_shot_classification_annotator import (
+    ZeroShotClassificationAnnotator,
 )
 from robokudo.annotators.cluster_color import ClusterColorAnnotator
 from robokudo.annotators.cluster_color_histogram import ClusterColorHistogramAnnotator
@@ -50,7 +50,7 @@ class AnalysisEngine(AnalysisEngineInterface):
                 ClusterColorAnnotator(),
                 ClusterColorHistogramAnnotator(),
                 ClusterPoseBBAnnotator(),
-                ZeroShotClassifierAnnotator(),
+                ZeroShotClassificationAnnotator(),
                 SemanticDigitalTwinConnector(),
                 # Additional annotators (e.g., QueryAnnotator, ActionServerCheck) can be added if needed.
             ]
