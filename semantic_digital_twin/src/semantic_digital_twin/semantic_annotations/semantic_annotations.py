@@ -902,9 +902,9 @@ class Cup(DrinkingContainer, IsPerceivable):
 
 
 @dataclass(eq=False)
-class Mug(DrinkingContainer):
+class Mug(DrinkingContainer, HasHandle):
     """
-    A mug.
+    A mug, held by its handle.
     """
 
 
@@ -931,9 +931,9 @@ class PanLid(Lid):
 
 
 @dataclass(eq=False)
-class Pot(CookingContainer):
+class Pot(CookingContainer, HasHandle):
     """
-    A pot.
+    A pot. Its handle is all of its handles, as one part.
     """
 
 

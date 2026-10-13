@@ -53,7 +53,7 @@ from semantic_digital_twin.orm.ormatic_interface import WorldMappingDAO
 from semantic_digital_twin.robots.pr2 import PR2
 from test.semantic_digital_twin_test.test_pipeline.test_part_finding import (
     BODY_OUTER_RADIUS,
-    door_with_mug_shape,
+    annotated_mug,
     mug,
     split_handle,
 )
@@ -3100,25 +3100,27 @@ def test_a_split_part_and_its_rollback_reach_a_synchronized_world(rclpy_node):
         assert wait_for_condition(
             lambda: sender_synchronizer.publisher.get_subscription_count() >= 2
         ), "the synchronizers never discovered each other"
-        door = door_with_mug_shape(sender)
+        annotation = annotated_mug(sender)
         whole_faces = len(mug().faces)
 
         def received_faces(shapes: str) -> int:
-            root = receiver.get_kinematic_structure_entity_by_id(door.root.id)
+            root = receiver.get_kinematic_structure_entity_by_id(annotation.root.id)
             return len(getattr(root, shapes).combined_mesh.faces)
 
         assert wait_for_condition(lambda: len(receiver.bodies) == 1)
         assert received_faces("collision") == whole_faces
 
-        split_handle(door)
+        split_handle(annotation)
 
         assert wait_for_condition(lambda: len(receiver.bodies) == 2)
-        root = receiver.get_kinematic_structure_entity_by_id(door.root.id)
+        root = receiver.get_kinematic_structure_entity_by_id(annotation.root.id)
         assert root.collision.reference_frame is root
         assert received_faces("collision") == len(
-            door.root.collision.combined_mesh.faces
+            annotation.root.collision.combined_mesh.faces
         )
-        assert received_faces("visual") == len(door.root.visual.combined_mesh.faces)
+        assert received_faces("visual") == len(
+            annotation.root.visual.combined_mesh.faces
+        )
         assert root.collision.combined_mesh.bounds[1][0] == pytest.approx(
             BODY_OUTER_RADIUS
         )
