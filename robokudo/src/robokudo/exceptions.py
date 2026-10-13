@@ -464,3 +464,27 @@ class WorldDescriptorBootstrapError(WorldDescriptorError, RuntimeError):
             "inspect the original chained exception for the underlying world model "
             "operation that failed."
         )
+
+
+@dataclass
+class DetectionModelNotConfigured(RoboKudoError, ValueError):
+    """
+    Raised when an annotator is given no model to load.
+    """
+
+    annotator_name: str
+    """
+    Name of the annotator that has no model configured.
+    """
+
+    def error_message(self) -> str:
+        return (
+            f"{self.annotator_name} has neither a pretrained model nor weights inside "
+            f"a ROS package configured."
+        )
+
+    def suggest_correction(self) -> str:
+        return (
+            "set 'pretrained_model', or set both 'ros_package_name' and "
+            "'weights_path' in the annotator's parameters."
+        )

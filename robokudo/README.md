@@ -40,9 +40,10 @@ Things to note:
 Annotators built on large machine learning libraries need extra packages that a plain `robokudo` install leaves out,
 so users who do not need them are spared the download. They are bundled in the `dev` extra:
 
-| Package | Annotators that need it                                 |
-|---------|---------------------------------------------------------|
-| `torch` | `ClipAnnotator` (`robokudo.annotators.clip_annotator`) |
+| Package       | Annotators that need it                                                                       |
+|---------------|-----------------------------------------------------------------------------------------------|
+| `torch`       | `ClipAnnotator` (`robokudo.annotators.clip_annotator`), `YoloAnnotator`                       |
+| `ultralytics` | `YoloAnnotator` (`robokudo.annotators.yolo_annotator`)                                        |
 
 Install them together with RoboKudo:
 
