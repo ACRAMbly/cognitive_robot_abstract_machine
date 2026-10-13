@@ -356,8 +356,11 @@ class HasTwoFingers(
         How much further along :attr:`EndEffector.approach_axis` the fingers meet when
         closed than when open, in metres. Zero for fingers that only slide.
 
-        A constant of the gripper's description, read once by putting its own open and
-        closed states on the world in turn and taking them back off again.
+        A constant of the gripper's description, read once and kept.
+
+        ..note:: The first read puts the gripper's open and closed states on the world
+            in turn and takes them back off again, so read it before a plan is driving
+            the robot.
         """
         with self._world.reset_state_context():
             open_P_grasp = self._grasp_point_at(GripperState.OPEN)
