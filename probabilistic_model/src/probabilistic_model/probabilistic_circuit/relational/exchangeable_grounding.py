@@ -507,27 +507,10 @@ class ExchangeablePartGrounder(Generic[NodeType], SubClassSafeGeneric):
             its region: there are at least two regions, or the only one is a point.
         """
         if len(branch_regions) == 1:
-            return ExchangeablePartGrounder._is_point(branch_regions[0])
+            return branch_regions[0].is_singleton()
         return all(
             left.intersection_with(right).is_empty()
             for left, right in itertools.combinations(branch_regions, 2)
-        )
-
-    @staticmethod
-    def _is_point(region: Event) -> bool:
-        """
-        :param region: A region of the undetermined statistics.
-        :return: Whether the region contains a single value of every variable.
-        """
-        if len(region.simple_sets) != 1:
-            return False
-        return all(
-            (
-                assignment.is_singleton()
-                if isinstance(assignment, Interval)
-                else len(assignment.simple_sets) == 1
-            )
-            for assignment in region.simple_sets[0].values()
         )
 
     @staticmethod
@@ -647,7 +630,4 @@ class RelationalGrounding:
         :return: Whether the value designates exactly one element of the variable's
             domain.
         """
-        composite = variable.make_value(value)
-        if isinstance(composite, Interval):
-            return composite.is_singleton()
-        return len(composite.simple_sets) == 1
+        return variable.make_value(value).is_singleton()
