@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 import torch
-from typing_extensions import Dict, List, Optional
+from typing_extensions import Any, Dict, List, Optional
 from ultralytics.engine.results import Results
 
 # %% detection model
@@ -57,6 +57,35 @@ class NormalizedBox:
 
 
 @dataclass
+class NormalizedKeypoint:
+    """
+    A body keypoint given as fractions of the image width and height.
+    """
+
+    x: float
+    """
+    Fraction of the image width left of the keypoint.
+    """
+
+    y: float
+    """
+    Fraction of the image height above the keypoint.
+    """
+
+    confidence: float
+    """
+    Confidence that the keypoint is visible at this position.
+    """
+
+    def in_pixels_of(self, image: np.ndarray) -> List[float]:
+        """
+        :return: The keypoint as (x, y, confidence) in pixels of the given image.
+        """
+        height, width = image.shape[:2]
+        return [self.x * width, self.y * height, self.confidence]
+
+
+@dataclass
 class ScriptedDetection:
     """
     A detection the scripted model reports on every image.
@@ -75,6 +104,11 @@ class ScriptedDetection:
     box: NormalizedBox
     """
     Where the detection lies, relative to the image size.
+    """
+
+    keypoints: List[NormalizedKeypoint] = field(default_factory=list)
+    """
+    The body keypoints a pose model reports for the detection.
     """
 
 
@@ -104,19 +138,43 @@ class ScriptedYoloModel:
     Shape of the image of the last prediction.
     """
 
-    def predict(self, image: np.ndarray, conf: float, show: bool) -> List[Results]:
+    def predict(
+        self, image: np.ndarray, conf: float, **prediction_settings: Any
+    ) -> List[Results]:
         """
+        :param prediction_settings: Further ultralytics prediction settings, ignored.
         :return: The scripted detections at least as confident as the threshold.
         """
         self.received_confidence = conf
         self.received_image_shape = image.shape
-        rows = [
-            [*detection.box.corners_in(image), detection.confidence, detection.class_id]
-            for detection in self.detections
-            if detection.confidence >= conf
+        reported = [
+            detection for detection in self.detections if detection.confidence >= conf
         ]
-        boxes = torch.tensor(rows, dtype=torch.float32).reshape(-1, 6)
-        return [Results(image, path="", names=self.names, boxes=boxes)]
+        boxes = torch.tensor(
+            [
+                [
+                    *detection.box.corners_in(image),
+                    detection.confidence,
+                    detection.class_id,
+                ]
+                for detection in reported
+            ],
+            dtype=torch.float32,
+        ).reshape(-1, 6)
+        keypoints = (
+            torch.tensor(
+                [
+                    [keypoint.in_pixels_of(image) for keypoint in detection.keypoints]
+                    for detection in reported
+                ],
+                dtype=torch.float32,
+            )
+            if any(detection.keypoints for detection in reported)
+            else None
+        )
+        return [
+            Results(image, path="", names=self.names, boxes=boxes, keypoints=keypoints)
+        ]
 
 
 # %% segmentation model
