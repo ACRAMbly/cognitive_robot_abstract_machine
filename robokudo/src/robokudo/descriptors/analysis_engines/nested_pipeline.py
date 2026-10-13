@@ -21,7 +21,8 @@ from robokudo.descriptors.factories.cr_descriptor_factory import (
     CollectionReaderDescriptorFactory,
 )
 from robokudo.analysis_engine import AnalysisEngineInterface
-from robokudo.pipeline import ClearAnnotatorOutputs, Pipeline
+from robokudo.behaviours.clear_annotator_outputs import ClearAnnotatorOutputs
+from robokudo.pipeline import Pipeline
 from py_trees.behaviours import SuccessEveryN, TickCounter
 from py_trees.common import Status
 from py_trees.decorators import Condition
