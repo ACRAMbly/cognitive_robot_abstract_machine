@@ -28,7 +28,6 @@ import robokudo.annotators.core
 import robokudo.annotators.outputs
 import robokudo.cas as cas
 import robokudo.defs as defs
-from robokudo.exceptions import ParentPipelineMissing
 import robokudo.utils.tree
 
 
@@ -192,28 +191,3 @@ class Pipeline(Sequence):
                 f"Pipeline Processing took in total {(timeit.default_timer() - self.cas_start_timer):.4f}s"
             )
             self.cas_start_timer = timeit.default_timer()
-
-
-class ClearAnnotatorOutputs(Behaviour):
-    """
-    Clears the annotator outputs of the pipeline it is placed in directly.
-    """
-
-    def __init__(self, name: str = "ClearAnnotatorOutputs") -> None:
-        super().__init__(name)
-        self.rk_logger = logging.getLogger(defs.PACKAGE_NAME)
-
-    def update(self) -> Status:
-        self.rk_logger.debug("%s.update()" % (self.__class__.__name__))
-        blackboard = Blackboard()
-        annotator_output_pipeline_map_buffer = blackboard.get(
-            "annotator_output_pipeline_map_buffer"
-        )
-        pipeline = robokudo.utils.tree.find_parent_of_type(self, Pipeline)
-        if pipeline is None:
-            raise ParentPipelineMissing(behaviour_name=self.name)
-
-        annotator_outputs = annotator_output_pipeline_map_buffer.map[pipeline.name]
-        annotator_outputs.clear_outputs()
-
-        return Status.SUCCESS

@@ -21,7 +21,8 @@ from robokudo.descriptors.factories.cr_descriptor_factory import (
     CollectionReaderDescriptorFactory,
 )
 from robokudo.io.storage import Storage
-from robokudo.pipeline import ClearAnnotatorOutputs, Pipeline
+from robokudo.behaviours.clear_annotator_outputs import ClearAnnotatorOutputs
+from robokudo.pipeline import Pipeline
 from semantic_digital_twin.adapters.ros.messages import WorldModelSnapshot
 
 pytestmark = pytest.mark.skipif(
