@@ -15,6 +15,10 @@ from krrood.entity_query_language.core.mapped_variable import Attribute
 from krrood.entity_query_language.core.variable import Variable
 from probabilistic_model.learning.jpt.jpt import JointProbabilityTree
 from probabilistic_model.learning.learning_method import LearningMethod
+from probabilistic_model.probabilistic_circuit.relational.exceptions import (
+    MissingPartLearningMethodError,
+    NotAnAttributeAccessError,
+)
 
 
 @dataclass
@@ -53,6 +57,8 @@ class PartLearningMethods(SubclassJSONSerializer):
         """
         :param part: An attribute access on a variable.
         :return: The path of the attribute access.
+        :raises NotAnAttributeAccessError: If the part is not an attribute access on a
+            variable.
         """
         reversed_names = []
         key = part
@@ -60,9 +66,7 @@ class PartLearningMethods(SubclassJSONSerializer):
             reversed_names.append(key._attribute_name_)
             key = key._child_
         if not reversed_names or not isinstance(key, Variable):
-            raise TypeError(
-                f"Expected an attribute access on an EQL variable, got {part!r}."
-            )
+            raise NotAnAttributeAccessError(part)
         return ".".join(reversed(reversed_names))
 
     def __getitem__(self, part: Attribute) -> LearningMethod:
@@ -79,11 +83,12 @@ class PartLearningMethods(SubclassJSONSerializer):
         :param path: The path of a part.
         :return: The learning method of the part, which is a copy of the default if the
             part has none yet.
-        :raises KeyError: If the part has no learning method and there is no default.
+        :raises MissingPartLearningMethodError: If the part has no learning method and
+            there is no default.
         """
         if path not in self.methods_by_path:
             if self.default is None:
-                raise KeyError(path)
+                raise MissingPartLearningMethodError(path)
             self.methods_by_path[path] = copy.deepcopy(self.default)
         return self.methods_by_path[path]
 

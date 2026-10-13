@@ -987,7 +987,7 @@ class ProductUnit(InnerUnit):
 
 
 @dataclass
-class ProbabilisticCircuit(GroundableCircuit, SubclassJSONSerializer):
+class ProbabilisticCircuit(GroundableCircuit[Unit], SubclassJSONSerializer):
     """
     Probabilistic Circuits as a directed, rooted, acyclic graph.
 

@@ -536,7 +536,6 @@ class Layer(SubclassJSONSerializer, ABC):
         Scale the parameters of this layer alone in-place.
         """
 
-    @abstractmethod
     # %% structure
 
     @abstractmethod

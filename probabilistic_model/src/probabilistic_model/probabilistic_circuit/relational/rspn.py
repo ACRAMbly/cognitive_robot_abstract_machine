@@ -47,7 +47,6 @@ from probabilistic_model.probabilistic_circuit.groundable_circuit import (
 )
 from probabilistic_model.probabilistic_circuit.relational.exceptions import (
     MixedCircuitTypesError,
-    PartCircuitGroundingFailedError,
     UnknownExchangeablePartsError,
 )
 from probabilistic_model.probabilistic_circuit.relational.exchangeable_grounding import (
@@ -61,10 +60,6 @@ from probabilistic_model.probabilistic_circuit.relational.part_learning_methods 
 )
 from probabilistic_model.probabilistic_circuit.relational.template import (
     RelationalDistributionTemplate,
-)
-from probabilistic_model.probabilistic_circuit.rx.probabilistic_circuit import (
-    ProbabilisticCircuit,
-    ProductUnit,
 )
 from random_events.variable import Variable
 
@@ -123,81 +118,6 @@ class ExchangeableDistributionTemplate(RelationalDistributionTemplate):
             part.prefix + variable.name[len(part.grounded_prefix) :],
             domain=variable.domain,
         )
-
-    def ground(
-        self, parts_to_ground: list[Match], aggregation_statistics: PartialPointType
-    ) -> ProbabilisticCircuit:
-        """
-        Build a product circuit by grounding each exchangeable part independently.
-
-        :param parts_to_ground: The query parts, one per child object in the relation.
-        :param aggregation_statistics: Observed aggregation values shared across all
-            parts.
-        :return: A product circuit over the grounded distributions of all parts.
-        """
-        return self.ground_instance(
-            self.grounded_templates_of_parts(
-                parts_to_ground, self.template_distribution.ground
-            ),
-            aggregation_statistics,
-        )
-
-    def ground_instance(
-        self,
-        parts: list[GroundedPartTemplate[ProbabilisticCircuit]],
-        aggregation_statistics: PartialPointType,
-    ) -> ProbabilisticCircuit:
-        """
-        :param parts: The grounded template of every part.
-        :param aggregation_statistics: Observed aggregation values shared across all
-            parts.
-        :return: A product circuit over the conditioned templates of all parts.
-        """
-        result = ProbabilisticCircuit()
-        root = ProductUnit(probabilistic_circuit=result)
-        for part in parts:
-            root.add_subcircuit(
-                self._mount_part(
-                    result, self._conditioned_part(part, aggregation_statistics)
-                )
-            )
-        return result
-
-    def _conditioned_part(
-        self,
-        part: GroundedPartTemplate[ProbabilisticCircuit],
-        aggregation_statistics: PartialPointType,
-    ) -> ProbabilisticCircuit:
-        """
-        Condition a copy of the grounded template of a part on
-        ``aggregation_statistics`` and remove the latent variables.
-
-        :param part: The grounded template of the part.
-        :param aggregation_statistics: Observed aggregation values to condition on.
-        :return: A self-contained circuit over the variables of the part, ready to be
-            mounted into the parent.
-        """
-        part_circuit = part.circuit.__deepcopy__()
-        conditioning_result, _ = part_circuit.log_conditional_in_place(
-            aggregation_statistics, preserve_structure=True
-        )
-        if conditioning_result is None:
-            part_circuit = part.circuit.__deepcopy__()
-        non_latent_variables = [
-            variable
-            for variable in part_circuit.variables
-            if variable not in self.latent_variables
-        ]
-        part_circuit.restrict_to_variables_in_place(non_latent_variables)
-        part_circuit.update_variables(
-            {
-                variable: self.variable_of_part(variable, part)
-                for variable in part_circuit.variables
-            }
-        )
-        if len(part_circuit.nodes()) == 0:
-            raise PartCircuitGroundingFailedError(self.template_distribution.class_)
-        return part_circuit
 
 
 @dataclass

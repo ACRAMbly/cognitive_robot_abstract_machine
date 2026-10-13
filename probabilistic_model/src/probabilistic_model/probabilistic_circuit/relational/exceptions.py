@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from typing_extensions import TYPE_CHECKING, List, Type
+from typing_extensions import TYPE_CHECKING, Any, List, Type
 
 from krrood.exceptions import DataclassException
 
@@ -122,6 +122,48 @@ class UnknownExchangeablePartsError(DataclassException):
         return (
             "Key the part learning methods by attribute accesses on a variable of the "
             "class that end at a one-to-many relation."
+        )
+
+
+@dataclass
+class NotAnAttributeAccessError(DataclassException):
+    """
+    Raised when a part learning method is keyed by something other than an attribute
+    access on an EQL variable.
+    """
+
+    key: Any
+    """
+    The key that is not an attribute access on an EQL variable.
+    """
+
+    def error_message(self) -> str:
+        return f"Expected an attribute access on an EQL variable, got {self.key!r}."
+
+    def suggest_correction(self) -> str:
+        return (
+            "Key the part learning methods by attribute accesses such as "
+            "`variable(SceneBuilding).floors.rooms`."
+        )
+
+
+@dataclass
+class MissingPartLearningMethodError(DataclassException):
+    """
+    Raised when an exchangeable part has no learning method and there is no default.
+    """
+
+    path: str
+    """
+    The path of the part, such as ``"floors.rooms"``.
+    """
+
+    def error_message(self) -> str:
+        return f"The part {self.path!r} has no learning method and there is no default."
+
+    def suggest_correction(self) -> str:
+        return (
+            "Give the part a learning method or give `PartLearningMethods` a default."
         )
 
 

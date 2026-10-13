@@ -22,7 +22,7 @@ from probabilistic_model.probabilistic_model import PartialPointType
 from probabilistic_model.probabilistic_circuit.groundable_circuit import (
     ConditionedCopies,
     GroundableCircuit,
-    NodeReference,
+    NodeType,
     ProductsOfCopies,
 )
 from probabilistic_model.probabilistic_circuit.relational.exceptions import (
@@ -182,13 +182,13 @@ class PartitionMixture(InstanceMixture, Generic[CircuitType], SubClassSafeGeneri
 
 
 @dataclass
-class ExchangeablePartGrounder:
+class ExchangeablePartGrounder(Generic[NodeType], SubClassSafeGeneric):
     """
     Grounds one exchangeable part into the class circuit, in place, through the
     operations on nodes that every groundable circuit provides.
     """
 
-    circuit: GroundableCircuit
+    circuit: GroundableCircuit[NodeType]
     """
     The working class circuit.
     """
@@ -218,9 +218,7 @@ class ExchangeablePartGrounder:
     Number of samples drawn of ``undetermined_latents``.
     """
 
-    product_nodes_to_extend: list[NodeReference] = field(
-        init=False, default_factory=list
-    )
+    product_nodes_to_extend: list[NodeType] = field(init=False, default_factory=list)
     """
     The nodes of the class circuit that the instances are mounted at.
     """
@@ -407,7 +405,7 @@ class ExchangeablePartGrounder:
         return PartitionMixture(assignments, log_weights, branches)
 
     def _sample_undetermined_latents(
-        self, node: Optional[NodeReference] = None
+        self, node: Optional[NodeType] = None
     ) -> list[PartialPointType]:
         """
         :param node: A mounting node to sample below, instead of the whole class
@@ -435,7 +433,7 @@ class ExchangeablePartGrounder:
         ]
 
     def _node_local_latent_log_likelihoods(
-        self, node: NodeReference, latent_assignments: list[PartialPointType]
+        self, node: NodeType, latent_assignments: list[PartialPointType]
     ) -> list[float]:
         """
         :param node: A mounting node.
@@ -456,7 +454,7 @@ class ExchangeablePartGrounder:
         ]
 
     def _node_local_assignments(
-        self, node: NodeReference, sampled_assignments: list[PartialPointType]
+        self, node: NodeType, sampled_assignments: list[PartialPointType]
     ) -> WeightedAssignments:
         """
         :param node: A mounting node.

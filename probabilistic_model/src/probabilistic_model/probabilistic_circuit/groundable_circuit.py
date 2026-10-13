@@ -6,16 +6,26 @@ from dataclasses import dataclass, field
 from random_events.product_algebra import Event, VariableMap
 from random_events.variable import Variable
 from sortedcontainers import SortedSet
-from typing_extensions import Any, Dict, Iterable, List, Optional, Self, Tuple
+from typing_extensions import (
+    Any,
+    Dict,
+    Generic,
+    Iterable,
+    List,
+    Optional,
+    Self,
+    Tuple,
+    TypeVar,
+)
 
 from probabilistic_model.probabilistic_circuit.tensorized.array_types import (
     DenseEdgeValues,
 )
 from probabilistic_model.probabilistic_model import PartialPointType, ProbabilisticModel
 
-NodeReference = Any
+NodeType = TypeVar("NodeType")
 """
-A node of a circuit, in the form the circuit type refers to its nodes.
+The type of the nodes of a circuit type.
 """
 
 
@@ -71,7 +81,7 @@ class ProductsOfCopies:
 
 
 @dataclass(eq=False)
-class GroundableCircuit(ProbabilisticModel, ABC):
+class GroundableCircuit(ProbabilisticModel, Generic[NodeType], ABC):
     """
     A circuit type that relational probabilistic circuits are fitted and grounded in.
     """
@@ -132,7 +142,7 @@ class GroundableCircuit(ProbabilisticModel, ABC):
     @abstractmethod
     def lowest_product_nodes_over(
         self, variables: SortedSet[Variable]
-    ) -> List[NodeReference]:
+    ) -> List[NodeType]:
         """
         :param variables: The variables every returned node must model.
         :return: The product nodes that model all of the variables and have no such
@@ -141,7 +151,7 @@ class GroundableCircuit(ProbabilisticModel, ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def subcircuit_at(self, node: NodeReference) -> Self:
+    def subcircuit_at(self, node: NodeType) -> Self:
         """
         :param node: A node of the circuit.
         :return: The circuit rooted at the node.
@@ -150,8 +160,8 @@ class GroundableCircuit(ProbabilisticModel, ABC):
 
     @abstractmethod
     def remove_variables_in_place(
-        self, variables: SortedSet[Variable], nodes: List[NodeReference]
-    ) -> List[NodeReference]:
+        self, variables: SortedSet[Variable], nodes: List[NodeType]
+    ) -> List[NodeType]:
         """
         Marginalize variables out of the circuit in place, keeping its structure.
 
@@ -172,7 +182,7 @@ class GroundableCircuit(ProbabilisticModel, ABC):
     @abstractmethod
     def multiply_nodes_by_mixtures(
         self,
-        nodes: List[NodeReference],
+        nodes: List[NodeType],
         products: ProductsOfCopies,
         log_weights: Optional[DenseEdgeValues],
     ):

@@ -7,7 +7,7 @@ from unittest.mock import patch
 import numpy as np
 import pytest
 from sortedcontainers import SortedSet
-from typing_extensions import Any
+from typing_extensions import Any, get_args
 
 from krrood.adapters.json_serializer import from_json, to_json
 from krrood.entity_query_language.factories import a, an, variable
@@ -20,7 +20,9 @@ from probabilistic_model.probabilistic_circuit.causal.causal_circuit import (
 from probabilistic_model.probabilistic_circuit.relational.exceptions import (
     CircuitNotFittedError,
     InvalidMonteCarloSampleCountError,
+    MissingPartLearningMethodError,
     MixedCircuitTypesError,
+    NotAnAttributeAccessError,
     UnknownExchangeablePartsError,
 )
 from probabilistic_model.learning.jpt.jpt import JointProbabilityTree
@@ -115,6 +117,18 @@ def room_query_4():
     )
     query.resolve()
     return query
+
+
+@pytest.mark.parametrize(
+    "fitted_circuit",
+    ["relational_probabilistic_circuit", "layered_relational_probabilistic_circuit"],
+)
+def test_groundable_circuits_return_nodes_of_their_node_type(fitted_circuit, request):
+    circuit = request.getfixturevalue(fitted_circuit).class_probabilistic_circuit
+    (node_type,) = get_args(type(circuit).__orig_bases__[0])
+    nodes = circuit.lowest_product_nodes_over(SortedSet(circuit.variables[:1]))
+    assert nodes
+    assert all(isinstance(node, node_type) for node in nodes)
 
 
 def test_ground_before_fit_raises(room_query_4):
@@ -1416,7 +1430,7 @@ def test_part_learning_methods_are_keyed_by_the_path_of_an_attribute_access():
 
 
 def test_part_learning_methods_are_only_keyed_by_attribute_accesses():
-    with pytest.raises(TypeError):
+    with pytest.raises(NotAnAttributeAccessError):
         PartLearningMethods()["objects"]
 
 
@@ -1429,7 +1443,7 @@ def test_part_learning_methods_survive_a_json_round_trip():
 
 
 def test_part_learning_methods_without_a_default_require_every_part():
-    with pytest.raises(KeyError):
+    with pytest.raises(MissingPartLearningMethodError):
         PartLearningMethods(None)[variable(SceneRoom).objects]
 
 
