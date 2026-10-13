@@ -5,7 +5,6 @@ Grounding relational probabilistic circuits for queries, independent of the circ
 from __future__ import annotations
 
 import enum
-import inspect
 import itertools
 import logging
 from abc import ABC, abstractmethod
@@ -14,13 +13,12 @@ from dataclasses import dataclass, field, replace
 import numpy as np
 from random_events.product_algebra import Event
 from sortedcontainers import SortedSet
-from typing_extensions import TYPE_CHECKING, Any, Generic, Optional, Type, TypeVar
+from typing_extensions import TYPE_CHECKING, Any, Generic, Optional, TypeVar
 
 from krrood.parametrization.feature_extraction.aggregations import (
     compute_aggregation_statistics,
 )
 from krrood.patterns.subclass_safe_generic import SubClassSafeGeneric
-from krrood.utils import recursive_subclasses
 from probabilistic_model.probabilistic_model import PartialPointType
 from probabilistic_model.probabilistic_circuit.groundable_circuit import (
     GroundableCircuit,
@@ -28,7 +26,6 @@ from probabilistic_model.probabilistic_circuit.groundable_circuit import (
 from probabilistic_model.probabilistic_circuit.relational.exceptions import (
     CircuitNotFittedError,
     InvalidMonteCarloSampleCountError,
-    NoGroundingForCircuitTypeError,
     UndeterminedLatentsNotModeledError,
     UndeterminedLatentsNotPartitionedError,
 )
@@ -521,7 +518,7 @@ class ExchangeablePartGrounder(
 
 
 @dataclass
-class RelationalGrounding(Generic[CircuitType], SubClassSafeGeneric, ABC):
+class RelationalGrounding:
     """
     Grounds a relational probabilistic circuit for queries, in the circuit type it was
     fitted in.
@@ -538,42 +535,7 @@ class RelationalGrounding(Generic[CircuitType], SubClassSafeGeneric, ABC):
     relations of the circuit and of every nested template.
     """
 
-    @classmethod
-    def of(
-        cls,
-        relational_circuit: RelationalProbabilisticCircuit,
-        grounding_mode: GroundingMode = GroundingMode.SAMPLED,
-    ) -> RelationalGrounding:
-        """
-        :param relational_circuit: A fitted relational circuit.
-        :param grounding_mode: How to represent the aggregation statistics a query
-            leaves undetermined.
-        :return: The grounding for the circuit type the relational circuit is fitted in.
-        :raises CircuitNotFittedError: If the relational circuit is not fitted.
-        :raises NoGroundingForCircuitTypeError: If no grounding grounds its circuit
-            type.
-        """
-        circuit = relational_circuit.class_probabilistic_circuit
-        if circuit is None:
-            raise CircuitNotFittedError(relational_circuit.class_)
-        for grounding_type in recursive_subclasses(cls):
-            if inspect.isabstract(grounding_type):
-                continue
-            if isinstance(
-                circuit, grounding_type.get_type_of_generic_parameter(CircuitType)
-            ):
-                return grounding_type(relational_circuit, grounding_mode)
-        raise NoGroundingForCircuitTypeError(type(circuit))
-
-    @property
-    @abstractmethod
-    def part_grounder_type(self) -> Type[ExchangeablePartGrounder[CircuitType, Any]]:
-        """
-        :return: What grounds one exchangeable relation.
-        """
-        raise NotImplementedError
-
-    def ground(self, query: Match) -> CircuitType:
+    def ground(self, query: Match) -> GroundableCircuit:
         """
         :param query: An underspecified, resolved query whose structure determines which
             parts are grounded and how many child objects every exchangeable relation
@@ -597,12 +559,12 @@ class RelationalGrounding(Generic[CircuitType], SubClassSafeGeneric, ABC):
 
     def part_grounder(
         self,
-        circuit: CircuitType,
+        circuit: GroundableCircuit,
         exchangeable_part_name: str,
         template: ExchangeableDistributionTemplate,
         query: Match,
         instance: Any,
-    ) -> ExchangeablePartGrounder[CircuitType, Any]:
+    ) -> ExchangeablePartGrounder:
         """
         :param circuit: The working class circuit.
         :param exchangeable_part_name: Field name of the exchangeable relation.
@@ -628,7 +590,7 @@ class RelationalGrounding(Generic[CircuitType], SubClassSafeGeneric, ABC):
         nested_grounding = replace(
             self, relational_circuit=template.template_distribution
         )
-        return self.part_grounder_type(
+        return circuit.exchangeable_part_grounder_type()(
             circuit=circuit,
             template=template,
             part_templates=template.grounded_templates_of_parts(

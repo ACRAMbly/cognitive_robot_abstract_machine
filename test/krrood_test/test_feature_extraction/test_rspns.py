@@ -30,12 +30,8 @@ from probabilistic_model.probabilistic_circuit.relational.exchangeable_grounding
     InstanceMixture,
     WeightedAssignments,
 )
-from probabilistic_model.probabilistic_circuit.relational.layered_grounding import (
-    LayeredRelationalGrounding,
-)
 from probabilistic_model.probabilistic_circuit.relational.rustworkx_grounding import (
     RustworkxExchangeablePartGrounder,
-    RustworkxRelationalGrounding,
 )
 from probabilistic_model.learning.learning_method import (
     LayeredLearning,
@@ -1154,18 +1150,20 @@ def events_over_discrete_variables(
     events = []
     for _ in range(number_of_events):
         assignment = {}
-        for variable in variables:
-            if isinstance(variable, Symbolic):
-                elements = list(variable.domain.simple_sets)
+        for circuit_variable in variables:
+            if isinstance(circuit_variable, Symbolic):
+                elements = list(circuit_variable.domain.simple_sets)
                 chosen = generator.sample(elements, generator.randint(1, len(elements)))
-                assignment[variable] = functools.reduce(
+                assignment[circuit_variable] = functools.reduce(
                     operator.or_, [element.as_composite_set() for element in chosen]
                 )
-            elif isinstance(variable, Integer):
+            elif isinstance(circuit_variable, Integer):
                 lower = generator.randint(0, 4)
-                assignment[variable] = closed(lower, lower + generator.randint(0, 3))
+                assignment[circuit_variable] = closed(
+                    lower, lower + generator.randint(0, 3)
+                )
             else:
-                assignment[variable] = variable.domain
+                assignment[circuit_variable] = circuit_variable.domain
         events.append(SimpleEvent.from_data(assignment).as_composite_set())
     return events
 
@@ -1396,12 +1394,10 @@ def test_a_relational_circuit_is_grounded_in_the_circuit_type_it_was_fitted_in(
     nested_query_with_rooms_of_one_shape,
 ):
     assert isinstance(
-        nested_relational_probabilistic_circuit.grounding(),
-        RustworkxRelationalGrounding,
-    )
-    assert isinstance(
-        layered_nested_relational_probabilistic_circuit.grounding(),
-        LayeredRelationalGrounding,
+        nested_relational_probabilistic_circuit.ground(
+            nested_query_with_rooms_of_one_shape
+        ),
+        ProbabilisticCircuit,
     )
     assert isinstance(
         layered_nested_relational_probabilistic_circuit.ground(

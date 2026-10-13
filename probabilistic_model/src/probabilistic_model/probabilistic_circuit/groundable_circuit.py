@@ -5,9 +5,14 @@ from dataclasses import dataclass
 
 from random_events.product_algebra import Event, VariableMap
 from random_events.variable import Variable
-from typing_extensions import Dict, Iterable, Optional, Self, Tuple
+from typing_extensions import TYPE_CHECKING, Dict, Iterable, Optional, Self, Tuple, Type
 
 from probabilistic_model.probabilistic_model import ProbabilisticModel
+
+if TYPE_CHECKING:
+    from probabilistic_model.probabilistic_circuit.relational.exchangeable_grounding import (
+        ExchangeablePartGrounder,
+    )
 
 
 @dataclass(eq=False)
@@ -15,6 +20,14 @@ class GroundableCircuit(ProbabilisticModel, ABC):
     """
     A circuit type that relational probabilistic circuits are fitted and grounded in.
     """
+
+    @classmethod
+    @abstractmethod
+    def exchangeable_part_grounder_type(cls) -> Type[ExchangeablePartGrounder]:
+        """
+        :return: What grounds one exchangeable relation into a circuit of this type.
+        """
+        raise NotImplementedError
 
     @property
     @abstractmethod

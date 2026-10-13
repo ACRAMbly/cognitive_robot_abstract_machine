@@ -10,14 +10,13 @@ from dataclasses import dataclass, field
 
 import numpy as np
 from sortedcontainers import SortedSet
-from typing_extensions import List, Type
+from typing_extensions import List
 
 from probabilistic_model.distributions.helper import make_dirac
 from probabilistic_model.probabilistic_circuit.relational.exchangeable_grounding import (
     ExchangeablePartGrounder,
     InstanceMixture,
     PartitionMixture,
-    RelationalGrounding,
 )
 from probabilistic_model.probabilistic_circuit.relational.helper import (
     find_lowest_product_nodes_that_model_variables,
@@ -221,17 +220,3 @@ class RustworkxExchangeablePartGrounder(
         for instance_root, log_weight in weighted_instances:
             sum_unit.add_subcircuit(instance_root, log_weight)
         sum_unit.normalize()
-
-
-# %% grounding a relational circuit
-
-
-@dataclass
-class RustworkxRelationalGrounding(RelationalGrounding[ProbabilisticCircuit]):
-    """
-    Grounds a relational probabilistic circuit fitted as rustworkx circuits.
-    """
-
-    @property
-    def part_grounder_type(self) -> Type[RustworkxExchangeablePartGrounder]:
-        return RustworkxExchangeablePartGrounder

@@ -55,28 +55,6 @@ class ClassCircuitGroundingFailedError(DataclassException):
 
 
 @dataclass
-class NoGroundingForCircuitTypeError(DataclassException):
-    """
-    Raised when a relational circuit is fitted in a circuit type that no relational
-    grounding grounds.
-    """
-
-    circuit_type: Type
-    """
-    The type of the class circuit.
-    """
-
-    def error_message(self) -> str:
-        return f"No relational grounding grounds {self.circuit_type.__name__}."
-
-    def suggest_correction(self) -> str:
-        return (
-            "Fit the relational circuit with a learning method whose circuit type has "
-            "a subclass of RelationalGrounding."
-        )
-
-
-@dataclass
 class MixedCircuitTypesError(DataclassException):
     """
     Raised when the template of an exchangeable relation is fitted in another circuit

@@ -56,12 +56,6 @@ from probabilistic_model.probabilistic_circuit.relational.exchangeable_grounding
     GroundingMode,
     RelationalGrounding,
 )
-
-# the groundings of the circuit types, which RelationalGrounding.of chooses from
-from probabilistic_model.probabilistic_circuit.relational import (  # noqa: F401
-    layered_grounding,
-    rustworkx_grounding,
-)
 from probabilistic_model.probabilistic_circuit.relational.part_learning_methods import (
     PartLearningMethods,
 )
@@ -519,4 +513,4 @@ class RelationalProbabilisticCircuit:
             undetermined.
         :return: What grounds this circuit in the circuit type it was fitted in.
         """
-        return RelationalGrounding.of(self, grounding_mode)
+        return RelationalGrounding(self, grounding_mode)

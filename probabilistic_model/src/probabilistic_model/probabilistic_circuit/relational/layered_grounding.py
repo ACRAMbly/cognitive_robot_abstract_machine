@@ -16,7 +16,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 from sortedcontainers import SortedSet
-from typing_extensions import TYPE_CHECKING, Dict, List, Optional, Type
+from typing_extensions import TYPE_CHECKING, Dict, List, Optional
 
 from probabilistic_model.distributions.helper import make_dirac
 from probabilistic_model.probabilistic_model import PartialPointType
@@ -25,7 +25,6 @@ from probabilistic_model.probabilistic_circuit.relational.exchangeable_grounding
     GroundedPartTemplate,
     InstanceMixture,
     PartitionMixture,
-    RelationalGrounding,
 )
 from probabilistic_model.probabilistic_circuit.tensorized.array_types import (
     NodeIndices,
@@ -557,17 +556,3 @@ class LayeredExchangeablePartGrounder(
         for layer, nodes, children in nodes_per_layer.values():
             layer.attach_child_layer(attached, np.array(nodes), np.array(children))
         self.circuit.reset_scopes()
-
-
-# %% grounding a relational circuit
-
-
-@dataclass
-class LayeredRelationalGrounding(RelationalGrounding[LayeredProbabilisticCircuit]):
-    """
-    Grounds a relational probabilistic circuit fitted as layered circuits.
-    """
-
-    @property
-    def part_grounder_type(self) -> Type[LayeredExchangeablePartGrounder]:
-        return LayeredExchangeablePartGrounder

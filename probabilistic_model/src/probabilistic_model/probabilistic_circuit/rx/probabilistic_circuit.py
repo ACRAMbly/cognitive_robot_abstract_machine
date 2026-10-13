@@ -25,6 +25,8 @@ from typing_extensions import (
     Iterable,
     Callable,
     Union,
+    Type,
+    TYPE_CHECKING,
 )
 
 from probabilistic_model.distributions.distributions import (
@@ -51,6 +53,11 @@ from random_events.product_algebra import VariableMap, SimpleEvent, Event
 from random_events.set import Set
 from krrood.adapters.json_serializer import SubclassJSONSerializer, to_json, from_json
 from random_events.variable import Variable, Symbolic, Continuous, Integer
+
+if TYPE_CHECKING:
+    from probabilistic_model.probabilistic_circuit.relational.rustworkx_grounding import (
+        RustworkxExchangeablePartGrounder,
+    )
 
 
 def invalidates_topology_cache(method):
@@ -1037,6 +1044,17 @@ class ProbabilisticCircuit(GroundableCircuit, SubclassJSONSerializer):
     @property
     def variable_to_index_map(self) -> Dict[Variable, int]:
         return {variable: index for index, variable in enumerate(self.variables)}
+
+    @classmethod
+    def exchangeable_part_grounder_type(
+        cls,
+    ) -> Type[RustworkxExchangeablePartGrounder]:
+        # imported here, since the grounder module imports this one
+        from probabilistic_model.probabilistic_circuit.relational.rustworkx_grounding import (
+            RustworkxExchangeablePartGrounder,
+        )
+
+        return RustworkxExchangeablePartGrounder
 
     @property
     def layers(self) -> List[List[Unit]]:

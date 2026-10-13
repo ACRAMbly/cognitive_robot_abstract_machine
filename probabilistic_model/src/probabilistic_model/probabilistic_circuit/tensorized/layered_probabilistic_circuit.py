@@ -6,7 +6,16 @@ import numpy as np
 from random_events.product_algebra import Event, SimpleEvent, VariableMap
 from random_events.variable import Symbolic, Variable
 from sortedcontainers import SortedSet
-from typing_extensions import Dict, Iterable, List, Optional, Self, Tuple, Type
+from typing_extensions import (
+    TYPE_CHECKING,
+    Dict,
+    Iterable,
+    List,
+    Optional,
+    Self,
+    Tuple,
+    Type,
+)
 
 from probabilistic_model.distributions.distributions import (
     IntegerDistribution,
@@ -69,6 +78,11 @@ from probabilistic_model.probabilistic_model import (
 )
 from probabilistic_model.utils import logsumexp
 
+if TYPE_CHECKING:
+    from probabilistic_model.probabilistic_circuit.relational.layered_grounding import (
+        LayeredExchangeablePartGrounder,
+    )
+
 
 @dataclass(eq=False)
 class LayeredProbabilisticCircuit(GroundableCircuit):
@@ -98,6 +112,15 @@ class LayeredProbabilisticCircuit(GroundableCircuit):
         :return: A map from every variable of the circuit to its column index.
         """
         return {variable: index for index, variable in enumerate(self.variables)}
+
+    @classmethod
+    def exchangeable_part_grounder_type(cls) -> Type[LayeredExchangeablePartGrounder]:
+        # imported here, since the grounder module imports this one
+        from probabilistic_model.probabilistic_circuit.relational.layered_grounding import (
+            LayeredExchangeablePartGrounder,
+        )
+
+        return LayeredExchangeablePartGrounder
 
     @property
     def number_of_nodes(self) -> int:
