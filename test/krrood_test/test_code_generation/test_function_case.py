@@ -225,5 +225,9 @@ class TestGeneratedSourceIsValidPython:
 
         measure.__module__ = "my.module"
         source = FunctionCaseGenerator().generate(measure)
-        assert GeneratedSourcePoint.__name__ in source
+        expected_import = (
+            f"from {GeneratedSourcePoint.__module__} "
+            f"import {GeneratedSourcePoint.__name__}"
+        )
+        assert expected_import in source
         compile(source, "<generated>", "exec")
