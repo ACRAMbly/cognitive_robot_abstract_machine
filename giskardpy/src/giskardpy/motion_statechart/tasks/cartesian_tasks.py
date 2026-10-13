@@ -714,10 +714,8 @@ class HoldPose(Task):
     """
     Keeps a link at the pose it had when this task started.
 
-    An invariant rather than a goal, so it neither reports progress nor has to be
-    reached for the motion around it to finish. A pose goal would instead have to
-    converge, which a link disturbed by physics or by a competing task never does, and
-    it would then read as a motion that stopped getting anywhere.
+    An invariant rather than a goal, so it does not report progress. It observes
+    whether the link is still at that pose.
 
     ..note:: Unlike :class:`CartesianPose`, this constrains the chain between
         ``root_link`` and ``tip_link`` without naming a pose, because the pose to keep
@@ -750,6 +748,12 @@ class HoldPose(Task):
     otherwise move it, and buying clearance by moving it is the motion this prevents.
     """
 
+    translation_threshold: float = field(default=0.01, kw_only=True)
+    """Unit: m. The link counts as held while it is at most this far from its pose."""
+
+    orientation_threshold: float = field(default=0.01, kw_only=True)
+    """Unit: rad. The link counts as held while it is rotated at most this far from its pose."""
+
     _pose_to_keep: ForwardKinematicsBinding = field(init=False, repr=False)
     """The pose the link is held at, bound when this task starts."""
 
@@ -771,8 +775,8 @@ class HoldPose(Task):
         Constrain the chain to the pose bound when this task started.
 
         :param context: Provides access to world model and kinematic expressions.
-        :return: The artifacts of this task, which observes true throughout, since an
-            invariant has no goal left to reach.
+        :return: The artifacts of this task, which observes whether the link is within
+            :attr:`translation_threshold` and :attr:`orientation_threshold` of that pose.
         """
         artifacts = NodeArtifacts()
         root_T_tip = context.world.compose_forward_kinematics_expression(
@@ -794,7 +798,16 @@ class HoldPose(Task):
             quadratic_weight=self.weight,
             name="orientation",
         )
-        artifacts.observation = sm.Scalar.const_true()
+        artifacts.observation = sm.logic_and(
+            root_T_tip_when_started.position.euclidean_distance(root_T_tip.position)
+            <= self.translation_threshold,
+            sm.abs(
+                root_T_tip.rotation_matrix.rotational_distance(
+                    root_T_tip_when_started.rotation_matrix
+                )
+            )
+            <= self.orientation_threshold,
+        )
         return artifacts
 
 

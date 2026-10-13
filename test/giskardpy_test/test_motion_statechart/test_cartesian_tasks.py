@@ -167,6 +167,40 @@ class TestHoldPose:
 
         assert hold.goal_reached_state == ObservationStateValues.TRUE
 
+    def test_a_link_moved_away_from_its_held_pose_is_observed_as_not_held(
+        self, cylinder_bot_world: World
+    ):
+        """
+        A hold that a stronger task overrules no longer keeps its link in place, and has
+        to say so rather than report an invariant that does not hold.
+        """
+        bot = cylinder_bot_world.get_kinematic_structure_entity_by_name("bot")
+        hold = HoldPose(
+            root_link=cylinder_bot_world.root,
+            tip_link=bot,
+            weight=DefaultWeights.WEIGHT_BELOW_COLLISION_AVOIDANCE,
+        )
+        motion_statechart = MotionStatechart()
+        motion_statechart.add_nodes(
+            [
+                CartesianPosition(
+                    root_link=cylinder_bot_world.root,
+                    tip_link=bot,
+                    goal_point=Point3(1, 0, 0, reference_frame=cylinder_bot_world.root),
+                    weight=DefaultWeights.WEIGHT_ABOVE_COLLISION_AVOIDANCE,
+                ),
+                hold,
+            ]
+        )
+        motion_statechart.add_node(EndMotion())
+
+        executor = Executor(MotionStatechartContext(world=cylinder_bot_world))
+        executor.compile(motion_statechart=motion_statechart)
+        for _ in range(100):
+            executor.tick()
+
+        assert hold.goal_reached_state == ObservationStateValues.FALSE
+
 
 # %% straight line paths
 
@@ -175,7 +209,8 @@ STRAIGHT_LINE_TOLERANCE = 0.02
 How far the tip may stray from the line it is supposed to travel along, in meters.
 
 Some deviation is unavoidable: the controller has to accelerate out of the pose the
-motion starts at, and it can only correct a lateral offset on the tick after it appeared.
+motion starts at, and it can only correct a lateral offset on the tick after it
+appeared.
 """
 
 
@@ -186,10 +221,14 @@ class StraightLine:
     """
 
     start: np.ndarray
-    """Position the motion starts at."""
+    """
+    Position the motion starts at.
+    """
 
     end: np.ndarray
-    """Position the motion ends at."""
+    """
+    Position the motion ends at.
+    """
 
     def distance_from(self, position: np.ndarray) -> float:
         """
@@ -398,8 +437,8 @@ class TestCartesianPositionTrajectory:
         self, cylinder_bot_world: World
     ):
         """
-        A trajectory bound on start must track its goal frame where that frame is when the
-        trajectory starts, even if a task built after the trajectory moved the frame
+        A trajectory bound on start must track its goal frame where that frame is when
+        the trajectory starts, even if a task built after the trajectory moved the frame
         first.
         """
         root = cylinder_bot_world.root
