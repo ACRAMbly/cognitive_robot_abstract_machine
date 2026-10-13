@@ -1451,9 +1451,10 @@ class Pen(HasGraspCandidates):
 
 
 @dataclass(eq=False)
-class ShapeSortingPiece(HasGraspCandidates):
+class MontessoriPiece(HasGraspCandidates):
     """
-    A loose piece of a shape-sorting toy, which drops through the hole of its own outline.
+    A loose piece of a Montessori shape-sorting toy, which drops through the hole of its
+    own outline.
     """
 
     grasp_height: float = field(kw_only=True)

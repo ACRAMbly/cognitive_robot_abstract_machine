@@ -75,7 +75,7 @@ for each piece, with the hole it was made for:
 ParkArmsAction(all arms)
 ```
 
-Every piece is a `ShapeSortingPiece` (`semantic_digital_twin`), which offers one
+Every piece is a `MontessoriPiece` (`semantic_digital_twin`), which offers one
 `GraspCandidate` derived from its own geometry: approached from above, the fingers closing
 along the piece's own x, `grasp_height` above its bottom face. The environment sets that
 height from how far Tracy's Robotiq pads swing down as they close. Which hole each piece
@@ -187,33 +187,3 @@ one configuration is deterministic: repeating it gives the same positions.
   `test_demo.py` that just imports the demo, wired into
   `.github/workflows/examples_and_demos.yml`. That would not work unchanged here, since
   importing `demo` does not run anything — `main()` is guarded by `__name__ == "__main__"`.
-
-## Why none of the existing montessori code is reused
-
-There is a much larger Tracy montessori implementation on `icra_final`, at
-`experiments/src/experiments/tracy_experiments/montessori/` — roughly 2300 lines across
-nine files, with a world builder, hole detection, event monitoring and a dashboard.
-
-None of it exists on `main`. Neither `experiments/src/experiments/tracy_experiments/` nor
-`experiments/src/experiments/montessori/` is there at all, so this demo is self-contained
-and depends only on `coraplex` and `semantic_digital_twin`. The board and the pieces are
-built from `Box` and `Cylinder` primitives rather than the `board.stl` that only exists on
-that branch.
-
-The trade is not all bad. `main` has since grown the cleaner API: `TracyLeftArm` and
-`TracyRightArm` are `UR10eArm` subclasses, the grippers are `Robotiq85Gripper` subclasses,
-and both base classes implement `_setup_servos()` and `_compensate_gravity()`, which
-`AbstractRobot.from_world()` calls for every robot part. So `Tracy.from_world(world)`
-already equips the arms and grippers with position servos and gravity compensation, and
-the whole of `icra_final`'s `equipment.py` is unnecessary here.
-
-## One trap worth recording
-
-The RViz backend originally created a `SingleThreadedExecutor` spinning on a daemon
-thread, copied from the pattern in `icra_final`'s `pickup_demo_simulated.py`. It crashed
-the process with `terminate called without an active exception` and a core dump.
-
-The executor is not needed. `VizMarkerPublisher` is a model-change callback and
-`TFPublisher` a state-change callback — the world calls both directly when it changes.
-Neither is driven by a ROS timer, so nothing has to spin the node for markers and
-transforms to be published. Removing the executor and its thread fixed it.

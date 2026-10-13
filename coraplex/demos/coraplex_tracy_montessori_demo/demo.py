@@ -28,7 +28,7 @@ from semantic_digital_twin.adapters.urdf import URDFParser
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 from semantic_digital_twin.robots.tracy import Tracy
 from semantic_digital_twin.semantic_annotations.semantic_annotations import (
-    ShapeSortingPiece,
+    MontessoriPiece,
 )
 from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix, Pose
 from semantic_digital_twin.world import World
@@ -208,7 +208,7 @@ class MontessoriEnvironment:
     The board, once :meth:`populate` has stood it on the table.
     """
 
-    holes_of_pieces: Dict[ShapeSortingPiece, HoleShape] = field(
+    holes_of_pieces: Dict[MontessoriPiece, HoleShape] = field(
         init=False, default_factory=dict
     )
     """
@@ -371,7 +371,7 @@ class MontessoriEnvironment:
 
     def _stand_piece(
         self, world: World, name: PrefixedName, shape: Shape, row_y: float
-    ) -> ShapeSortingPiece:
+    ) -> MontessoriPiece:
         """
         Stand one loose piece in the row in front of Tracy.
 
@@ -402,7 +402,7 @@ class MontessoriEnvironment:
         self.solid(ContactParameters.create_for_grasped_object().friction).apply_to(
             [body]
         )
-        piece = ShapeSortingPiece(root=body, grasp_height=self.grasp_height)
+        piece = MontessoriPiece(root=body, grasp_height=self.grasp_height)
         world.add_semantic_annotations([piece])
         return piece
 
@@ -440,4 +440,4 @@ def main(execution_type: ExecutionType) -> None:
 
 
 if __name__ == "__main__":
-    main(ExecutionType.PHYSICALLY_SIMULATED)
+    main(ExecutionType.KINEMATICALLY_SIMULATED)
