@@ -181,24 +181,17 @@ def test_mutagenesis_predictive_accuracy_beats_the_majority_baseline(
 
 
 @requires_mutagenesis_dataset
-def test_mutagenesis_chlorine_count_is_not_a_split_feature(mutagenesis_rpc):
+def test_mutagenesis_chlorine_count_is_partitioned(mutagenesis_rpc):
     """
-    Structural check from the plan: whether ``chlorine_count`` is actually split on by
-    the fitted tree, the precondition ``GroundingMode.EXACT`` needs to avoid silently
-    falling back to ``SAMPLED``.
-
-    On ``mutagenesis_188``, chlorine is rare (23 atoms out of 4893, ~0.12 per molecule),
-    so the fitted tree does not pick it as a split feature -- this is a property of the
-    real dataset, not a pipeline defect; a later causal-query change building on this
-    fit should use ``GroundingMode.SAMPLED`` for ``chlorine_count`` accordingly, exactly
-    the fallback the plan anticipates for this case.
+    ``GroundingMode.EXACT`` applies to ``chlorine_count``: the leaves of the fitted tree
+    separate molecules by many other variables, but over ``chlorine_count`` they have
+    only a few distinct, pairwise disjoint regions.
     """
     circuit = mutagenesis_rpc.class_probabilistic_circuit
     chlorine_count_variable = next(
         v for v in circuit.variables if v.name == CHLORINE_COUNT_VARIABLE_NAME
     )
     marginal = circuit.marginal([chlorine_count_variable])
-    branches = marginal.root_mixture_components()
-    assert not ExchangeablePartGrounder._undetermined_latents_partition_disjointly(
-        [branch.support for branch in branches]
+    assert ExchangeablePartGrounder._undetermined_latents_partition_disjointly(
+        ExchangeablePartGrounder._distinct_component_regions(marginal)
     )

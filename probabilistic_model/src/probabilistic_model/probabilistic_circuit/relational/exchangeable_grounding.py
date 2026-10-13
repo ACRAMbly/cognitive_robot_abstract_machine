@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import enum
 import itertools
-import logging
 from dataclasses import dataclass, field, replace
 
 import numpy as np
@@ -45,7 +44,6 @@ if TYPE_CHECKING:
         RelationalProbabilisticCircuit,
     )
 
-logger = logging.getLogger(__name__)
 
 CircuitType = TypeVar("CircuitType", bound=GroundableCircuit)
 """
@@ -227,8 +225,10 @@ class ExchangeablePartGrounder(Generic[NodeType], SubClassSafeGeneric):
         """
         Mount the instances of the part into the class circuit.
 
-        :param grounding_mode: How to represent the undetermined statistics. ``EXACT``
-            falls back to ``SAMPLED`` if their fitted partition is not disjoint.
+        :param grounding_mode: How to represent the undetermined statistics.
+        :raises UndeterminedLatentsNotPartitionedError: If the grounding mode is
+            ``EXACT`` and the fitted partition of the undetermined statistics is not
+            disjoint.
         """
         self.circuit.condition_on_point_in_place(self.determined_statistics)
         self.product_nodes_to_extend = self.circuit.lowest_product_nodes_over(
@@ -238,18 +238,9 @@ class ExchangeablePartGrounder(Generic[NodeType], SubClassSafeGeneric):
             self.single_instance()
             return
         if grounding_mode is GroundingMode.EXACT:
-            try:
-                mixture = self.exact_partition_mixture()
-            except UndeterminedLatentsNotPartitionedError:
-                logger.warning(
-                    "Exact-partition grounding for latents [%s] is not support-"
-                    "deterministic; falling back to GroundingMode.SAMPLED.",
-                    ", ".join(variable.name for variable in self.undetermined_latents),
-                )
-            else:
-                self.partition_mixture(mixture)
-                return
-        self.sampled_mixture(self.monte_carlo_mixture())
+            self.partition_mixture(self.exact_partition_mixture())
+        else:
+            self.sampled_mixture(self.monte_carlo_mixture())
 
     def remove_undetermined_latents(self):
         """
@@ -371,18 +362,18 @@ class ExchangeablePartGrounder(Generic[NodeType], SubClassSafeGeneric):
             at every mounting node.
         :raises UndeterminedLatentsNotModeledError: If the class circuit does not model
             the undetermined statistics.
-        :raises UndeterminedLatentsNotPartitionedError: If the branches are not
-            pairwise disjoint.
+        :raises UndeterminedLatentsNotPartitionedError: If the regions of the branches
+            are not pairwise disjoint.
         """
         proposal = self.circuit.marginal(self.undetermined_latents)
         if proposal is None:
             raise UndeterminedLatentsNotModeledError(list(self.undetermined_latents))
-        branches = proposal.root_mixture_components()
-        branch_regions = [branch.support for branch in branches]
+        branch_regions = self._distinct_component_regions(proposal)
         if not self._undetermined_latents_partition_disjointly(branch_regions):
             raise UndeterminedLatentsNotPartitionedError(
                 list(self.undetermined_latents)
             )
+        branches = [proposal.truncated(region)[0] for region in branch_regions]
 
         # each node's weights must be read off the class circuit before the
         # undetermined latents are removed from it below
@@ -492,19 +483,51 @@ class ExchangeablePartGrounder(Generic[NodeType], SubClassSafeGeneric):
             ]
 
     @staticmethod
+    def _distinct_component_regions(proposal: CircuitType) -> list[Event]:
+        """
+        :param proposal: The class circuit marginalized to the undetermined statistics.
+        :return: The distinct supports of the components its root mixes, or its own
+            support if the root does not mix. Components that the fitted circuit only
+            separates by other variables have the same support here.
+        """
+        components = proposal.root_mixture_components() or [proposal]
+        result = []
+        for component in components:
+            if component.support not in result:
+                result.append(component.support)
+        return result
+
+    @staticmethod
     def _undetermined_latents_partition_disjointly(
         branch_regions: list[Event],
     ) -> bool:
         """
         :param branch_regions: The support of every branch.
-        :return: Whether there are at least two branches and no two of them overlap. A
-            single branch does not partition the latents.
+        :return: Whether no two of the regions overlap and every instance can be tied to
+            its region: there are at least two regions, or the only one is a point.
         """
-        if len(branch_regions) < 2:
-            return False
+        if len(branch_regions) == 1:
+            return ExchangeablePartGrounder._is_point(branch_regions[0])
         return all(
             left.intersection_with(right).is_empty()
             for left, right in itertools.combinations(branch_regions, 2)
+        )
+
+    @staticmethod
+    def _is_point(region: Event) -> bool:
+        """
+        :param region: A region of the undetermined statistics.
+        :return: Whether the region contains a single value of every variable.
+        """
+        if len(region.simple_sets) != 1:
+            return False
+        return all(
+            (
+                assignment.is_singleton()
+                if isinstance(assignment, Interval)
+                else len(assignment.simple_sets) == 1
+            )
+            for assignment in region.simple_sets[0].values()
         )
 
     @staticmethod

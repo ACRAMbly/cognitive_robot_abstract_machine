@@ -23,6 +23,7 @@ from probabilistic_model.probabilistic_circuit.relational.exceptions import (
     MissingPartLearningMethodError,
     MixedCircuitTypesError,
     NotAnAttributeAccessError,
+    UndeterminedLatentsNotPartitionedError,
     UnknownExchangeablePartsError,
 )
 from probabilistic_model.learning.jpt.jpt import JointProbabilityTree
@@ -569,8 +570,7 @@ def test_exact_grounding_is_reproducible_across_calls(
     relational_probabilistic_circuit, room_query_4
 ):
     """
-    ``EXACT`` grounding -- whether it takes its own exact-partition path or falls back
-    to ``SAMPLED`` -- must ground the identical set of variables across calls, even
+    ``EXACT`` grounding must ground the identical set of variables across calls, even
     under different random state.
     """
     np.random.seed(0)
@@ -617,29 +617,18 @@ def test_exact_grounding_backdoor_adjustment_runs(
     assert interventional_circuit.is_valid()
 
 
-def test_exact_grounding_falls_back_to_sampled_when_partition_overlaps(
-    relational_probabilistic_circuit, room_query_4, caplog
+def test_exact_grounding_raises_when_partition_overlaps(
+    relational_probabilistic_circuit, room_query_4
 ):
-    """
-    When the fitted circuit's partition over the undetermined latents is not disjoint,
-    ``EXACT`` must fall back to ``SAMPLED`` rather than raise or produce an unsound
-    circuit.
-    """
-    np.random.seed(0)
     with patch.object(
         ExchangeablePartGrounder,
         "_undetermined_latents_partition_disjointly",
         return_value=False,
     ):
-        with caplog.at_level("WARNING"):
-            model = relational_probabilistic_circuit.ground(
+        with pytest.raises(UndeterminedLatentsNotPartitionedError):
+            relational_probabilistic_circuit.ground(
                 room_query_4, grounding_mode=GroundingMode.EXACT
             )
-
-    assert model.is_valid()
-    names = {variable.name for variable in model.variables}
-    assert "SceneRoomAggregations.chair_count()" in names
-    assert any("falling back" in message.lower() for message in caplog.messages)
 
 
 # %% GroundingMode.EXACT preserves the actual correlation between the retained
@@ -724,7 +713,7 @@ def test_exact_grounding_preserves_correlation_with_the_retained_latent(
     point) into conditioning, which always failed and silently fell back to grounding
     every branch from the same unconditioned distribution -- and even after fixing that,
     a single, undifferentiated partition branch was treated as trivially valid instead
-    of triggering a fall back to sampling, discarding the correlation either way.
+    of being rejected, discarding the correlation either way.
     P(objects[0].type=CHAIR | do(chair_count=1)) and P(objects[0].type=CHAIR |
     do(chair_count=3)) must therefore differ, reflecting chair_count=1 rooms never
     having their first object be a chair and chair_count=3 rooms always having it be
@@ -869,9 +858,8 @@ def _circuit_below(node: ProductUnit) -> ProbabilisticCircuit:
 
 
 def _partitions_disjointly(circuit: ProbabilisticCircuit) -> bool:
-    branches = circuit.root_mixture_components()
     return ExchangeablePartGrounder._undetermined_latents_partition_disjointly(
-        [branch.support for branch in branches]
+        ExchangeablePartGrounder._distinct_component_regions(circuit)
     )
 
 
@@ -884,7 +872,7 @@ def _integer_leaf(variable, probabilities, circuit):
     )
 
 
-def test_partition_disjointly_false_for_a_single_branch():
+def test_partition_disjointly_false_for_a_single_branch_of_several_values():
     """
     A single, undifferentiated branch fails the precondition rather than trivially
     passing it: the fitted circuit never actually split on this latent, so every
@@ -894,8 +882,30 @@ def test_partition_disjointly_false_for_a_single_branch():
     """
     variable = Integer("value")
     circuit = ProbabilisticCircuit()
-    _integer_leaf(variable, {1: 1.0}, circuit)
+    _integer_leaf(variable, {1: 0.5, 2: 0.5}, circuit)
     assert not _partitions_disjointly(circuit)
+
+
+def test_partition_disjointly_true_for_a_single_point():
+    variable = Integer("value")
+    circuit = ProbabilisticCircuit()
+    _integer_leaf(variable, {1: 1.0}, circuit)
+    assert _partitions_disjointly(circuit)
+
+
+def test_branches_with_the_same_region_are_one_branch():
+    """
+    Leaves that the fitted circuit separates only by other variables have the same
+    region over the latents, which does not make the partition overlap.
+    """
+    variable = Integer("value")
+    circuit = ProbabilisticCircuit()
+    root = SumUnit(probabilistic_circuit=circuit)
+    for value in [1, 1, 2]:
+        root.add_subcircuit(_integer_leaf(variable, {value: 1.0}, circuit), 0.0)
+    root.normalize()
+    assert len(ExchangeablePartGrounder._distinct_component_regions(circuit)) == 2
+    assert _partitions_disjointly(circuit)
 
 
 def test_partition_disjointly_true_for_disjoint_branches():
@@ -1420,8 +1430,9 @@ def test_a_relational_circuit_is_grounded_in_the_circuit_type_it_was_fitted_in(
 
 def test_part_learning_methods_are_keyed_by_the_path_of_an_attribute_access():
     stratified = StratifiedLearning(["type"], JointProbabilityTree())
-    methods = PartLearningMethods(
-        methods={variable(SceneBuilding).floors.rooms: stratified}
+    methods = PartLearningMethods.from_methods_and_default(
+        {variable(SceneBuilding).floors.rooms: stratified},
+        JointProbabilityTree(),
     )
     assert methods[variable(SceneBuilding).floors.rooms] is stratified
     assert variable(SceneBuilding).floors.rooms in methods
@@ -1435,9 +1446,9 @@ def test_part_learning_methods_are_only_keyed_by_attribute_accesses():
 
 
 def test_part_learning_methods_survive_a_json_round_trip():
-    methods = PartLearningMethods(
-        LayeredLearning(JointProbabilityTree()),
+    methods = PartLearningMethods.from_methods_and_default(
         {variable(SceneBuilding).floors.rooms: JointProbabilityTree()},
+        LayeredLearning(JointProbabilityTree()),
     )
     assert from_json(json.loads(json.dumps(to_json(methods)))) == methods
 
@@ -1463,8 +1474,9 @@ def test_the_default_part_learning_method_reaches_nested_parts():
 def test_a_learning_method_for_an_unknown_part_raises():
     model = RelationalProbabilisticCircuit(
         SceneRoom,
-        part_learning_methods=PartLearningMethods(
-            methods={variable(SceneRoom).objekts: JointProbabilityTree()}
+        part_learning_methods=PartLearningMethods.from_methods_and_default(
+            {variable(SceneRoom).objekts: JointProbabilityTree()},
+            JointProbabilityTree(),
         ),
     )
     with pytest.raises(UnknownExchangeablePartsError):
@@ -1475,9 +1487,9 @@ def test_fitting_parts_in_another_circuit_type_raises():
     model = RelationalProbabilisticCircuit(
         SceneWithExchangeableParts,
         learning_method=LayeredLearning(JointProbabilityTree()),
-        part_learning_methods=PartLearningMethods(
-            LayeredLearning(JointProbabilityTree()),
+        part_learning_methods=PartLearningMethods.from_methods_and_default(
             {variable(SceneWithExchangeableParts).rooms: JointProbabilityTree()},
+            LayeredLearning(JointProbabilityTree()),
         ),
     )
     with pytest.raises(MixedCircuitTypesError):

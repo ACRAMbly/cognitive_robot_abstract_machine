@@ -6,7 +6,7 @@ attribute accesses.
 from __future__ import annotations
 
 import copy
-from dataclasses import InitVar, dataclass, field
+from dataclasses import dataclass, field
 
 from typing_extensions import Any, Dict, Optional, Self
 
@@ -38,19 +38,27 @@ class PartLearningMethods(SubclassJSONSerializer):
     or ``None`` to require a learning method for every part.
     """
 
-    methods: InitVar[Optional[Dict[Attribute, LearningMethod]]] = None
-    """
-    The learning methods of the parts.
-    """
-
     methods_by_path: Dict[str, LearningMethod] = field(init=False, default_factory=dict)
     """
     The learning method of every part, keyed by its path.
     """
 
-    def __post_init__(self, methods: Optional[Dict[Attribute, LearningMethod]]):
-        for part, method in (methods or {}).items():
-            self[part] = method
+    @classmethod
+    def from_methods_and_default(
+        cls,
+        methods: Dict[Attribute, LearningMethod],
+        default: Optional[LearningMethod],
+    ) -> Self:
+        """
+        :param methods: The learning methods of the parts.
+        :param default: What a part without a learning method is fitted with, or
+            ``None`` to require a learning method for every part.
+        :return: The learning methods of the parts.
+        """
+        result = cls(default)
+        for part, method in methods.items():
+            result[part] = method
+        return result
 
     @staticmethod
     def path_of(part: Attribute) -> str:

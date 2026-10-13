@@ -132,13 +132,13 @@ class NotAnAttributeAccessError(DataclassException):
     access on an EQL variable.
     """
 
-    key: Any
+    part: Any
     """
     The key that is not an attribute access on an EQL variable.
     """
 
     def error_message(self) -> str:
-        return f"Expected an attribute access on an EQL variable, got {self.key!r}."
+        return f"Expected an attribute access on an EQL variable, got {self.part!r}."
 
     def suggest_correction(self) -> str:
         return (
@@ -247,9 +247,7 @@ class UndeterminedLatentsNotPartitionedError(DataclassException):
 
     Exact-partition grounding requires at least two mutually exclusive branches so each
     grounded exchangeable instance stays tied to the latent value its own branch
-    represents. This is caught internally by ``RelationalProbabilisticCircuit`` and
-    triggers a fall back to ``GroundingMode.SAMPLED``; it is not expected to reach a
-    caller of ``ground``.
+    represents.
     """
 
     undetermined_latents: List[Variable]

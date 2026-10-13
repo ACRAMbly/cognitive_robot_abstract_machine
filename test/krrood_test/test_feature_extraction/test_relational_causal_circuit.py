@@ -412,12 +412,13 @@ def test_fit_stratifies_an_exchangeable_parts_template_by_the_given_variable(
         learning_method=StratifiedLearning(
             variables=[chair_count_variable._name_], method=JointProbabilityTree()
         ),
-        part_learning_methods=PartLearningMethods(
-            methods={
+        part_learning_methods=PartLearningMethods.from_methods_and_default(
+            {
                 variable(SceneRoom).objects: StratifiedLearning(
                     variables=["type"], method=JointProbabilityTree()
                 )
-            }
+            },
+            JointProbabilityTree(),
         ),
     )
     model.fit(many_chair_count_rooms)
@@ -484,12 +485,13 @@ def test_minimum_samples_per_leaf_reaches_an_exchangeable_parts_template(
     object_count = sum(len(room.objects) for room in many_chair_count_rooms)
     model = RelationalProbabilisticCircuit(
         SceneRoom,
-        part_learning_methods=PartLearningMethods(
-            methods={
+        part_learning_methods=PartLearningMethods.from_methods_and_default(
+            {
                 variable(SceneRoom).objects: JointProbabilityTree(
                     min_samples_per_leaf=object_count
                 )
-            }
+            },
+            JointProbabilityTree(),
         ),
     )
     model.fit(many_chair_count_rooms)
@@ -569,13 +571,14 @@ def _part_attribute_causal_circuit(rooms, correlated_room_query) -> CausalCircui
     model = RelationalProbabilisticCircuit(
         SceneRoom,
         learning_method=JointProbabilityTree(min_samples_per_leaf=5),
-        part_learning_methods=PartLearningMethods(
-            methods={
+        part_learning_methods=PartLearningMethods.from_methods_and_default(
+            {
                 variable(SceneRoom).objects: StratifiedLearning(
                     variables=["type"],
                     method=JointProbabilityTree(min_samples_per_leaf=5),
                 )
-            }
+            },
+            JointProbabilityTree(),
         ),
     )
     model.fit(rooms)

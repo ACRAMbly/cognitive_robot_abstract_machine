@@ -39,6 +39,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+
 @dataclass
 class RelationalCausalCircuit:
     """
@@ -122,7 +123,7 @@ class RelationalCausalCircuit:
         :param grounding_mode: How to represent aggregation latents the query leaves
             undetermined. Defaults to :attr:`GroundingMode.SAMPLED`, which always
             succeeds; :attr:`GroundingMode.EXACT` gives reproducible, domain-covering
-            regions but may fall back internally if its precondition isn't met. See
+            regions but raises if its precondition isn't met. See
             :class:`~probabilistic_model.probabilistic_circuit.relational.rspn.GroundingMode`.
         :param trim_to_registered_variables: See :meth:`from_grounded_circuit`.
         :return: A verified, support-deterministic ``CausalCircuit`` over the grounded
