@@ -71,14 +71,6 @@ class GarmiVelocityInterface(RobotInterfaceConfig):
     """
 
     def setup(self) -> None:
-        # Base localization and drive, per real_robot.md. Both producers run on
-        # the current robot deployment: map->odom is on the global /tf (static
-        # identity while localization is "none") and the legs EKF publishes the
-        # filtered platform odometry at 50 Hz.
-        # NOTE the base listens on /r100_0603/cmd_vel as geometry_msgs/TwistStamped,
-        # while add_base_cmd_velocity publishes a plain Twist -- so the twist goes
-        # out on the unstamped topic and garmi_giskard's twist_stamping_relay
-        # (started by giskard_real.launch.py) stamps it onto /r100_0603/cmd_vel.
         self.sync_6dof_joint_with_tf_frame(
             joint=self.world.get_connections_by_type(Connection6DoF)[0],
             tf_parent_frame="map",
@@ -91,8 +83,8 @@ class GarmiVelocityInterface(RobotInterfaceConfig):
         )
 
         # The merged whole-robot joint state (~50 Hz): arms + lift, the platform's
-        # wheels, and the head. The per-subsystem topics documented in
-        # real_robot.md stay available if a joint group needs faster sync.
+        # wheels, and the head. The per-subsystem topics
+        # stay available if a joint group needs faster sync.
         self.sync_joint_state_topic("/garmi/joint_states")
 
         self.add_joint_velocity_group_controller(
