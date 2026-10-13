@@ -12,7 +12,7 @@ from typing_extensions import TYPE_CHECKING
 from krrood.entity_query_language.query.match import AbstractMatchExpression, Match
 
 if TYPE_CHECKING:
-    from probabilistic_model.probabilistic_circuit.relational.rspn import (
+    from probabilistic_model.probabilistic_circuit.relational.relational_probabilistic_circuit import (
         RelationalProbabilisticCircuit,
     )
 

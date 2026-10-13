@@ -25,7 +25,7 @@ from probabilistic_model.probabilistic_circuit.rx.probabilistic_circuit import (
 
 if TYPE_CHECKING:
     from krrood.entity_query_language.query.match import Match
-    from probabilistic_model.probabilistic_circuit.relational.rspn import (
+    from probabilistic_model.probabilistic_circuit.relational.relational_probabilistic_circuit import (
         RelationalProbabilisticCircuit,
     )
 
@@ -36,7 +36,7 @@ class MarkovChainDistributionTemplate(RelationalDistributionTemplate):
     A fitted distribution template for one sequential (Markov chain) relation.
 
     Grounds one ``RelationalProbabilisticCircuit`` per position in a sequence, the
-    same way :class:`~probabilistic_model.probabilistic_circuit.relational.rspn.ExchangeableDistributionTemplate`
+    same way :class:`~probabilistic_model.probabilistic_circuit.relational.relational_probabilistic_circuit.ExchangeableDistributionTemplate`
     grounds one per exchangeable child, and chains the grounded copies into a
     hidden Markov model instead of combining them under a product.
 

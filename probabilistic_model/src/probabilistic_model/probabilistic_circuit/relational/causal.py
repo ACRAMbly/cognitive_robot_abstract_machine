@@ -3,9 +3,9 @@ Bridges ``RelationalProbabilisticCircuit`` grounding into ``CausalCircuit``
 construction.
 
 .. note::
-    This module mirrors how ``rspn.py`` deliberately bridges ``probabilistic_model``
+    This module mirrors how ``relational_probabilistic_circuit.py`` deliberately bridges ``probabilistic_model``
     and ``krrood``: it is the seam where relational grounding meets exact causal
-    inference, kept separate from both ``rspn.py`` and ``causal_circuit.py`` so
+    inference, kept separate from both ``relational_probabilistic_circuit.py`` and ``causal_circuit.py`` so
     neither needs to depend on the other.
 """
 
@@ -25,7 +25,7 @@ from probabilistic_model.probabilistic_circuit.relational.exceptions import (
     AmbiguousVariablePathError,
     VariableNotFoundError,
 )
-from probabilistic_model.probabilistic_circuit.relational.rspn import (
+from probabilistic_model.probabilistic_circuit.relational.relational_probabilistic_circuit import (
     GroundingMode,
     RelationalProbabilisticCircuit,
 )
@@ -124,7 +124,7 @@ class RelationalCausalCircuit:
             undetermined. Defaults to :attr:`GroundingMode.SAMPLED`, which always
             succeeds; :attr:`GroundingMode.EXACT` gives reproducible, domain-covering
             regions but raises if its precondition isn't met. See
-            :class:`~probabilistic_model.probabilistic_circuit.relational.rspn.GroundingMode`.
+            :class:`~probabilistic_model.probabilistic_circuit.relational.relational_probabilistic_circuit.GroundingMode`.
         :param trim_to_registered_variables: See :meth:`from_grounded_circuit`.
         :return: A verified, support-deterministic ``CausalCircuit`` over the grounded
             circuit.
@@ -218,8 +218,8 @@ class RelationalCausalCircuit:
         regions expensive, rather than waiting to discover this at query time.
 
         A relational adjustment variable's region count can grow with the training data
-        under :attr:`~probabilistic_model.probabilistic_circuit.relational.rspn.GroundingMode.EXACT`,
-        unlike :attr:`~probabilistic_model.probabilistic_circuit.relational.rspn.GroundingMode.SAMPLED`,
+        under :attr:`~probabilistic_model.probabilistic_circuit.relational.relational_probabilistic_circuit.GroundingMode.EXACT`,
+        unlike :attr:`~probabilistic_model.probabilistic_circuit.relational.relational_probabilistic_circuit.GroundingMode.SAMPLED`,
         whose region count is capped by ``monte_carlo_sample_count``. This is a
         best-effort diagnostic based on
         ``grounded_circuit``'s actual leaf-region counts, not a guarantee: it flags

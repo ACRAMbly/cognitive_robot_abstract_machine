@@ -1,5 +1,5 @@
 """
-Validation of RSPN fitting against the CTU Mutagenesis dataset
+Validation of relational circuit fitting against the CTU Mutagenesis dataset
 (https://relational.fel.cvut.cz/dataset/Mutagenesis), covering steps 1-4 of
 ``Documents/mutagenesis_pipeline_test_plan.md``: download, class mapping, fitting, and
 the predictive/structural sanity checks required before grounding any causal query on
@@ -30,7 +30,7 @@ from experiments.causal_reasoning.mutagenesis.dataset import (
 from probabilistic_model.probabilistic_circuit.relational.exchangeable_grounding import (
     ExchangeablePartGrounder,
 )
-from probabilistic_model.probabilistic_circuit.relational.rspn import (
+from probabilistic_model.probabilistic_circuit.relational.relational_probabilistic_circuit import (
     RelationalProbabilisticCircuit,
 )
 

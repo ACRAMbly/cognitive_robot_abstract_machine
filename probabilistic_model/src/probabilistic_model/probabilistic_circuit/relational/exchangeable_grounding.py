@@ -39,7 +39,7 @@ from random_events.variable import Variable
 
 if TYPE_CHECKING:
     from krrood.entity_query_language.query.match import Match
-    from probabilistic_model.probabilistic_circuit.relational.rspn import (
+    from probabilistic_model.probabilistic_circuit.relational.relational_probabilistic_circuit import (
         ExchangeableDistributionTemplate,
         RelationalProbabilisticCircuit,
     )

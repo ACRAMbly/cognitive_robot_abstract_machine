@@ -19,7 +19,7 @@ from krrood.entity_query_language.query.match import Match
 from krrood.exceptions import DataclassException
 from krrood.ormatic.data_access_objects.dao import get_dao_schema
 from krrood.ormatic.data_access_objects.helper import get_data_access_object_class
-from probabilistic_model.probabilistic_circuit.relational.rspn import (
+from probabilistic_model.probabilistic_circuit.relational.relational_probabilistic_circuit import (
     RelationalProbabilisticCircuit,
 )
 from typing_extensions import Any, List
@@ -70,7 +70,7 @@ class AmbiguousThresholdError(DataclassException):
 
 def _build_grounding_query(domain_class: type, instance: Any) -> Match:
     """
-    Build a query mirroring an instance's collection structure for RSPN grounding.
+    Build a query mirroring an instance's collection structure for relational grounding.
 
     Every constructor field of ``domain_class`` without a default is filled with an
     ellipsis placeholder, except for the class's collection relationships - found

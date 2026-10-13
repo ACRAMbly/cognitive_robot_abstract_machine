@@ -1,5 +1,5 @@
 """
-Relational probabilistic circuits ("RSPNs").
+Relational probabilistic circuits.
 
 .. note::
     This module deliberately bridges ``probabilistic_model`` and ``krrood``: it
