@@ -554,6 +554,7 @@ class SymbolicMathType(ABC):
     @classmethod
     def from_casadi_sx(cls, casadi_sx: ca.SX) -> Self:
         result = cls.__new__(cls)
+        # result = cls() is equivalent but slightly slower. if anything is sus with symbolic math, try if this fixes it
         result.casadi_sx = casadi_sx
         result.pinned_free_variables = []
         return result
