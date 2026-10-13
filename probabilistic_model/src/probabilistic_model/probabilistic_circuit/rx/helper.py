@@ -6,7 +6,6 @@ from probabilistic_model.distributions.distributions import (
 )
 from probabilistic_model.distributions.gaussian import GaussianDistribution
 from probabilistic_model.distributions.uniform import UniformDistribution
-from probabilistic_model.exceptions import EventWithoutUniformMeasureError
 from probabilistic_model.utils import MissingDict
 
 
@@ -16,8 +15,6 @@ def uniform_measure_of_event(event: Event) -> ProbabilisticCircuit:
 
     :param event: The event
     :return: The circuit describing the uniform measure
-    :raises EventWithoutUniformMeasureError: If the event has no volume in the box
-        bounding it.
     """
     # calculate the bounding box of the event
     bounding_box = event.bounding_box()
@@ -27,59 +24,7 @@ def uniform_measure_of_event(event: Event) -> ProbabilisticCircuit:
     # condition the uniform measure on the event
     uniform_model, _ = uniform_model.truncated(event)
 
-    if uniform_model is None:
-        raise EventWithoutUniformMeasureError(event)
-
     return uniform_model
-
-
-def _uniform_measure_of_intervals(
-    variable: Continuous,
-    intervals: Interval,
-    probabilistic_circuit: ProbabilisticCircuit,
-) -> SumUnit:
-    """
-    The uniform measure of a union of intervals, each weighted by its width.
-
-    Points have no width, so they have no mass next to an interval that has. Only a
-    union of nothing but points is measured by its points, each equally likely.
-
-    :param variable: The variable the intervals are over.
-    :param intervals: The union of intervals.
-    :param probabilistic_circuit: The circuit to build the measure in.
-    :return: A sum over one leaf per interval that has mass.
-    """
-    distribution = SumUnit(probabilistic_circuit=probabilistic_circuit)
-    intervals_with_width = [
-        interval for interval in intervals.simple_sets if not interval.is_singleton()
-    ]
-    if intervals_with_width:
-        leaves_and_log_weights = [
-            (
-                UniformDistribution(variable=variable, interval=interval),
-                np.log(interval.upper - interval.lower),
-            )
-            for interval in intervals_with_width
-        ]
-    else:
-        leaves_and_log_weights = [
-            (
-                DiracDeltaDistribution(
-                    variable=variable, location=point.lower, density_cap=1.0
-                ),
-                0.0,
-            )
-            for point in intervals.simple_sets
-        ]
-    for leaf_distribution, log_weight in leaves_and_log_weights:
-        distribution.add_subcircuit(
-            UnivariateContinuousLeaf(
-                leaf_distribution, probabilistic_circuit=probabilistic_circuit
-            ),
-            log_weight,
-        )
-    distribution.normalize()
-    return distribution
 
 
 def uniform_measure_of_simple_event(simple_event: SimpleEvent) -> ProbabilisticCircuit:
@@ -97,7 +42,29 @@ def uniform_measure_of_simple_event(simple_event: SimpleEvent) -> ProbabilisticC
         # handle different variables
         if isinstance(variable, Continuous):
 
-            distribution = _uniform_measure_of_intervals(variable, assignment, result)
+            distribution = SumUnit(probabilistic_circuit=result)
+            if all(assignment_.is_singleton() for assignment_ in assignment):
+                # a variable pinned to points has no width, so every point is equally likely
+                for assignment_ in assignment:
+                    dirac = DiracDeltaDistribution(
+                        variable=variable, location=assignment_.lower, density_cap=1.0
+                    )
+                    distribution.add_subcircuit(
+                        UnivariateContinuousLeaf(dirac, probabilistic_circuit=result),
+                        0.0,
+                    )
+            else:
+                # create a uniform distribution for every interval in a continuous variables description,
+                # weighted by its width
+                for assignment_ in assignment:
+                    uniform = UniformDistribution(
+                        variable=variable, interval=assignment_
+                    )
+                    distribution.add_subcircuit(
+                        UnivariateContinuousLeaf(uniform, probabilistic_circuit=result),
+                        -uniform.log_probability_density_function_value(),
+                    )
+            distribution.normalize()
 
         # create uniform distribution for symbolic variables
         elif isinstance(variable, Symbolic):

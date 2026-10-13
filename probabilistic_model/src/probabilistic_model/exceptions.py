@@ -206,28 +206,3 @@ class InvalidMomentOrderError(DataclassException, ValueError):
 
     def suggest_correction(self) -> str:
         return "Ask for an order that is a whole number and not negative."
-
-
-@dataclass
-class EventWithoutUniformMeasureError(DataclassException, ValueError):
-    """
-    Exception raised when a uniform measure is asked for an event that has no volume in
-    the box bounding it.
-
-    This happens when every piece of the event pins a variable to a point that another
-    piece leaves free to vary.
-    """
-
-    event: Event
-    """
-    The event that was asked for.
-    """
-
-    def error_message(self) -> str:
-        return (
-            f"Every piece of {self.event} pins a variable to a point that the box "
-            f"bounding the event spans, so the event has no volume to be uniform over."
-        )
-
-    def suggest_correction(self) -> str:
-        return "Ask for the uniform measure of each piece on its own."
