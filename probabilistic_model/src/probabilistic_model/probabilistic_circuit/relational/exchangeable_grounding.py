@@ -7,7 +7,6 @@ from __future__ import annotations
 import enum
 import itertools
 import logging
-from abc import ABC, abstractmethod
 from dataclasses import dataclass, field, replace
 
 import numpy as np
@@ -21,11 +20,15 @@ from krrood.parametrization.feature_extraction.aggregations import (
 from krrood.patterns.subclass_safe_generic import SubClassSafeGeneric
 from probabilistic_model.probabilistic_model import PartialPointType
 from probabilistic_model.probabilistic_circuit.groundable_circuit import (
+    ConditionedCopies,
     GroundableCircuit,
+    NodeReference,
+    ProductsOfCopies,
 )
 from probabilistic_model.probabilistic_circuit.relational.exceptions import (
     CircuitNotFittedError,
     InvalidMonteCarloSampleCountError,
+    PartCircuitGroundingFailedError,
     UndeterminedLatentsNotModeledError,
     UndeterminedLatentsNotPartitionedError,
 )
@@ -47,12 +50,6 @@ logger = logging.getLogger(__name__)
 CircuitType = TypeVar("CircuitType", bound=GroundableCircuit)
 """
 The circuit type a relational circuit is fitted and grounded in.
-"""
-
-MountingNodeType = TypeVar("MountingNodeType")
-"""
-A node of the class circuit that the instances of an exchangeable relation are mounted
-at.
 """
 
 
@@ -185,16 +182,13 @@ class PartitionMixture(InstanceMixture, Generic[CircuitType], SubClassSafeGeneri
 
 
 @dataclass
-class ExchangeablePartGrounder(
-    Generic[CircuitType, MountingNodeType], SubClassSafeGeneric, ABC
-):
+class ExchangeablePartGrounder:
     """
-    Grounds one exchangeable part into the class circuit, in place.
-
-    Subclasses implement the operations on the nodes of one circuit type.
+    Grounds one exchangeable part into the class circuit, in place, through the
+    operations on nodes that every groundable circuit provides.
     """
 
-    circuit: CircuitType
+    circuit: GroundableCircuit
     """
     The working class circuit.
     """
@@ -204,7 +198,7 @@ class ExchangeablePartGrounder(
     The fitted template whose exchangeable relation is being grounded.
     """
 
-    part_templates: list[GroundedPartTemplate[CircuitType]]
+    part_templates: list[GroundedPartTemplate]
     """
     The grounded template of every child object of the relation.
     """
@@ -224,7 +218,7 @@ class ExchangeablePartGrounder(
     Number of samples drawn of ``undetermined_latents``.
     """
 
-    product_nodes_to_extend: list[MountingNodeType] = field(
+    product_nodes_to_extend: list[NodeReference] = field(
         init=False, default_factory=list
     )
     """
@@ -238,8 +232,10 @@ class ExchangeablePartGrounder(
         :param grounding_mode: How to represent the undetermined statistics. ``EXACT``
             falls back to ``SAMPLED`` if their fitted partition is not disjoint.
         """
-        self.condition_class_circuit()
-        self.product_nodes_to_extend = self.mounting_nodes()
+        self.circuit.condition_on_point_in_place(self.determined_statistics)
+        self.product_nodes_to_extend = self.circuit.lowest_product_nodes_over(
+            SortedSet(self.template.latent_variables)
+        )
         if not self.undetermined_latents:
             self.single_instance()
             return
@@ -257,60 +253,27 @@ class ExchangeablePartGrounder(
                 return
         self.sampled_mixture(self.monte_carlo_mixture())
 
-    # %% operations on the class circuit
-
-    @abstractmethod
-    def condition_class_circuit(self):
-        """
-        Condition the class circuit on the determined statistics in place, keeping its
-        structure. Statistics the circuit deems impossible leave it unchanged.
-        """
-        raise NotImplementedError
-
-    @abstractmethod
-    def mounting_nodes(self) -> list[MountingNodeType]:
-        """
-        :return: The lowest product nodes that model every latent variable of the
-            template, none of them an ancestor of another.
-        """
-        raise NotImplementedError
-
-    @abstractmethod
-    def circuit_below(self, node: MountingNodeType) -> CircuitType:
-        """
-        :param node: A node of the class circuit.
-        :return: The subcircuit rooted at the node.
-        """
-        raise NotImplementedError
-
-    @abstractmethod
     def remove_undetermined_latents(self):
         """
         Remove the undetermined latents from the class circuit in place, keeping the
         mounting nodes.
         """
-        raise NotImplementedError
-
-    @staticmethod
-    @abstractmethod
-    def partition_branches(proposal: CircuitType) -> list[CircuitType]:
-        """
-        :param proposal: A circuit over the undetermined latents.
-        :return: The subcircuits that the root of the circuit mixes, or nothing if the
-            root does not mix.
-        """
-        raise NotImplementedError
+        self.product_nodes_to_extend = self.circuit.remove_variables_in_place(
+            self.undetermined_latents, self.product_nodes_to_extend
+        )
 
     # %% mounting the instances
 
-    @abstractmethod
     def single_instance(self):
         """
         Mount the part as one instance at every mounting node.
         """
-        raise NotImplementedError
+        self.circuit.multiply_nodes_by_mixtures(
+            self.product_nodes_to_extend,
+            self.instances([self.determined_statistics]),
+            None,
+        )
 
-    @abstractmethod
     def sampled_mixture(self, mixture: InstanceMixture):
         """
         Mount the part as a mixture of one instance per sampled assignment, each
@@ -319,17 +282,69 @@ class ExchangeablePartGrounder(
         :param mixture: The sampled assignments with their weights at every mounting
             node.
         """
-        raise NotImplementedError
+        instances = self.instances(self.statistics_of(mixture))
+        instances.point_masses = {
+            variable: [assignment[variable] for assignment in mixture.assignments]
+            for variable in self.undetermined_latents
+        }
+        self.circuit.multiply_nodes_by_mixtures(
+            self.product_nodes_to_extend, instances, mixture.log_weights
+        )
 
-    @abstractmethod
-    def partition_mixture(self, mixture: PartitionMixture[CircuitType]):
+    def partition_mixture(self, mixture: PartitionMixture):
         """
         Mount the part as a mixture of one instance per branch of the exact partition,
         each carrying its branch.
 
         :param mixture: The branches with their weights at every mounting node.
         """
-        raise NotImplementedError
+        instances = self.instances(self.statistics_of(mixture))
+        instances.components = mixture.branches
+        self.circuit.multiply_nodes_by_mixtures(
+            self.product_nodes_to_extend, instances, mixture.log_weights
+        )
+
+    def statistics_of(self, mixture: InstanceMixture) -> list[PartialPointType]:
+        """
+        :param mixture: The assignments of the undetermined statistics.
+        :return: The values of every aggregation statistic, one assignment per instance.
+        """
+        return [
+            {**self.determined_statistics, **assignment}
+            for assignment in mixture.assignments
+        ]
+
+    def instances(self, statistics: list[PartialPointType]) -> ProductsOfCopies:
+        """
+        :param statistics: The values of every aggregation statistic, one assignment per
+            instance.
+        :return: The instances, each multiplying the template of every child object
+            conditioned on its statistics.
+        :raises PartCircuitGroundingFailedError: If a template models nothing but the
+            aggregation statistics.
+        """
+        conditioned_copies = []
+        for part in self.part_templates:
+            variables = SortedSet(
+                variable
+                for variable in part.circuit.variables
+                if variable not in self.template.latent_variables
+            )
+            if not variables:
+                raise PartCircuitGroundingFailedError(
+                    self.template.template_distribution.class_
+                )
+            conditioned_copies.append(
+                ConditionedCopies(
+                    part.circuit,
+                    variables,
+                    {
+                        variable: self.template.variable_of_part(variable, part)
+                        for variable in variables
+                    },
+                )
+            )
+        return ProductsOfCopies(statistics, conditioned_copies)
 
     # %% weighing the instances
 
@@ -364,7 +379,7 @@ class ExchangeablePartGrounder(
         proposal = self.circuit.marginal(self.undetermined_latents)
         if proposal is None:
             raise UndeterminedLatentsNotModeledError(list(self.undetermined_latents))
-        branches = self.partition_branches(proposal)
+        branches = proposal.root_mixture_components()
         branch_regions = [branch.support for branch in branches]
         if not self._undetermined_latents_partition_disjointly(branch_regions):
             raise UndeterminedLatentsNotPartitionedError(
@@ -376,7 +391,9 @@ class ExchangeablePartGrounder(
         log_weights = np.array(
             [
                 self._branch_log_probabilities(
-                    self.circuit_below(node), self.undetermined_latents, branch_regions
+                    self.circuit.subcircuit_at(node),
+                    self.undetermined_latents,
+                    branch_regions,
                 )
                 for node in self.product_nodes_to_extend
             ]
@@ -390,7 +407,7 @@ class ExchangeablePartGrounder(
         return PartitionMixture(assignments, log_weights, branches)
 
     def _sample_undetermined_latents(
-        self, node: Optional[MountingNodeType] = None
+        self, node: Optional[NodeReference] = None
     ) -> list[PartialPointType]:
         """
         :param node: A mounting node to sample below, instead of the whole class
@@ -402,7 +419,7 @@ class ExchangeablePartGrounder(
         """
         if self.monte_carlo_sample_count < 1:
             raise InvalidMonteCarloSampleCountError(self.monte_carlo_sample_count)
-        source = self.circuit if node is None else self.circuit_below(node)
+        source = self.circuit if node is None else self.circuit.subcircuit_at(node)
         proposal = source.marginal(self.undetermined_latents)
         if proposal is None:
             raise UndeterminedLatentsNotModeledError(list(self.undetermined_latents))
@@ -418,7 +435,7 @@ class ExchangeablePartGrounder(
         ]
 
     def _node_local_latent_log_likelihoods(
-        self, node: MountingNodeType, latent_assignments: list[PartialPointType]
+        self, node: NodeReference, latent_assignments: list[PartialPointType]
     ) -> list[float]:
         """
         :param node: A mounting node.
@@ -426,7 +443,7 @@ class ExchangeablePartGrounder(
         :return: The log-likelihood of every assignment under the subcircuit of the
             node.
         """
-        subcircuit = self.circuit_below(node)
+        subcircuit = self.circuit.subcircuit_at(node)
         subcircuit.marginal_in_place(self.undetermined_latents)
         index_of_variable = subcircuit.variable_to_index_map
         events = np.full((len(latent_assignments), len(index_of_variable)), np.nan)
@@ -439,7 +456,7 @@ class ExchangeablePartGrounder(
         ]
 
     def _node_local_assignments(
-        self, node: MountingNodeType, sampled_assignments: list[PartialPointType]
+        self, node: NodeReference, sampled_assignments: list[PartialPointType]
     ) -> WeightedAssignments:
         """
         :param node: A mounting node.
@@ -590,7 +607,7 @@ class RelationalGrounding:
         nested_grounding = replace(
             self, relational_circuit=template.template_distribution
         )
-        return circuit.exchangeable_part_grounder_type()(
+        return ExchangeablePartGrounder(
             circuit=circuit,
             template=template,
             part_templates=template.grounded_templates_of_parts(

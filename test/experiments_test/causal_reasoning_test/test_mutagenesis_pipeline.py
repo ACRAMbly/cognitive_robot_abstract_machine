@@ -33,9 +33,6 @@ from probabilistic_model.probabilistic_circuit.relational.exchangeable_grounding
 from probabilistic_model.probabilistic_circuit.relational.rspn import (
     RelationalProbabilisticCircuit,
 )
-from probabilistic_model.probabilistic_circuit.relational.rustworkx_grounding import (
-    RustworkxExchangeablePartGrounder,
-)
 
 CHLORINE_COUNT_VARIABLE_NAME = "MutagenesisMoleculeAggregations.chlorine_count()"
 MUTAGENIC_VARIABLE_NAME = "MutagenesisMolecule.mutagenic"
@@ -201,7 +198,7 @@ def test_mutagenesis_chlorine_count_is_not_a_split_feature(mutagenesis_rpc):
         v for v in circuit.variables if v.name == CHLORINE_COUNT_VARIABLE_NAME
     )
     marginal = circuit.marginal([chlorine_count_variable])
-    branches = RustworkxExchangeablePartGrounder.partition_branches(marginal)
+    branches = marginal.root_mixture_components()
     assert not ExchangeablePartGrounder._undetermined_latents_partition_disjointly(
         [branch.support for branch in branches]
     )

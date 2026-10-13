@@ -30,9 +30,6 @@ from probabilistic_model.probabilistic_circuit.relational.exchangeable_grounding
     InstanceMixture,
     WeightedAssignments,
 )
-from probabilistic_model.probabilistic_circuit.relational.rustworkx_grounding import (
-    RustworkxExchangeablePartGrounder,
-)
 from probabilistic_model.learning.learning_method import (
     LayeredLearning,
     StratifiedLearning,
@@ -858,7 +855,7 @@ def _circuit_below(node: ProductUnit) -> ProbabilisticCircuit:
 
 
 def _partitions_disjointly(circuit: ProbabilisticCircuit) -> bool:
-    branches = RustworkxExchangeablePartGrounder.partition_branches(circuit)
+    branches = circuit.root_mixture_components()
     return ExchangeablePartGrounder._undetermined_latents_partition_disjointly(
         [branch.support for branch in branches]
     )

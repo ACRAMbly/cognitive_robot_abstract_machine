@@ -1,18 +1,73 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from random_events.product_algebra import Event, VariableMap
 from random_events.variable import Variable
-from typing_extensions import TYPE_CHECKING, Dict, Iterable, Optional, Self, Tuple, Type
+from sortedcontainers import SortedSet
+from typing_extensions import Any, Dict, Iterable, List, Optional, Self, Tuple
 
-from probabilistic_model.probabilistic_model import ProbabilisticModel
+from probabilistic_model.probabilistic_circuit.tensorized.array_types import (
+    DenseEdgeValues,
+)
+from probabilistic_model.probabilistic_model import PartialPointType, ProbabilisticModel
 
-if TYPE_CHECKING:
-    from probabilistic_model.probabilistic_circuit.relational.exchangeable_grounding import (
-        ExchangeablePartGrounder,
-    )
+NodeReference = Any
+"""
+A node of a circuit, in the form the circuit type refers to its nodes.
+"""
+
+
+@dataclass
+class ConditionedCopies:
+    """
+    Copies of a circuit, one per point of a :class:`ProductsOfCopies`, each conditioned
+    on its point and restricted to some variables of the circuit, which are renamed.
+    """
+
+    circuit: GroundableCircuit
+    """
+    The circuit to copy. Copies of the same circuit have the same structure.
+    """
+
+    variables: SortedSet[Variable]
+    """
+    The variables of the circuit the copies keep.
+    """
+
+    renaming: Dict[Variable, Variable]
+    """
+    The new name of every kept variable.
+    """
+
+
+@dataclass
+class ProductsOfCopies:
+    """
+    Products whose ``i``-th one multiplies the ``i``-th copy of every factor.
+    """
+
+    points: List[PartialPointType]
+    """
+    The point every product conditions its conditioned copies on, one per product.
+    """
+
+    conditioned_copies: List[ConditionedCopies]
+    """
+    The conditioned copies every product multiplies.
+    """
+
+    point_masses: Dict[Variable, List[Any]] = field(default_factory=dict)
+    """
+    Variables every product multiplies a point mass of, with the value of the point
+    mass in every product.
+    """
+
+    components: List[GroundableCircuit] = field(default_factory=list)
+    """
+    A circuit every product multiplies, one per product, or nothing.
+    """
 
 
 @dataclass(eq=False)
@@ -20,14 +75,6 @@ class GroundableCircuit(ProbabilisticModel, ABC):
     """
     A circuit type that relational probabilistic circuits are fitted and grounded in.
     """
-
-    @classmethod
-    @abstractmethod
-    def exchangeable_part_grounder_type(cls) -> Type[ExchangeablePartGrounder]:
-        """
-        :return: What grounds one exchangeable relation into a circuit of this type.
-        """
-        raise NotImplementedError
 
     @property
     @abstractmethod
@@ -66,4 +113,76 @@ class GroundableCircuit(ProbabilisticModel, ABC):
 
     @abstractmethod
     def __deepcopy__(self, memo=None) -> Self:
+        raise NotImplementedError
+
+    # %% operations on nodes
+
+    @abstractmethod
+    def condition_on_point_in_place(self, point: PartialPointType) -> bool:
+        """
+        Condition the circuit on a point in place, keeping its structure. Variables of
+        the point that the circuit does not model are ignored.
+
+        :param point: The point.
+        :return: Whether the point is possible. An impossible point leaves the circuit
+            unchanged.
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    def lowest_product_nodes_over(
+        self, variables: SortedSet[Variable]
+    ) -> List[NodeReference]:
+        """
+        :param variables: The variables every returned node must model.
+        :return: The product nodes that model all of the variables and have no such
+            node below them, so none of them is an ancestor of another.
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    def subcircuit_at(self, node: NodeReference) -> Self:
+        """
+        :param node: A node of the circuit.
+        :return: The circuit rooted at the node.
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    def remove_variables_in_place(
+        self, variables: SortedSet[Variable], nodes: List[NodeReference]
+    ) -> List[NodeReference]:
+        """
+        Marginalize variables out of the circuit in place, keeping its structure.
+
+        :param variables: The variables to remove.
+        :param nodes: Nodes of the circuit to keep track of.
+        :return: The nodes in the marginalized circuit.
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    def root_mixture_components(self) -> List[Self]:
+        """
+        :return: The circuits that the root of the circuit mixes, or nothing if the root
+            does not mix.
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    def multiply_nodes_by_mixtures(
+        self,
+        nodes: List[NodeReference],
+        products: ProductsOfCopies,
+        log_weights: Optional[DenseEdgeValues],
+    ):
+        """
+        Make product nodes of the circuit multiply mixtures of products, in place.
+
+        :param nodes: The product nodes.
+        :param products: The products.
+        :param log_weights: The weight of every product in the mixture of every node,
+            shape (#nodes, #products), ``-inf`` where a node does not use a product.
+            ``None`` if there is one product, which every node multiplies.
+        """
         raise NotImplementedError
