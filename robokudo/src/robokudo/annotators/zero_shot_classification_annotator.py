@@ -22,7 +22,7 @@ if TYPE_CHECKING:
 FONT = cv2.FONT_HERSHEY_COMPLEX
 
 
-class ZeroShotClassifierAnnotator(ThreadedAnnotator):
+class ZeroShotClassificationAnnotator(ThreadedAnnotator):
     """
     Classifies the whole image or each object hypothesis with CLIP against a freely
     chosen vocabulary of class names, without training on those classes.
@@ -30,7 +30,7 @@ class ZeroShotClassifierAnnotator(ThreadedAnnotator):
 
     class Descriptor(ThreadedAnnotator.Descriptor):
         """
-        Descriptor for the ZeroShotClassifierAnnotator.
+        Descriptor for the ZeroShotClassificationAnnotator.
         """
 
         class Parameters:
@@ -90,8 +90,8 @@ class ZeroShotClassifierAnnotator(ThreadedAnnotator):
 
     def __init__(
         self,
-        name: str = "ZeroShotClassifierAnnotator",
-        descriptor: ZeroShotClassifierAnnotator.Descriptor | None = None,
+        name: str = "ZeroShotClassificationAnnotator",
+        descriptor: ZeroShotClassificationAnnotator.Descriptor | None = None,
     ) -> None:
         super().__init__(name=name, descriptor=descriptor)
 
@@ -208,7 +208,9 @@ class ZeroShotClassifierAnnotator(ThreadedAnnotator):
         :return: The py_trees status.
         """
         cas = self.get_cas()
-        parameters: ZeroShotClassifierAnnotator.Descriptor.Parameters = self.parameters
+        parameters: ZeroShotClassificationAnnotator.Descriptor.Parameters = (
+            self.parameters
+        )
 
         vocabulary: List[str] = parameters.vocabulary
         use_softmax: bool = parameters.use_softmax
@@ -266,7 +268,9 @@ class ZeroShotClassifierAnnotator(ThreadedAnnotator):
             self.rk_logger.info("Found 0 object hypotheses to analyze")
             return Status.SUCCESS
 
-        parameters: ZeroShotClassifierAnnotator.Descriptor.Parameters = self.parameters
+        parameters: ZeroShotClassificationAnnotator.Descriptor.Parameters = (
+            self.parameters
+        )
         if parameters.filter_fn is not None:
             filter_fn = parameters.filter_fn
             ohs = list(filter(filter_fn, ohs))

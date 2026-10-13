@@ -28,6 +28,7 @@ import robokudo.annotators.core
 import robokudo.annotators.outputs
 import robokudo.cas as cas
 import robokudo.defs as defs
+from robokudo.exceptions import ParentPipelineMissing
 import robokudo.utils.tree
 
 
@@ -95,10 +96,6 @@ class Pipeline(Sequence):
         blackboard = Blackboard()
         annotator_output_pipeline_map_buffer = blackboard.get(
             "annotator_output_pipeline_map_buffer"
-        )
-        assert isinstance(
-            annotator_output_pipeline_map_buffer,
-            robokudo.annotators.outputs.AnnotatorOutputPerPipelineMap,
         )
         if self.name not in annotator_output_pipeline_map_buffer.map:
             annotator_output_pipeline_map_buffer.map[self.name] = (
@@ -212,20 +209,11 @@ class ClearAnnotatorOutputs(Behaviour):
         annotator_output_pipeline_map_buffer = blackboard.get(
             "annotator_output_pipeline_map_buffer"
         )
-        assert isinstance(
-            annotator_output_pipeline_map_buffer,
-            robokudo.annotators.outputs.AnnotatorOutputPerPipelineMap,
-        )
-
         pipeline = robokudo.utils.tree.find_parent_of_type(self, Pipeline)
         if pipeline is None:
-            self.feedback_message = "No parent pipeline found!"
-            return Status.FAILURE
+            raise ParentPipelineMissing(behaviour_name=self.name)
 
         annotator_outputs = annotator_output_pipeline_map_buffer.map[pipeline.name]
-        assert isinstance(
-            annotator_outputs, robokudo.annotators.outputs.AnnotatorOutputs
-        )
         annotator_outputs.clear_outputs()
 
         return Status.SUCCESS
