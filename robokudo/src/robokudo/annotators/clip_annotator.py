@@ -97,7 +97,7 @@ class ClipAnnotator(ThreadedAnnotator):
 
         self.rk_logger.debug(f"Starting to init {self.__class__.__name__}")
 
-        self.parameters = descriptor.parameters
+        self.parameters = self.descriptor.parameters
         """
         The parameters used by this annotator.
         """
@@ -155,6 +155,18 @@ class ClipAnnotator(ThreadedAnnotator):
             crop_features = crop_features.cpu().numpy()
         return crop_features
 
+    def _candidate_count(self) -> int:
+        """
+        Number of vocabulary entries to retrieve from the index per analyzed image.
+
+        With softmax, every entry is needed to normalize the confidences; without it,
+        only the kept ones, but never more than the vocabulary holds.
+        """
+        vocabulary_size = len(self.parameters.vocabulary)
+        if self.parameters.use_softmax:
+            return vocabulary_size
+        return min(self.parameters.save_top_k, vocabulary_size)
+
     def _search_index(
         self,
         features: npt.NDArray[np.float32],
@@ -206,7 +218,7 @@ class ClipAnnotator(ThreadedAnnotator):
 
         class_similarities, class_indices = self._search_index(
             features=image_features,
-            k=len(vocabulary) if use_softmax else save_top_k,
+            k=self._candidate_count(),
             use_softmax=use_softmax,
             save_top_k=save_top_k,
         )
@@ -275,7 +287,7 @@ class ClipAnnotator(ThreadedAnnotator):
 
         class_similarities, class_indices = self._search_index(
             features=crop_features,
-            k=len(vocabulary) if use_softmax else save_top_k,
+            k=self._candidate_count(),
             use_softmax=use_softmax,
             save_top_k=save_top_k,
         )
