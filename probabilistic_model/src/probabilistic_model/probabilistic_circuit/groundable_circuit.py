@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 
 from random_events.product_algebra import Event, VariableMap
 from random_events.variable import Variable
@@ -9,6 +10,7 @@ from typing_extensions import Dict, Iterable, Optional, Self, Tuple
 from probabilistic_model.probabilistic_model import ProbabilisticModel
 
 
+@dataclass(eq=False)
 class GroundableCircuit(ProbabilisticModel, ABC):
     """
     A circuit type that relational probabilistic circuits are fitted and grounded in.

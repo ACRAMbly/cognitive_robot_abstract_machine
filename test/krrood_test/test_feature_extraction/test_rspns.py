@@ -1418,8 +1418,21 @@ def test_part_learning_methods_are_keyed_by_the_path_of_an_attribute_access():
     )
     assert methods[variable(SceneBuilding).floors.rooms] is stratified
     assert variable(SceneBuilding).floors.rooms in methods
-    assert methods.of_part("floors")["rooms"] is stratified
+    assert methods.of_part("floors").method_of_path("rooms") is stratified
     assert methods[variable(SceneBuilding).floors] == JointProbabilityTree()
+
+
+def test_part_learning_methods_are_only_keyed_by_attribute_accesses():
+    with pytest.raises(TypeError):
+        PartLearningMethods()["objects"]
+
+
+def test_part_learning_methods_survive_a_json_round_trip():
+    methods = PartLearningMethods(
+        LayeredLearning(JointProbabilityTree()),
+        {variable(SceneBuilding).floors.rooms: JointProbabilityTree()},
+    )
+    assert from_json(json.loads(json.dumps(to_json(methods)))) == methods
 
 
 def test_part_learning_methods_without_a_default_require_every_part():

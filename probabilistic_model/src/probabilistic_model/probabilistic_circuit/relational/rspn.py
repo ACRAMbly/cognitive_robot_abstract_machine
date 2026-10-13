@@ -396,7 +396,9 @@ class RelationalProbabilisticCircuit:
         template = ExchangeableDistributionTemplate(
             RelationalProbabilisticCircuit(
                 child_type,
-                learning_method=self.part_learning_methods[exchangeable_part],
+                learning_method=self.part_learning_methods.method_of_path(
+                    exchangeable_part
+                ),
                 part_learning_methods=self.part_learning_methods.of_part(
                     exchangeable_part
                 ),
@@ -455,7 +457,7 @@ class RelationalProbabilisticCircuit:
             in self.feature_extractor.exchangeable_features
         ]
         unknown_parts = {
-            path.split(".")[0] for path in self.part_learning_methods
+            path.split(".")[0] for path in self.part_learning_methods.methods_by_path
         } - set(exchangeable_parts)
         if unknown_parts:
             raise UnknownExchangeablePartsError(self.class_, sorted(unknown_parts))
