@@ -57,7 +57,6 @@ def uniform_measure_of_simple_event(simple_event: SimpleEvent) -> ProbabilisticC
 
             distribution = SumUnit(probabilistic_circuit=result)
             if all(assignment_.is_singleton() for assignment_ in assignment):
-                # a variable pinned to points has no width, so every point is equally likely
                 for assignment_ in assignment:
                     dirac = DiracDeltaDistribution(
                         variable=variable, location=assignment_.lower, density_cap=1.0
@@ -67,8 +66,6 @@ def uniform_measure_of_simple_event(simple_event: SimpleEvent) -> ProbabilisticC
                         0.0,
                     )
             else:
-                # create a uniform distribution for every interval in a continuous variables description,
-                # weighted by its width
                 for assignment_ in assignment:
                     uniform = UniformDistribution(
                         variable=variable, interval=assignment_
