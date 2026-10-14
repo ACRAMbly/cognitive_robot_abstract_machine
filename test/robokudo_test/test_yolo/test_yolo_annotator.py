@@ -15,6 +15,7 @@ import numpy as np
 import open3d as o3d
 import pytest
 from py_trees.common import Status
+from ultralytics.utils.plotting import colors
 
 import robokudo
 import robokudo.annotators.yolo_annotator
@@ -24,6 +25,7 @@ from robokudo.exceptions import DetectionModelNotConfigured
 from robokudo.pipeline import Pipeline
 from robokudo.types.annotation import Classification
 from robokudo.types.scene import HumanHypothesis, ObjectHypothesis
+from robokudo.utils.annotator_helper import draw_bounding_boxes_from_object_hypotheses
 from robokudo.utils.file_loader import FileLoader
 from ._yolo_stand_in import (
     NormalizedBox,
@@ -50,7 +52,7 @@ class CupScene:
 
     class_names: dict[int, str] = field(
         default_factory=lambda: {
-            0: YoloAnnotator.person_class_name,
+            0: YoloAnnotator.Descriptor.Parameters().person_class_name,
             41: "cup",
             46: "banana",
         }
@@ -336,13 +338,26 @@ def test_hypothesis_region_is_detection_bounding_box(ultralytics, scene):
 
 
 def test_person_detection_becomes_human_hypothesis(ultralytics, scene):
+    descriptor = scene.descriptor()
     person_class_id = next(
         class_id
         for class_id, name in scene.class_names.items()
-        if name == YoloAnnotator.person_class_name
+        if name == descriptor.parameters.person_class_name
     )
     ultralytics.model.detections[0].class_id = person_class_id
-    annotator = scene.annotator_in_pipeline(scene.descriptor())
+    annotator = scene.annotator_in_pipeline(descriptor)
+
+    annotator.compute()
+
+    assert type(_only_hypothesis(annotator)) is HumanHypothesis
+
+
+def test_detection_of_configured_person_class_becomes_human_hypothesis(
+    ultralytics, scene
+):
+    descriptor = scene.descriptor()
+    descriptor.parameters.person_class_name = scene.class_names[scene.cup_class_id]
+    annotator = scene.annotator_in_pipeline(descriptor)
 
     annotator.compute()
 
@@ -382,9 +397,7 @@ def test_mask_fills_bounding_box_without_precision_mode(ultralytics, scene):
     x1, y1, x2, y2 = scene.cup_corners()
     np.testing.assert_array_equal(
         _only_hypothesis(annotator).roi.mask,
-        np.full(
-            (y2 - y1, x2 - x1), YoloAnnotator.hypothesis_mask_foreground, dtype=np.uint8
-        ),
+        np.full((y2 - y1, x2 - x1), YoloAnnotator.mask_foreground, dtype=np.uint8),
     )
 
 
@@ -405,9 +418,7 @@ def _segmented_cup_mask(
         image, scene.cup_box.corners_in(image)
     )
     x1, y1, x2, y2 = scene.cup_corners()
-    return (
-        segmentation[y1:y2, x1:x2] * YoloAnnotator.hypothesis_mask_foreground
-    ).astype(np.uint8)
+    return (segmentation[y1:y2, x1:x2] * YoloAnnotator.mask_foreground).astype(np.uint8)
 
 
 def test_precision_mode_mask_is_segmentation_of_detection(ultralytics, scene):
@@ -428,15 +439,47 @@ def test_precision_mode_erosion_shrinks_segmentation(ultralytics, scene):
 
     annotator.compute()
 
-    eroded = (
-        _only_hypothesis(annotator).roi.mask == YoloAnnotator.hypothesis_mask_foreground
-    )
-    segmented = (
-        _segmented_cup_mask(ultralytics, scene)
-        == YoloAnnotator.hypothesis_mask_foreground
-    )
+    eroded = _only_hypothesis(annotator).roi.mask == YoloAnnotator.mask_foreground
+    segmented = _segmented_cup_mask(ultralytics, scene) == YoloAnnotator.mask_foreground
     assert np.all(segmented[eroded])
     assert eroded.sum() < segmented.sum()
+
+
+# %% visualization
+
+
+def test_visualization_draws_labelled_bounding_box_of_each_detection(
+    ultralytics, scene
+):
+    annotator = scene.annotator_in_pipeline(scene.descriptor())
+
+    annotator.compute()
+
+    hypothesis = _only_hypothesis(annotator)
+    classification = _classification(hypothesis)
+    expected_image = scene.color_image()
+    draw_bounding_boxes_from_object_hypotheses(
+        expected_image,
+        [hypothesis],
+        lambda _: f"{classification.classname}, {classification.confidence:.2f}",
+    )
+    np.testing.assert_array_equal(
+        annotator.get_annotator_output_struct().image, expected_image
+    )
+
+
+def test_precision_mode_visualization_paints_mask_in_palette_color(ultralytics, scene):
+    annotator = scene.annotator_in_pipeline(_precision_descriptor(scene))
+
+    annotator.compute()
+
+    x1, y1, x2, y2 = scene.cup_corners()
+    segmented_rows = slice(y1 + 2, (y1 + y2) // 2)
+    columns_inside_box = slice(x1 + 2, x2 - 2)
+    painted = annotator.get_annotator_output_struct().image[
+        segmented_rows, columns_inside_box
+    ]
+    assert np.all(painted == colors(0, bgr=True))
 
 
 # %% depth

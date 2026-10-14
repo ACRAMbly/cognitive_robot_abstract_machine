@@ -137,9 +137,7 @@ class TopHalfSegmentationModel:
         mask[y1 : (y1 + y2) // 2, x1:x2] = 1.0
         return mask
 
-    def predict(
-        self, image: np.ndarray, bboxes: List[List[float]], labels: List[int]
-    ) -> List[Results]:
+    def predict(self, image: np.ndarray, bboxes: List[List[float]]) -> List[Results]:
         """
         :return: The segmentation of the first prompted box.
         """

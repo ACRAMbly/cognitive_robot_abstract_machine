@@ -27,6 +27,7 @@ from krrood.ormatic.utils import classproperty
 from py_trees.common import Status
 from typing_extensions import TYPE_CHECKING, Any, Dict, List, Optional
 from ultralytics import SAM, YOLO
+from ultralytics.utils.plotting import colors
 
 from robokudo.annotators.core import ThreadedAnnotator
 from robokudo.cas import CASViews
@@ -35,7 +36,11 @@ from robokudo.exceptions import DetectionModelNotConfigured
 from robokudo.types.annotation import Classification
 from robokudo.types.cv import Point2D, Rect
 from robokudo.types.scene import HumanHypothesis, ObjectHypothesis
-from robokudo.utils.annotator_helper import resize_mask, scale_camera_intrinsics
+from robokudo.utils.annotator_helper import (
+    draw_bounding_boxes_from_object_hypotheses,
+    resize_mask,
+    scale_camera_intrinsics,
+)
 from robokudo.utils.comparators import RoiComparator
 from robokudo.utils.cv_helper import crop_image, get_scaled_color_image_for_depth_image
 from robokudo.utils.decorators import timer_decorator
@@ -143,6 +148,10 @@ class YoloAnnotator(ThreadedAnnotator):
                 """
                 Minimum confidence of a detection to be annotated.
                 """
+                self.person_class_name: str = "person"
+                """
+                Class name of the detections that become human hypotheses.
+                """
                 self.ignored_class_names: List[str] = []
                 """
                 Classes whose detections are neither annotated nor visualized.
@@ -207,56 +216,11 @@ class YoloAnnotator(ThreadedAnnotator):
                 )
 
     @classproperty
-    def person_class_name(cls) -> str:
+    def mask_foreground(cls) -> int:
         """
-        Class name of the detections that become human hypotheses.
-        """
-        return "person"
-
-    @classproperty
-    def segmentation_foreground_label(cls) -> int:
-        """
-        Label telling SAM that a prompted bounding box surrounds the object to segment.
-        """
-        return 1
-
-    @classproperty
-    def detection_mask_foreground(cls) -> int:
-        """
-        Value of the object pixels in a mask computed on the detection image.
-        """
-        return 1
-
-    @classproperty
-    def hypothesis_mask_foreground(cls) -> int:
-        """
-        Value of the object pixels in the mask of an object hypothesis.
+        Value of the object pixels in the masks this annotator computes.
         """
         return 255
-
-    @classproperty
-    def label_font(cls) -> int:
-        """
-        The OpenCV font of the class labels drawn into the visualization.
-        """
-        return cv2.FONT_HERSHEY_COMPLEX
-
-    @classproperty
-    def label_color(cls) -> tuple[int, int, int]:
-        """
-        Color of the bounding boxes and class labels drawn into the visualization.
-        """
-        return 0, 0, 255
-
-    @classproperty
-    def mask_colors(cls) -> npt.NDArray[np.int64]:
-        """
-        Colors the hypothesis masks are painted with in precision mode, cycled per
-        hypothesis.
-        """
-        return np.array(
-            [[255, 0, 0], [0, 255, 0], [0, 0, 255], [122, 0, 122], [90, 90, 0]]
-        )
 
     def __init__(
         self,
@@ -469,7 +433,8 @@ class YoloAnnotator(ThreadedAnnotator):
         """
         hypothesis = (
             HumanHypothesis()
-            if detection.classification.classname == self.person_class_name
+            if detection.classification.classname
+            == self.descriptor.parameters.person_class_name
             else ObjectHypothesis()
         )
         hypothesis.source = self.name
@@ -478,11 +443,8 @@ class YoloAnnotator(ThreadedAnnotator):
         detection_mask = self._detection_mask(detection, detection_image)
         if self.descriptor.parameters.global_with_depth:
             hypothesis.points = self._point_cloud(detection_mask, detection_image)
-        color_image_mask = (
-            resize_mask(self, detection_mask) * self.hypothesis_mask_foreground
-        )
         hypothesis.roi.mask = crop_image(
-            color_image_mask,
+            resize_mask(self, detection_mask),
             (region.pos.x, region.pos.y),
             (region.width, region.height),
         )
@@ -498,15 +460,17 @@ class YoloAnnotator(ThreadedAnnotator):
         if not parameters.precision_mode:
             x1, y1, x2, y2 = detection.corners.astype(int)
             mask = np.zeros(detection_image.shape[:2], dtype=np.uint8)
-            mask[y1:y2, x1:x2] = self.detection_mask_foreground
+            mask[y1:y2, x1:x2] = self.mask_foreground
             return mask
 
         segmentation = self.segmentation_model.predict(
             detection_image,
             bboxes=[detection.corners.tolist()],
-            labels=[self.segmentation_foreground_label],
         )[0]
-        mask = segmentation.masks.data.cpu().numpy()[0].astype(np.uint8)
+        mask = (
+            segmentation.masks.data.cpu().numpy()[0].astype(np.uint8)
+            * self.mask_foreground
+        )
         torch.cuda.empty_cache()
         if not parameters.precision_mode_apply_erosion:
             return mask
@@ -528,7 +492,7 @@ class YoloAnnotator(ThreadedAnnotator):
             mask=detection_mask,
             camera_intrinsics=self.camera_intrinsics,
             depth_truncate=self.descriptor.parameters.depth_truncate,
-            mask_true_val=self.detection_mask_foreground,
+            mask_true_val=self.mask_foreground,
         )
 
     def _visualize(self, annotated_detections: List[AnnotatedDetection]) -> None:
@@ -538,33 +502,19 @@ class YoloAnnotator(ThreadedAnnotator):
         """
         parameters: YoloAnnotator.Descriptor.Parameters = self.descriptor.parameters
         visualization_image = self.get_cas().get_copy(CASViews.COLOR_IMAGE)
-        mask_colors = self.mask_colors
         for index, annotated in enumerate(annotated_detections):
-            x1, y1, x2, y2 = annotated.hypothesis.roi.roi.get_corner_points()
             if parameters.precision_mode and annotated.is_new:
+                x1, y1, _, _ = annotated.hypothesis.roi.roi.get_corner_points()
                 mask = annotated.hypothesis.roi.mask
                 region = visualization_image[
                     y1 : y1 + mask.shape[0], x1 : x1 + mask.shape[1]
                 ]
-                region[mask == self.hypothesis_mask_foreground] = mask_colors[
-                    index % len(mask_colors)
-                ]
-            label = (
-                f"{annotated.detection.classification.classname}, "
-                f"{annotated.detection.classification.confidence:.2f}"
-            )
-            visualization_image = cv2.putText(
+                region[mask == self.mask_foreground] = colors(index, bgr=True)
+            classification = annotated.detection.classification
+            draw_bounding_boxes_from_object_hypotheses(
                 visualization_image,
-                label,
-                (x1, y1 - 5),
-                self.label_font,
-                0.5,
-                self.label_color,
-                1,
-                2,
-            )
-            visualization_image = cv2.rectangle(
-                visualization_image, (x1, y1), (x2, y2), self.label_color, 2
+                [annotated.hypothesis],
+                lambda _: f"{classification.classname}, {classification.confidence:.2f}",
             )
         self.get_annotator_output_struct().set_image(visualization_image)
         if parameters.global_with_depth:
