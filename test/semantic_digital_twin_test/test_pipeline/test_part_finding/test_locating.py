@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 
+import jinja2
 import numpy as np
 import pytest
 import trimesh
@@ -31,6 +32,7 @@ from semantic_digital_twin.pipeline.part_finding.vision_language import (
     CameraRing,
     FilledBoxSegmenter,
     KnownPartBoxDetector,
+    PartBoxPrompt,
     ViewDirection,
     VisionLanguagePartLocator,
 )
@@ -271,3 +273,21 @@ def test_each_located_leg_becomes_a_leg_of_the_table():
     assert table.legs == legs
     assert len(legs) == 2
     assert len(table._world.bodies) == 3
+
+
+# %% the question asked about each view
+
+
+def test_the_question_names_the_part_and_the_object():
+    question = PartBoxPrompt().question("handle", "mug")
+    assert question == (
+        "Locate the handle of the mug in the image. Output its bounding boxes in JSON "
+        'format as [{"bbox_2d": [x1, y1, x2, y2], "label": "handle"}]. If no handle is '
+        "visible, output []."
+    )
+
+
+def test_a_question_with_an_unknown_placeholder_fails():
+    prompt = PartBoxPrompt(template="Where is the {{ prat }} of the {{ object }}?")
+    with pytest.raises(jinja2.UndefinedError):
+        prompt.question("handle", "mug")

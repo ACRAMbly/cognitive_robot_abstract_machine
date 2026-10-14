@@ -15,7 +15,9 @@ from __future__ import annotations
 import json
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
+from pathlib import Path
 
+import jinja2
 import numpy as np
 import trimesh
 from numpy.typing import NDArray
@@ -236,6 +238,34 @@ class CameraRing:
 
 
 # %% finding the part in each view
+
+
+@dataclass
+class PartBoxPrompt:
+    """
+    The question a vision-language model is asked about each view of an object.
+    """
+
+    template: str = field(
+        default_factory=lambda: (Path(__file__).parent / "prompts" / "part_boxes.jinja")
+        .read_text()
+        .strip()
+    )
+    """
+    A Jinja2 template, with ``part`` and ``object`` standing for the names of the part
+    and the object.
+    """
+
+    def question(self, part_name: str, object_name: str) -> str:
+        """
+        :param part_name: What the part is called, such as ``"handle"``.
+        :param object_name: What the object is called, such as ``"mug"``.
+        :return: The question about the part of the object.
+        """
+        environment = jinja2.Environment(undefined=jinja2.StrictUndefined)
+        return environment.from_string(self.template).render(
+            part=part_name, object=object_name
+        )
 
 
 class PartBoxDetector(ABC):

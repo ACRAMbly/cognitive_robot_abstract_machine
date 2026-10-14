@@ -14,7 +14,6 @@ import re
 from dataclasses import dataclass, field
 from enum import Enum, StrEnum
 from functools import cached_property
-from pathlib import Path
 
 import numpy as np
 import torch
@@ -33,6 +32,7 @@ from transformers import (
 from semantic_digital_twin.pipeline.part_finding.vision_language import (
     BoxSegmenter,
     PartBoxDetector,
+    PartBoxPrompt,
     RenderedViews,
 )
 
@@ -145,14 +145,9 @@ class QwenBoxDetector(PartBoxDetector):
     Where the model runs.
     """
 
-    prompt: str = field(
-        default_factory=lambda: (Path(__file__).parent / "prompts" / "part_boxes.txt")
-        .read_text()
-        .strip()
-    )
+    prompt: PartBoxPrompt = field(default_factory=PartBoxPrompt)
     """
-    The question asked about each view, with ``{part}`` and ``{object}`` standing for
-    the names of the part and the object.
+    The question asked about each view.
     """
 
     maximum_answer_tokens: int = 120
@@ -207,7 +202,7 @@ class QwenBoxDetector(PartBoxDetector):
     def detect(
         self, views: RenderedViews, part_name: str, object_name: str
     ) -> list[NDArray[np.float64]]:
-        question = self.prompt.format(part=part_name, object=object_name)
+        question = self.prompt.question(part_name, object_name)
         conversations = [
             [
                 {
@@ -248,7 +243,7 @@ class QwenBoxDetector(PartBoxDetector):
     def fingerprint(self) -> str:
         return (
             f"{self.model.repository}@{self.model.revision} "
-            f"{self.quantization} {self.prompt}"
+            f"{self.quantization} {self.prompt.template}"
         )
 
     def load(self) -> None:
