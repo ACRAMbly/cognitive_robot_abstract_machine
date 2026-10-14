@@ -72,6 +72,11 @@ from probabilistic_model.probabilistic_circuit.groundable_circuit import (
     GroundableCircuit,
     ProductsOfCopies,
 )
+from probabilistic_model.probabilistic_circuit.intervenable_circuit import (
+    IntervenableCircuit,
+    validate_mixture,
+    validate_product,
+)
 from probabilistic_model.probabilistic_model import (
     CenterType,
     MomentType,
@@ -116,7 +121,7 @@ class LayerNode:
 
 
 @dataclass(eq=False)
-class LayeredProbabilisticCircuit(GroundableCircuit[LayerNode]):
+class LayeredProbabilisticCircuit(GroundableCircuit[LayerNode], IntervenableCircuit):
     """
     A probabilistic circuit whose units are grouped into layers of numpy arrays.
 
@@ -129,7 +134,9 @@ class LayeredProbabilisticCircuit(GroundableCircuit[LayerNode]):
 
     variables: SortedSet
     """
-    The variables of the circuit. The layers refer to them by their index here.
+    The variables of the circuit.
+
+    The layers refer to them by their index here.
     """
 
     root: Layer
@@ -562,8 +569,8 @@ class LayeredProbabilisticCircuit(GroundableCircuit[LayerNode]):
         variable_index: int, distributions: List[UnivariateDistribution]
     ) -> UnivariateInputLayer:
         """
-        The layer of several point masses on one variable, such as the one a
-        conditioned variable is reattached with.
+        The layer of several point masses on one variable, such as the one a conditioned
+        variable is reattached with.
 
         For a discrete variable this is a discrete layer, since a Dirac delta layer can
         neither hold the symbolic or integer distributions that
@@ -701,6 +708,30 @@ class LayeredProbabilisticCircuit(GroundableCircuit[LayerNode]):
         for variable, value in scaling.items():
             values[self.variables.index(variable)] = value
         self.root.apply_scaling(values)
+
+    # %% composition
+
+    @classmethod
+    def mixture_of(cls, components: List[Self], log_weights: Iterable[float]) -> Self:
+        log_weights = list(log_weights)
+        validate_mixture(components, log_weights)
+        copies = [component.__deepcopy__() for component in components]
+        root = SumLayer.mixture_of([copy.root for copy in copies], log_weights)
+        root.normalize_own()
+        return cls(SortedSet(components[0].variables), root)
+
+    @classmethod
+    def product_of(cls, factors: List[Self]) -> Self:
+        validate_product(factors)
+        variables = SortedSet()
+        for factor in factors:
+            variables |= factor.variables
+        copies = []
+        for factor in factors:
+            copy = factor.__deepcopy__()
+            copy.restore_variables(variables)
+            copies.append(copy)
+        return cls(variables, ProductLayer.product_of([copy.root for copy in copies]))
 
     # %% operations on nodes
 

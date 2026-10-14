@@ -40,6 +40,11 @@ from probabilistic_model.probabilistic_circuit.groundable_circuit import (
     GroundableCircuit,
     ProductsOfCopies,
 )
+from probabilistic_model.probabilistic_circuit.intervenable_circuit import (
+    IntervenableCircuit,
+    validate_mixture,
+    validate_product,
+)
 from probabilistic_model.probabilistic_circuit.tensorized.array_types import (
     DenseEdgeValues,
 )
@@ -987,7 +992,9 @@ class ProductUnit(InnerUnit):
 
 
 @dataclass
-class ProbabilisticCircuit(GroundableCircuit[Unit], SubclassJSONSerializer):
+class ProbabilisticCircuit(
+    GroundableCircuit[Unit], IntervenableCircuit, SubclassJSONSerializer
+):
     """
     Probabilistic Circuits as a directed, rooted, acyclic graph.
 
@@ -1630,6 +1637,36 @@ class ProbabilisticCircuit(GroundableCircuit[Unit], SubclassJSONSerializer):
             component = products.components[index]
             root.add_subcircuit(self.mount(component.root)[component.root.index])
         return root
+
+    # %% composition
+
+    @classmethod
+    def mixture_of(cls, components: List[Self], log_weights: Iterable[float]) -> Self:
+        log_weights = list(log_weights)
+        validate_mixture(components, log_weights)
+        result = cls()
+        root = SumUnit(probabilistic_circuit=result)
+        for component, log_weight in zip(components, log_weights):
+            root.add_subcircuit(result._mounted_copy_of(component), log_weight)
+        root.normalize()
+        return result
+
+    @classmethod
+    def product_of(cls, factors: List[Self]) -> Self:
+        validate_product(factors)
+        result = cls()
+        root = ProductUnit(probabilistic_circuit=result)
+        for factor in factors:
+            root.add_subcircuit(result._mounted_copy_of(factor))
+        return result
+
+    def _mounted_copy_of(self, other: Self) -> Unit:
+        """
+        :param other: A circuit to copy into this one.
+        :return: The root of the copy, a unit of this circuit.
+        """
+        copy = other.__deepcopy__()
+        return self.mount(copy.root)[copy.root.index]
 
     def marginal(self, variables: Iterable[Variable]) -> Optional[Self]:
         result = self.restrict_to_variables(variables)
