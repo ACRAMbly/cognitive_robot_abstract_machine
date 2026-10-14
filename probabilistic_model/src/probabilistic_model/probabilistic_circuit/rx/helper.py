@@ -7,7 +7,10 @@ from probabilistic_model.distributions.distributions import (
 from probabilistic_model.distributions.gaussian import GaussianDistribution
 from probabilistic_model.distributions.uniform import UniformDistribution
 from probabilistic_model.exceptions import EventMixesPointsAndIntervalsError
-from probabilistic_model.utils import MissingDict
+from probabilistic_model.utils import (
+    MissingDict,
+    event_compatible_for_truncation_with_singletons,
+)
 
 
 def uniform_measure_of_event(event: Event) -> ProbabilisticCircuit:
@@ -39,6 +42,11 @@ def uniform_measure_of_simple_event(simple_event: SimpleEvent) -> ProbabilisticC
     :raises EventMixesPointsAndIntervalsError: If a continuous variable takes points and
         intervals.
     """
+    if not event_compatible_for_truncation_with_singletons(
+        simple_event.as_composite_set()
+    ):
+        raise EventMixesPointsAndIntervalsError(simple_event)
+
     # initialize the root of the circuit
     result = ProbabilisticCircuit()
     uniform_model = ProductUnit(probabilistic_circuit=result)
@@ -47,12 +55,8 @@ def uniform_measure_of_simple_event(simple_event: SimpleEvent) -> ProbabilisticC
         # handle different variables
         if isinstance(variable, Continuous):
 
-            singletons = [assignment_.is_singleton() for assignment_ in assignment]
-            if any(singletons) and not all(singletons):
-                raise EventMixesPointsAndIntervalsError(variable, assignment)
-
             distribution = SumUnit(probabilistic_circuit=result)
-            if all(singletons):
+            if assignment.simple_sets[0].is_singleton():
                 # a variable pinned to points has no width, so every point is equally likely
                 for assignment_ in assignment:
                     dirac = DiracDeltaDistribution(
