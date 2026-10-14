@@ -8,14 +8,14 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from semantic_digital_twin.adapters.part_finding.client import RemotePartLocator
-from semantic_digital_twin.pipeline.part_locating import (
+from semantic_digital_twin.pipeline.part_finding.locating import (
     LocatedFacesFinder,
     LocatedPart,
     PartLocator,
     PartQuery,
     PartRelationship,
 )
-from semantic_digital_twin.pipeline.part_splitting import PartSplitter
+from semantic_digital_twin.pipeline.part_finding.splitting import PartSplitter
 from semantic_digital_twin.semantic_annotations.mixins import (
     HasRootBody,
     PartWholeRelationship,

@@ -9,7 +9,6 @@ a server, which is why both the query and the answer are plain data.
 
 from __future__ import annotations
 
-import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from functools import cached_property
@@ -18,12 +17,13 @@ import numpy as np
 import trimesh
 from krrood.class_diagrams.class_diagram import WrappedClass
 from krrood.class_diagrams.wrapped_field import WrappedField
+from krrood.entity_query_language.utils import camel_case_to_words
 from numpy.typing import NDArray
 from scipy.spatial import cKDTree
 from typing_extensions import Optional, Type
 
 from semantic_digital_twin.exceptions import UnknownPartWholeRelationshipField
-from semantic_digital_twin.pipeline.part_splitting import PartFinder, ShapeSplit
+from semantic_digital_twin.pipeline.part_finding.splitting import PartFinder, ShapeSplit
 from semantic_digital_twin.semantic_annotations.mixins import (
     HasRootBody,
     PartWholeRelationship,
@@ -33,14 +33,6 @@ from semantic_digital_twin.semantic_annotations.part_whole import (
 )
 
 # %% the parts an annotation calls for
-
-
-def _plain_words(type_: type) -> str:
-    """
-    :param type_: A class.
-    :return: Its name as lower case words, such as ``"cooking pot"`` for ``CookingPot``.
-    """
-    return re.sub(r"(?<!^)(?=[A-Z])", " ", type_.__name__).lower()
 
 
 @dataclass
@@ -106,7 +98,7 @@ class PartRelationship:
         """
         :return: What a part is called in plain words, such as ``"handle"``.
         """
-        return _plain_words(self.part_type)
+        return camel_case_to_words(self.part_type.__name__)
 
     @property
     def holds_many(self) -> bool:
@@ -205,7 +197,7 @@ class PartQuery:
         """
         :return: What the annotation is called in plain words, such as ``"mug"``.
         """
-        return _plain_words(self.whole_type)
+        return camel_case_to_words(self.whole_type.__name__)
 
 
 @dataclass

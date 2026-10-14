@@ -7,7 +7,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import StrEnum
 
-from semantic_digital_twin.pipeline.part_locating import LocatedPart
+from semantic_digital_twin.pipeline.part_finding.locating import LocatedPart
 
 
 class PartFindingRoute(StrEnum):
@@ -18,13 +18,24 @@ class PartFindingRoute(StrEnum):
     PARTS = "/parts"
     """
     Takes a gzip-compressed
-    :class:`~semantic_digital_twin.pipeline.part_locating.PartQuery` and answers with a
-    :class:`PartFindingAnswer`.
+    :class:`~semantic_digital_twin.pipeline.part_finding.locating.PartQuery` and answers
+    with a :class:`PartFindingAnswer`.
     """
 
     STATUS = "/status"
     """
     Answers with a :class:`PartFindingServerStatus`.
+    """
+
+
+class EnvironmentVariable(StrEnum):
+    """
+    The environment variables clients of a part finding server read.
+    """
+
+    PART_FINDING_SERVER_URL = "SEMANTIC_DIGITAL_TWIN_PART_FINDING_SERVER_URL"
+    """
+    The address of the server clients ask by default.
     """
 
 

@@ -1,16 +1,13 @@
 """
-Splitting a part, such as a handle or a rim, off the shape of an object into a body of
-its own, annotated as that part of the object's annotation.
-
-A finder decides which piece of the object's shape the part is; a splitter cuts the
-shape there and gives each piece its own body, on its own or as a step of a pipeline.
-Shapes are taken in the frame of the object's root body, its z-axis pointing up.
+Splitting a part, such as a handle, off the shape of an object into a body of its own,
+annotated as that part of the object's annotation.
 """
 
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from functools import cached_property
 from itertools import count
 
 import numpy as np
@@ -73,30 +70,6 @@ class ShapeSplit:
             rest=shape.submesh([np.flatnonzero(~in_part)], append=True),
         )
 
-    @classmethod
-    def by_plane(
-        cls,
-        shape: trimesh.Trimesh,
-        point: NDArray[np.float64],
-        normal: NDArray[np.float64],
-    ) -> Optional[ShapeSplit]:
-        """
-        Cut the shape along a plane.
-
-        A closed shape is cut into closed pieces.
-        :param shape: The shape to split.
-        :param point: A point on the plane.
-        :param normal: The plane's normal, pointing towards the part.
-        :return: What lies on the side of the plane the normal points to, as the part,
-            and what lies on the other side; ``None`` if either would be empty.
-        """
-        cap = shape.is_watertight
-        part = shape.slice_plane(point, normal, cap=cap)
-        rest = shape.slice_plane(point, -np.asarray(normal), cap=cap)
-        if part is None or rest is None or part.is_empty or rest.is_empty:
-            return None
-        return cls(part=part, rest=rest)
-
 
 class PartFinder(ABC):
     """
@@ -118,21 +91,11 @@ class PartFinder(ABC):
 @dataclass
 class PartSplitter:
     """
-    Splits a part off the shape of a single body, or of the root body of an annotation,
-    when it is needed.
+    Splits a part off the shape of a body into a new body fixed to it, optionally
+    annotating the new body as a part of the body's annotation.
 
-    The piece of the body's shape that the finder finds is moved to a new body, fixed to
-    the body at its origin. Both bodies look and collide as their own piece of the
-    shape; a physics simulator that needs convex collision shapes decomposes them
-    afterwards. Each piece keeps the colors the shape had there, and the surface finish
-    and simulator properties all of the body's shapes share.
-
-    The body keeps its inertial properties, which describe the whole object, and the
-    part's body is given a negligible one, so the object weighs and turns as it did
-    before the split.
-
-    Each split is one block of the world's modification history, the body's new shape
-    included, so it is synchronized and rolling it back restores the whole shape.
+    The body keeps its inertial properties, which describe the whole object; each split
+    is one block of the world's modification history.
     """
 
     part_type: Type[HasRootBody]
@@ -195,7 +158,7 @@ class PartSplitter:
         with body._world.modify_world():
             return cut.apply()
 
-    def _cut(self, body: Body) -> Optional[_Cut]:
+    def _cut(self, body: Body) -> Optional[CutBody]:
         """
         :param body: The body whose shape is split.
         :return: The part's body and the rest of the shape, not yet in the world;
@@ -204,19 +167,19 @@ class PartSplitter:
         shapes = body.visual or body.collision
         if not shapes:
             return None
-        colored = _colored_mesh(shapes)
-        split = self.finder.split(colored)
+        colored = ColoredShape(shapes=shapes)
+        split = self.finder.split(colored.mesh)
         if split is None:
             return None
         part = Body(name=self._part_name(body), inertial=Inertial.negligible())
-        part.visual = _piece(split.part, part, shapes, colored)
-        rest = _piece(split.rest, body, shapes, colored)
+        part.visual = colored.piece(split.part, part)
+        rest = colored.piece(split.rest, body)
         if body.collision:
-            part.collision = _piece(split.part, part, shapes, colored)
-            rest_collision = _piece(split.rest, body, shapes, colored)
+            part.collision = colored.piece(split.part, part)
+            rest_collision = colored.piece(split.rest, body)
         else:
             rest_collision = ShapeCollection()
-        return _Cut(body=body, part=part, visual=rest, collision=rest_collision)
+        return CutBody(body=body, part=part, visual=rest, collision=rest_collision)
 
     def _part_name(self, body: Body) -> PrefixedName:
         """
@@ -236,7 +199,7 @@ class PartSplitter:
 
 
 @dataclass
-class _Cut:
+class CutBody:
     """
     A body's shape cut into the part's body and the rest, to be applied to the world.
     """
@@ -276,65 +239,68 @@ class _Cut:
         return self.part
 
 
-def _colored_mesh(shapes: ShapeCollection) -> trimesh.Trimesh:
+@dataclass
+class ColoredShape:
     """
-    :param shapes: Shapes of a body.
-    :return: The shapes as one mesh in the body's frame, each face colored as its shape
-        looks there, so that the colors survive cutting the mesh.
+    The shapes of a body as one mesh whose faces keep the colors of the shapes, so that
+    the pieces cut from it can be colored like it.
     """
-    meshes = []
-    for shape in shapes:
-        mesh = shape.mesh.copy()
-        if isinstance(mesh.visual, TextureVisuals):
-            mesh.visual = mesh.visual.to_color()
-        if mesh.visual.kind is None:
-            mesh.visual.face_colors = trimesh.visual.color.to_rgba(
-                shape.color.to_rgba()
-            )
-        mesh.apply_transform(shape.origin.to_np())
-        meshes.append(mesh)
-    return trimesh.util.concatenate(meshes)
 
+    shapes: ShapeCollection
+    """
+    The shapes of the body.
+    """
 
-def _piece(
-    mesh: trimesh.Trimesh,
-    body: Body,
-    original: ShapeCollection,
-    colored: trimesh.Trimesh,
-) -> ShapeCollection:
-    """
-    :param mesh: A piece of the shape, in the frame of ``body``.
-    :param body: The body the piece belongs to.
-    :param original: The shapes the piece was cut from.
-    :param colored: The mesh the piece was cut from, as :func:`_colored_mesh` made it.
-    :return: The piece as the shapes of ``body``, colored like the faces of ``colored``
-        it was cut from, and with the surface finish and simulator properties that all
-        of ``original`` share.
-    """
-    mesh = mesh.copy()
-    _, _, faces = trimesh.proximity.closest_point(colored, mesh.triangles_center)
-    mesh.visual = trimesh.visual.ColorVisuals(
-        mesh, face_colors=colored.visual.face_colors[faces]
-    )
-    shape = Mesh.from_trimesh(
-        mesh=mesh,
-        origin=HomogeneousTransformationMatrix(reference_frame=body),
-        finish=_shared(original, lambda shape: shape.finish),
-    )
-    shape.simulator_additional_properties = list(
-        _shared(original, lambda shape: shape.simulator_additional_properties) or []
-    )
-    return ShapeCollection([shape], reference_frame=body)
+    @cached_property
+    def mesh(self) -> trimesh.Trimesh:
+        """
+        :return: The shapes as one mesh in the body's frame, each face colored as its
+            shape looks there.
+        """
+        meshes = []
+        for shape in self.shapes:
+            mesh = shape.mesh.copy()
+            if isinstance(mesh.visual, TextureVisuals):
+                mesh.visual = mesh.visual.to_color()
+            if mesh.visual.kind is None:
+                mesh.visual.face_colors = trimesh.visual.color.to_rgba(
+                    shape.color.to_rgba()
+                )
+            mesh.apply_transform(shape.origin.to_np())
+            meshes.append(mesh)
+        return trimesh.util.concatenate(meshes)
 
+    def piece(self, mesh: trimesh.Trimesh, body: Body) -> ShapeCollection:
+        """
+        :param mesh: A piece cut from :attr:`mesh`, in the frame of ``body``.
+        :param body: The body the piece belongs to.
+        :return: The piece as the shapes of ``body``, colored like the faces it was cut
+            from, and with the surface finish and simulator properties that all of
+            :attr:`shapes` share.
+        """
+        mesh = mesh.copy()
+        _, _, faces = trimesh.proximity.closest_point(self.mesh, mesh.triangles_center)
+        mesh.visual = trimesh.visual.ColorVisuals(
+            mesh, face_colors=self.mesh.visual.face_colors[faces]
+        )
+        shape = Mesh.from_trimesh(
+            mesh=mesh,
+            origin=HomogeneousTransformationMatrix(reference_frame=body),
+            finish=self.shared(lambda shape: shape.finish),
+        )
+        shape.simulator_additional_properties = list(
+            self.shared(lambda shape: shape.simulator_additional_properties) or []
+        )
+        return ShapeCollection([shape], reference_frame=body)
 
-def _shared(shapes: ShapeCollection, attribute: Callable[[Shape], T]) -> Optional[T]:
-    """
-    :param shapes: Some shapes.
-    :param attribute: Reads an attribute of a shape.
-    :return: The attribute's value, if all ``shapes`` have the same; otherwise ``None``.
-    """
-    values = [attribute(shape) for shape in shapes]
-    return values[0] if all(value == values[0] for value in values) else None
+    def shared(self, attribute: Callable[[Shape], T]) -> Optional[T]:
+        """
+        :param attribute: Reads an attribute of a shape.
+        :return: The attribute's value, if all :attr:`shapes` have the same; otherwise
+            ``None``.
+        """
+        values = [attribute(shape) for shape in self.shapes]
+        return values[0] if all(value == values[0] for value in values) else None
 
 
 # %% the pipeline step
@@ -343,12 +309,8 @@ def _shared(shapes: ShapeCollection, attribute: Callable[[Shape], T]) -> Optiona
 @dataclass
 class SplitPartFromShape(Step):
     """
-    Gives every annotation of a type the part its shape has, as a body of its own, by
-    applying a :class:`PartSplitter` to each annotation that has no such part yet.
-
-    This suits a world that is handed to a physics simulator afterwards, whose model is
-    built once from the world's bodies; otherwise, split the part off when it is first
-    needed with :meth:`PartSplitter.part_of`.
+    Gives every annotation of a type that has no such part yet the part its shape has,
+    as a body of its own.
     """
 
     whole_type: Type[PartWholeRelationship]

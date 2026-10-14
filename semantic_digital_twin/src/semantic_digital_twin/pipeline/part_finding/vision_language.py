@@ -7,7 +7,7 @@ on whether they belong to the part by how often the views that show them mask th
 
 The detector and the segmenter are abstract, so this module runs without any model; the
 models themselves are in
-:mod:`~semantic_digital_twin.pipeline.vision_language_models`.
+:mod:`~semantic_digital_twin.pipeline.part_finding.vision_language_models`.
 """
 
 from __future__ import annotations
@@ -22,10 +22,17 @@ from numpy.typing import NDArray
 from scipy.spatial import cKDTree
 
 from krrood.adapters.json_serializer import to_json
-from semantic_digital_twin.pipeline.part_locating import (
+from semantic_digital_twin.datastructures.camera_resolution import CameraResolution
+from semantic_digital_twin.pipeline.part_finding.locating import (
     LocatedPart,
     PartLocator,
     PartQuery,
+)
+from semantic_digital_twin.spatial_types import (
+    HomogeneousTransformationMatrix,
+    Point3,
+    RotationMatrix,
+    Vector3,
 )
 
 # %% rendering the views
@@ -34,18 +41,71 @@ from semantic_digital_twin.pipeline.part_locating import (
 @dataclass
 class ViewDirection:
     """
-    The direction a camera looks at a shape from.
+    Where a camera looks at a shape from, as seen from the shape's center: the reference
+    plane is the shape's horizontal plane, the reference direction its x-axis and the
+    zenith its z-axis.
     """
 
     azimuth: float
     """
-    The angle about the vertical axis, from the x-axis towards the y-axis, in degrees.
+    The angle from the reference direction to the camera projected onto the reference
+    plane, counterclockwise as seen from the zenith, in radians.
     """
 
     elevation: float
     """
-    The angle above the horizontal plane, in degrees.
+    The angle from the reference plane up to the camera, in radians.
     """
+
+    @staticmethod
+    def around(perspectives: int, elevation: float) -> list[ViewDirection]:
+        """
+        :param perspectives: How many directions.
+        :param elevation: The elevation of each direction, in radians.
+        :return: Directions evenly spaced in azimuth all around, the first along the
+            reference direction.
+        """
+        return [
+            ViewDirection(azimuth, elevation)
+            for azimuth in np.linspace(0.0, 2 * np.pi, perspectives, endpoint=False)
+        ]
+
+    @property
+    def towards_camera(self) -> NDArray[np.float64]:
+        """
+        :return: The unit vector from the shape's center towards the camera.
+        """
+        return np.array(
+            [
+                np.cos(self.elevation) * np.cos(self.azimuth),
+                np.cos(self.elevation) * np.sin(self.azimuth),
+                np.sin(self.elevation),
+            ]
+        )
+
+    def camera_pose(
+        self, target: NDArray[np.float64], distance: float
+    ) -> HomogeneousTransformationMatrix:
+        """
+        :param target: The point the camera looks at.
+        :param distance: How far the camera is from it.
+        :return: The pose of the camera in the shape's frame, in the convention of
+            :class:`~semantic_digital_twin.robots.robot_parts.Camera` and
+            :meth:`~semantic_digital_twin.spatial_computations.raytracer.RayTracer.create_camera_rays`:
+            its x-axis is the direction the camera looks, its negative y-axis points to the
+            top and its negative z-axis to the right of the image, so that the zenith is
+            up in the image.
+        """
+        towards_camera = self.towards_camera
+        zenith = np.array([0.0, 0.0, 1.0])
+        image_up = zenith - (zenith @ towards_camera) * towards_camera
+        return HomogeneousTransformationMatrix.from_point_rotation_matrix(
+            point=Point3(*(target + towards_camera * distance)),
+            rotation_matrix=RotationMatrix.from_vectors(
+                x=Vector3(*-towards_camera),
+                y=Vector3(*-image_up / np.linalg.norm(image_up)),
+            ),
+        )
 
 
 def _ring_of_eleven() -> list[ViewDirection]:
@@ -54,9 +114,9 @@ def _ring_of_eleven() -> list[ViewDirection]:
         ones, 65 degrees from above, so that handles on any side and flat objects are
         seen.
     """
-    return [ViewDirection(float(azimuth), 25.0) for azimuth in range(0, 360, 45)] + [
-        ViewDirection(float(azimuth), 65.0) for azimuth in (0, 120, 240)
-    ]
+    return ViewDirection.around(8, np.radians(25.0)) + ViewDirection.around(
+        3, np.radians(65.0)
+    )
 
 
 @dataclass
@@ -96,9 +156,11 @@ class CameraRing:
     The directions the shape is looked at from.
     """
 
-    resolution: int = 448
+    resolution: CameraResolution = field(
+        default_factory=lambda: CameraResolution(width=448, height=448)
+    )
     """
-    The width and height of each image, in pixels.
+    The size of each image, in pixels.
     """
 
     margin: float = 1.05
@@ -140,43 +202,33 @@ class CameraRing:
         """
         :param shape: The shape.
         :param direction: Where the camera looks from.
-        :return: The single view from there.
+        :return: The single orthographic view from there.
         """
-        azimuth, elevation = np.radians(direction.azimuth), np.radians(
-            direction.elevation
-        )
-        towards_camera = np.array(
-            [
-                np.cos(elevation) * np.cos(azimuth),
-                np.cos(elevation) * np.sin(azimuth),
-                np.sin(elevation),
-            ]
-        )
-        forward = -towards_camera
-        right = np.cross(forward, [0.0, 0.0, 1.0])
-        right /= np.linalg.norm(right)
-        up = np.cross(right, forward)
         diagonal = float(np.linalg.norm(shape.extents))
+        pose = direction.camera_pose(shape.bounds.mean(axis=0), diagonal).to_np()
+        forward, eye = pose[:3, 0], pose[:3, 3]
+        up, right = -pose[:3, 1], -pose[:3, 2]
         half_width = diagonal / 2 * self.margin
-        eye = shape.bounds.mean(axis=0) + towards_camera * diagonal
-        steps = (np.arange(self.resolution) + 0.5) / self.resolution * 2 - 1
-        across, upwards = np.meshgrid(steps, -steps)
-        origins = eye + half_width * (
-            across[..., None] * right + upwards[..., None] * up
+        width, height = self.resolution.width, self.resolution.height
+        half_height = half_width * height / width
+        across, upwards = np.meshgrid(
+            ((np.arange(width) + 0.5) / width * 2 - 1) * half_width,
+            -((np.arange(height) + 0.5) / height * 2 - 1) * half_height,
         )
+        origins = eye + across[..., None] * right + upwards[..., None] * up
         triangles, rays = shape.ray.intersects_id(
             origins.reshape(-1, 3),
-            np.broadcast_to(forward, (origins.shape[0] * origins.shape[1], 3)),
+            np.broadcast_to(forward, (width * height, 3)),
             multiple_hits=False,
         )
-        faces = np.full(self.resolution * self.resolution, -1, dtype=np.int64)
+        faces = np.full(width * height, -1, dtype=np.int64)
         faces[rays] = triangles
-        image = np.full(self.resolution * self.resolution, float(self.background))
+        image = np.full(width * height, float(self.background))
         facing = np.abs(shape.face_normals[triangles] @ forward)
         image[rays] = (
             self.darkest_shade + (self.brightest_shade - self.darkest_shade) * facing
         )
-        shape_of_views = (1, self.resolution, self.resolution)
+        shape_of_views = (1, height, width)
         return RenderedViews(
             images=image.reshape(shape_of_views).astype(np.uint8),
             faces=faces.reshape(shape_of_views),

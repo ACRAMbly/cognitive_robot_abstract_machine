@@ -1,6 +1,7 @@
 """
 Locating the parts an annotation's part-whole relationships call for in its shape, and
-giving the annotation the parts found.
+giving the annotation the parts found, with stand-ins for the vision-language models
+that box and mask exactly the faces they are told.
 """
 
 from __future__ import annotations
@@ -13,17 +14,20 @@ import trimesh
 from numpy.typing import NDArray
 
 from krrood.adapters.json_serializer import from_json, to_json
+from semantic_digital_twin.datastructures.camera_resolution import CameraResolution
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 from semantic_digital_twin.exceptions import UnknownPartWholeRelationshipField
-from semantic_digital_twin.pipeline.annotation_part_finding import AnnotationPartFinder
-from semantic_digital_twin.pipeline.part_locating import (
+from semantic_digital_twin.pipeline.part_finding.annotation_part_finder import (
+    AnnotationPartFinder,
+)
+from semantic_digital_twin.pipeline.part_finding.locating import (
     KnownPartLocator,
     LocatedFacesFinder,
     LocatedPart,
     PartQuery,
     PartRelationship,
 )
-from semantic_digital_twin.pipeline.vision_language_part_locating import (
+from semantic_digital_twin.pipeline.part_finding.vision_language import (
     CameraRing,
     FilledBoxSegmenter,
     KnownPartBoxDetector,
@@ -82,11 +86,11 @@ def all_around() -> CameraRing:
     """
     return CameraRing(
         directions=[
-            ViewDirection(float(azimuth), elevation)
-            for azimuth in range(0, 360, 45)
+            direction
             for elevation in (-40.0, 25.0, 65.0)
+            for direction in ViewDirection.around(8, np.radians(elevation))
         ],
-        resolution=128,
+        resolution=CameraResolution(width=128, height=128),
     )
 
 

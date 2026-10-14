@@ -18,14 +18,14 @@ from semantic_digital_twin.adapters.part_finding.server import (
     PartFindingCache,
     PartFindingServer,
 )
-from semantic_digital_twin.pipeline.vision_language_models import (
+from semantic_digital_twin.pipeline.part_finding.vision_language_models import (
     Device,
     QwenBoxDetector,
     QwenModel,
     Quantization,
     Sam2BoxSegmenter,
 )
-from semantic_digital_twin.pipeline.vision_language_part_locating import (
+from semantic_digital_twin.pipeline.part_finding.vision_language import (
     VisionLanguagePartLocator,
 )
 from semantic_digital_twin.utils import create_cache_dir

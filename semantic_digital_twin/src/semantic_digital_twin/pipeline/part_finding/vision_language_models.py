@@ -1,6 +1,6 @@
 """
 The models behind
-:class:`~semantic_digital_twin.pipeline.vision_language_part_locating.VisionLanguagePartLocator`:
+:class:`~semantic_digital_twin.pipeline.part_finding.vision_language.VisionLanguagePartLocator`:
 Qwen3-VL puts boxes around a part, SAM 2 masks it inside them.
 
 Needs the ``vision`` extra of this package. The weights are downloaded from Hugging Face
@@ -30,7 +30,7 @@ from transformers import (
     Sam2Processor,
 )
 
-from semantic_digital_twin.pipeline.vision_language_part_locating import (
+from semantic_digital_twin.pipeline.part_finding.vision_language import (
     BoxSegmenter,
     PartBoxDetector,
     RenderedViews,
@@ -58,29 +58,33 @@ class PretrainedWeights:
     """
 
 
-class QwenModel(Enum):
+class QwenModel(PretrainedWeights, Enum):
     """
     The sizes of Qwen3-VL the handle finder benchmark measured.
     """
 
-    QWEN3_VL_2B = PretrainedWeights(
-        "Qwen/Qwen3-VL-2B-Instruct", "89644892e4d85e24eaac8bacfd4f463576704203"
+    QWEN3_VL_2B = (
+        "Qwen/Qwen3-VL-2B-Instruct",
+        "89644892e4d85e24eaac8bacfd4f463576704203",
     )
-    QWEN3_VL_4B = PretrainedWeights(
-        "Qwen/Qwen3-VL-4B-Instruct", "ebb281ec70b05090aa6165b016eac8ec08e71b17"
+    QWEN3_VL_4B = (
+        "Qwen/Qwen3-VL-4B-Instruct",
+        "ebb281ec70b05090aa6165b016eac8ec08e71b17",
     )
-    QWEN3_VL_8B = PretrainedWeights(
-        "Qwen/Qwen3-VL-8B-Instruct", "0c351dd01ed87e9c1b53cbc748cba10e6187ff3b"
+    QWEN3_VL_8B = (
+        "Qwen/Qwen3-VL-8B-Instruct",
+        "0c351dd01ed87e9c1b53cbc748cba10e6187ff3b",
     )
 
 
-class SegmentationModel(Enum):
+class SegmentationModel(PretrainedWeights, Enum):
     """
     The SAM 2 models a box can be segmented with.
     """
 
-    SAM2_1_HIERA_LARGE = PretrainedWeights(
-        "facebook/sam2.1-hiera-large", "665f8e2ad61cf5f53d65644ff27c8ee525124610"
+    SAM2_1_HIERA_LARGE = (
+        "facebook/sam2.1-hiera-large",
+        "665f8e2ad61cf5f53d65644ff27c8ee525124610",
     )
 
 
@@ -141,8 +145,10 @@ class QwenBoxDetector(PartBoxDetector):
     Where the model runs.
     """
 
-    prompt: Path = field(
-        default_factory=lambda: Path(__file__).parent / "prompts" / "part_boxes.txt"
+    prompt: str = field(
+        default_factory=lambda: (Path(__file__).parent / "prompts" / "part_boxes.txt")
+        .read_text()
+        .strip()
     )
     """
     The question asked about each view, with ``{part}`` and ``{object}`` standing for
@@ -166,7 +172,7 @@ class QwenBoxDetector(PartBoxDetector):
             into text.
         """
         processor = AutoProcessor.from_pretrained(
-            self.model.value.repository, revision=self.model.value.revision
+            self.model.repository, revision=self.model.revision
         )
         processor.tokenizer.padding_side = "left"
         return processor
@@ -176,7 +182,7 @@ class QwenBoxDetector(PartBoxDetector):
         """
         :return: The model, loaded onto :attr:`device`.
         """
-        weights = self.model.value
+        weights = self.model
         if self.quantization is Quantization.FOUR_BIT:
             return Qwen3VLForConditionalGeneration.from_pretrained(
                 weights.repository,
@@ -201,9 +207,7 @@ class QwenBoxDetector(PartBoxDetector):
     def detect(
         self, views: RenderedViews, part_name: str, object_name: str
     ) -> list[NDArray[np.float64]]:
-        question = (
-            self.prompt.read_text().strip().format(part=part_name, object=object_name)
-        )
+        question = self.prompt.format(part=part_name, object=object_name)
         conversations = [
             [
                 {
@@ -233,21 +237,22 @@ class QwenBoxDetector(PartBoxDetector):
         answers = self.processor.batch_decode(
             generated[:, inputs["input_ids"].shape[1] :], skip_special_tokens=True
         )
-        image_width = views.images.shape[-1]
+        _, height, width = views.images.shape
+        image_size = np.array([width, height, width, height], dtype=np.float64)
         return [
-            self._boxes_in(answer) / self.coordinate_range * image_width
+            self._boxes_in(answer) / self.coordinate_range * image_size
             for answer in answers
         ]
 
     @property
     def fingerprint(self) -> str:
         return (
-            f"{self.model.value.repository}@{self.model.value.revision} "
-            f"{self.quantization} {self.prompt.read_text().strip()}"
+            f"{self.model.repository}@{self.model.revision} "
+            f"{self.quantization} {self.prompt}"
         )
 
     def load(self) -> None:
-        logger.info("Loaded %s on %s", self.model.value.repository, self.network.device)
+        logger.info("Loaded %s on %s", self.model.repository, self.network.device)
 
     @staticmethod
     def _boxes_in(answer: str) -> NDArray[np.float64]:
@@ -286,7 +291,7 @@ class Sam2BoxSegmenter(BoxSegmenter):
             into masks.
         """
         return Sam2Processor.from_pretrained(
-            self.model.value.repository, revision=self.model.value.revision
+            self.model.repository, revision=self.model.revision
         )
 
     @cached_property
@@ -296,7 +301,7 @@ class Sam2BoxSegmenter(BoxSegmenter):
         """
         return (
             Sam2Model.from_pretrained(
-                self.model.value.repository, revision=self.model.value.revision
+                self.model.repository, revision=self.model.revision
             )
             .to(self.device.value)
             .eval()
@@ -324,7 +329,7 @@ class Sam2BoxSegmenter(BoxSegmenter):
 
     @property
     def fingerprint(self) -> str:
-        return f"{self.model.value.repository}@{self.model.value.revision}"
+        return f"{self.model.repository}@{self.model.revision}"
 
     def load(self) -> None:
-        logger.info("Loaded %s on %s", self.model.value.repository, self.network.device)
+        logger.info("Loaded %s on %s", self.model.repository, self.network.device)

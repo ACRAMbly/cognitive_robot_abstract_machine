@@ -16,6 +16,7 @@ import hashlib
 import json
 import logging
 import os
+import socket
 import threading
 import time
 from dataclasses import dataclass, field
@@ -35,12 +36,12 @@ from semantic_digital_twin.adapters.part_finding.protocol import (
     PartFindingRoute,
     PartFindingServerStatus,
 )
-from semantic_digital_twin.pipeline.part_locating import (
+from semantic_digital_twin.pipeline.part_finding.locating import (
     LocatedPart,
     PartQuery,
     PartRelationship,
 )
-from semantic_digital_twin.pipeline.vision_language_part_locating import (
+from semantic_digital_twin.pipeline.part_finding.vision_language import (
     VisionLanguagePartLocator,
 )
 from semantic_digital_twin.semantic_annotations.mixins import PartWholeRelationship
@@ -260,21 +261,37 @@ class PartFindingServer:
 # %% answering a request
 
 
+@dataclass(eq=False)
 class PartFindingRequestHandler(BaseHTTPRequestHandler):
     """
     Answers one http request to a :class:`PartFindingServer`.
 
-    ..note:: Not a dataclass, because the http server constructs it with the
-        signature of :class:`~http.server.BaseHTTPRequestHandler`.
+    The http server creates one for each request, which is answered as soon as it is
+    created.
     """
 
-    def __init__(self, part_finding_server: PartFindingServer, *arguments: Any) -> None:
-        """
-        :param part_finding_server: The server the request is answered for.
-        :param arguments: What the http server passes to every request handler.
-        """
-        self.part_finding_server = part_finding_server
-        super().__init__(*arguments)
+    part_finding_server: PartFindingServer
+    """
+    The server the request is answered for.
+    """
+
+    request: socket.socket
+    """
+    The connection the request came in on.
+    """
+
+    client_address: tuple[str, int]
+    """
+    The address of the client.
+    """
+
+    server: ThreadingHTTPServer
+    """
+    The http server that received the request.
+    """
+
+    def __post_init__(self) -> None:
+        super().__init__(self.request, self.client_address, self.server)
 
     def do_GET(self) -> None:
         """

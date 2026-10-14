@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import gzip
 import json
+import os
 from dataclasses import dataclass, field
 from datetime import timedelta
 from http import HTTPStatus
@@ -19,12 +20,13 @@ from semantic_digital_twin.adapters.part_finding.exceptions import (
 from semantic_digital_twin.adapters.part_finding.protocol import (
     ContentEncoding,
     ContentType,
+    EnvironmentVariable,
     HeaderName,
     PartFindingAnswer,
     PartFindingRoute,
     PartFindingServerStatus,
 )
-from semantic_digital_twin.pipeline.part_locating import (
+from semantic_digital_twin.pipeline.part_finding.locating import (
     LocatedPart,
     PartLocator,
     PartQuery,
@@ -37,9 +39,16 @@ class RemotePartLocator(PartLocator):
     Locates parts by asking a part finding server.
     """
 
-    base_url: str = "http://neem-4.informatik.uni-bremen.de:8790"
+    base_url: str = field(
+        default_factory=lambda: os.environ.get(
+            EnvironmentVariable.PART_FINDING_SERVER_URL,
+            "http://neem-4.informatik.uni-bremen.de:8790",
+        )
+    )
     """
-    The address of the server, which is reachable from within the university's network.
+    The address of the server: the value of the environment variable
+    ``SEMANTIC_DIGITAL_TWIN_PART_FINDING_SERVER_URL`` if it is set, otherwise the server
+    on neem-4, which is reachable from within the university's network.
     """
 
     timeout: timedelta = timedelta(minutes=5)

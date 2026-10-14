@@ -13,6 +13,7 @@ import requests
 import trimesh
 
 from semantic_digital_twin.adapters.part_finding.client import RemotePartLocator
+from semantic_digital_twin.datastructures.camera_resolution import CameraResolution
 from semantic_digital_twin.adapters.part_finding.exceptions import (
     PartFindingServerError,
 )
@@ -20,8 +21,8 @@ from semantic_digital_twin.adapters.part_finding.server import (
     PartFindingCache,
     PartFindingServer,
 )
-from semantic_digital_twin.pipeline.part_locating import PartQuery
-from semantic_digital_twin.pipeline.vision_language_part_locating import (
+from semantic_digital_twin.pipeline.part_finding.locating import PartQuery
+from semantic_digital_twin.pipeline.part_finding.vision_language import (
     CameraRing,
     FilledBoxSegmenter,
     KnownPartBoxDetector,
@@ -51,7 +52,7 @@ def server(mug_query, tmp_path):
         locator=VisionLanguagePartLocator(
             detector=KnownPartBoxDetector(part_faces={"handle": handle_faces}),
             segmenter=FilledBoxSegmenter(),
-            cameras=CameraRing(resolution=128),
+            cameras=CameraRing(resolution=CameraResolution(width=128, height=128)),
         ),
         host="127.0.0.1",
         port=0,

@@ -1,25 +1,25 @@
 """
-Finding an object's handle or rim in its shape and splitting it off.
+Splitting a part off an object's shape, at the faces a vision-language model located it
+at, which are given here.
 """
 
+import numpy as np
 import pytest
-from typing_extensions import Optional
 import trimesh
+from numpy.typing import NDArray
+from typing_extensions import Optional
 
 from krrood.adapters.json_serializer import from_json, to_json
 from semantic_digital_twin.adapters.world_entity_kwargs_tracker import (
     WorldEntityWithIDKwargsTracker,
 )
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
-from semantic_digital_twin.pipeline.handle_finding import (
-    NarrowEndHandleFinder,
-    ProtrudingHandleFinder,
-)
-from semantic_digital_twin.pipeline.part_splitting import (
+from semantic_digital_twin.pipeline.part_finding.locating import LocatedFacesFinder
+from semantic_digital_twin.pipeline.part_finding.splitting import (
     PartSplitter,
+    ShapeSplit,
     SplitPartFromShape,
 )
-from semantic_digital_twin.pipeline.rim_finding import RimFinder
 from semantic_digital_twin.semantic_annotations.semantic_annotations import (
     Handle,
     Mug,
@@ -42,16 +42,6 @@ HANDLE_REACH = 0.02
 How far the synthetic mug's handle sticks out of its body.
 """
 
-TOOL_HANDLE_LENGTH = 0.1
-"""
-Length of the synthetic tool's handle, which runs from x = -0.1 to x = 0.
-"""
-
-TOOL_HANDLE_WIDTH = 0.01
-"""
-Width of the synthetic tool's handle.
-"""
-
 
 def cup_without_handle() -> trimesh.Trimesh:
     """
@@ -71,105 +61,41 @@ def mug() -> trimesh.Trimesh:
     return trimesh.util.concatenate([cup_without_handle(), handle])
 
 
-def tool() -> trimesh.Trimesh:
+def handle_faces() -> NDArray[np.bool_]:
     """
-    :return: A flat tool, its narrow handle towards negative x and its wide head
-        towards positive x.
+    :return: For each face of the mug, whether it is a face of its handle, as a model
+        would have located them.
     """
-    handle = trimesh.creation.box(
-        extents=[TOOL_HANDLE_LENGTH, TOOL_HANDLE_WIDTH, 0.005]
-    )
-    handle.apply_translation([-TOOL_HANDLE_LENGTH / 2, 0.0, 0.0])
-    head = trimesh.creation.box(extents=[0.05, 0.04, 0.005])
-    head.apply_translation([0.025, 0.0, 0.0])
-    return trimesh.util.concatenate([handle, head])
+    return np.arange(len(mug().faces)) >= len(cup_without_handle().faces)
 
 
-# %% handles sticking out of a round body
+def located(in_part: NDArray[np.bool_]) -> LocatedFacesFinder:
+    """
+    :param in_part: For each face of the mug, whether it belongs to the part.
+    :return: Finds the part at those faces.
+    """
+    return LocatedFacesFinder(face_centers=mug().triangles_center[in_part])
 
 
-def test_the_handle_of_a_mug_is_what_sticks_out_of_its_round_body():
-    split = ProtrudingHandleFinder().split(mug())
+# %% splitting a shape at located faces
+
+
+def test_a_shape_is_split_at_the_located_faces():
+    split = located(handle_faces()).split(mug())
 
     lowest, highest = split.part.bounds
-    assert lowest[0] >= BODY_OUTER_RADIUS - 1e-9
+    assert lowest[0] == pytest.approx(BODY_OUTER_RADIUS)
     assert highest[0] == pytest.approx(BODY_OUTER_RADIUS + HANDLE_REACH)
     assert split.rest.bounds[1][0] == pytest.approx(BODY_OUTER_RADIUS)
     assert len(split.part.faces) + len(split.rest.faces) == len(mug().faces)
 
 
-def test_a_cup_without_a_handle_has_none():
-    assert ProtrudingHandleFinder().split(cup_without_handle()) is None
+def test_a_part_with_no_located_faces_is_not_split_off():
+    assert located(np.zeros(len(mug().faces), dtype=bool)).split(mug()) is None
 
 
-def cup_with_handle(reach: float) -> trimesh.Trimesh:
-    """
-    :param reach: How far the handle sticks out of the cup's body.
-    :return: The cup with a box-shaped handle sticking out towards positive x.
-    """
-    handle = trimesh.creation.box(extents=[reach, 0.01, 0.01])
-    handle.apply_translation([BODY_OUTER_RADIUS + reach / 2, 0.0, 0.0])
-    return trimesh.util.concatenate([cup_without_handle(), handle])
-
-
-def test_a_long_handle_does_not_pull_the_body_outline_off_the_body():
-    reach = 3 * BODY_OUTER_RADIUS
-    split = ProtrudingHandleFinder().split(cup_with_handle(reach))
-
-    lowest, highest = split.part.bounds
-    assert lowest[0] >= BODY_OUTER_RADIUS - 1e-9
-    assert highest[0] == pytest.approx(BODY_OUTER_RADIUS + reach)
-    assert split.rest.bounds[1][0] == pytest.approx(BODY_OUTER_RADIUS)
-
-
-def test_what_barely_sticks_out_stays_with_the_body():
-    assert (
-        ProtrudingHandleFinder().split(cup_with_handle(0.1 * BODY_OUTER_RADIUS)) is None
-    )
-
-
-def test_a_body_that_is_not_round_has_no_protruding_handle():
-    box = trimesh.creation.box(extents=[0.08, 0.08, 0.1])
-
-    assert ProtrudingHandleFinder().split(box) is None
-
-
-# %% handles at the narrow end of a tool
-
-
-def test_the_handle_of_a_tool_is_its_narrow_end_cut_off_where_it_widens():
-    split = NarrowEndHandleFinder().split(tool())
-
-    lowest, highest = split.part.bounds
-    assert lowest[0] == pytest.approx(-TOOL_HANDLE_LENGTH)
-    assert highest[0] == pytest.approx(0.0)
-    assert highest[1] - lowest[1] == pytest.approx(TOOL_HANDLE_WIDTH)
-    assert split.rest.bounds[0][0] == pytest.approx(0.0)
-    assert split.part.is_watertight and split.rest.is_watertight
-
-
-def test_a_bar_of_even_width_has_no_handle():
-    bar = trimesh.creation.box(extents=[0.2, 0.02, 0.02])
-
-    assert NarrowEndHandleFinder().split(bar) is None
-
-
-# %% rims of open containers
-
-
-def test_the_rim_of_a_cup_is_the_band_below_its_top():
-    finder = RimFinder()
-
-    split = finder.split(cup_without_handle())
-
-    top = cup_without_handle().bounds[1][2]
-    assert split.part.bounds[0][2] == pytest.approx(top - finder.depth)
-    assert split.part.bounds[1][2] == pytest.approx(top)
-    assert split.rest.bounds[1][2] == pytest.approx(top - finder.depth)
-    assert split.part.is_watertight and split.rest.is_watertight
-    assert split.part.volume + split.rest.volume == pytest.approx(
-        cup_without_handle().volume
-    )
+def test_a_part_that_is_the_whole_shape_is_not_split_off():
+    assert located(np.ones(len(mug().faces), dtype=bool)).split(mug()) is None
 
 
 # %% splitting a part off an annotation in a world
@@ -210,7 +136,7 @@ def handle_splitter() -> PartSplitter:
     """
     :return: Splits the handle off the shape of a mug.
     """
-    return PartSplitter(part_type=Handle, finder=ProtrudingHandleFinder())
+    return PartSplitter(part_type=Handle, finder=located(handle_faces()))
 
 
 def test_a_part_is_split_off_only_the_first_time_it_is_asked_for():
@@ -303,7 +229,7 @@ def test_the_pieces_keep_the_color_of_the_shape():
 
 def test_the_pieces_keep_the_colors_of_the_faces_they_were_cut_from():
     annotation = annotated_mug()
-    split = ProtrudingHandleFinder().split(mug())
+    split = ShapeSplit.by_faces(mug(), handle_faces())
     split.part.visual.face_colors = [0, 255, 0, 255]
     split.rest.visual.face_colors = [0, 0, 255, 255]
     mesh = trimesh.util.concatenate([split.part, split.rest])
@@ -329,10 +255,11 @@ def test_the_pieces_keep_the_colors_of_the_faces_they_were_cut_from():
 
 def test_parts_split_off_the_same_body_have_distinct_names():
     annotation = annotated_mug()
-    splitter = PartSplitter(part_type=Handle, finder=RimFinder())
-
-    first = splitter.split_body(annotation.root)
-    second = splitter.split_body(annotation.root)
+    bottom = mug().triangles_center[:, 2] < 0.0
+    first = handle_splitter().split_body(annotation.root)
+    second = PartSplitter(
+        part_type=Handle, finder=located(bottom & ~handle_faces())
+    ).split_body(annotation.root)
 
     assert str(first.name) == "mug/handle"
     assert str(second.name) == "mug/handle_1"
