@@ -26,11 +26,11 @@ from robokudo.pipeline import Pipeline
 from robokudo.types.annotation import Classification
 from robokudo.types.scene import HumanHypothesis, ObjectHypothesis
 from robokudo.utils.file_loader import FileLoader
-from .test_analysis_engine_query_composition import (
+from ..test_analysis_engine_query_composition import (
     bounded_build_time,
     install_fake_collection_reader_descriptor,
 )
-from .yolo_stand_in import (
+from ._yolo_stand_in import (
     NormalizedBox,
     ScriptedDetection,
     ScriptedUltralytics,
