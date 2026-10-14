@@ -5,6 +5,7 @@ from abc import ABC, abstractmethod
 
 import cv2
 import numpy as np
+from krrood.ormatic.utils import classproperty
 from PIL import Image
 from py_trees.common import Status
 from typing_extensions import TYPE_CHECKING, Callable
@@ -16,8 +17,6 @@ from robokudo.types.scene import ObjectHypothesis
 
 if TYPE_CHECKING:
     import numpy.typing as npt
-
-FONT = cv2.FONT_HERSHEY_COMPLEX
 
 
 class ZeroShotClassificationAnnotator(ThreadedAnnotator, ABC):
@@ -67,6 +66,13 @@ class ZeroShotClassificationAnnotator(ThreadedAnnotator, ABC):
                 How many annotations to create per analyzed image or hypothesis.
                 """
 
+    @classproperty
+    def visualization_font(cls) -> int:
+        """
+        The OpenCV font the classifications are written onto the output image with.
+        """
+        return cv2.FONT_HERSHEY_COMPLEX
+
     @abstractmethod
     def classify(self, images: list[Image.Image]) -> list[list[Classification]]:
         """
@@ -102,7 +108,14 @@ class ZeroShotClassificationAnnotator(ThreadedAnnotator, ABC):
         for i, classification in enumerate(classifications):
             text = f"{classification.confidence:.2f} /{classification.classname}"
             visualization_img = cv2.putText(
-                visualization_img, text, (10, 40 + 20 * i), FONT, 0.5, (0, 0, 255), 1, 2
+                visualization_img,
+                text,
+                (10, 40 + 20 * i),
+                self.visualization_font,
+                0.5,
+                (0, 0, 255),
+                1,
+                2,
             )
 
             self.rk_logger.info(
@@ -157,7 +170,14 @@ class ZeroShotClassificationAnnotator(ThreadedAnnotator, ABC):
                 visualization_img, (x1, y1), (x2, y2), (255, 255, 255), 2
             )
             visualization_img = cv2.putText(
-                visualization_img, text, (x1, y1 - 20), FONT, 0.5, (0, 0, 255), 1, 2
+                visualization_img,
+                text,
+                (x1, y1 - 20),
+                self.visualization_font,
+                0.5,
+                (0, 0, 255),
+                1,
+                2,
             )
 
             object_hypothesis.annotations.extend(classifications)
