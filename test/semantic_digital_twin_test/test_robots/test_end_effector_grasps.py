@@ -19,7 +19,7 @@ from semantic_digital_twin.robots.robot_parts import Camera, EndEffector
 from semantic_digital_twin.robots.tracy import Tracy
 from semantic_digital_twin.semantic_annotations.semantic_annotations import Milk
 from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix
-from semantic_digital_twin.spatial_types.spatial_types import Vector3
+from semantic_digital_twin.spatial_types.spatial_types import Point3, Vector3
 from semantic_digital_twin.world_description.connections import FixedConnection
 from semantic_digital_twin.world_description.geometry import Box, Scale
 from semantic_digital_twin.world_description.shape_collection import ShapeCollection
@@ -264,15 +264,35 @@ def test_the_held_grasp_is_turned_the_way_the_gripper_faces(pr2_gripper):
     )
 
 
-def test_the_held_grasp_is_the_offset_the_body_hangs_at(pr2_gripper):
+def test_the_held_grasp_sits_where_the_gripper_holds_the_object(pr2_gripper):
+    """
+    The grasp is read at the point the gripper holds an object, so it sits at that
+    point, shifted by how the body hangs off the tool frame.
+    """
     body = hold_body(pr2_gripper)
 
     np.testing.assert_allclose(
         pr2_gripper.held_body_T_grasp.to_np()[:3, 3],
-        -HELD_BODY_OFFSET.to_np()[:3, 3],
+        pr2_gripper.tool_P_grasp_when_closed.to_np()[:3].ravel()
+        - HELD_BODY_OFFSET.to_np()[:3, 3],
         atol=1e-9,
     )
     assert pr2_gripper.held_body_T_grasp.reference_frame is body
+
+
+def test_the_held_grasp_can_be_read_at_any_point_of_the_gripper(pr2_gripper):
+    """
+    Read at the tool frame itself, the grasp is only the offset the body hangs at.
+    """
+    hold_body(pr2_gripper)
+
+    body_T_grasp = pr2_gripper.held_body_T_grasp_at(
+        Point3(0.0, 0.0, 0.0, reference_frame=pr2_gripper.tool_frame)
+    )
+
+    np.testing.assert_allclose(
+        body_T_grasp.to_np()[:3, 3], -HELD_BODY_OFFSET.to_np()[:3, 3], atol=1e-9
+    )
 
 
 # %% where a two-finger gripper's fingers meet

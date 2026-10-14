@@ -86,7 +86,7 @@ def _fingers_at(goal, end_effector) -> np.ndarray:
         is what the sequence aims and so what the clearances are measured at.
     """
     reached = goal.homogeneous_matrix.to_np()
-    tool_P_grasp = end_effector.fingertips.tool_P_grasp.to_np()[:3].ravel()
+    tool_P_grasp = end_effector.tool_P_grasp_when_closed.to_np()[:3].ravel()
     return reached[:3, :3] @ tool_P_grasp + reached[:3, 3]
 
 

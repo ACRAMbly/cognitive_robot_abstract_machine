@@ -391,15 +391,45 @@ class HasTwoFingers(
         self.get_joint_state_by_type(state_type).apply_to(self._world)
         return fingertips.tool_P_grasp
 
+    @cached_property
+    def tool_P_grasp_when_closed(self) -> Point3:
+        """
+        Where the fingers meet once closed, in :attr:`tool_frame`.
+
+        Jaws on a linkage carry the meeting point :attr:`travel_when_closing` further
+        out as they close, so where the fingers meet depends on how far the gripper
+        happens to stand open. A grasp planned while open and a release planned while
+        holding would then be aimed at two different points, and an object placed after
+        being picked up would land beside its target by that difference. This is the
+        point an object is held at, which is the one both have to be aimed at.
+
+        A constant of the gripper's description, read once and kept. The same point as
+        :attr:`Fingertips.tool_P_grasp` for fingers that only slide.
+        """
+        with self._world.reset_state_context():
+            return self._meeting_point_in_state(self.fingertips, GripperState.CLOSE)
+
+    # %% reaching and reading back a grasp
+
     def tool_frame_goal_for_grasp(self, grasp_pose: Pose) -> Pose:
         """
-        Express a grasp frame as the goal that puts :attr:`Fingertips.tool_P_grasp` on
+        Express a grasp frame as the goal that puts :attr:`tool_P_grasp_when_closed` on
         it.
 
         :param grasp_pose: The grasp frame to meet.
         :return: The pose the tool frame has to reach, in ``grasp_pose``'s frame.
         """
-        return self.tool_frame_goal_for_point(self.fingertips.tool_P_grasp, grasp_pose)
+        return self.tool_frame_goal_for_point(self.tool_P_grasp_when_closed, grasp_pose)
+
+    @property
+    def held_body_T_grasp(self) -> Pose:
+        """
+        The grasp this gripper has on the body it holds, read at the point it holds an
+        object, which is the point :meth:`tool_frame_goal_for_grasp` aims at.
+
+        :return: The grasp frame, in the held body's frame.
+        """
+        return self.held_body_T_grasp_at(self.tool_P_grasp_when_closed)
 
 
 @dataclass(eq=False)

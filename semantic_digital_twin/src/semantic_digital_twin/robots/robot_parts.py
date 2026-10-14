@@ -738,22 +738,23 @@ class EndEffector(AbstractRobotPart, ABC):
             raise MoreThanOneBodyHeld(self, children)
         return children[0]
 
-    @property
-    def held_body_T_grasp(self) -> Pose:
+    def held_body_T_grasp_at(self, tool_P_point: Point3) -> Pose:
         """
         The grasp this gripper has on the body it holds, read off the transform between
-        the tool frame and that body.
+        the tool frame and that body, with the grasp sitting at a given point of the
+        gripper rather than at the tool frame.
 
+        :param tool_P_point: The point the grasp sits at, read in the tool frame.
         :return: The grasp frame, in :attr:`held_body`'s frame.
+        :raises NothingHeld: If the gripper holds nothing.
         """
         body = self.held_body
         if body is None:
             raise NothingHeld(self)
         body_T_tool = self._world.transform(self.tool_frame.global_transform, body)
-        body_R_grasp = body_T_tool.rotation_matrix @ self.tool_R_grasp
         return HomogeneousTransformationMatrix.from_point_rotation_matrix(
-            point=body_T_tool.position,
-            rotation_matrix=body_R_grasp,
+            point=body_T_tool @ tool_P_point,
+            rotation_matrix=body_T_tool.rotation_matrix @ self.tool_R_grasp,
             reference_frame=body,
         ).pose
 
