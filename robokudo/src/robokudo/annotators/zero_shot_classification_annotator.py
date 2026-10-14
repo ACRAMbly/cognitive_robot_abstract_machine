@@ -67,18 +67,6 @@ class ZeroShotClassificationAnnotator(ThreadedAnnotator, ABC):
                 How many annotations to create per analyzed image or hypothesis.
                 """
 
-    def __init__(
-        self,
-        name: str,
-        descriptor: ZeroShotClassificationAnnotator.Descriptor | None = None,
-    ) -> None:
-        super().__init__(name=name, descriptor=descriptor)
-
-        self.parameters = self.descriptor.parameters
-        """
-        The parameters used by this annotator.
-        """
-
     @abstractmethod
     def classify(self, images: list[Image.Image]) -> list[list[Classification]]:
         """
@@ -139,8 +127,8 @@ class ZeroShotClassificationAnnotator(ThreadedAnnotator, ABC):
             self.rk_logger.info("Found 0 object hypotheses to analyze")
             return Status.SUCCESS
 
-        if self.parameters.filter_fn is not None:
-            ohs = list(filter(self.parameters.filter_fn, ohs))
+        if self.descriptor.parameters.filter_fn is not None:
+            ohs = list(filter(self.descriptor.parameters.filter_fn, ohs))
 
             if len(ohs) == 0:
                 self.rk_logger.info("All object hypotheses were filtered out")
@@ -190,7 +178,7 @@ class ZeroShotClassificationAnnotator(ThreadedAnnotator, ABC):
         :return: Whether the computation was successfull or not.
         """
         start_time = time.perf_counter()
-        analysis_scope = self.parameters.analysis_scope
+        analysis_scope = self.descriptor.parameters.analysis_scope
 
         color_image = self.get_cas().get(CASViews.COLOR_IMAGE).copy()
 

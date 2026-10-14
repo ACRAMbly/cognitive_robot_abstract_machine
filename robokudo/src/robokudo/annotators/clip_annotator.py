@@ -63,13 +63,15 @@ class CLIPAnnotator(ZeroShotClassificationAnnotator):
 
         self.rk_logger.debug(f"Starting to init {self.__class__.__name__}")
 
-        self.clip_model = CLIPModel.from_pretrained(self.parameters.model_name).to(
-            self.parameters.device
-        )
+        self.clip_model = CLIPModel.from_pretrained(
+            self.descriptor.parameters.model_name
+        ).to(self.descriptor.parameters.device)
         """
         CLIP model used for feature extraction.
         """
-        self.clip_preprocess = CLIPProcessor.from_pretrained(self.parameters.model_name)
+        self.clip_preprocess = CLIPProcessor.from_pretrained(
+            self.descriptor.parameters.model_name
+        )
         """
         CLIP preprocessor used for input preprocessing.
         """
@@ -85,14 +87,14 @@ class CLIPAnnotator(ZeroShotClassificationAnnotator):
         """
         with torch.no_grad():
             templated_texts = [
-                self.parameters.vocabulary_template.format(name)
-                for name in self.parameters.vocabulary
+                self.descriptor.parameters.vocabulary_template.format(name)
+                for name in self.descriptor.parameters.vocabulary
             ]
             inputs = self.clip_tokenizer(
                 templated_texts,
                 padding=True,
                 return_tensors="pt",
-            ).to(self.parameters.device)
+            ).to(self.descriptor.parameters.device)
             text_features = self.clip_model.get_text_features(**inputs).pooler_output
             text_features /= torch.norm(text_features, p=2, dim=-1, keepdim=True)
             text_features = text_features.cpu().numpy()
@@ -123,10 +125,10 @@ class CLIPAnnotator(ZeroShotClassificationAnnotator):
         With softmax, every entry is needed to normalize the confidences; without it,
         only the kept ones, but never more than the vocabulary holds.
         """
-        vocabulary_size = len(self.parameters.vocabulary)
-        if self.parameters.use_softmax:
+        vocabulary_size = len(self.descriptor.parameters.vocabulary)
+        if self.descriptor.parameters.use_softmax:
             return vocabulary_size
-        return min(self.parameters.save_top_k, vocabulary_size)
+        return min(self.descriptor.parameters.save_top_k, vocabulary_size)
 
     def _search_index(
         self,
@@ -165,14 +167,14 @@ class CLIPAnnotator(ZeroShotClassificationAnnotator):
         class_similarities, class_indices = self._search_index(
             features=self._get_image_features(images),
             k=self._candidate_count(),
-            use_softmax=self.parameters.use_softmax,
-            save_top_k=self.parameters.save_top_k,
+            use_softmax=self.descriptor.parameters.use_softmax,
+            save_top_k=self.descriptor.parameters.save_top_k,
         )
         return [
             [
                 Classification(
                     source=self.name,
-                    classname=self.parameters.vocabulary[index],
+                    classname=self.descriptor.parameters.vocabulary[index],
                     confidence=similarity,
                 )
                 for index, similarity in zip(image_indices, image_similarities)

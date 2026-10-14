@@ -53,12 +53,12 @@ class ChannelMeanClassificationAnnotator(ZeroShotClassificationAnnotator):
                 classname=word,
                 confidence=float(mean_color @ (rgb(COLOR_BY_WORD[word]) / 255.0)),
             )
-            for word in self.parameters.vocabulary
+            for word in self.descriptor.parameters.vocabulary
         ]
         classifications.sort(
             key=lambda classification: classification.confidence, reverse=True
         )
-        return classifications[: self.parameters.save_top_k]
+        return classifications[: self.descriptor.parameters.save_top_k]
 
 
 def _color_descriptor() -> ZeroShotClassificationAnnotator.Descriptor:
