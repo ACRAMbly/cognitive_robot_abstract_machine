@@ -56,7 +56,7 @@ def uniform_measure_of_simple_event(simple_event: SimpleEvent) -> ProbabilisticC
         if isinstance(variable, Continuous):
 
             distribution = SumUnit(probabilistic_circuit=result)
-            if assignment.simple_sets[0].is_singleton():
+            if all(assignment_.is_singleton() for assignment_ in assignment):
                 # a variable pinned to points has no width, so every point is equally likely
                 for assignment_ in assignment:
                     dirac = DiracDeltaDistribution(
