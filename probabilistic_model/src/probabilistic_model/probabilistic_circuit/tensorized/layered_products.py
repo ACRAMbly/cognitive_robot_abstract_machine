@@ -23,9 +23,6 @@ from probabilistic_model.probabilistic_circuit.tensorized.inner_layer.inner_laye
 from probabilistic_model.probabilistic_circuit.tensorized.inner_layer.product_layer import (
     ProductLayer,
 )
-from probabilistic_model.probabilistic_circuit.tensorized.input_layer.point_masses import (
-    point_masses_layer,
-)
 from probabilistic_model.probabilistic_circuit.tensorized.query_cache import QueryCache
 from probabilistic_model.probabilistic_circuit.tensorized.stacked_copies import (
     AlignedCopiesStacker,
@@ -193,10 +190,15 @@ class LayeredProducts:
         :return: A factor per point mass variable, whose ``i``-th node is the point mass
             of the ``i``-th product.
         """
+        # inline, since layered_probabilistic_circuit imports this module
+        from probabilistic_model.probabilistic_circuit.tensorized.layered_probabilistic_circuit import (
+            LayeredProbabilisticCircuit,
+        )
+
         products = self.product_indices
         return [
             ProductFactor(
-                point_masses_layer(
+                LayeredProbabilisticCircuit.point_masses_layer(
                     variables.index(variable),
                     [make_dirac(variable, value) for value in values],
                 ),

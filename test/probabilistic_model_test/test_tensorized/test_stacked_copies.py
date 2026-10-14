@@ -60,9 +60,6 @@ from probabilistic_model.probabilistic_circuit.tensorized.input_layer.probabilit
     ProbabilityTable,
     SparseProbabilityTable,
 )
-from probabilistic_model.probabilistic_circuit.tensorized.input_layer.point_masses import (
-    point_masses_layer,
-)
 from probabilistic_model.probabilistic_circuit.tensorized.input_layer.uniform_layer import (
     UniformLayer,
 )
@@ -355,7 +352,7 @@ def integer_point_mass_at(variables: Variables, value: float) -> IntegerLayer:
     :param value: The value of ``count`` that gets all of the mass.
     :return: A layer of one point mass over ``count``, whose only state is the value.
     """
-    return point_masses_layer(
+    return LayeredProbabilisticCircuit.point_masses_layer(
         0,
         [
             IntegerDistribution(
@@ -526,7 +523,7 @@ def test_only_the_given_nodes_multiply_the_attached_child_layer(variables):
 
 def test_every_point_mass_puts_its_mass_on_its_value(variables):
     values = [0, 2]
-    layer = point_masses_layer(
+    layer = LayeredProbabilisticCircuit.point_masses_layer(
         0,
         [
             IntegerDistribution(
