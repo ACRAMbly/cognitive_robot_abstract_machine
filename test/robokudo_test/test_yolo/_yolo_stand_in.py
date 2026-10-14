@@ -165,12 +165,17 @@ class ScriptedUltralytics:
         default_factory=TopHalfSegmentationModel
     )
     """
-    The segmentation model handed out for every SAM model name.
+    The segmentation model handed out for every SAM model location.
     """
 
     loaded_model_locations: List[str] = field(default_factory=list)
     """
     The locations the detection model was loaded from.
+    """
+
+    loaded_segmentation_model_locations: List[str] = field(default_factory=list)
+    """
+    The locations the segmentation model was loaded from.
     """
 
     def load_model(self, location: str) -> ScriptedYoloModel:
@@ -180,8 +185,9 @@ class ScriptedUltralytics:
         self.loaded_model_locations.append(location)
         return self.model
 
-    def load_segmentation_model(self, name: str) -> TopHalfSegmentationModel:
+    def load_segmentation_model(self, location: str) -> TopHalfSegmentationModel:
         """
-        Stand-in for constructing a SAM model with the given name.
+        Stand-in for constructing a SAM model from the given location.
         """
+        self.loaded_segmentation_model_locations.append(location)
         return self.segmentation_model

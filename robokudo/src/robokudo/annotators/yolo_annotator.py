@@ -30,6 +30,7 @@ from ultralytics import SAM, YOLO
 
 from robokudo.annotators.core import ThreadedAnnotator
 from robokudo.cas import CASViews
+from robokudo.defs import PACKAGE_NAME
 from robokudo.exceptions import DetectionModelNotConfigured
 from robokudo.types.annotation import Classification
 from robokudo.types.cv import Point2D, Rect
@@ -39,6 +40,7 @@ from robokudo.utils.comparators import RoiComparator
 from robokudo.utils.cv_helper import crop_image, get_scaled_color_image_for_depth_image
 from robokudo.utils.decorators import timer_decorator
 from robokudo.utils.file_loader import FileLoader
+from robokudo.utils.module_loader import ModuleLoader
 from robokudo.utils.o3d_helper import get_cloud_from_rgb_depth_and_mask
 
 if TYPE_CHECKING:
@@ -105,10 +107,19 @@ class YoloAnnotator(ThreadedAnnotator):
             """
 
             def __init__(self) -> None:
+                self.models_directory: Path = (
+                    ModuleLoader.get_module_path(PACKAGE_NAME) / "models"
+                )
+                """
+                Directory the pretrained models are loaded from, and downloaded into on
+                first use.
+
+                Created during setup if it does not exist.
+                """
                 self.pretrained_model: Optional[str] = None
                 """
-                Name of a model ultralytics provides, e.g. ``yolov8m.pt``, downloaded on
-                first use.
+                Name of a model ultralytics provides, e.g. ``yolov8m.pt``, inside
+                :attr:`models_directory`.
 
                 Takes precedence over weights inside a ROS package.
                 """
@@ -143,7 +154,8 @@ class YoloAnnotator(ThreadedAnnotator):
                 """
                 self.segmentation_model: str = "mobile_sam.pt"
                 """
-                Name of the SAM model ultralytics loads in precision mode.
+                Name of the SAM model ultralytics provides, inside
+                :attr:`models_directory`, loaded in precision mode.
                 """
                 self.precision_mode_apply_erosion: bool = False
                 """
@@ -174,12 +186,12 @@ class YoloAnnotator(ThreadedAnnotator):
                 """
                 :param annotator_name: Name of the annotator loading the model, for the
                     error.
-                :return: The pretrained model name, or else the path of the custom
-                    weights.
+                :return: The path of the pretrained model inside
+                    :attr:`models_directory`, or else the path of the custom weights.
                 :raises DetectionModelNotConfigured: If neither is configured.
                 """
                 if self.pretrained_model is not None:
-                    return self.pretrained_model
+                    return str(self.models_directory / self.pretrained_model)
                 if self.ros_package_name is None or self.weights_path is None:
                     raise DetectionModelNotConfigured(annotator_name=annotator_name)
                 return str(self.file_in_ros_package(self.weights_path))
@@ -284,10 +296,13 @@ class YoloAnnotator(ThreadedAnnotator):
         Load the models, so that building a pipeline does not download them.
         """
         parameters: YoloAnnotator.Descriptor.Parameters = self.descriptor.parameters
+        parameters.models_directory.mkdir(parents=True, exist_ok=True)
         self.model = YOLO(self.model_location)
         self.class_names = self._load_class_names()
         if parameters.precision_mode:
-            self.segmentation_model = SAM(parameters.segmentation_model)
+            self.segmentation_model = SAM(
+                str(parameters.models_directory / parameters.segmentation_model)
+            )
         return super().setup(**kwargs)
 
     def _load_class_names(self) -> Dict[int, str]:

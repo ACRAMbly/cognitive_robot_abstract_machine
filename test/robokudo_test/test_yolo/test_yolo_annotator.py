@@ -9,17 +9,23 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
+from pathlib import Path
 
 import numpy as np
 import open3d as o3d
 import pytest
 from py_trees.common import Status
 
+import robokudo
 import robokudo.annotators.yolo_annotator
 from robokudo.annotators.yolo_annotator import YoloAnnotator
 from robokudo.cas import CASViews
-from robokudo.descriptors.analysis_engines.yolo_demo_from_storage import (
+from robokudo.analysis_engine import AnalysisEngineInterface
+from robokudo.descriptors.analysis_engines.yolo_demo import (
     AnalysisEngine as YoloDemoAnalysisEngine,
+)
+from robokudo.descriptors.analysis_engines.yolo_demo_from_storage import (
+    AnalysisEngine as YoloDemoFromStorageAnalysisEngine,
 )
 from robokudo.exceptions import DetectionModelNotConfigured
 from robokudo.pipeline import Pipeline
@@ -46,6 +52,11 @@ pytestmark = pytest.mark.usefixtures("annotator_output_buffer")
 class CupScene:
     """
     A camera view of a cup at a constant distance, which the scripted model detects.
+    """
+
+    models_directory: Path
+    """
+    Directory the annotators under test load pretrained models from.
     """
 
     class_names: dict[int, str] = field(
@@ -110,6 +121,7 @@ class CupScene:
         :return: A descriptor loading the pretrained model and ignoring depth.
         """
         descriptor = YoloAnnotator.Descriptor()
+        descriptor.parameters.models_directory = self.models_directory
         descriptor.parameters.pretrained_model = self.pretrained_model
         descriptor.parameters.threshold = 0.5
         descriptor.parameters.global_with_depth = False
@@ -167,11 +179,11 @@ class CupScene:
 
 
 @pytest.fixture
-def scene() -> CupScene:
+def scene(tmp_path: Path) -> CupScene:
     """
     The camera view the annotators under test detect a cup in.
     """
-    return CupScene()
+    return CupScene(models_directory=tmp_path / "models")
 
 
 @pytest.fixture
@@ -233,14 +245,37 @@ def _hypothesis_at(x: int, y: int, width: int, height: int) -> ObjectHypothesis:
 # %% model loading
 
 
-def test_pretrained_model_is_loaded_by_name(ultralytics, scene):
+def test_models_directory_defaults_to_models_folder_of_robokudo_package():
+    parameters = YoloAnnotator.Descriptor.Parameters()
+
+    assert parameters.models_directory == Path(robokudo.__file__).parent / "models"
+
+
+def test_pretrained_model_is_loaded_from_models_directory(ultralytics, scene):
     descriptor = scene.descriptor()
 
     YoloAnnotator(descriptor=descriptor).setup()
 
     assert ultralytics.loaded_model_locations == [
-        descriptor.parameters.pretrained_model
+        str(scene.models_directory / descriptor.parameters.pretrained_model)
     ]
+
+
+def test_segmentation_model_is_loaded_from_models_directory(ultralytics, scene):
+    descriptor = scene.descriptor()
+    descriptor.parameters.precision_mode = True
+
+    YoloAnnotator(descriptor=descriptor).setup()
+
+    assert ultralytics.loaded_segmentation_model_locations == [
+        str(scene.models_directory / descriptor.parameters.segmentation_model)
+    ]
+
+
+def test_setup_creates_missing_models_directory(ultralytics, scene):
+    YoloAnnotator(descriptor=scene.descriptor()).setup()
+
+    assert scene.models_directory.is_dir()
 
 
 def test_annotator_without_model_raises(ultralytics, scene):
@@ -500,21 +535,33 @@ def test_existing_hypotheses_are_left_alone_unless_enabled(ultralytics, scene):
 # %% demo analysis engine
 
 
-def test_demo_pipeline_contains_yolo_annotator(ultralytics, monkeypatch):
+@pytest.mark.parametrize(
+    "analysis_engine_type",
+    [YoloDemoAnalysisEngine, YoloDemoFromStorageAnalysisEngine],
+)
+def test_demo_pipeline_contains_yolo_annotator(
+    ultralytics, monkeypatch, analysis_engine_type: type[AnalysisEngineInterface]
+):
     install_fake_collection_reader_descriptor(monkeypatch)
     with bounded_build_time():
-        pipeline = YoloDemoAnalysisEngine().implementation()
+        pipeline = analysis_engine_type().implementation()
 
     assert any(isinstance(node, YoloAnnotator) for node in pipeline.children)
 
 
-def test_building_demo_pipeline_loads_no_model(ultralytics, monkeypatch):
+@pytest.mark.parametrize(
+    "analysis_engine_type",
+    [YoloDemoAnalysisEngine, YoloDemoFromStorageAnalysisEngine],
+)
+def test_building_demo_pipeline_loads_no_model(
+    ultralytics, monkeypatch, analysis_engine_type: type[AnalysisEngineInterface]
+):
     """
     Models are loaded during setup, so that building every analysis engine, as the test
     suite does, downloads no weights.
     """
     install_fake_collection_reader_descriptor(monkeypatch)
     with bounded_build_time():
-        YoloDemoAnalysisEngine().implementation()
+        analysis_engine_type().implementation()
 
     assert ultralytics.loaded_model_locations == []
