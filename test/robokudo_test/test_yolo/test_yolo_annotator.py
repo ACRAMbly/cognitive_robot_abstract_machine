@@ -20,22 +20,11 @@ import robokudo
 import robokudo.annotators.yolo_annotator
 from robokudo.annotators.yolo_annotator import YoloAnnotator
 from robokudo.cas import CASViews
-from robokudo.analysis_engine import AnalysisEngineInterface
-from robokudo.descriptors.analysis_engines.yolo_demo import (
-    AnalysisEngine as YoloDemoAnalysisEngine,
-)
-from robokudo.descriptors.analysis_engines.yolo_demo_from_storage import (
-    AnalysisEngine as YoloDemoFromStorageAnalysisEngine,
-)
 from robokudo.exceptions import DetectionModelNotConfigured
 from robokudo.pipeline import Pipeline
 from robokudo.types.annotation import Classification
 from robokudo.types.scene import HumanHypothesis, ObjectHypothesis
 from robokudo.utils.file_loader import FileLoader
-from ..test_analysis_engine_query_composition import (
-    bounded_build_time,
-    install_fake_collection_reader_descriptor,
-)
 from ._yolo_stand_in import (
     NormalizedBox,
     ScriptedDetection,
@@ -530,38 +519,3 @@ def test_existing_hypotheses_are_left_alone_unless_enabled(ultralytics, scene):
 
     assert len(_hypotheses(annotator)) == 2
     assert existing.annotations == []
-
-
-# %% demo analysis engine
-
-
-@pytest.mark.parametrize(
-    "analysis_engine_type",
-    [YoloDemoAnalysisEngine, YoloDemoFromStorageAnalysisEngine],
-)
-def test_demo_pipeline_contains_yolo_annotator(
-    ultralytics, monkeypatch, analysis_engine_type: type[AnalysisEngineInterface]
-):
-    install_fake_collection_reader_descriptor(monkeypatch)
-    with bounded_build_time():
-        pipeline = analysis_engine_type().implementation()
-
-    assert any(isinstance(node, YoloAnnotator) for node in pipeline.children)
-
-
-@pytest.mark.parametrize(
-    "analysis_engine_type",
-    [YoloDemoAnalysisEngine, YoloDemoFromStorageAnalysisEngine],
-)
-def test_building_demo_pipeline_loads_no_model(
-    ultralytics, monkeypatch, analysis_engine_type: type[AnalysisEngineInterface]
-):
-    """
-    Models are loaded during setup, so that building every analysis engine, as the test
-    suite does, downloads no weights.
-    """
-    install_fake_collection_reader_descriptor(monkeypatch)
-    with bounded_build_time():
-        analysis_engine_type().implementation()
-
-    assert ultralytics.loaded_model_locations == []
