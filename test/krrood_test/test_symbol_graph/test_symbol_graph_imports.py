@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import subprocess
 import sys
 import tomllib
@@ -13,12 +12,6 @@ import krrood.symbol_graph.symbol_graph
 PACKAGE_DIRECTORY = Path(__file__).parents[3] / "krrood"
 """
 The directory holding krrood's ``pyproject.toml``.
-"""
-
-PROBE = Path(__file__).parents[1] / "dataset" / "loaded_top_level_packages.py"
-"""
-The script that imports a module in an interpreter of its own, so that what it loads is
-not already loaded by the test run.
 """
 
 # %% optional dependencies
@@ -37,16 +30,24 @@ def test_importing_the_symbol_graph_loads_no_optional_dependency():
         for extra in project["optional-dependencies"].values()
         for requirement in extra
     } - required
-    probe = subprocess.run(
+    # A fresh interpreter, because the test run has already loaded what it would load.
+    # ``-X importtime`` reports every module the import loads, one per stderr line.
+    import_report = subprocess.run(
         [
             sys.executable,
             "-I",
-            PROBE,
+            "-X",
+            "importtime",
+            "-m",
             krrood.symbol_graph.symbol_graph.__name__,
         ],
         capture_output=True,
         text=True,
         check=True,
     )
+    loaded_top_level_packages = {
+        line.rpartition("|")[2].strip().partition(".")[0]
+        for line in import_report.stderr.splitlines()
+    }
 
-    assert set(json.loads(probe.stdout)) & optional == set()
+    assert loaded_top_level_packages & optional == set()
