@@ -7,6 +7,27 @@ from krrood.exceptions import DataclassException
 
 
 @dataclass
+class PartFindingServerUnknownError(DataclassException):
+    """
+    Raised when a part finding client is given no server to ask.
+    """
+
+    variable: str = field(kw_only=True)
+    """
+    The environment variable that names the server by default.
+    """
+
+    def error_message(self) -> str:
+        return f"No part finding server was given, and {self.variable} is not set."
+
+    def suggest_correction(self) -> str:
+        return (
+            f"set {self.variable} to the address of the institute's part finding "
+            "server, or pass base_url."
+        )
+
+
+@dataclass
 class PartFindingServerError(DataclassException):
     """
     Raised when a part finding server does not answer a query with the parts.

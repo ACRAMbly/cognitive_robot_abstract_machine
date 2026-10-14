@@ -29,10 +29,10 @@ and the classes it is made of.
 
 ## Where the models run
 
-By default `AnnotationPartFinder` asks the part finding server on neem-4, which is
-reachable from within the university's network and needs nothing beyond this package.
-Another server is asked when the environment variable
-`SEMANTIC_DIGITAL_TWIN_PART_FINDING_SERVER_URL` names it, or when it is given directly:
+By default `AnnotationPartFinder` asks the part finding server that runs on an internal
+server of the institute, which needs nothing beyond this package. Set the environment
+variable `SEMANTIC_DIGITAL_TWIN_PART_FINDING_SERVER_URL` to its address, which you get
+from the institute, or give a server directly:
 
 ```python
 from semantic_digital_twin.adapters.part_finding.client import RemotePartLocator

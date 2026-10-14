@@ -13,9 +13,11 @@ import requests
 import trimesh
 
 from semantic_digital_twin.adapters.part_finding.client import RemotePartLocator
+from semantic_digital_twin.adapters.part_finding.protocol import EnvironmentVariable
 from semantic_digital_twin.datastructures.camera_resolution import CameraResolution
 from semantic_digital_twin.adapters.part_finding.exceptions import (
     PartFindingServerError,
+    PartFindingServerUnknownError,
 )
 from semantic_digital_twin.adapters.part_finding.server import (
     PartFindingCache,
@@ -113,3 +115,16 @@ def test_the_status_names_the_locator(server):
 
 def test_an_unknown_path_is_not_found(server):
     assert requests.get(f"{server.url}/nothing").status_code == HTTPStatus.NOT_FOUND
+
+
+def test_a_client_without_a_server_to_ask_fails(monkeypatch):
+    monkeypatch.delenv(EnvironmentVariable.PART_FINDING_SERVER_URL, raising=False)
+
+    with pytest.raises(PartFindingServerUnknownError):
+        RemotePartLocator()
+
+
+def test_a_client_asks_the_server_the_environment_names(monkeypatch, server):
+    monkeypatch.setenv(EnvironmentVariable.PART_FINDING_SERVER_URL, server.url)
+
+    assert RemotePartLocator().status().locator == server.locator.fingerprint

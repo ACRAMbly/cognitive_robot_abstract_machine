@@ -1,7 +1,7 @@
 """
 A server that finds the parts of shapes for clients that have no GPU, such as the one on
-neem-4. Start it with ``semantic-digital-twin-part-finding-server``, see
-:mod:`~semantic_digital_twin.adapters.part_finding.command_line`.
+the institute's internal server. Start it with ``semantic-digital-twin-part-finding-
+server``, see :mod:`~semantic_digital_twin.adapters.part_finding.command_line`.
 
 The server answers one query at a time and keeps every answer, so the same question
 about the same shape is only ever worked out once.
@@ -20,6 +20,7 @@ import socket
 import threading
 import time
 from dataclasses import dataclass, field
+from datetime import timedelta
 from functools import partial
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -208,7 +209,7 @@ class PartFindingServer:
             return PartFindingAnswer(
                 parts=cached,
                 locator=fingerprint,
-                seconds=time.perf_counter() - start,
+                duration=timedelta(seconds=time.perf_counter() - start),
                 from_cache=True,
             )
         with self._counter_lock:
@@ -227,7 +228,10 @@ class PartFindingServer:
             seconds,
         )
         return PartFindingAnswer(
-            parts=parts, locator=fingerprint, seconds=seconds, from_cache=False
+            parts=parts,
+            locator=fingerprint,
+            duration=timedelta(seconds=seconds),
+            from_cache=False,
         )
 
     def status(self) -> PartFindingServerStatus:

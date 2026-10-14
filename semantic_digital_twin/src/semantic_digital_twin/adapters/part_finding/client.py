@@ -1,5 +1,6 @@
 """
-Asking a part finding server, such as the one on neem-4, where the parts of a shape are.
+Asking a part finding server, such as the institute's internal one, where the parts of a
+shape are.
 """
 
 from __future__ import annotations
@@ -12,10 +13,12 @@ from datetime import timedelta
 from http import HTTPStatus
 
 import requests
+from typing_extensions import Optional
 
 from krrood.adapters.json_serializer import from_json, to_json
 from semantic_digital_twin.adapters.part_finding.exceptions import (
     PartFindingServerError,
+    PartFindingServerUnknownError,
 )
 from semantic_digital_twin.adapters.part_finding.protocol import (
     ContentEncoding,
@@ -39,16 +42,14 @@ class RemotePartLocator(PartLocator):
     Locates parts by asking a part finding server.
     """
 
-    base_url: str = field(
+    base_url: Optional[str] = field(
         default_factory=lambda: os.environ.get(
-            EnvironmentVariable.PART_FINDING_SERVER_URL,
-            "http://neem-4.informatik.uni-bremen.de:8790",
+            EnvironmentVariable.PART_FINDING_SERVER_URL
         )
     )
     """
-    The address of the server: the value of the environment variable
-    ``SEMANTIC_DIGITAL_TWIN_PART_FINDING_SERVER_URL`` if it is set, otherwise the server
-    on neem-4, which is reachable from within the university's network.
+    The address of the server; by default the value of the environment variable
+    ``SEMANTIC_DIGITAL_TWIN_PART_FINDING_SERVER_URL``.
     """
 
     timeout: timedelta = timedelta(minutes=5)
@@ -60,6 +61,12 @@ class RemotePartLocator(PartLocator):
     """
     The connection the queries are sent on.
     """
+
+    def __post_init__(self) -> None:
+        if self.base_url is None:
+            raise PartFindingServerUnknownError(
+                variable=EnvironmentVariable.PART_FINDING_SERVER_URL
+            )
 
     def locate(self, query: PartQuery) -> list[LocatedPart]:
         return self.answer(query).parts

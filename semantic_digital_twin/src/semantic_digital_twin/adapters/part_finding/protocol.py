@@ -5,6 +5,7 @@ What a part finding server and its clients say to each other over http.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import timedelta
 from enum import StrEnum
 
 from semantic_digital_twin.pipeline.part_finding.locating import LocatedPart
@@ -81,7 +82,7 @@ class PartFindingAnswer:
     The fingerprint of the locator that found them, naming its models and settings.
     """
 
-    seconds: float
+    duration: timedelta
     """
     How long finding them took, or reading them from the cache.
     """
