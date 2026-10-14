@@ -24,7 +24,7 @@ from typing_extensions import (
     Type,
 )
 
-from krrood.class_diagrams.utils import lowest_common_primary_superclass
+from krrood.class_diagrams.utils import common_base_class
 from krrood.ormatic.data_access_objects.dao import (
     DataAccessObjectSchema,
     get_dao_schema,
@@ -48,7 +48,9 @@ from probabilistic_model.probabilistic_circuit.groundable_circuit import (
     GroundableCircuit,
 )
 from probabilistic_model.probabilistic_circuit.relational.exceptions import (
+    InstanceNotOfClassError,
     MixedCircuitTypesError,
+    NoCommonSuperclassError,
     UnknownExchangeablePartsError,
 )
 from probabilistic_model.probabilistic_circuit.relational.exchangeable_grounding import (
@@ -132,9 +134,7 @@ class RelationalProbabilisticCircuit:
         init=False, default=None, metadata=JSONMetadata(serialize=True).as_dict()
     )
     """
-    The domain class whose instances this distribution models, set by ``fit`` to the
-    lowest common superclass of the training instances on their primary inheritance
-    paths.
+    The domain class whose instances this distribution models, set by ``fit``.
     """
 
     class_probabilistic_circuit: Optional[GroundableCircuit] = None
@@ -338,9 +338,29 @@ class RelationalProbabilisticCircuit:
             )
         return template
 
+    @staticmethod
+    def _class_of(instances: list[Any], class_: Optional[Type]) -> Type:
+        """
+        :param instances: Training instances.
+        :param class_: The class the circuit models, or ``None`` for the lowest common
+            superclass of the instances in their method resolution orders.
+        :return: The class the circuit models.
+        """
+        if class_ is None:
+            class_ = common_base_class([type(instance) for instance in instances])
+            if class_ is None:
+                raise NoCommonSuperclassError(
+                    sorted({type(instance) for instance in instances}, key=str)
+                )
+        for instance in instances:
+            if not isinstance(instance, class_):
+                raise InstanceNotOfClassError(class_, type(instance))
+        return class_
+
     def fit(
         self,
         instances: list[Any],
+        class_: Optional[Type] = None,
         dataframe_from_parent: Optional[pd.DataFrame] = None,
     ):
         """
@@ -352,14 +372,17 @@ class RelationalProbabilisticCircuit:
         schema.
 
         :param instances: Training instances.
+        :param class_: The class the circuit models, or ``None`` for the lowest common
+            superclass of the instances.
         :param dataframe_from_parent: Pre-built dataframe supplied by a parent
             ``_fit_exchangeable_part`` call. When provided, feature extraction and
             preprocessing are skipped.
         :return:``self``, to allow chaining.
+        :raises NoCommonSuperclassError: If ``class_`` is not given and the instances
+            share no superclass but ``object``.
+        :raises InstanceNotOfClassError: If an instance is not of ``class_``.
         """
-        self.class_ = lowest_common_primary_superclass(
-            type(instance) for instance in instances
-        )
+        self.class_ = self._class_of(instances, class_)
         self.feature_extractor = FeatureExtractor.from_instances(instances)
         class_dataframe = self._build_class_dataframe(
             self.feature_extractor, instances, dataframe_from_parent

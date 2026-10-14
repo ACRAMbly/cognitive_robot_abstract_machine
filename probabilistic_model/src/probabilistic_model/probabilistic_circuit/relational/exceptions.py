@@ -317,3 +317,52 @@ class AmbiguousVariablePathError(DataclassException):
 
     def suggest_correction(self) -> str:
         return "Use a longer, more specific suffix of the variable's full name."
+
+
+@dataclass
+class NoCommonSuperclassError(DataclassException):
+    """
+    Raised when the instances a relational circuit is fitted on share no superclass
+    but ``object``.
+    """
+
+    classes: List[Type]
+    """
+    The classes of the instances.
+    """
+
+    def error_message(self) -> str:
+        return (
+            f"The classes {', '.join(clazz.__name__ for clazz in self.classes)} have "
+            f"no common superclass."
+        )
+
+    def suggest_correction(self) -> str:
+        return "Fit on instances of one class, or pass the class to `fit`."
+
+
+@dataclass
+class InstanceNotOfClassError(DataclassException):
+    """
+    Raised when a relational circuit is fitted for a class on an instance of another
+    class.
+    """
+
+    class_: Type
+    """
+    The class the circuit is fitted for.
+    """
+
+    instance_class: Type
+    """
+    The class of the instance.
+    """
+
+    def error_message(self) -> str:
+        return (
+            f"An instance of {self.instance_class.__name__} is not an instance of "
+            f"{self.class_.__name__}."
+        )
+
+    def suggest_correction(self) -> str:
+        return "Pass a class that every instance is an instance of."

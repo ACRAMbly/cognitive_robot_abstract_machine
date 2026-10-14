@@ -6,11 +6,7 @@ from types import NoneType
 from typing_extensions import List, Type, TypeVar
 
 from krrood.class_diagrams.class_diagram import WrappedClass
-from krrood.class_diagrams.utils import (
-    common_base_class,
-    lowest_common_primary_superclass,
-    primary_inheritance_path,
-)
+from krrood.class_diagrams.utils import common_base_class
 from krrood.class_diagrams.wrapped_field import WrappedField
 from ..dataset.example_classes import (
     KRROODPosition,
@@ -211,34 +207,3 @@ def test_common_base_class():
     )
 
     assert common_base_class([KRROODCup, KRROODBowl, NoneType]) is None
-
-
-class PrimaryBase: ...
-
-
-class LeftChild(PrimaryBase): ...
-
-
-class RightChild(PrimaryBase): ...
-
-
-class Mixin: ...
-
-
-class MixedChild(Mixin, LeftChild): ...
-
-
-def test_primary_inheritance_path_follows_the_first_base():
-    assert primary_inheritance_path(MixedChild) == [MixedChild, Mixin, object]
-    assert primary_inheritance_path(LeftChild) == [LeftChild, PrimaryBase, object]
-
-
-def test_lowest_common_primary_superclass():
-    assert lowest_common_primary_superclass([LeftChild, RightChild]) is PrimaryBase
-    assert lowest_common_primary_superclass([LeftChild]) is LeftChild
-    assert lowest_common_primary_superclass([LeftChild, LeftChild]) is LeftChild
-
-
-def test_lowest_common_primary_superclass_ignores_other_bases():
-    assert common_base_class([MixedChild, RightChild]) is PrimaryBase
-    assert lowest_common_primary_superclass([MixedChild, RightChild]) is object

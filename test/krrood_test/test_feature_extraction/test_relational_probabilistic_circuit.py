@@ -19,6 +19,8 @@ from probabilistic_model.probabilistic_circuit.causal.causal_circuit import (
 )
 from probabilistic_model.probabilistic_circuit.relational.exceptions import (
     CircuitNotFittedError,
+    InstanceNotOfClassError,
+    NoCommonSuperclassError,
     InvalidMonteCarloSampleCountError,
     MissingPartLearningMethodError,
     MixedCircuitTypesError,
@@ -137,6 +139,22 @@ def test_fit_sets_the_class_of_the_instances(relational_probabilistic_circuit):
         template.template_distribution.class_ is SceneObject
         for template in relational_probabilistic_circuit.exchangeable_distribution_templates.values()
     )
+
+
+def test_fit_uses_the_given_class(scenario):
+    model = RelationalProbabilisticCircuit().fit(list(scenario), class_=SceneRoom)
+    assert model.class_ is SceneRoom
+
+
+def test_fit_raises_for_an_instance_not_of_the_given_class(scenario):
+    with pytest.raises(InstanceNotOfClassError):
+        RelationalProbabilisticCircuit().fit(list(scenario), class_=SceneObject)
+
+
+def test_fit_raises_without_a_common_superclass(scenario):
+    room, _ = scenario
+    with pytest.raises(NoCommonSuperclassError):
+        RelationalProbabilisticCircuit().fit([room, room.objects[0]])
 
 
 def test_ground_before_fit_raises(room_query_4):
