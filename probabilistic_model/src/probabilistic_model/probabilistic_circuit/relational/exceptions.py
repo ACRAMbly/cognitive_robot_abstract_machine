@@ -16,15 +16,9 @@ class CircuitNotFittedError(DataclassException):
     Raised when a RelationalProbabilisticCircuit is grounded before it has been fitted.
     """
 
-    class_: Type
-    """
-    The domain class whose relational circuit has not been fitted yet.
-    """
-
     def error_message(self) -> str:
         return (
-            f"RelationalProbabilisticCircuit for {self.class_.__name__} must be fitted "
-            f"before it can be grounded."
+            "A RelationalProbabilisticCircuit must be fitted before it can be grounded."
         )
 
     def suggest_correction(self) -> str:

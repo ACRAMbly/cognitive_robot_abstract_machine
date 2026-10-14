@@ -566,7 +566,7 @@ class RelationalGrounding:
         """
         relational_circuit = self.relational_circuit
         if relational_circuit.class_probabilistic_circuit is None:
-            raise CircuitNotFittedError(relational_circuit.class_)
+            raise CircuitNotFittedError()
         circuit = relational_circuit.class_probabilistic_circuit.__deepcopy__()
         instance = query.construct_instance()
         for (

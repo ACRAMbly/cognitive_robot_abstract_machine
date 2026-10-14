@@ -47,7 +47,7 @@ def stationed_robot_circuit() -> RelationalProbabilisticCircuit:
     robots = _stationed_robots(random_state, RobotStation.LAB, 20) + _stationed_robots(
         random_state, RobotStation.FACTORY, 20
     )
-    model = RelationalProbabilisticCircuit(StationedPickingRobot)
+    model = RelationalProbabilisticCircuit()
     model.fit(robots)
     return model
 

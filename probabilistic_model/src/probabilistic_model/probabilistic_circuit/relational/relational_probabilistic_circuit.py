@@ -24,6 +24,7 @@ from typing_extensions import (
     Type,
 )
 
+from krrood.class_diagrams.utils import lowest_common_primary_superclass
 from krrood.ormatic.data_access_objects.dao import (
     DataAccessObjectSchema,
     get_dao_schema,
@@ -33,6 +34,7 @@ from krrood.parametrization.feature_extraction.aggregations import (
     compute_aggregation_statistics,
 )
 from krrood.parametrization.feature_extraction.feature_extractor import FeatureExtractor
+from krrood.patterns.field_metadata import JSONMetadata
 
 if TYPE_CHECKING:
     from krrood.entity_query_language.query.match import Match
@@ -126,9 +128,13 @@ class RelationalProbabilisticCircuit:
     A probabilistic circuit that jointly models a class and its relational structure.
     """
 
-    class_: Type
+    class_: Optional[Type] = field(
+        init=False, default=None, metadata=JSONMetadata(serialize=True).as_dict()
+    )
     """
-    The domain class whose instances this distribution models.
+    The domain class whose instances this distribution models, set by ``fit`` to the
+    lowest common superclass of the training instances on their primary inheritance
+    paths.
     """
 
     class_probabilistic_circuit: Optional[GroundableCircuit] = None
@@ -293,7 +299,6 @@ class RelationalProbabilisticCircuit:
                 getattr(instance, exchangeable_part) for instance in instances
             )
         )
-        child_type = type(child_instances[0])
         child_feature_extractor = FeatureExtractor.from_instances(child_instances)
         child_dataframe = self._build_child_joint_dataframe(
             exchangeable_part,
@@ -309,7 +314,6 @@ class RelationalProbabilisticCircuit:
         ]
         template = ExchangeableDistributionTemplate(
             RelationalProbabilisticCircuit(
-                child_type,
                 learning_method=self.part_learning_methods.method_of_path(
                     exchangeable_part
                 ),
@@ -347,12 +351,15 @@ class RelationalProbabilisticCircuit:
         ``ExchangeableDistributionTemplate`` per exchangeable part discovered in the
         schema.
 
-        :param instances: Training instances; all must be of the same class.
+        :param instances: Training instances.
         :param dataframe_from_parent: Pre-built dataframe supplied by a parent
             ``_fit_exchangeable_part`` call. When provided, feature extraction and
             preprocessing are skipped.
         :return:``self``, to allow chaining.
         """
+        self.class_ = lowest_common_primary_superclass(
+            type(instance) for instance in instances
+        )
         self.feature_extractor = FeatureExtractor.from_instances(instances)
         class_dataframe = self._build_class_dataframe(
             self.feature_extractor, instances, dataframe_from_parent

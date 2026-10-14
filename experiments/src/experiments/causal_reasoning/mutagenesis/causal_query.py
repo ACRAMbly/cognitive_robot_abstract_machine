@@ -199,7 +199,6 @@ class BranchingAtomCountCausalQuery:
             MutagenesisMoleculeAggregations
         ).branching_atom_count()
         model = RelationalProbabilisticCircuit(
-            MutagenesisMolecule,
             monte_carlo_sample_count=monte_carlo_sample_count,
             learning_method=StratifiedLearning(
                 variables=[branching_atom_count_variable_expression._name_],

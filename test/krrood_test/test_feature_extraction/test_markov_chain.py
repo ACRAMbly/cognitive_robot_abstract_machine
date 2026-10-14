@@ -41,7 +41,7 @@ def type_variable() -> Symbolic:
 @pytest.fixture
 def dirac_hidden_state_template(type_variable):
     """
-    A ``RelationalProbabilisticCircuit(SceneObject)`` whose class circuit is a
+    A ``RelationalProbabilisticCircuit`` of ``SceneObject`` whose class circuit is a
     2-state hidden Markov emission model built by hand: one state always emits
     ``CHAIR``, the other always emits ``TABLE``. The dirac emissions make the
     "type" observed at each grounded position reveal the hidden state exactly,
@@ -57,7 +57,7 @@ def dirac_hidden_state_template(type_variable):
     root.add_subcircuit(
         leaf(make_dirac(type_variable, SceneObjectType.TABLE), circuit), np.log(0.5)
     )
-    template_distribution = RelationalProbabilisticCircuit(SceneObject)
+    template_distribution = RelationalProbabilisticCircuit()
     template_distribution.class_probabilistic_circuit = circuit
     return template_distribution
 

@@ -169,7 +169,6 @@ def test_cause_on_an_aggregation_statistic_grounds_through_the_registry():
     ]
     chair_count_variable = variable(SceneRoomAggregations).chair_count()
     model = RelationalProbabilisticCircuit(
-        SceneRoom,
         learning_method=StratifiedLearning(
             variables=[chair_count_variable._name_], method=JointProbabilityTree()
         ),

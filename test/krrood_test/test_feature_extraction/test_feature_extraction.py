@@ -105,7 +105,7 @@ def test_features_extraction():
 
 def test_feature_extraction_with_aggregations(scenario):
     room, room2, feature_extractor = scenario
-    relational_probabilistic_circuit = RelationalProbabilisticCircuit(SceneRoom)
+    relational_probabilistic_circuit = RelationalProbabilisticCircuit()
     relational_probabilistic_circuit.fit([room, room2])
 
     room_query = a(SceneRoom)(

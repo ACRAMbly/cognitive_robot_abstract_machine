@@ -57,7 +57,7 @@ def _nested_scenario(room_counts: list[int]) -> list:
 # %% fixtures
 @pytest.fixture
 def nested_relational_probabilistic_circuit():
-    model = RelationalProbabilisticCircuit(SceneWithExchangeableParts)
+    model = RelationalProbabilisticCircuit()
     model.fit(_nested_scenario([2, 3]))
     return model
 
@@ -187,7 +187,7 @@ def three_level_relational_probabilistic_circuit():
         )
         for _ in range(4)
     ]
-    return RelationalProbabilisticCircuit(SceneBuilding).fit(buildings)
+    return RelationalProbabilisticCircuit().fit(buildings)
 
 
 @pytest.fixture

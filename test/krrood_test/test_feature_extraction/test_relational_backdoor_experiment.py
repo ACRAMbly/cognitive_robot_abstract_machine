@@ -60,7 +60,7 @@ def _sample_confounded_robot(rng: np.random.Generator) -> PickingRobot:
 def confounded_model() -> RelationalProbabilisticCircuit:
     rng = np.random.default_rng(0)
     robots = [_sample_confounded_robot(rng) for _ in range(TRAINING_ROBOT_COUNT)]
-    model = RelationalProbabilisticCircuit(PickingRobot)
+    model = RelationalProbabilisticCircuit()
     model.fit(robots)
     return model
 

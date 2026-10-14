@@ -47,7 +47,7 @@ def synthetic_molecules():
 
 @pytest.fixture
 def synthetic_rpc(synthetic_molecules) -> RelationalProbabilisticCircuit:
-    model = RelationalProbabilisticCircuit(MutagenesisMolecule)
+    model = RelationalProbabilisticCircuit()
     model.fit(synthetic_molecules)
     return model
 
@@ -89,7 +89,7 @@ def mutagenesis_split(mutagenesis_molecules):
 @pytest.fixture(scope="module")
 def mutagenesis_rpc(mutagenesis_split) -> RelationalProbabilisticCircuit:
     train_molecules, _ = mutagenesis_split
-    model = RelationalProbabilisticCircuit(MutagenesisMolecule)
+    model = RelationalProbabilisticCircuit()
     model.fit(train_molecules)
     return model
 

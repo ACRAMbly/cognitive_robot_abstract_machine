@@ -536,7 +536,6 @@ class MutagenesisDoQuery:
         :return: The grounded circuit, with its cause and effect registered.
         """
         model = RelationalProbabilisticCircuit(
-            MutagenesisMolecule,
             monte_carlo_sample_count=self.monte_carlo_sample_count,
             learning_method=StratifiedLearning(
                 variables=[self.question.cause_variable_name],

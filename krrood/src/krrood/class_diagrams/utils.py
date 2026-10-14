@@ -16,6 +16,7 @@ from typing_extensions import (
     Any,
     Callable,
     Dict,
+    Iterable,
     List,
     Optional,
     Tuple,
@@ -122,6 +123,33 @@ def common_base_class(types: List[Type]) -> Optional[Type]:
         if cls in common and cls is not object:
             return cls
     return None
+
+
+def primary_inheritance_path(clazz: Type) -> List[Type]:
+    """
+    :param clazz: The class to start from.
+    :return: The class followed by its first base, the first base of that and so on,
+        ending at :class:`object`.
+    """
+    result = [clazz]
+    while result[-1].__bases__:
+        result.append(result[-1].__bases__[0])
+    return result
+
+
+def lowest_common_primary_superclass(classes: Iterable[Type]) -> Type:
+    """
+    :param classes: The classes to find the superclass of; at least one.
+    :return: The lowest class on the primary inheritance path of every class, see
+        :func:`primary_inheritance_path`. Other bases are ignored.
+    """
+    classes = list(classes)
+    paths = [set(primary_inheritance_path(clazz)) for clazz in classes[1:]]
+    return next(
+        clazz
+        for clazz in primary_inheritance_path(classes[0])
+        if all(clazz in path for path in paths)
+    )
 
 
 def is_builtin_class(clazz: Type) -> bool:

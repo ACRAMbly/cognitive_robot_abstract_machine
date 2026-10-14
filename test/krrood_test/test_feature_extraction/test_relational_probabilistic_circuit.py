@@ -93,7 +93,7 @@ def scenario():
 @pytest.fixture
 def relational_probabilistic_circuit(scenario):
     room, room2 = scenario
-    model = RelationalProbabilisticCircuit(SceneRoom)
+    model = RelationalProbabilisticCircuit()
     model.fit([room, room2])
     return model
 
@@ -101,7 +101,6 @@ def relational_probabilistic_circuit(scenario):
 @pytest.fixture
 def layered_relational_probabilistic_circuit(scenario):
     return RelationalProbabilisticCircuit(
-        SceneRoom,
         learning_method=LayeredLearning(JointProbabilityTree()),
         part_learning_methods=PartLearningMethods(
             LayeredLearning(JointProbabilityTree())
@@ -132,8 +131,16 @@ def test_groundable_circuits_return_nodes_of_their_node_type(fitted_circuit, req
     assert all(isinstance(node, node_type) for node in nodes)
 
 
+def test_fit_sets_the_class_of_the_instances(relational_probabilistic_circuit):
+    assert relational_probabilistic_circuit.class_ is SceneRoom
+    assert all(
+        template.template_distribution.class_ is SceneObject
+        for template in relational_probabilistic_circuit.exchangeable_distribution_templates.values()
+    )
+
+
 def test_ground_before_fit_raises(room_query_4):
-    model = RelationalProbabilisticCircuit(SceneRoom)
+    model = RelationalProbabilisticCircuit()
     with pytest.raises(CircuitNotFittedError):
         model.ground(room_query_4)
 
@@ -297,7 +304,7 @@ def relational_probabilistic_circuit_with_ambiguous_total_count_4():
     sit within one leaf for the sample count to decide how much of it is discovered.
     """
     model = RelationalProbabilisticCircuit(
-        SceneRoom, learning_method=JointProbabilityTree(min_samples_per_leaf=2)
+        learning_method=JointProbabilityTree(min_samples_per_leaf=2)
     )
     model.fit(_rooms_with_ambiguous_total_count_4())
     return model
@@ -306,7 +313,6 @@ def relational_probabilistic_circuit_with_ambiguous_total_count_4():
 @pytest.fixture
 def layered_relational_probabilistic_circuit_with_ambiguous_total_count_4():
     return RelationalProbabilisticCircuit(
-        SceneRoom,
         learning_method=LayeredLearning(JointProbabilityTree(min_samples_per_leaf=2)),
         part_learning_methods=PartLearningMethods(
             LayeredLearning(JointProbabilityTree())
@@ -673,7 +679,7 @@ def _correlated_rooms() -> list[SceneRoom]:
 
 @pytest.fixture
 def correlated_relational_probabilistic_circuit() -> RelationalProbabilisticCircuit:
-    model = RelationalProbabilisticCircuit(SceneRoom)
+    model = RelationalProbabilisticCircuit()
     model.fit(_correlated_rooms())
     return model
 
@@ -683,7 +689,6 @@ def layered_correlated_relational_probabilistic_circuit() -> (
     RelationalProbabilisticCircuit
 ):
     return RelationalProbabilisticCircuit(
-        SceneRoom,
         learning_method=LayeredLearning(JointProbabilityTree()),
         part_learning_methods=PartLearningMethods(
             LayeredLearning(JointProbabilityTree())
@@ -967,15 +972,12 @@ def _nested_scenes() -> list[SceneWithExchangeableParts]:
 
 @pytest.fixture
 def nested_relational_probabilistic_circuit() -> RelationalProbabilisticCircuit:
-    return RelationalProbabilisticCircuit(SceneWithExchangeableParts).fit(
-        _nested_scenes()
-    )
+    return RelationalProbabilisticCircuit().fit(_nested_scenes())
 
 
 @pytest.fixture
 def layered_nested_relational_probabilistic_circuit() -> RelationalProbabilisticCircuit:
     return RelationalProbabilisticCircuit(
-        SceneWithExchangeableParts,
         learning_method=LayeredLearning(JointProbabilityTree()),
         part_learning_methods=PartLearningMethods(
             LayeredLearning(JointProbabilityTree())
@@ -1460,7 +1462,6 @@ def test_part_learning_methods_without_a_default_require_every_part():
 
 def test_the_default_part_learning_method_reaches_nested_parts():
     model = RelationalProbabilisticCircuit(
-        SceneBuilding,
         learning_method=LayeredLearning(JointProbabilityTree()),
         part_learning_methods=PartLearningMethods(
             LayeredLearning(JointProbabilityTree())
@@ -1473,7 +1474,6 @@ def test_the_default_part_learning_method_reaches_nested_parts():
 
 def test_a_learning_method_for_an_unknown_part_raises():
     model = RelationalProbabilisticCircuit(
-        SceneRoom,
         part_learning_methods=PartLearningMethods.from_methods_and_default(
             {variable(SceneRoom).objekts: JointProbabilityTree()},
             JointProbabilityTree(),
@@ -1485,7 +1485,6 @@ def test_a_learning_method_for_an_unknown_part_raises():
 
 def test_fitting_parts_in_another_circuit_type_raises():
     model = RelationalProbabilisticCircuit(
-        SceneWithExchangeableParts,
         learning_method=LayeredLearning(JointProbabilityTree()),
         part_learning_methods=PartLearningMethods.from_methods_and_default(
             {variable(SceneWithExchangeableParts).rooms: JointProbabilityTree()},
@@ -1563,9 +1562,8 @@ def _building_query(objects_per_room_per_floor: list[list[int]]) -> Any:
 def test_layered_grounding_of_three_levels_of_relations_is_the_grounding(
     objects_per_room_per_floor, grounding_mode
 ):
-    model = RelationalProbabilisticCircuit(SceneBuilding).fit(_buildings())
+    model = RelationalProbabilisticCircuit().fit(_buildings())
     layered_model = RelationalProbabilisticCircuit(
-        SceneBuilding,
         learning_method=LayeredLearning(JointProbabilityTree()),
         part_learning_methods=PartLearningMethods(
             LayeredLearning(JointProbabilityTree())
