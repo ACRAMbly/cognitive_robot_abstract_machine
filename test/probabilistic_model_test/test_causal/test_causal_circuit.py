@@ -347,7 +347,7 @@ def _build_unnormalized_circuit() -> tuple:
 def _build_shared_cause_subcircuit_circuit() -> tuple:
     """
     A DAG, not a tree: the SumUnit over the cause x is mounted as a shared child of two
-    different ProductUnits, matching the mounting pattern RSPN grounding uses when one
+    different ProductUnits, matching the mounting pattern relational grounding uses when one
     exchangeable instance is attached under several class-level product nodes.
 
         SumUnit(root)
@@ -753,7 +753,7 @@ class VerifySupportDeterminismSharedSubcircuitTestCase(unittest.TestCase):
     """
     A shared child (a node with more than one parent) must be visited once by
     _check_support_disjointness's traversal and its disjointness result attributed
-    correctly to every parent -- the pattern RSPN's exact-partition and Monte-Carlo
+    correctly to every parent -- the pattern the relational circuit's exact-partition and Monte-Carlo
     grounding both rely on when one grounded instance is mounted under several class-
     level product nodes.
     """
