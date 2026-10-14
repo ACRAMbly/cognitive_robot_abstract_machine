@@ -2,9 +2,9 @@
 Splitting a part, such as a handle or a rim, off the shape of an object into a body of
 its own, annotated as that part of the object's annotation.
 
-A finder decides which piece of the object's shape the part is; a splitter cuts the shape
-there and gives each piece its own body, on its own or as a step of a pipeline. Shapes are
-taken in the frame of the object's root body, its z-axis pointing up.
+A finder decides which piece of the object's shape the part is; a splitter cuts the
+shape there and gives each piece its own body, on its own or as a step of a pipeline.
+Shapes are taken in the frame of the object's root body, its z-axis pointing up.
 """
 
 from __future__ import annotations
@@ -81,8 +81,9 @@ class ShapeSplit:
         normal: NDArray[np.float64],
     ) -> Optional[ShapeSplit]:
         """
-        Cut the shape along a plane. A closed shape is cut into closed pieces.
+        Cut the shape along a plane.
 
+        A closed shape is cut into closed pieces.
         :param shape: The shape to split.
         :param point: A point on the plane.
         :param normal: The plane's normal, pointing towards the part.
@@ -157,12 +158,16 @@ class PartSplitter:
             return existing[0]
         return self.split(whole)
 
-    def split(self, whole: PartWholeRelationship) -> Optional[HasRootBody]:
+    def split(
+        self, whole: PartWholeRelationship, field_name: str = ""
+    ) -> Optional[HasRootBody]:
         """
         Split the part off the shape of one annotation's root body and add it to the
         annotation, whether or not the annotation has such a part already.
 
         :param whole: The annotation whose root body's shape is split.
+        :param field_name: The part-whole relationship field of the annotation the part
+            is added to; found by the part's type if not given.
         :return: The part, added to the annotation and its world; ``None`` if the finder
             finds none or the root body has no shape.
         """
@@ -173,7 +178,7 @@ class PartSplitter:
         with world.modify_world():
             part = self.part_type(root=cut.apply())
             world.add_semantic_annotation(part)
-            whole.add(part)
+            whole.add(part, field_name=field_name)
         return part
 
     def split_body(self, body: Body) -> Optional[Body]:
@@ -258,8 +263,9 @@ class _Cut:
 
     def apply(self) -> Body:
         """
-        Give the body the rest of its shape and fix the part's body to it. Must be
-        called while the world is being modified.
+        Give the body the rest of its shape and fix the part's body to it.
+
+        Must be called while the world is being modified.
 
         :return: The part's body.
         """
@@ -337,8 +343,8 @@ def _shared(shapes: ShapeCollection, attribute: Callable[[Shape], T]) -> Optiona
 @dataclass
 class SplitPartFromShape(Step):
     """
-    Gives every annotation of a type the part its shape has, as a body of its own,
-    by applying a :class:`PartSplitter` to each annotation that has no such part yet.
+    Gives every annotation of a type the part its shape has, as a body of its own, by
+    applying a :class:`PartSplitter` to each annotation that has no such part yet.
 
     This suits a world that is handed to a physics simulator afterwards, whose model is
     built once from the world's bodies; otherwise, split the part off when it is first

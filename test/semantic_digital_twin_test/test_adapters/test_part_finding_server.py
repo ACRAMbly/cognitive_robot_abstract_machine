@@ -1,0 +1,114 @@
+"""
+Asking a part finding server for the parts of a shape, with a locator that needs no
+model standing in for the real one.
+"""
+
+from __future__ import annotations
+
+from http import HTTPStatus
+
+import numpy as np
+import pytest
+import requests
+import trimesh
+
+from semantic_digital_twin.adapters.part_finding.client import RemotePartLocator
+from semantic_digital_twin.adapters.part_finding.exceptions import (
+    PartFindingServerError,
+)
+from semantic_digital_twin.adapters.part_finding.server import (
+    PartFindingCache,
+    PartFindingServer,
+)
+from semantic_digital_twin.pipeline.part_locating import PartQuery
+from semantic_digital_twin.pipeline.vision_language_part_locating import (
+    CameraRing,
+    FilledBoxSegmenter,
+    KnownPartBoxDetector,
+    VisionLanguagePartLocator,
+)
+from semantic_digital_twin.semantic_annotations.semantic_annotations import Mug
+
+
+@pytest.fixture
+def mug_query() -> PartQuery:
+    """
+    :return: A query for the handle of a mug whose last twelve faces are its handle.
+    """
+    cup = trimesh.creation.annulus(r_min=0.035, r_max=0.04, height=0.1)
+    handle = trimesh.creation.box(extents=[0.02, 0.01, 0.06])
+    handle.apply_translation([0.07, 0.0, 0.0])
+    return PartQuery.of_shape(trimesh.util.concatenate([cup, handle]), Mug, ["handle"])
+
+
+@pytest.fixture
+def server(mug_query, tmp_path):
+    """
+    :return: A server on a free local port whose locator boxes the mug's handle.
+    """
+    handle_faces = np.arange(len(mug_query.faces) - 12, len(mug_query.faces))
+    server = PartFindingServer(
+        locator=VisionLanguagePartLocator(
+            detector=KnownPartBoxDetector(part_faces={"handle": handle_faces}),
+            segmenter=FilledBoxSegmenter(),
+            cameras=CameraRing(resolution=128),
+        ),
+        host="127.0.0.1",
+        port=0,
+        cache=PartFindingCache(directory=tmp_path),
+    )
+    server.start()
+    yield server
+    server.stop()
+
+
+def test_a_remote_query_is_answered_like_a_local_one(server, mug_query):
+    [remote] = RemotePartLocator(base_url=server.url).locate(mug_query)
+    [local] = server.locator.locate(mug_query)
+
+    assert remote.relationship_name == local.relationship_name
+    assert np.array_equal(remote.faces, local.faces)
+    assert remote.confidence == local.confidence
+
+
+def test_a_repeated_query_is_answered_from_the_cache(server, mug_query):
+    client = RemotePartLocator(base_url=server.url)
+
+    first = client.answer(mug_query)
+    second = client.answer(mug_query)
+
+    assert not first.from_cache
+    assert second.from_cache
+    assert np.array_equal(second.parts[0].faces, first.parts[0].faces)
+    assert second.locator == server.locator.fingerprint
+
+
+def test_a_shape_with_too_many_faces_is_refused(server, mug_query):
+    server.maximum_faces = len(mug_query.faces) - 1
+
+    with pytest.raises(PartFindingServerError) as raised:
+        RemotePartLocator(base_url=server.url).locate(mug_query)
+
+    assert raised.value.status_code == HTTPStatus.REQUEST_ENTITY_TOO_LARGE
+
+
+def test_a_query_for_a_relationship_the_annotation_does_not_have_is_refused(
+    server, mug_query
+):
+    mug_query.relationship_names = ["spout"]
+
+    with pytest.raises(PartFindingServerError) as raised:
+        RemotePartLocator(base_url=server.url).locate(mug_query)
+
+    assert raised.value.status_code == HTTPStatus.BAD_REQUEST
+
+
+def test_the_status_names_the_locator(server):
+    status = RemotePartLocator(base_url=server.url).status()
+
+    assert status.locator == server.locator.fingerprint
+    assert status.waiting_queries == 0
+
+
+def test_an_unknown_path_is_not_found(server):
+    assert requests.get(f"{server.url}/nothing").status_code == HTTPStatus.NOT_FOUND
