@@ -74,7 +74,7 @@ def get_scaled_color_image_for_depth_image(
     o3d.geometry.RGBDImage.create_from_color_and_depth is called, so that depth and
     color image match.
 
-    :param cas: The CAS where the COLOR_TO_DEPTH_RATIO is stored.
+    :param cas: The CAS holding the color-to-depth ratio.
     :param color_image: The color image to be adjusted
     :return: A resized copy of the color image if a resize necessary. Otherwise, the
         unchanged color_image is returned.

@@ -268,7 +268,7 @@ def resize_mask(annotator: BaseAnnotator, mask: npt.NDArray) -> npt.NDArray:
 
     :param annotator: Annotator containing resolution info
     :param mask: A binary image.
-    :return: The scaled version of mask, according to the COLOR_TO_DEPTH_RATIO.
+    :return: The mask scaled back by the color-to-depth ratio.
     """
     if not annotator.descriptor.parameters.global_with_depth:
         # nothing to do

@@ -42,7 +42,7 @@ class TestRoboKudoExceptions:
     def test_color_to_depth_ratio_missing_message(self):
         exception = ColorToDepthRatioMissing(operation="scale coordinates")
 
-        assert "COLOR_TO_DEPTH_RATIO is missing from the CAS" in str(exception)
+        assert "The color-to-depth ratio is missing from the CAS" in str(exception)
         assert "Can't scale coordinates" in str(exception)
         assert "Suggestion:" in str(exception)
 
