@@ -14,24 +14,28 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import IntEnum
-from timeit import default_timer
+from pathlib import Path
 
 import cv2
 import numpy as np
 import open3d as o3d
+from krrood.ormatic.utils import classproperty
 from py_trees.common import Status
-from typing_extensions import TYPE_CHECKING, Any, List, Optional, Tuple
+from typing_extensions import TYPE_CHECKING, Any
 from ultralytics import YOLO
 
 from robokudo.annotators.core import BaseAnnotator
-from robokudo.annotators.yolo_annotator import PERSON_CLASS_NAME, YoloModelParameters
+from robokudo.annotators.exceptions import PoseModelRequired
 from robokudo.cas import CASViews
+from robokudo.defs import PACKAGE_NAME
 from robokudo.types.annotation import Classification, CloudAnnotation
+from robokudo.types.cv import Rect
 from robokudo.types.human import KeypointAnnotation
 from robokudo.types.scene import HumanHypothesis
 from robokudo.utils.annotator_helper import scale_camera_intrinsics
 from robokudo.utils.cv_helper import get_scaled_color_image_for_depth_image
 from robokudo.utils.decorators import record_time
+from robokudo.utils.module_loader import ModuleLoader
 from robokudo.utils.o3d_helper import (
     concatenate_clouds,
     get_cloud_from_rgb_depth_and_mask,
@@ -41,20 +45,7 @@ if TYPE_CHECKING:
     import numpy.typing as npt
     from ultralytics.engine.results import Results
 
-WARMUP_IMAGE_SHAPE = (512, 512, 3)
-"""
-Shape of the blank image the model is warmed up on.
-"""
-
-NON_MAXIMUM_SUPPRESSION_OVERLAP = 0.5
-"""
-Intersection over union above which the model merges overlapping detections.
-"""
-
-MASK_FOREGROUND = 255
-"""
-Value of the pixels a point cloud is built from in a depth mask.
-"""
+# %% body keypoints
 
 
 class PoseKeypoint(IntEnum):
@@ -100,7 +91,7 @@ class DepthFrame:
     The color image in RGB order, scaled to the depth image resolution.
     """
 
-    color_to_depth_ratio: Tuple[float, float]
+    color_to_depth_ratio: tuple[float, float]
     """
     Size of the depth image relative to the color image, along x and y.
     """
@@ -110,48 +101,77 @@ class DepthFrame:
     Intrinsics of the camera at the depth image resolution.
     """
 
-    def depth_pixel(self, x: float, y: float) -> Tuple[int, int]:
+    @classproperty
+    def mask_foreground(cls) -> int:
         """
-        :return: The depth image pixel at the given color image position.
+        Value of the pixels a point cloud is built from in a depth mask.
+        """
+        return 255
+
+    def depth_pixel(self, x: float, y: float) -> tuple[int, int]:
+        """
+        Map a color image position onto the depth image.
+
+        :param x: Horizontal position in color image pixels.
+        :param y: Vertical position in color image pixels.
+        :return: The (x, y) of the depth image pixel at that position.
         """
         ratio_x, ratio_y = self.color_to_depth_ratio
         return int(x * ratio_x), int(y * ratio_y)
 
-    def box_cloud(
-        self, corners: npt.NDArray[np.float32], depth_truncate: float
-    ) -> o3d.geometry.PointCloud:
+    def box_cloud(self, box: Rect, depth_truncate: float) -> o3d.geometry.PointCloud:
         """
-        :param corners: Corners (x1, y1, x2, y2) of a box in color image pixels.
-        :param depth_truncate: Distance in meters beyond which measurements are left out.
-        :return: The point cloud of the depth measurements inside the box.
+        Build the point cloud of the depth measurements inside a box.
+
+        :param box: The box in color image pixels.
+        :param depth_truncate: Distance in meters beyond which measurements are left
+            out.
+        :return: The colored point cloud of the depth measurements inside the box.
         """
-        x1, y1 = self.depth_pixel(corners[0], corners[1])
-        x2, y2 = self.depth_pixel(corners[2], corners[3])
+        x1, y1, x2, y2 = box.get_corner_points()
+        depth_x1, depth_y1 = self.depth_pixel(x1, y1)
+        depth_x2, depth_y2 = self.depth_pixel(x2, y2)
         mask = np.zeros_like(self.depth_image, dtype=np.uint8)
-        mask[y1:y2, x1:x2] = MASK_FOREGROUND
+        mask[depth_y1:depth_y2, depth_x1:depth_x2] = self.mask_foreground
         return self._masked_cloud(mask, depth_truncate=depth_truncate)
 
     def disc_cloud(self, x: float, y: float, radius: int) -> o3d.geometry.PointCloud:
         """
+        Build the point cloud of the depth measurements inside a disc.
+
         :param x: Horizontal disc center in color image pixels.
         :param y: Vertical disc center in color image pixels.
         :param radius: Disc radius in depth image pixels.
-        :return: The point cloud of the depth measurements inside the disc.
+        :return: The colored point cloud of the depth measurements inside the disc.
         """
         mask = np.zeros_like(self.depth_image, dtype=np.uint8)
         cv2.circle(
-            mask, self.depth_pixel(x, y), radius, MASK_FOREGROUND, thickness=cv2.FILLED
+            mask,
+            self.depth_pixel(x, y),
+            radius,
+            self.mask_foreground,
+            thickness=cv2.FILLED,
         )
         return self._masked_cloud(mask)
 
     def _masked_cloud(
         self, mask: npt.NDArray[np.uint8], **cloud_settings: float
     ) -> o3d.geometry.PointCloud:
+        """
+        Build the point cloud of the depth measurements a mask marks.
+
+        :param mask: Mask on the depth image whose pixels with value
+            :attr:`mask_foreground` the cloud is built from.
+        :param cloud_settings: Further settings of
+            :func:`~robokudo.utils.o3d_helper.get_cloud_from_rgb_depth_and_mask`.
+        :return: The colored point cloud of the depth measurements inside the mask.
+        """
         return get_cloud_from_rgb_depth_and_mask(
             rgb_image=self.rgb_image,
             depth_image=self.depth_image.copy(),
             mask=mask,
             camera_intrinsics=self.camera_intrinsics,
+            mask_true_val=self.mask_foreground,
             **cloud_settings,
         )
 
@@ -169,23 +189,51 @@ class HumanAndPoseAnnotator(BaseAnnotator):
         Descriptor for the HumanAndPoseAnnotator.
         """
 
-        class Parameters(YoloModelParameters):
+        class Parameters:
             """
             Parameters for the HumanAndPoseAnnotator.
             """
 
             def __init__(self) -> None:
-                super().__init__()
-                self.pretrained_model = "yolov8n-pose.pt"
+                self.models_directory: Path = (
+                    ModuleLoader.get_module_path(PACKAGE_NAME) / "models"
+                )
+                """
+                Directory the pose model weights are loaded from.
+
+                Created during setup if it does not exist.
+                """
+                self.pretrained_model: str = "yolov8n-pose.pt"
+                """
+                File name of the YOLO pose model weights inside
+                :attr:`models_directory`.
+
+                A model ultralytics provides is downloaded there on first use; custom
+                trained weights must already be there.
+
+                .. note::
+                   The model must report body keypoints, otherwise
+                   :meth:`HumanAndPoseAnnotator.update` raises
+                   :class:`~robokudo.annotators.exceptions.PoseModelRequired`.
+                """
+                self.person_class_name: str = "person"
+                """
+                Class name the human hypotheses are classified as.
+                """
                 self.confidence_threshold: float = 0.7
                 """
                 Minimum confidence of a human detection to be annotated.
+                """
+                self.non_maximum_suppression_overlap: float = 0.5
+                """
+                Intersection over union above which the model merges overlapping
+                detections.
                 """
                 self.global_with_depth: bool = False
                 """
                 Whether to build point clouds from the depth image.
                 """
-                self.shrink_bounding_box: Optional[float] = None
+                self.shrink_bounding_box: float | None = None
                 """
                 Fraction in [0, 1] of its width and height the bounding box of each
                 human is shrunk by around its center, or None to keep it.
@@ -218,6 +266,11 @@ class HumanAndPoseAnnotator(BaseAnnotator):
                 Whether setup runs the model once, so that the first real detection is
                 not slowed down by its initialization.
                 """
+                self.warmup_image_shape: tuple[int, int, int] = (512, 512, 3)
+                """
+                Shape (height, width, channels) of the blank image the model is warmed
+                up on.
+                """
                 self.depth_truncate: float = 3.5
                 """
                 Distance in meters beyond which depth measurements are left out of the
@@ -227,39 +280,51 @@ class HumanAndPoseAnnotator(BaseAnnotator):
     def __init__(
         self,
         name: str = "HumanAndPoseAnnotator",
-        descriptor: Optional[HumanAndPoseAnnotator.Descriptor] = None,
+        descriptor: HumanAndPoseAnnotator.Descriptor | None = None,
     ) -> None:
         super().__init__(name, descriptor)
-        self.model_location: str = self.descriptor.parameters.model_location(self.name)
-        """
-        Where the pose model is loaded from.
-        """
-        self.model: Optional[YOLO] = None
+        self.model: YOLO | None = None
         """
         The YOLO pose model, loaded during setup.
         """
-        self.camera_intrinsics: Optional[o3d.camera.PinholeCameraIntrinsic] = None
+        self.camera_intrinsics: o3d.camera.PinholeCameraIntrinsic | None = None
         """
         Intrinsics of the camera at the resolution of the depth image.
         """
 
     def setup(self, **kwargs: Any) -> bool:
         """
-        Load the model and, if configured, warm it up.
+        Extends :meth:`BaseAnnotator.setup` by loading the pose model from
+        :attr:`Descriptor.Parameters.models_directory`, creating that directory if it
+        does not exist, and, if configured, warming the model up.
         """
-        self.model = YOLO(self.model_location)
-        if self.descriptor.parameters.warmup_annotator:
-            self._predict(np.zeros(WARMUP_IMAGE_SHAPE, dtype=np.uint8))
+        parameters: HumanAndPoseAnnotator.Descriptor.Parameters = (
+            self.descriptor.parameters
+        )
+        parameters.models_directory.mkdir(parents=True, exist_ok=True)
+        self.model = YOLO(
+            str(parameters.models_directory / parameters.pretrained_model)
+        )
+        if parameters.warmup_annotator:
+            self._predict(np.zeros(parameters.warmup_image_shape, dtype=np.uint8))
         return super().setup(**kwargs)
 
     def _predict(self, image: npt.NDArray[np.uint8]) -> Results:
         """
-        :return: The humans and keypoints the model detects in the image.
+        Run the pose model on an image with the configured confidence threshold and non-
+        maximum suppression overlap.
+
+        :param image: The color image to detect humans in.
+        :return: The humans the model detects in the image, with their bounding boxes,
+            confidences and keypoints.
         """
+        parameters: HumanAndPoseAnnotator.Descriptor.Parameters = (
+            self.descriptor.parameters
+        )
         return self.model.predict(
             image,
-            conf=self.descriptor.parameters.confidence_threshold,
-            iou=NON_MAXIMUM_SUPPRESSION_OVERLAP,
+            conf=parameters.confidence_threshold,
+            iou=parameters.non_maximum_suppression_overlap,
             save=False,
             verbose=False,
         )[0]
@@ -267,9 +332,12 @@ class HumanAndPoseAnnotator(BaseAnnotator):
     @record_time
     def update(self) -> Status:
         """
-        Detect humans and annotate them as human hypotheses with their keypoints.
+        Detect humans in the color image of the CAS and add one human hypothesis with
+        its keypoints per detection to the CAS.
+
+        :return: :attr:`Status.SUCCESS` once the hypotheses are added.
+        :raises PoseModelRequired: If the model reports no keypoints for a detection.
         """
-        start_timer = default_timer()
         parameters: HumanAndPoseAnnotator.Descriptor.Parameters = (
             self.descriptor.parameters
         )
@@ -284,14 +352,16 @@ class HumanAndPoseAnnotator(BaseAnnotator):
 
         if parameters.global_with_visualization:
             self._visualize(result, hypotheses)
-        self.feedback_message = (
-            f"Processing took {(default_timer() - start_timer):.4f}s"
-        )
         return Status.SUCCESS
 
     def _depth_frame(self) -> DepthFrame:
         """
-        :return: The depth measurements of the CAS with the color image scaled to them.
+        Collect the depth measurements of the CAS and scale the color image and the
+        camera intrinsics to the depth image resolution.
+
+        Sets :attr:`camera_intrinsics` to the scaled intrinsics.
+
+        :return: The depth measurements of the CAS with the matching color image.
         """
         cas = self.get_cas()
         self.camera_intrinsics = cas.get_copy(CASViews.CAMERA_INTRINSIC)
@@ -307,33 +377,41 @@ class HumanAndPoseAnnotator(BaseAnnotator):
         )
 
     def _hypothesis(
-        self, result: Results, index: int, depth_frame: Optional[DepthFrame]
+        self, result: Results, index: int, depth_frame: DepthFrame | None
     ) -> HumanHypothesis:
         """
-        :return: The human hypothesis of the detection at the index of the result.
+        Turn one detection into a human hypothesis classified as a person and annotated
+        with its 2D keypoints, and, with depth, with its point clouds.
+
+        :param result: The detections of the pose model on the color image.
+        :param index: Index of the detection in the result, which becomes the id of the
+            hypothesis.
+        :param depth_frame: The depth measurements to build point clouds from, or None
+            to build none.
+        :return: The human hypothesis of the detection.
+        :raises PoseModelRequired: If the model reports no keypoints.
         """
         parameters: HumanAndPoseAnnotator.Descriptor.Parameters = (
             self.descriptor.parameters
         )
-        corners = result.boxes.xyxy[index].cpu().numpy()
-        shrunk_corners = (
-            corners if parameters.shrink_bounding_box is None else self._shrunk(corners)
+        if result.keypoints is None:
+            raise PoseModelRequired(
+                annotator_name=self.name, model=parameters.pretrained_model
+            )
+        box = Rect.from_corner_points(*result.boxes.xyxy[index].cpu().numpy())
+        shrunk_box = (
+            box if parameters.shrink_bounding_box is None else self._shrunk(box)
         )
         keeps_full_box = depth_frame is not None and parameters.shrink_as_annotation
-        region_corners = corners if keeps_full_box else shrunk_corners
 
         hypothesis = HumanHypothesis()
         hypothesis.id = index
         hypothesis.source = self.name
-        x1, y1, x2, y2 = region_corners
-        hypothesis.roi.roi.pos.x = int(x1)
-        hypothesis.roi.roi.pos.y = int(y1)
-        hypothesis.roi.roi.width = int(x2 - x1)
-        hypothesis.roi.roi.height = int(y2 - y1)
+        hypothesis.roi.roi = box if keeps_full_box else shrunk_box
         hypothesis.annotations.append(
             Classification(
                 source=self.name,
-                classname=PERSON_CLASS_NAME,
+                classname=parameters.person_class_name,
                 confidence=float(result.boxes.conf[index]),
             )
         )
@@ -350,15 +428,13 @@ class HumanAndPoseAnnotator(BaseAnnotator):
             return hypothesis
 
         hypothesis.points = depth_frame.box_cloud(
-            region_corners, parameters.depth_truncate
+            hypothesis.roi.roi, parameters.depth_truncate
         )
         if parameters.shrink_bounding_box is not None and keeps_full_box:
             hypothesis.annotations.append(
                 CloudAnnotation(
                     source=self.name,
-                    points=depth_frame.box_cloud(
-                        shrunk_corners, parameters.depth_truncate
-                    ),
+                    points=depth_frame.box_cloud(shrunk_box, parameters.depth_truncate),
                 )
             )
         if parameters.generate_clouds_for_keypoints:
@@ -371,23 +447,34 @@ class HumanAndPoseAnnotator(BaseAnnotator):
             )
         return hypothesis
 
-    def _shrunk(self, corners: npt.NDArray[np.float32]) -> npt.NDArray[np.float32]:
+    def _shrunk(self, box: Rect) -> Rect:
         """
-        :return: The box shrunk by the configured fraction around its center.
+        Shrink a box around its center by
+        :attr:`Descriptor.Parameters.shrink_bounding_box` of its width and height.
+
+        :param box: The box in color image pixels.
+        :return: The shrunk box in color image pixels.
         """
-        x1, y1, x2, y2 = corners
+        x1, y1, x2, y2 = box.get_corner_points()
         shrink_fraction = self.descriptor.parameters.shrink_bounding_box
-        margin_x = (x2 - x1) * shrink_fraction / 2
-        margin_y = (y2 - y1) * shrink_fraction / 2
-        return np.array([x1 + margin_x, y1 + margin_y, x2 - margin_x, y2 - margin_y])
+        margin_x = box.width * shrink_fraction / 2
+        margin_y = box.height * shrink_fraction / 2
+        return Rect.from_corner_points(
+            x1=x1 + margin_x, y1=y1 + margin_y, x2=x2 - margin_x, y2=y2 - margin_y
+        )
 
     def _keypoint_clouds(
-        self, keypoints: List[List[float]], depth_frame: DepthFrame
-    ) -> List[List[Any]]:
+        self, keypoints: list[list[float]], depth_frame: DepthFrame
+    ) -> list[list[Any]]:
         """
+        Build a point cloud from the disc of
+        :attr:`Descriptor.Parameters.keypoint_masking_radius` around each keypoint.
+
         :param keypoints: The (x, y, confidence) of each keypoint in color image pixels.
+        :param depth_frame: The depth measurements to build the clouds from.
         :return: The (point cloud, confidence) of each keypoint, the cloud empty for
-            keypoints below the confidence threshold.
+            keypoints below
+            :attr:`Descriptor.Parameters.keypoint_confidence_threshold_for_clouds`.
         """
         parameters: HumanAndPoseAnnotator.Descriptor.Parameters = (
             self.descriptor.parameters
@@ -401,9 +488,13 @@ class HumanAndPoseAnnotator(BaseAnnotator):
             keypoint_clouds.append([cloud, confidence])
         return keypoint_clouds
 
-    def _visualize(self, result: Results, hypotheses: List[HumanHypothesis]) -> None:
+    def _visualize(self, result: Results, hypotheses: list[HumanHypothesis]) -> None:
         """
-        Output the detections drawn by the model and the clouds of the hypotheses.
+        Output the color image with the detections drawn by the model and, if any
+        hypothesis has one, the point clouds of the hypotheses merged into one.
+
+        :param result: The detections of the pose model on the color image.
+        :param hypotheses: The human hypotheses made from the detections.
         """
         self.get_annotator_output_struct().set_image(result.plot())
         clouds = [

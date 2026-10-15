@@ -77,7 +77,7 @@ class NormalizedKeypoint:
     Confidence that the keypoint is visible at this position.
     """
 
-    def in_pixels_of(self, image: np.ndarray) -> List[float]:
+    def in_pixels_of(self, image: np.ndarray) -> list[float]:
         """
         :return: The keypoint as (x, y, confidence) in pixels of the given image.
         """
@@ -106,7 +106,7 @@ class MockDetection:
     Where the detection lies, relative to the image size.
     """
 
-    keypoints: List[NormalizedKeypoint] = field(default_factory=list)
+    keypoints: list[NormalizedKeypoint] = field(default_factory=list)
     """
     The body keypoints a pose model reports for the detection.
     """
@@ -138,14 +138,20 @@ class MockDetectionModel:
     Shape of the image of the last prediction.
     """
 
+    received_prediction_settings: dict[str, Any] = field(default_factory=dict)
+    """
+    The further ultralytics prediction settings of the last prediction, by keyword.
+    """
+
     def predict(
         self, image: np.ndarray, conf: float, **prediction_settings: Any
-    ) -> List[Results]:
+    ) -> list[Results]:
         """
         :return: The predefined detections at least as confident as the threshold.
         """
         self.received_confidence = conf
         self.received_image_shape = image.shape
+        self.received_prediction_settings = prediction_settings
         reported = [
             detection for detection in self.detections if detection.confidence >= conf
         ]
