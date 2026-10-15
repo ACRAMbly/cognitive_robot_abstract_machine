@@ -17,7 +17,7 @@ from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 from semantic_digital_twin.pipeline.part_finding.locating import LocatedFacesFinder
 from semantic_digital_twin.pipeline.part_finding.splitting import (
     PartSplitter,
-    ShapeSplit,
+    MeshSplit,
     SplitPartFromShape,
 )
 from semantic_digital_twin.semantic_annotations.semantic_annotations import (
@@ -69,12 +69,12 @@ def handle_faces() -> NDArray[np.bool_]:
     return np.arange(len(mug().faces)) >= len(cup_without_handle().faces)
 
 
-def located(in_part: NDArray[np.bool_]) -> LocatedFacesFinder:
+def located(belongs_to_part_mask: NDArray[np.bool_]) -> LocatedFacesFinder:
     """
-    :param in_part: For each face of the mug, whether it belongs to the part.
+    :param belongs_to_part_mask: For each face of the mug, whether it belongs to the part.
     :return: Finds the part at those faces.
     """
-    return LocatedFacesFinder(face_centers=mug().triangles_center[in_part])
+    return LocatedFacesFinder(face_centers=mug().triangles_center[belongs_to_part_mask])
 
 
 # %% splitting a shape at located faces
@@ -229,7 +229,7 @@ def test_the_pieces_keep_the_color_of_the_shape():
 
 def test_the_pieces_keep_the_colors_of_the_faces_they_were_cut_from():
     annotation = annotated_mug()
-    split = ShapeSplit.by_faces(mug(), handle_faces())
+    split = MeshSplit.from_mesh(mug(), handle_faces())
     split.part.visual.face_colors = [0, 255, 0, 255]
     split.rest.visual.face_colors = [0, 0, 255, 255]
     mesh = trimesh.util.concatenate([split.part, split.rest])
@@ -253,7 +253,7 @@ def test_the_pieces_keep_the_colors_of_the_faces_they_were_cut_from():
     assert (body_colors == [0, 0, 255, 255]).all()
 
 
-def test_parts_split_off_the_same_body_have_distinct_names():
+def test_parts_of_the_same_type_split_off_the_same_body_share_a_name():
     annotation = annotated_mug()
     bottom = mug().triangles_center[:, 2] < 0.0
     first = handle_splitter().split_body(annotation.root)
@@ -261,8 +261,8 @@ def test_parts_split_off_the_same_body_have_distinct_names():
         part_type=Handle, finder=located(bottom & ~handle_faces())
     ).split_body(annotation.root)
 
-    assert str(first.name) == "mug/handle"
-    assert str(second.name) == "mug/handle_1"
+    assert str(first.name) == str(second.name) == "mug/handle"
+    assert len(annotation._world.bodies) == 3
 
 
 def test_shapes_without_a_reference_frame_are_taken_relative_to_the_body():

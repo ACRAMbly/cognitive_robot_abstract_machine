@@ -33,8 +33,8 @@ from semantic_digital_twin.pipeline.part_finding.vision_language import (
     BoxSegmenter,
     PartBoxDetector,
     PartBoxPrompt,
-    RenderedViews,
 )
+from semantic_digital_twin.spatial_computations.mesh_rendering import RenderedViews
 
 logger = logging.getLogger(__name__)
 
@@ -200,9 +200,9 @@ class QwenBoxDetector(PartBoxDetector):
         )
 
     def detect(
-        self, views: RenderedViews, part_name: str, object_name: str
+        self, views: RenderedViews, part_name: str, whole_name: str
     ) -> list[NDArray[np.float64]]:
-        question = self.prompt.question(part_name, object_name)
+        question = self.prompt.question(part_name, whole_name)
         conversations = [
             [
                 {
@@ -239,13 +239,6 @@ class QwenBoxDetector(PartBoxDetector):
             for answer in answers
         ]
 
-    @property
-    def fingerprint(self) -> str:
-        return (
-            f"{self.model.repository}@{self.model.revision} "
-            f"{self.quantization} {self.prompt.template}"
-        )
-
     def load(self) -> None:
         logger.info("Loaded %s on %s", self.model.repository, self.network.device)
 
@@ -266,7 +259,7 @@ class QwenBoxDetector(PartBoxDetector):
 @dataclass
 class Sam2BoxSegmenter(BoxSegmenter):
     """
-    Masks the object inside each box with SAM 2, one view at a time.
+    Masks the part inside each box with SAM 2, one view at a time.
     """
 
     model: SegmentationModel = SegmentationModel.SAM2_1_HIERA_LARGE
@@ -321,10 +314,6 @@ class Sam2BoxSegmenter(BoxSegmenter):
             )[0]
             mask[:] = box_masks[:, 0].numpy().any(axis=0)
         return masks
-
-    @property
-    def fingerprint(self) -> str:
-        return f"{self.model.repository}@{self.model.revision}"
 
     def load(self) -> None:
         logger.info("Loaded %s on %s", self.model.repository, self.network.device)

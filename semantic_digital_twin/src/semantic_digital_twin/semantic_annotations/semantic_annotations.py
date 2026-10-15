@@ -31,6 +31,7 @@ from semantic_digital_twin.semantic_annotations.mixins import (
     HasDrawers,
     HasDoors,
     HasHandle,
+    HasHandles,
     HasCaseAsRootBody,
     HasMovableJoint,
     HasApertures,
@@ -931,9 +932,9 @@ class PanLid(Lid):
 
 
 @dataclass(eq=False)
-class Pot(CookingContainer, HasHandle):
+class Pot(CookingContainer, HasHandles):
     """
-    A pot. Its handle is all of its handles, as one part.
+    A pot.
     """
 
 

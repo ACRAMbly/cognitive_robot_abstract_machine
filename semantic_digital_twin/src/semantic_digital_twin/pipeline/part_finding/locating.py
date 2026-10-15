@@ -1,8 +1,8 @@
 """
-Locating the parts an annotation's part-whole relationships call for in the shape of its
-root body, as faces of that shape.
+Locating the parts an annotation's part-whole relationships call for in the mesh of its
+root body, as faces of that mesh.
 
-A :class:`PartLocator` answers a :class:`PartQuery` -- a shape and the type of annotation
+A :class:`PartLocator` answers a :class:`PartQuery` -- a mesh and the type of annotation
 it belongs to -- with the faces of each part it finds. It may run on this machine or on
 a server, which is why both the query and the answer are plain data.
 """
@@ -23,7 +23,7 @@ from scipy.spatial import cKDTree
 from typing_extensions import Optional, Type
 
 from semantic_digital_twin.exceptions import UnknownPartWholeRelationshipField
-from semantic_digital_twin.pipeline.part_finding.splitting import PartFinder, ShapeSplit
+from semantic_digital_twin.pipeline.part_finding.splitting import PartFinder, MeshSplit
 from semantic_digital_twin.semantic_annotations.mixins import (
     HasRootBody,
     PartWholeRelationship,
@@ -36,10 +36,13 @@ from semantic_digital_twin.semantic_annotations.part_whole import (
 
 
 @dataclass
-class PartRelationship:
+class PartRelationshipInspector:
     """
-    A part-whole relationship of an annotation type whose parts have a body of their
-    own, so that they can be split off the shape of the annotation's root body.
+    Tells what a part-whole relationship field of an annotation type asks for: which
+    type of part, how many, and whether they are optional.
+
+    Only covers relationships whose parts have a body of their own, so that they can be
+    split off the mesh of the annotation's root body.
     """
 
     relationship_field: WrappedField
@@ -48,7 +51,9 @@ class PartRelationship:
     """
 
     @classmethod
-    def all_of(cls, whole_type: Type[PartWholeRelationship]) -> list[PartRelationship]:
+    def all_of_type(
+        cls, whole_type: Type[PartWholeRelationship]
+    ) -> list[PartRelationshipInspector]:
         """
         :param whole_type: A type of annotation.
         :return: Its part-whole relationships whose parts have a body of their own, in
@@ -65,13 +70,13 @@ class PartRelationship:
     @classmethod
     def named(
         cls, whole_type: Type[PartWholeRelationship], name: str
-    ) -> PartRelationship:
+    ) -> PartRelationshipInspector:
         """
         :param whole_type: A type of annotation.
         :param name: The name of one of its part-whole relationship fields.
         :return: That relationship.
         """
-        relationships = cls.all_of(whole_type)
+        relationships = cls.all_of_type(whole_type)
         for relationship in relationships:
             if relationship.name == name:
                 return relationship
@@ -130,24 +135,24 @@ class PartRelationship:
 @dataclass
 class PartQuery:
     """
-    The question which faces of a shape belong to the parts an annotation's part-whole
+    The question which faces of a mesh belong to the parts an annotation's part-whole
     relationships call for.
     """
 
     vertices: NDArray[np.float64]
     """
-    The shape's vertices, as rows of x, y and z in the frame of the annotation's root
+    The mesh's vertices, as rows of x, y and z in the frame of the annotation's root
     body, its z-axis pointing up.
     """
 
     faces: NDArray[np.int64]
     """
-    The shape's triangles, as rows of three indices into :attr:`vertices`.
+    The mesh's triangles, as rows of three indices into :attr:`vertices`.
     """
 
     whole_type: Type[PartWholeRelationship]
     """
-    The type of annotation the shape belongs to.
+    The type of annotation the mesh belongs to.
     """
 
     relationship_names: list[str]
@@ -156,44 +161,44 @@ class PartQuery:
     """
 
     @classmethod
-    def of_shape(
+    def from_mesh(
         cls,
-        shape: trimesh.Trimesh,
+        mesh: trimesh.Trimesh,
         whole_type: Type[PartWholeRelationship],
         relationship_names: list[str],
     ) -> PartQuery:
         """
-        :param shape: The shape of an annotation's root body, in its frame.
+        :param mesh: The mesh of an annotation's root body, in its frame.
         :param whole_type: The type of the annotation.
         :param relationship_names: The part-whole relationships whose parts are wanted.
         :return: The query for those parts.
         """
         return cls(
-            vertices=np.asarray(shape.vertices, dtype=np.float64),
-            faces=np.asarray(shape.faces, dtype=np.int64),
+            vertices=np.asarray(mesh.vertices, dtype=np.float64),
+            faces=np.asarray(mesh.faces, dtype=np.int64),
             whole_type=whole_type,
             relationship_names=list(relationship_names),
         )
 
     @cached_property
-    def shape(self) -> trimesh.Trimesh:
+    def mesh(self) -> trimesh.Trimesh:
         """
-        :return: The shape, its faces in the order of :attr:`faces`.
+        :return: The mesh, its faces in the order of :attr:`faces`.
         """
         return trimesh.Trimesh(vertices=self.vertices, faces=self.faces, process=False)
 
     @property
-    def relationships(self) -> list[PartRelationship]:
+    def relationships(self) -> list[PartRelationshipInspector]:
         """
         :return: The part-whole relationships whose parts are wanted.
         """
         return [
-            PartRelationship.named(self.whole_type, name)
+            PartRelationshipInspector.named(self.whole_type, name)
             for name in self.relationship_names
         ]
 
     @property
-    def object_name(self) -> str:
+    def whole_name(self) -> str:
         """
         :return: What the annotation is called in plain words, such as ``"mug"``.
         """
@@ -203,7 +208,7 @@ class PartQuery:
 @dataclass
 class LocatedPart:
     """
-    A part found in the shape of a :class:`PartQuery`.
+    A part found in the mesh of a :class:`PartQuery`.
     """
 
     relationship_name: str
@@ -213,7 +218,7 @@ class LocatedPart:
 
     faces: NDArray[np.int64]
     """
-    The indices of the shape's faces that make up the part.
+    The indices of the mesh's faces that make up the part.
     """
 
     confidence: float
@@ -224,13 +229,13 @@ class LocatedPart:
 
 class PartLocator(ABC):
     """
-    Finds which faces of a shape belong to the parts of an annotation.
+    Finds which faces of a mesh belong to the parts of an annotation.
     """
 
     @abstractmethod
     def locate(self, query: PartQuery) -> list[LocatedPart]:
         """
-        :param query: The shape and the parts wanted.
+        :param query: The mesh and the parts wanted.
         :return: The parts found: for a relationship that holds a single part at most
             one, for one that holds any number each separate piece. A part that is not
             found is left out.
@@ -265,7 +270,7 @@ class KnownPartLocator(PartLocator):
 @dataclass
 class LocatedFacesFinder(PartFinder):
     """
-    Finds a part whose faces were located in a shape before, either in that shape or in
+    Finds a part whose faces were located in a mesh before, either in that mesh or in
     what is left of it after other parts were split off, by the faces' centers.
     """
 
@@ -280,6 +285,6 @@ class LocatedFacesFinder(PartFinder):
     the part's faces, in meters.
     """
 
-    def split(self, shape: trimesh.Trimesh) -> Optional[ShapeSplit]:
-        distances, _ = cKDTree(self.face_centers).query(shape.triangles_center)
-        return ShapeSplit.by_faces(shape, distances <= self.tolerance)
+    def split(self, mesh: trimesh.Trimesh) -> Optional[MeshSplit]:
+        distances, _ = cKDTree(self.face_centers).query(mesh.triangles_center)
+        return MeshSplit.from_mesh(mesh, distances <= self.tolerance)

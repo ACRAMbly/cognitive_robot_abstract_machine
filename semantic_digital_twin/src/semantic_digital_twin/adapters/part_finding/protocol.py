@@ -46,8 +46,19 @@ class HeaderName(StrEnum):
     """
 
     CONTENT_LENGTH = "Content-Length"
+    """
+    The size of the body, in bytes.
+    """
+
     CONTENT_ENCODING = "Content-Encoding"
+    """
+    How the body is compressed.
+    """
+
     CONTENT_TYPE = "Content-Type"
+    """
+    The format of the body.
+    """
 
 
 class ContentType(StrEnum):
@@ -56,6 +67,9 @@ class ContentType(StrEnum):
     """
 
     JSON = "application/json"
+    """
+    A body in json.
+    """
 
 
 class ContentEncoding(StrEnum):
@@ -64,6 +78,9 @@ class ContentEncoding(StrEnum):
     """
 
     GZIP = "gzip"
+    """
+    A body compressed with gzip.
+    """
 
 
 @dataclass
@@ -79,7 +96,7 @@ class PartFindingAnswer:
 
     locator: str
     """
-    The fingerprint of the locator that found them, naming its models and settings.
+    The settings of the locator that found them, as json.
     """
 
     duration: timedelta
@@ -101,7 +118,7 @@ class PartFindingServerStatus:
 
     locator: str
     """
-    The fingerprint of the locator the server finds parts with.
+    The settings of the locator the server finds parts with, as json.
     """
 
     waiting_queries: int

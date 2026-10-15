@@ -13,7 +13,7 @@ from semantic_digital_twin.pipeline.part_finding.locating import (
     LocatedPart,
     PartLocator,
     PartQuery,
-    PartRelationship,
+    PartRelationshipInspector,
 )
 from semantic_digital_twin.pipeline.part_finding.splitting import PartSplitter
 from semantic_digital_twin.semantic_annotations.mixins import (
@@ -58,13 +58,13 @@ class AnnotationPartFinder:
         """
         missing = [
             relationship.name
-            for relationship in PartRelationship.all_of(type(whole))
+            for relationship in PartRelationshipInspector.all_of_type(type(whole))
             if not relationship.is_filled_in(whole)
         ]
         shapes = whole.root.visual or whole.root.collision
         if not missing or not shapes:
             return []
-        query = PartQuery.of_shape(shapes.combined_mesh, type(whole), missing)
+        query = PartQuery.from_mesh(shapes.combined_mesh, type(whole), missing)
         parts = []
         for located in self.locator.locate(query):
             part = self._add(whole, query, located)
@@ -83,7 +83,7 @@ class AnnotationPartFinder:
             annotation; ``None`` if the annotation may lack it and the locator is not
             sure enough of it, or nothing of it is left in the body's shape.
         """
-        relationship = PartRelationship.named(
+        relationship = PartRelationshipInspector.named(
             query.whole_type, located.relationship_name
         )
         if relationship.may_be_empty and located.confidence < self.minimum_confidence:
@@ -91,7 +91,7 @@ class AnnotationPartFinder:
         splitter = PartSplitter(
             part_type=relationship.part_type,
             finder=LocatedFacesFinder(
-                face_centers=query.shape.triangles_center[located.faces]
+                face_centers=query.mesh.triangles_center[located.faces]
             ),
         )
         return splitter.split(whole, field_name=relationship.name)

@@ -52,9 +52,10 @@ class RemotePartLocator(PartLocator):
     ``SEMANTIC_DIGITAL_TWIN_PART_FINDING_SERVER_URL``.
     """
 
-    timeout: timedelta = timedelta(minutes=5)
+    timeout: timedelta = timedelta(seconds=30)
     """
-    How long to wait for an answer, including the time the query waits behind others.
+    How long to wait for an answer, including the time the query waits behind others;
+    the server takes about 5 seconds per object.
     """
 
     session: requests.Session = field(default_factory=requests.Session)

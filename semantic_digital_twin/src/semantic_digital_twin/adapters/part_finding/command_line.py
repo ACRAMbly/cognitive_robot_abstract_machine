@@ -18,7 +18,7 @@ from semantic_digital_twin.adapters.part_finding.server import (
     PartFindingCache,
     PartFindingServer,
 )
-from semantic_digital_twin.pipeline.part_finding.vision_language_models import (
+from semantic_digital_twin.adapters.part_finding.vision_language_models import (
     Device,
     QwenBoxDetector,
     QwenModel,
@@ -33,15 +33,33 @@ from semantic_digital_twin.utils import create_cache_dir
 
 class CommandLineOption(StrEnum):
     """
-    The options of ``semantic-digital-twin-part-finding-server``, each setting the field
-    of :class:`PartFindingCommandLine` of the same name.
+    The options of ``semantic-digital-twin-part-finding-server``.
     """
 
     MODEL = "--model"
+    """
+    Sets :attr:`PartFindingCommandLine.model`.
+    """
+
     QUANTIZATION = "--quantization"
+    """
+    Sets :attr:`PartFindingCommandLine.quantization`.
+    """
+
     DEVICE = "--device"
+    """
+    Sets :attr:`PartFindingCommandLine.device`.
+    """
+
     PORT = "--port"
+    """
+    Sets :attr:`PartFindingCommandLine.port`.
+    """
+
     CACHE = "--cache"
+    """
+    Sets :attr:`PartFindingCommandLine.cache`.
+    """
 
 
 @dataclass

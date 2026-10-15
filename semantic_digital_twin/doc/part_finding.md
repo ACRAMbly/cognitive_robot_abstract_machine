@@ -17,6 +17,10 @@ Only relationships the annotation has no part in yet are looked at. An optional 
 such as a mug's handle, and each of any number of parts, such as a table's legs, is
 added only when the finder is at least `minimum_confidence` sure of it.
 
+A relationship that holds a single part, such as a mug's handle, gets the piece the
+finder is most sure of. Annotations that may have several parts of a kind hold them in
+a list, such as a pot's `handles`, and get each piece found as a part of its own.
+
 ## How the parts are found
 
 The parts are found by a combination of Qwen3-VL and SAM 2.1. In a benchmark on 93
@@ -52,7 +56,7 @@ uv pip install -e "semantic_digital_twin[vision]"
 ```
 
 ```python
-from semantic_digital_twin.pipeline.part_finding.vision_language_models import (
+from semantic_digital_twin.adapters.part_finding.vision_language_models import (
     QwenBoxDetector, QwenModel, Quantization, Sam2BoxSegmenter,
 )
 from semantic_digital_twin.pipeline.part_finding.vision_language import (

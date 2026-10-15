@@ -8,7 +8,6 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from functools import cached_property
-from itertools import count
 
 import numpy as np
 import trimesh
@@ -34,13 +33,13 @@ if TYPE_CHECKING:
 
 T = TypeVar("T")
 
-# %% splitting a shape
+# %% splitting a mesh
 
 
 @dataclass
-class ShapeSplit:
+class MeshSplit:
     """
-    A shape cut into a part and the rest of it.
+    A mesh cut into a part and the rest of it.
     """
 
     part: trimesh.Trimesh
@@ -50,37 +49,38 @@ class ShapeSplit:
 
     rest: trimesh.Trimesh
     """
-    The rest of the shape.
+    The rest of the mesh.
     """
 
     @classmethod
-    def by_faces(
-        cls, shape: trimesh.Trimesh, in_part: NDArray[np.bool_]
-    ) -> Optional[ShapeSplit]:
+    def from_mesh(
+        cls, mesh: trimesh.Trimesh, belongs_to_part_mask: NDArray[np.bool_]
+    ) -> Optional[MeshSplit]:
         """
-        :param shape: The shape to split.
-        :param in_part: For each face of ``shape``, whether it belongs to the part.
+        :param mesh: The mesh to split.
+        :param belongs_to_part_mask: For each face of ``mesh``, whether it belongs to
+            the part.
         :return: The faces of the part and the remaining faces; ``None`` if either
             would be empty.
         """
-        if not in_part.any() or in_part.all():
+        if not belongs_to_part_mask.any() or belongs_to_part_mask.all():
             return None
         return cls(
-            part=shape.submesh([np.flatnonzero(in_part)], append=True),
-            rest=shape.submesh([np.flatnonzero(~in_part)], append=True),
+            part=mesh.submesh([np.flatnonzero(belongs_to_part_mask)], append=True),
+            rest=mesh.submesh([np.flatnonzero(~belongs_to_part_mask)], append=True),
         )
 
 
 class PartFinder(ABC):
     """
-    Finds the piece of an object's shape that is one of its parts.
+    Finds the piece of an object's mesh that is one of its parts.
     """
 
     @abstractmethod
-    def split(self, shape: trimesh.Trimesh) -> Optional[ShapeSplit]:
+    def split(self, mesh: trimesh.Trimesh) -> Optional[MeshSplit]:
         """
-        :param shape: The object's shape, in its root body's frame.
-        :return: The shape split into the part and the rest; ``None`` if the shape has
+        :param mesh: The object's mesh, in its root body's frame.
+        :return: The mesh split into the part and the rest; ``None`` if the mesh has
             no such part.
         """
 
@@ -184,18 +184,9 @@ class PartSplitter:
     def _part_name(self, body: Body) -> PrefixedName:
         """
         :param body: The body the part is split off.
-        :return: The part's type, under the body's name, numbered if the world has an
-            entity of that name already.
+        :return: The part's type, under the body's name.
         """
-        taken = {
-            str(entity.name) for entity in body._world.kinematic_structure_entities
-        }
-        base = self.part_type.__name__.lower()
-        names = (
-            PrefixedName(f"{base}_{number}" if number else base, str(body.name))
-            for number in count()
-        )
-        return next(name for name in names if str(name) not in taken)
+        return PrefixedName(self.part_type.__name__.lower(), str(body.name))
 
 
 @dataclass

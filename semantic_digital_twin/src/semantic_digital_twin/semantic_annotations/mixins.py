@@ -689,6 +689,23 @@ class HasHandle(HasRootBody, PartWholeRelationship):
     """
 
 
+@dataclass(eq=False)
+class HasHandles(HasRootBody, PartWholeRelationship):
+    """
+    A mixin class for semantic annotations that may have more than one handle.
+    """
+
+    handles: List[Handle] = field(
+        default_factory=list,
+        hash=False,
+        kw_only=True,
+        metadata=IsPartWholeRelationship().as_dict(),
+    )
+    """
+    The handles of the semantic annotation.
+    """
+
+
 THasRootBody = TypeVar("THasRootBody", bound=HasRootBody)
 """
 A type variable for HasRootBody.

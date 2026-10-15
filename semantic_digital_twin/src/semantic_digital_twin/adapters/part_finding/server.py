@@ -40,7 +40,7 @@ from semantic_digital_twin.adapters.part_finding.protocol import (
 from semantic_digital_twin.pipeline.part_finding.locating import (
     LocatedPart,
     PartQuery,
-    PartRelationship,
+    PartRelationshipInspector,
 )
 from semantic_digital_twin.pipeline.part_finding.vision_language import (
     VisionLanguagePartLocator,
@@ -67,7 +67,7 @@ class PartFindingCache:
     def key(self, query: PartQuery, locator: str) -> str:
         """
         :param query: A query.
-        :param locator: The fingerprint of the locator that answers it.
+        :param locator: The settings of the locator that answers it.
         :return: A name that is the same exactly for the same query to the same locator.
         """
         content = json.dumps(to_json(query), sort_keys=True) + locator
@@ -171,12 +171,21 @@ class PartFindingServer:
         """
         return f"http://localhost:{self.http_server.server_address[1]}"
 
+    @property
+    def locator_settings(self) -> str:
+        """
+        :return: The locator's settings as json, such as its models and the prompt, which
+            the cache keys its answers by. A model is named by its enum member, so clear
+            the cache after pinning a member to a new revision.
+        """
+        return json.dumps(to_json(self.locator), sort_keys=True)
+
     def serve_forever(self) -> None:
         """
         Load the locator's models and answer requests until the process is stopped.
         """
         self.locator.load()
-        logger.info("Finding parts at %s with %s", self.url, self.locator.fingerprint)
+        logger.info("Finding parts at %s with %s", self.url, self.locator_settings)
         self.http_server.serve_forever()
 
     def start(self) -> threading.Thread:
@@ -202,13 +211,13 @@ class PartFindingServer:
         :return: The parts found for it, from the cache if it was asked before.
         """
         start = time.perf_counter()
-        fingerprint = self.locator.fingerprint
-        key = self.cache.key(query, fingerprint)
+        settings = self.locator_settings
+        key = self.cache.key(query, settings)
         cached = self.cache.read(key)
         if cached is not None:
             return PartFindingAnswer(
                 parts=cached,
-                locator=fingerprint,
+                locator=settings,
                 duration=timedelta(seconds=time.perf_counter() - start),
                 from_cache=True,
             )
@@ -229,7 +238,7 @@ class PartFindingServer:
         )
         return PartFindingAnswer(
             parts=parts,
-            locator=fingerprint,
+            locator=settings,
             duration=timedelta(seconds=seconds),
             from_cache=False,
         )
@@ -239,7 +248,7 @@ class PartFindingServer:
         :return: Which locator the server runs and how busy it is.
         """
         return PartFindingServerStatus(
-            locator=self.locator.fingerprint, waiting_queries=self.waiting_queries
+            locator=self.locator_settings, waiting_queries=self.waiting_queries
         )
 
     def is_answerable(self, query: Any) -> bool:
@@ -257,7 +266,7 @@ class PartFindingServer:
             return False
         known = {
             relationship.name
-            for relationship in PartRelationship.all_of(query.whole_type)
+            for relationship in PartRelationshipInspector.all_of_type(query.whole_type)
         }
         return set(query.relationship_names) <= known
 
