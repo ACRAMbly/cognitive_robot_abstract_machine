@@ -24,7 +24,7 @@ from py_trees.common import Status
 from typing_extensions import TYPE_CHECKING, Any
 from ultralytics import YOLO
 
-from robokudo.annotators.core import BaseAnnotator
+from robokudo.annotators.core import ThreadedAnnotator
 from robokudo.annotators.exceptions import NotAPoseModelException
 from robokudo.cas import CASViews
 from robokudo.defs import PACKAGE_NAME
@@ -165,10 +165,10 @@ class DepthFrame:
         """
         return get_cloud_from_rgb_depth_and_mask(
             rgb_image=self.rgb_image,
-            depth_image=self.depth_image.copy(),
+            depth_image=self.depth_image,
             mask=mask,
             camera_intrinsics=self.camera_intrinsics,
-            mask_true_val=self.mask_foreground,
+            mask_true_value=self.mask_foreground,
             **cloud_settings,
         )
 
@@ -176,12 +176,12 @@ class DepthFrame:
 # %% annotator
 
 
-class HumanAndPoseAnnotator(BaseAnnotator):
+class HumanAndPoseAnnotator(ThreadedAnnotator):
     """
     Detects humans with a YOLO pose model and annotates them with their keypoints.
     """
 
-    class Descriptor(BaseAnnotator.Descriptor):
+    class Descriptor(ThreadedAnnotator.Descriptor):
         """
         Descriptor for the HumanAndPoseAnnotator.
         """
@@ -210,7 +210,7 @@ class HumanAndPoseAnnotator(BaseAnnotator):
 
                 .. note::
                    The model must report body keypoints, otherwise
-                   :meth:`HumanAndPoseAnnotator.update` raises
+                   :meth:`HumanAndPoseAnnotator.compute` raises
                    :class:`~robokudo.annotators.exceptions.NotAPoseModelException`.
                 """
                 self.person_class_name: str = "person"
@@ -287,7 +287,7 @@ class HumanAndPoseAnnotator(BaseAnnotator):
 
     def setup(self, **kwargs: Any) -> bool:
         """
-        Extends :meth:`BaseAnnotator.setup` by loading the pose model from
+        Extends :meth:`ThreadedAnnotator.setup` by loading the pose model from
         :attr:`Descriptor.Parameters.models_directory`, creating that directory if it
         does not exist, and, if configured, warming the model up.
         """
@@ -323,7 +323,7 @@ class HumanAndPoseAnnotator(BaseAnnotator):
         )[0]
 
     @record_time
-    def update(self) -> Status:
+    def compute(self) -> Status:
         """
         Detect humans in the color image of the CAS and add one human hypothesis with
         its keypoints per detection to the CAS.

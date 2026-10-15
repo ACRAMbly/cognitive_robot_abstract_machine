@@ -539,5 +539,5 @@ class StaticObjectDetectorAnnotator(BaseAnnotator):
         mask = np.zeros_like(self.depth, dtype=np.uint8)
         mask[top:bottom, left:right] = 255
         return get_cloud_from_rgb_depth_and_mask(
-            color_rgb, self.depth, mask, self.camera_intrinsics, mask_true_val=255
+            color_rgb, self.depth, mask, self.camera_intrinsics, mask_true_value=255
         )

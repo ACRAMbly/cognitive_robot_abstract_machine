@@ -287,7 +287,7 @@ def test_person_becomes_human_hypothesis_classified_as_person(
 ):
     annotator = scene.annotator_in_pipeline(scene.descriptor())
 
-    status = annotator.update()
+    status = annotator.compute()
 
     assert status == Status.SUCCESS
     hypothesis = _only_hypothesis(annotator)
@@ -302,7 +302,7 @@ def test_hypothesis_region_is_person_bounding_box(
 ):
     annotator = scene.annotator_in_pipeline(scene.descriptor())
 
-    annotator.update()
+    annotator.compute()
 
     assert _only_hypothesis(annotator).roi.roi == (
         scene.person_box_in(scene.color_image())
@@ -316,7 +316,7 @@ def test_each_person_is_identified_by_its_detection_index(
     model_loader.model.detections.append(scene.person_detection(second_person_box))
     annotator = scene.annotator_in_pipeline(scene.descriptor())
 
-    annotator.update()
+    annotator.compute()
 
     hypotheses = annotator.get_cas().filter_annotations_by_type(HumanHypothesis)
     assert [hypothesis.id for hypothesis in hypotheses] == [0, 1]
@@ -327,7 +327,7 @@ def test_hypothesis_carries_two_dimensional_keypoints_in_pixels(
 ):
     annotator = scene.annotator_in_pipeline(scene.descriptor())
 
-    annotator.update()
+    annotator.compute()
 
     keypoints = _keypoints_of_kind(
         _only_hypothesis(annotator), KeypointKind.IMAGE_POSITION
@@ -349,7 +349,7 @@ def test_model_predicts_with_configured_threshold(
     descriptor.parameters.confidence_threshold = 0.42
     annotator = scene.annotator_in_pipeline(descriptor)
 
-    annotator.update()
+    annotator.compute()
 
     assert (
         model_loader.model.received_confidence
@@ -364,7 +364,7 @@ def test_model_merges_detections_overlapping_more_than_configured(
     descriptor.parameters.non_maximum_suppression_overlap = 0.3
     annotator = scene.annotator_in_pipeline(descriptor)
 
-    annotator.update()
+    annotator.compute()
 
     assert (
         model_loader.model.received_prediction_settings["iou"]
@@ -385,7 +385,7 @@ def test_model_without_keypoints_raises(
     annotator = scene.annotator_in_pipeline(scene.descriptor())
 
     with pytest.raises(NotAPoseModelException):
-        annotator.update()
+        annotator.compute()
 
 
 def test_shrinking_narrows_hypothesis_region_around_its_center(
@@ -395,7 +395,7 @@ def test_shrinking_narrows_hypothesis_region_around_its_center(
     descriptor.parameters.shrink_bounding_box = 0.5
     annotator = scene.annotator_in_pipeline(descriptor)
 
-    annotator.update()
+    annotator.compute()
 
     assert _only_hypothesis(annotator).roi.roi == (
         scene.person_box_shrunk_by(descriptor.parameters.shrink_bounding_box)
@@ -410,7 +410,7 @@ def test_shrink_as_annotation_without_depth_shrinks_region(
     descriptor.parameters.shrink_as_annotation = True
     annotator = scene.annotator_in_pipeline(descriptor)
 
-    annotator.update()
+    annotator.compute()
 
     assert _only_hypothesis(annotator).roi.roi == (
         scene.person_box_shrunk_by(descriptor.parameters.shrink_bounding_box)
@@ -425,7 +425,7 @@ def test_point_cloud_holds_depth_measured_inside_bounding_box(
 ):
     annotator = scene.annotator_in_pipeline(scene.depth_descriptor())
 
-    annotator.update()
+    annotator.compute()
 
     points = np.asarray(_only_hypothesis(annotator).points.points)
     assert len(points) == _area(scene.person_box_in(scene.color_image()))
@@ -439,7 +439,7 @@ def test_point_cloud_is_built_on_smaller_depth_resolution(
         scene.depth_descriptor(), color_to_depth_ratio=0.5
     )
 
-    annotator.update()
+    annotator.compute()
 
     depth_image = annotator.get_cas().get(CASViews.DEPTH_IMAGE)
     points = np.asarray(_only_hypothesis(annotator).points.points)
@@ -454,7 +454,7 @@ def test_shrunk_cloud_is_added_as_annotation_when_requested(
     descriptor.parameters.shrink_as_annotation = True
     annotator = scene.annotator_in_pipeline(descriptor)
 
-    annotator.update()
+    annotator.compute()
 
     hypothesis = _only_hypothesis(annotator)
     (shrunk_cloud,) = _annotations_of_type(hypothesis, CloudAnnotation)
@@ -471,7 +471,7 @@ def test_shrink_as_annotation_without_shrinking_keeps_box_and_adds_no_cloud(
     descriptor.parameters.shrink_as_annotation = True
     annotator = scene.annotator_in_pipeline(descriptor)
 
-    annotator.update()
+    annotator.compute()
 
     hypothesis = _only_hypothesis(annotator)
     assert hypothesis.roi.roi == (scene.person_box_in(scene.color_image()))
@@ -485,7 +485,7 @@ def test_keypoint_clouds_cover_disc_around_confident_keypoints_only(
     descriptor.parameters.generate_clouds_for_keypoints = True
     annotator = scene.annotator_in_pipeline(descriptor)
 
-    annotator.update()
+    annotator.compute()
 
     keypoints = _keypoints_of_kind(
         _only_hypothesis(annotator), KeypointKind.POINT_CLOUD
@@ -515,7 +515,7 @@ def test_keypoint_clouds_are_built_around_the_two_dimensional_keypoints(
     descriptor.parameters.generate_clouds_for_keypoints = True
     annotator = scene.annotator_in_pipeline(descriptor)
 
-    annotator.update()
+    annotator.compute()
 
     hypothesis = _only_hypothesis(annotator)
     keypoint_clouds = _keypoints_of_kind(hypothesis, KeypointKind.POINT_CLOUD)
@@ -534,7 +534,7 @@ def test_visualization_shows_detections_drawn_by_model(
     descriptor = scene.descriptor()
     annotator = scene.annotator_in_pipeline(descriptor)
 
-    annotator.update()
+    annotator.compute()
 
     (expected_result,) = model_loader.model.predict(
         scene.color_image(), conf=descriptor.parameters.confidence_threshold
@@ -549,7 +549,7 @@ def test_visualization_shows_point_clouds_of_hypotheses(
 ):
     annotator = scene.annotator_in_pipeline(scene.depth_descriptor())
 
-    annotator.update()
+    annotator.compute()
 
     assert len(annotator.get_annotator_output_struct().geometries.points) == _area(
         scene.person_box_in(scene.color_image())
@@ -561,6 +561,6 @@ def test_visualization_without_depth_shows_no_point_clouds(
 ):
     annotator = scene.annotator_in_pipeline(scene.descriptor())
 
-    annotator.update()
+    annotator.compute()
 
     assert annotator.get_annotator_output_struct().geometries == []

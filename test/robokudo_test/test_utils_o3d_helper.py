@@ -566,6 +566,38 @@ class TestUtilsO3DHelper(object):
 
         assert len(pc.points) == 0
 
+    def test_get_cloud_from_rgb_depth_and_mask_keeps_pixels_of_mask_true_value(
+        self, kinect_intrinsics: o3d.camera.PinholeCameraIntrinsic
+    ):
+        shape = (kinect_intrinsics.height, kinect_intrinsics.width)
+        rgb_image = np.zeros((*shape, 3), dtype=np.uint8)
+        depth_image = np.full(shape, 1000, dtype=np.uint16)
+        mask = np.zeros(shape, dtype=np.uint8)
+        mask[100:110, 100:120] = 7
+        mask[300:310, 300:310] = 255
+
+        pc = get_cloud_from_rgb_depth_and_mask(
+            rgb_image, depth_image, mask, kinect_intrinsics, mask_true_value=7
+        )
+
+        assert len(pc.points) == 10 * 20
+
+    def test_get_cloud_from_rgb_depth_and_mask_leaves_depth_image_unchanged(
+        self, kinect_intrinsics: o3d.camera.PinholeCameraIntrinsic
+    ):
+        shape = (kinect_intrinsics.height, kinect_intrinsics.width)
+        depth_image = np.full(shape, 1000, dtype=np.uint16)
+        mask = np.zeros(shape, dtype=np.uint8)
+        mask[100:200, 100:200] = 255
+
+        get_cloud_from_rgb_depth_and_mask(
+            np.zeros((*shape, 3), dtype=np.uint8), depth_image, mask, kinect_intrinsics
+        )
+
+        np.testing.assert_array_equal(
+            depth_image, np.full(shape, 1000, dtype=np.uint16)
+        )
+
     @pytest.mark.parametrize(
         ["channel", "expected_color"],
         [

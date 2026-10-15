@@ -495,7 +495,7 @@ class YoloAnnotator(ThreadedAnnotator):
             mask=detection_mask,
             camera_intrinsics=self.camera_intrinsics,
             depth_truncate=self.descriptor.parameters.depth_truncate,
-            mask_true_val=self.mask_foreground,
+            mask_true_value=self.mask_foreground,
         )
 
     def _visualize(self, annotated_detections: List[AnnotatedDetection]) -> None:
