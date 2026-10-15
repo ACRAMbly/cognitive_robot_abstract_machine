@@ -73,7 +73,9 @@ from probabilistic_model.probabilistic_circuit.groundable_circuit import (
     ProductsOfCopies,
 )
 from probabilistic_model.probabilistic_circuit.probabilistic_circuit_representation import (
+    MixtureOverVariable,
     ProbabilisticCircuitRepresentation,
+    UnnormalizedMixture,
 )
 from probabilistic_model.probabilistic_model import (
     CenterType,
@@ -120,7 +122,7 @@ class LayerNode:
 
 @dataclass(eq=False)
 class LayeredProbabilisticCircuit(
-    GroundableCircuit[LayerNode], ProbabilisticCircuitRepresentation
+    GroundableCircuit[LayerNode], ProbabilisticCircuitRepresentation[LayerNode]
 ):
     """
     A probabilistic circuit whose units are grouped into layers of numpy arrays.
@@ -616,6 +618,24 @@ class LayeredProbabilisticCircuit(
         :param variables: The variables to keep.
         :return: This circuit, or ``None`` if it models none of the variables.
         """
+        if self.restrict_to_variables_in_place(variables) is None:
+            return None
+        return self.simplify()
+
+    def restrict_to_variables(self, variables: Iterable[Variable]) -> Optional[Self]:
+        result = self.__deepcopy__()
+        return result.restrict_to_variables_in_place(variables)
+
+    def restrict_to_variables_in_place(
+        self, variables: Iterable[Variable]
+    ) -> Optional[Self]:
+        """
+        Restrict this circuit to a subset of its variables in place, without
+        :meth:`simplify`'s removal of the identity layers.
+
+        :param variables: The variables to keep.
+        :return: This circuit, or ``None`` if it models none of the variables.
+        """
         requested = set(variables)
         kept_variables = SortedSet(
             variable for variable in self.variables if variable in requested
@@ -635,7 +655,7 @@ class LayeredProbabilisticCircuit(
             remap[self.variables.index(variable)] = new_index
         new_root.remap_variables(remap)
 
-        self.root = new_root.simplify()
+        self.root = new_root
         self.variables = kept_variables
         return self
 
@@ -709,12 +729,60 @@ class LayeredProbabilisticCircuit(
             values[self.variables.index(variable)] = value
         self.root.apply_scaling(values)
 
+    # %% reading the mixtures
+
+    def unnormalized_mixtures(
+        self, tolerance: float = 1e-6
+    ) -> List[UnnormalizedMixture]:
+        result = []
+        for layer in self.layers:
+            log_weight_sums = layer.log_normalization_constants
+            unnormalized = np.abs(log_weight_sums) >= tolerance
+            for node in np.flatnonzero(unnormalized & layer.nodes_with_components()):
+                result.append(
+                    UnnormalizedMixture(
+                        LayerNode(layer, int(node)), float(log_weight_sums[node])
+                    )
+                )
+        return result
+
+    def mixtures_over(
+        self, variables: SortedSet[Variable]
+    ) -> List[MixtureOverVariable]:
+        cache = QueryCache()
+        result = []
+        for layer in reversed(self.layers):
+            modelled = [
+                variable
+                for variable in variables
+                if variable in self.variables
+                and self.variables.index(variable) in layer.variables
+            ]
+            if not modelled:
+                continue
+            for node, supports in enumerate(
+                layer.component_supports(self.variables, cache=cache)
+            ):
+                if len(supports) < 2:
+                    continue
+                for variable in modelled:
+                    result.append(
+                        MixtureOverVariable(
+                            LayerNode(layer, node),
+                            variable,
+                            [support.marginal([variable]) for support in supports],
+                        )
+                    )
+        return result
+
     # %% composition
 
     @classmethod
     def mixture_of(cls, components: List[Self], log_weights: Iterable[float]) -> Self:
         log_weights = list(log_weights)
-        ProbabilisticCircuitRepresentation.validate_mixture(components, log_weights)
+        ProbabilisticCircuitRepresentation.validate_mixture(
+            components, log_weights
+        )
         copies = [component.__deepcopy__() for component in components]
         root = SumLayer.mixture_of([copy.root for copy in copies], log_weights)
         root.normalize_own()

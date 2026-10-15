@@ -164,6 +164,32 @@ class Layer(SubclassJSONSerializer, ABC):
 
     # %% queries
 
+    @property
+    def log_normalization_constants(self) -> NodeValues:
+        """
+        :return: ``log(sum(exp(w)))`` over the weights of each node of this layer,
+            shape (#nodes,), zero everywhere if this layer has no weights.
+        """
+        return np.zeros(self.number_of_nodes)
+
+    def nodes_with_components(self) -> NodeMask:
+        """
+        :return: The nodes of this layer that mix at least one component, none if this
+            layer does not mix.
+        """
+        return np.zeros(self.number_of_nodes, dtype=bool)
+
+    def component_supports(
+        self, variables: SortedSet, cache: Optional[QueryCache] = None
+    ) -> List[List[Event]]:
+        """
+        :param variables: The variables of the circuit.
+        :param cache: The shared cache of the current pass.
+        :return: The support of every component of every node of this layer, one list
+            per node, or nothing if this layer does not mix.
+        """
+        return []
+
     @abstractmethod
     def log_likelihood_of_nodes(
         self, events: SampleArray, cache: Optional[QueryCache] = None
