@@ -162,7 +162,7 @@ class PointcloudCropAnnotator(BaseAnnotator):
         self.get_cas().set_ref(CASViews.CLOUD, cropped_cloud)
         self.get_annotator_output_struct().set_geometries(cropped_cloud)
 
-        mask_scale = 1.0 / color2depth_ratio[0]
+        mask_scale = 1.0 / color2depth_ratio.horizontal
         mask = get_mask_from_pointcloud(
             cropped_cloud,
             self.color,

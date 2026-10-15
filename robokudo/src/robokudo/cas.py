@@ -46,6 +46,7 @@ if TYPE_CHECKING:
     from semantic_digital_twin.world import World
 
     from robokudo.types.core import Annotation
+    from robokudo.types.cv import ColorToDepthRatio
 
 
 class CASViews(StrEnum):
@@ -179,11 +180,14 @@ class CAS:
         self.views[CASViews.DEPTH_IMAGE] = value
 
     @property
-    def color2depth_ratio(self) -> Optional[Tuple[float, float]]:
+    def color2depth_ratio(self) -> ColorToDepthRatio | None:
+        """
+        Size of the depth image relative to the color image, or None without depth.
+        """
         return self.views.get(CASViews.COLOR2DEPTH_RATIO)
 
     @color2depth_ratio.setter
-    def color2depth_ratio(self, value: Tuple[float, float]) -> None:
+    def color2depth_ratio(self, value: ColorToDepthRatio | None) -> None:
         self.views[CASViews.COLOR2DEPTH_RATIO] = value
 
     @property

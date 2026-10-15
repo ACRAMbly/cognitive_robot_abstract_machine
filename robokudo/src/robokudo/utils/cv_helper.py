@@ -26,6 +26,7 @@ if TYPE_CHECKING:
     import cv2.typing as cv2t
     import numpy.typing as npt
     from robokudo.cas import CAS
+    from robokudo.types.cv import ColorToDepthRatio
 
 
 def crop_image(image: npt.NDArray, xy: tuple, wh: tuple) -> npt.NDArray:
@@ -82,47 +83,42 @@ def get_scaled_color_image_for_depth_image(
     """
     color2depth_ratio = cas.get(CASViews.COLOR2DEPTH_RATIO)
 
-    if not color2depth_ratio:
+    if color2depth_ratio is None:
         raise ColorToDepthRatioMissing(
             operation="scale color image to depth image resolution"
         )
 
-    if color2depth_ratio == (1, 1):
-        resized_color = color_image
-    else:
-        c2d_ratio_x = color2depth_ratio[0]
-        c2d_ratio_y = color2depth_ratio[1]
-        resized_color = cv2.resize(
-            color_image,
-            None,
-            fx=c2d_ratio_x,
-            fy=c2d_ratio_y,
-            interpolation=cv2.INTER_NEAREST,
-        )
-
-    return resized_color
+    if color2depth_ratio.is_identity:
+        return color_image
+    return cv2.resize(
+        color_image,
+        None,
+        fx=color2depth_ratio.horizontal,
+        fy=color2depth_ratio.vertical,
+        interpolation=cv2.INTER_NEAREST,
+    )
 
 
 def get_scale_coordinates(
-    color2depth_ratio: Tuple[int, int], coordinates: Tuple[int, int]
-) -> Tuple[int, int]:
+    color2depth_ratio: ColorToDepthRatio | None, coordinates: Tuple[float, float]
+) -> Tuple[float, float]:
     """
-    Scale coordinates based on color-to-depth ratio.
+    Scale color image coordinates to the depth image resolution.
 
-    :param color2depth_ratio: Scale factors (x_scale, y_scale)
+    :param color2depth_ratio: Size of the depth image relative to the color image.
     :param coordinates: Input coordinates (x, y)
     :return: Scaled coordinates
     :raises ColorToDepthRatioMissing: If color-to-depth ratio not provided
     """
-    if not color2depth_ratio:
+    if color2depth_ratio is None:
         raise ColorToDepthRatioMissing(operation="scale coordinates")
 
-    if color2depth_ratio == (1, 1):
+    if color2depth_ratio.is_identity:
         return coordinates
 
     return (
-        color2depth_ratio[0] * coordinates[0],
-        color2depth_ratio[1] * coordinates[1],
+        color2depth_ratio.horizontal * coordinates[0],
+        color2depth_ratio.vertical * coordinates[1],
     )
 
 

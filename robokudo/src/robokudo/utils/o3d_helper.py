@@ -125,14 +125,9 @@ def get_2d_corner_points_from_3d_bb(
         raise ValueError("Division by zero: Bounding box has zero depth.")
     corner_points_in_2d_x = (uvd[:, 0] / uvd[:, 2]).astype(int)
     corner_points_in_2d_y = (uvd[:, 1] / uvd[:, 2]).astype(int)
-    # We have to respect the ratio of the depth and rgb image to properly project back.
-    # Invert from RGB-> Depth to Depth->RGB
-    color2depth_ratio = cas.get(CASViews.COLOR2DEPTH_RATIO)
-    depth2color_ratio = (1 / color2depth_ratio[0], 1 / color2depth_ratio[1])
-    x_scaled = (corner_points_in_2d_x * depth2color_ratio[0]).astype(int)
-    y_scaled = (corner_points_in_2d_y * depth2color_ratio[1]).astype(int)
-    corner_points_in_2d_xy = np.stack((x_scaled, y_scaled), axis=1)
-    return corner_points_in_2d_xy
+    return cas.get(CASViews.COLOR2DEPTH_RATIO).color_pixels(
+        np.stack((corner_points_in_2d_x, corner_points_in_2d_y), axis=1)
+    )
 
 
 def project_points_to_image(
@@ -150,11 +145,7 @@ def project_points_to_image(
     v = (uvd[valid, 1] / z[valid]).astype(int)
 
     color2depth_ratio = cas.get(CASViews.COLOR2DEPTH_RATIO)
-    depth2color_ratio = (1 / color2depth_ratio[0], 1 / color2depth_ratio[1])
-    u = (u * depth2color_ratio[0]).astype(int)
-    v = (v * depth2color_ratio[1]).astype(int)
-
-    return np.stack([u, v], axis=1), valid
+    return color2depth_ratio.color_pixels(np.stack([u, v], axis=1)), valid
 
 
 def draw_mesh_wireframe_on_image(

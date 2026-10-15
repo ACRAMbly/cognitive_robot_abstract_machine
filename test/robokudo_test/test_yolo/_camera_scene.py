@@ -10,6 +10,7 @@ from pathlib import Path
 import numpy as np
 import open3d as o3d
 
+from robokudo.types.cv import ColorToDepthRatio
 from robokudo.annotators.core import BaseAnnotator
 from robokudo.cas import CASViews
 from robokudo.pipeline import Pipeline
@@ -78,7 +79,10 @@ class CameraScene:
             ),
         )
         cas.set(
-            CASViews.COLOR2DEPTH_RATIO, (color_to_depth_ratio, color_to_depth_ratio)
+            CASViews.COLOR2DEPTH_RATIO,
+            ColorToDepthRatio(
+                horizontal=color_to_depth_ratio, vertical=color_to_depth_ratio
+            ),
         )
         cas.set(
             CASViews.CAMERA_INTRINSIC,

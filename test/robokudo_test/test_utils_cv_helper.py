@@ -5,6 +5,7 @@ import open3d as o3d
 import pytest
 from cv2 import boundingRect
 
+from robokudo.types.cv import ColorToDepthRatio
 import robokudo.cas
 from robokudo.annotators.core import BaseAnnotator
 from robokudo.annotators.image_preprocessor import ImagePreprocessorAnnotator
@@ -130,7 +131,10 @@ class TestUtilsCVHelper(object):
 
         image = np.zeros((height, width, 3), dtype=np.uint8)
 
-        cas.set(robokudo.cas.CASViews.COLOR2DEPTH_RATIO, (scalex, scaley))
+        cas.set(
+            robokudo.cas.CASViews.COLOR2DEPTH_RATIO,
+            ColorToDepthRatio(horizontal=scalex, vertical=scaley),
+        )
 
         annotator_in_pipeline.camera_intrinsics = copy.deepcopy(kinect_intrinsics)
 
@@ -163,7 +167,9 @@ class TestUtilsCVHelper(object):
     def test_get_scale_coordinates(self, scale_factor):
         scalex, scaley = scale_factor
         coordinates = (512, 512)
-        scaled_coordinates = get_scale_coordinates((scalex, scaley), coordinates)
+        scaled_coordinates = get_scale_coordinates(
+            ColorToDepthRatio(horizontal=scalex, vertical=scaley), coordinates
+        )
         assert np.all(
             scaled_coordinates == (coordinates[0] * scalex, coordinates[1] * scaley)
         ), f"Coordinates should be scaled to {scalex}, {scaley}"

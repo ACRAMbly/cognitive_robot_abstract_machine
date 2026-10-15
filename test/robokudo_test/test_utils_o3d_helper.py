@@ -3,6 +3,7 @@ import open3d as o3d
 import pytest
 import sensor_msgs.msg
 
+from robokudo.types.cv import ColorToDepthRatio
 import robokudo.cas
 from robokudo.cas import CAS, CASViews
 from robokudo.utils.o3d_helper import (
@@ -26,7 +27,7 @@ class TestUtilsO3DHelper(object):
     def cas(self, kinect_intrinsics: o3d.camera.PinholeCameraIntrinsic) -> CAS:
         cas = robokudo.cas.CAS()
         cas.set(CASViews.POINTCLOUD_CAMERA_INTRINSIC, kinect_intrinsics)
-        cas.set(CASViews.COLOR2DEPTH_RATIO, (1.0, 1.0))
+        cas.set(CASViews.COLOR2DEPTH_RATIO, ColorToDepthRatio())
         return cas
 
     @pytest.fixture
@@ -242,7 +243,10 @@ class TestUtilsO3DHelper(object):
         ), f"unexpected corner points, did the camera intrinsics change? {result}"
 
     def test_get_2d_corner_points_from_3d_bb_with_scaling(self, cas: CAS):
-        cas.set(robokudo.cas.CASViews.COLOR2DEPTH_RATIO, (2.0, 2.0))
+        cas.set(
+            robokudo.cas.CASViews.COLOR2DEPTH_RATIO,
+            ColorToDepthRatio(horizontal=2.0, vertical=2.0),
+        )
 
         obb = o3d.geometry.OrientedBoundingBox(
             center=[0, 0, 1], R=np.eye(3), extent=[1, 1, 1]

@@ -32,18 +32,20 @@ from robokudo.types.annotation import Classification, CloudAnnotation
 from robokudo.types.cv import Rect
 from robokudo.types.human import KeypointAnnotation
 from robokudo.types.scene import HumanHypothesis
-from robokudo.utils.annotator_helper import scale_camera_intrinsics
 from robokudo.utils.cv_helper import get_scaled_color_image_for_depth_image
 from robokudo.utils.decorators import record_time
 from robokudo.utils.module_loader import ModuleLoader
 from robokudo.utils.o3d_helper import (
     concatenate_clouds,
     get_cloud_from_rgb_depth_and_mask,
+    scale_o3d_camera_intrinsics,
 )
 
 if TYPE_CHECKING:
     import numpy.typing as npt
     from ultralytics.engine.results import Results
+
+    from robokudo.types.cv import ColorToDepthRatio
 
 # %% body keypoints
 
@@ -91,9 +93,9 @@ class DepthFrame:
     The color image in RGB order, scaled to the depth image resolution.
     """
 
-    color_to_depth_ratio: tuple[float, float]
+    color_to_depth_ratio: ColorToDepthRatio
     """
-    Size of the depth image relative to the color image, along x and y.
+    Size of the depth image relative to the color image.
     """
 
     camera_intrinsics: o3d.camera.PinholeCameraIntrinsic
@@ -108,17 +110,6 @@ class DepthFrame:
         """
         return 255
 
-    def depth_pixel(self, x: float, y: float) -> tuple[int, int]:
-        """
-        Map a color image position onto the depth image.
-
-        :param x: Horizontal position in color image pixels.
-        :param y: Vertical position in color image pixels.
-        :return: The (x, y) of the depth image pixel at that position.
-        """
-        ratio_x, ratio_y = self.color_to_depth_ratio
-        return int(x * ratio_x), int(y * ratio_y)
-
     def box_cloud(self, box: Rect, depth_truncate: float) -> o3d.geometry.PointCloud:
         """
         Build the point cloud of the depth measurements inside a box.
@@ -128,11 +119,11 @@ class DepthFrame:
             out.
         :return: The colored point cloud of the depth measurements inside the box.
         """
-        x1, y1, x2, y2 = box.get_corner_points()
-        depth_x1, depth_y1 = self.depth_pixel(x1, y1)
-        depth_x2, depth_y2 = self.depth_pixel(x2, y2)
+        left, top, right, bottom = self.color_to_depth_ratio.depth_region(
+            box
+        ).get_corner_points()
         mask = np.zeros_like(self.depth_image, dtype=np.uint8)
-        mask[depth_y1:depth_y2, depth_x1:depth_x2] = self.mask_foreground
+        mask[top:bottom, left:right] = self.mask_foreground
         return self._masked_cloud(mask, depth_truncate=depth_truncate)
 
     def disc_cloud(self, x: float, y: float, radius: int) -> o3d.geometry.PointCloud:
@@ -144,10 +135,11 @@ class DepthFrame:
         :param radius: Disc radius in depth image pixels.
         :return: The colored point cloud of the depth measurements inside the disc.
         """
+        center = self.color_to_depth_ratio.depth_pixel(x, y)
         mask = np.zeros_like(self.depth_image, dtype=np.uint8)
         cv2.circle(
             mask,
-            self.depth_pixel(x, y),
+            (center.x, center.y),
             radius,
             self.mask_foreground,
             thickness=cv2.FILLED,
@@ -287,10 +279,6 @@ class HumanAndPoseAnnotator(BaseAnnotator):
         """
         The YOLO pose model, loaded during setup.
         """
-        self.camera_intrinsics: o3d.camera.PinholeCameraIntrinsic | None = None
-        """
-        Intrinsics of the camera at the resolution of the depth image.
-        """
 
     def setup(self, **kwargs: Any) -> bool:
         """
@@ -360,21 +348,22 @@ class HumanAndPoseAnnotator(BaseAnnotator):
         Collect the depth measurements of the CAS and scale the color image and the
         camera intrinsics to the depth image resolution.
 
-        Sets :attr:`camera_intrinsics` to the scaled intrinsics.
-
         :return: The depth measurements of the CAS with the matching color image.
         """
         cas = self.get_cas()
-        self.camera_intrinsics = cas.get_copy(CASViews.CAMERA_INTRINSIC)
-        scale_camera_intrinsics(self)
+        color_to_depth_ratio = cas.get(CASViews.COLOR2DEPTH_RATIO)
         scaled_color = get_scaled_color_image_for_depth_image(
             cas, cas.get(CASViews.COLOR_IMAGE)
         )
         return DepthFrame(
             depth_image=cas.get(CASViews.DEPTH_IMAGE),
             rgb_image=cv2.cvtColor(scaled_color, cv2.COLOR_BGR2RGB),
-            color_to_depth_ratio=cas.get(CASViews.COLOR2DEPTH_RATIO),
-            camera_intrinsics=self.camera_intrinsics,
+            color_to_depth_ratio=color_to_depth_ratio,
+            camera_intrinsics=scale_o3d_camera_intrinsics(
+                cas.get(CASViews.CAMERA_INTRINSIC),
+                color_to_depth_ratio.horizontal,
+                color_to_depth_ratio.vertical,
+            ),
         )
 
     def _hypothesis(

@@ -39,7 +39,7 @@ from rclpy.node import Node
 from rclpy.time import Time
 from sensor_msgs.msg import CompressedImage, CameraInfo, Image
 from tf2_ros import Buffer
-from typing_extensions import Optional, List, Any, TYPE_CHECKING, Union, Tuple
+from typing_extensions import Optional, List, Any, TYPE_CHECKING, Union
 
 from robokudo.cas import CASViews, CAS
 from robokudo.defs import PACKAGE_NAME
@@ -57,6 +57,8 @@ from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix
 
 if TYPE_CHECKING:
     import numpy.typing as npt
+
+    from robokudo.types.cv import ColorToDepthRatio
 
 
 class CameraInterface(object):
@@ -476,7 +478,7 @@ class KinectCameraInterface(ROSCameraInterface):
         Open3D camera intrinsics
         """
 
-        self.color2depth_ratio: Optional[Tuple[float, float]] = None
+        self.color2depth_ratio: ColorToDepthRatio | None = None
         """
         Ratio between color and depth image sizes
         """
