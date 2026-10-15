@@ -2,6 +2,7 @@ import numpy as np
 
 from robokudo.io import cas_annotation_codecs
 from robokudo.types.annotation import CloudAnnotation, Shape, Sphere, Cylinder
+from robokudo.types.human import BodyKeypoint, BodyKeypointCloud, KeypointAnnotation
 from semantic_digital_twin.world_description.geometry import (
     Box as SemDTBox,
     Cylinder as SemDTCylinder,
@@ -134,3 +135,37 @@ def test_cylinder_annotation_serialization_roundtrip_preserves_dimensions():
     assert isinstance(restored_cylinder.geometry, SemDTCylinder)
     assert restored_cylinder.geometry.width == 0.2
     assert restored_cylinder.geometry.height == 0.6
+
+
+def test_body_keypoint_annotation_serialization_roundtrip_preserves_keypoints():
+    keypoint_annotation = KeypointAnnotation(
+        source="pose_annotator",
+        keypoints=[BodyKeypoint(x=12.5, y=30.0, confidence=0.9)],
+        type=KeypointAnnotation.KP_TYPE_2D,
+    )
+
+    serialized = cas_annotation_codecs.serialize_annotations([keypoint_annotation])
+    (restored,) = cas_annotation_codecs.deserialize_annotations(serialized)
+
+    assert restored.keypoints == keypoint_annotation.keypoints
+
+
+def test_body_keypoint_cloud_serialization_roundtrip_preserves_keypoint_and_points():
+    points = np.array([[0.0, 0.0, 1.0], [0.1, 0.0, 1.0]], dtype=np.float64)
+    point_cloud = cas_annotation_codecs.o3d.geometry.PointCloud()
+    point_cloud.points = cas_annotation_codecs.o3d.utility.Vector3dVector(points)
+    keypoint = BodyKeypoint(x=12.5, y=30.0, confidence=0.9)
+    keypoint_annotation = KeypointAnnotation(
+        source="pose_annotator",
+        keypoints=[BodyKeypointCloud(keypoint=keypoint, points=point_cloud)],
+        type=KeypointAnnotation.KP_TYPE_3D,
+    )
+
+    serialized = cas_annotation_codecs.serialize_annotations([keypoint_annotation])
+    (restored,) = cas_annotation_codecs.deserialize_annotations(serialized)
+
+    (restored_keypoint_cloud,) = restored.keypoints
+    assert restored_keypoint_cloud.keypoint == keypoint
+    np.testing.assert_allclose(
+        np.asarray(restored_keypoint_cloud.points.points), points
+    )

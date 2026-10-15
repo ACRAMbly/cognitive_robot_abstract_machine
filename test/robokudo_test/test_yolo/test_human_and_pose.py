@@ -7,7 +7,7 @@ downloaded.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import astuple, dataclass, field
 from pathlib import Path
 
 import cv2
@@ -335,9 +335,9 @@ def test_hypothesis_carries_two_dimensional_keypoints_in_pixels(
         _only_hypothesis(annotator), KeypointAnnotation.KP_TYPE_2D
     )
     np.testing.assert_allclose(
-        keypoints.keypoints,
+        [astuple(keypoint) for keypoint in keypoints.keypoints],
         [
-            keypoint.in_pixels_of(scene.color_image())
+            astuple(keypoint.in_pixels_of(scene.color_image()))
             for keypoint in scene.person_keypoints()
         ],
         rtol=1e-5,
@@ -499,15 +499,13 @@ def test_keypoint_clouds_cover_disc_around_confident_keypoints_only(
         _only_hypothesis(annotator), KeypointAnnotation.KP_TYPE_3D
     )
     point_counts = {
-        keypoint: len(cloud.points)
-        for keypoint, (cloud, confidence) in zip(PoseKeypoint, keypoints.keypoints)
+        keypoint: len(keypoint_cloud.points.points)
+        for keypoint, keypoint_cloud in zip(PoseKeypoint, keypoints.keypoints)
     }
-    nose_x, nose_y, _ = scene.person_keypoints()[PoseKeypoint.NOSE].in_pixels_of(
-        scene.color_image()
-    )
+    nose = scene.person_keypoints()[PoseKeypoint.NOSE].in_pixels_of(scene.color_image())
     nose_disc = cv2.circle(
         np.zeros(scene.color_image_shape[:2], dtype=np.uint8),
-        (int(nose_x), int(nose_y)),
+        (int(nose.x), int(nose.y)),
         descriptor.parameters.keypoint_masking_radius,
         1,
         thickness=cv2.FILLED,
@@ -516,6 +514,23 @@ def test_keypoint_clouds_cover_disc_around_confident_keypoints_only(
         keypoint: (np.count_nonzero(nose_disc) if keypoint == PoseKeypoint.NOSE else 0)
         for keypoint in PoseKeypoint
     }
+
+
+def test_keypoint_clouds_are_built_around_the_two_dimensional_keypoints(
+    model_loader: MockModelLoader, scene: PersonScene
+):
+    descriptor = scene.depth_descriptor()
+    descriptor.parameters.generate_clouds_for_keypoints = True
+    annotator = scene.annotator_in_pipeline(descriptor)
+
+    annotator.update()
+
+    hypothesis = _only_hypothesis(annotator)
+    keypoint_clouds = _keypoints_of_type(hypothesis, KeypointAnnotation.KP_TYPE_3D)
+    keypoints = _keypoints_of_type(hypothesis, KeypointAnnotation.KP_TYPE_2D)
+    assert [
+        keypoint_cloud.keypoint for keypoint_cloud in keypoint_clouds.keypoints
+    ] == keypoints.keypoints
 
 
 # %% visualization

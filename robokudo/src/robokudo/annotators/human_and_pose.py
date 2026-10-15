@@ -30,7 +30,7 @@ from robokudo.cas import CASViews
 from robokudo.defs import PACKAGE_NAME
 from robokudo.types.annotation import Classification, CloudAnnotation
 from robokudo.types.cv import Rect
-from robokudo.types.human import KeypointAnnotation
+from robokudo.types.human import BodyKeypoint, BodyKeypointCloud, KeypointAnnotation
 from robokudo.types.scene import HumanHypothesis
 from robokudo.utils.cv_helper import get_scaled_color_image_for_depth_image
 from robokudo.utils.decorators import record_time
@@ -406,7 +406,10 @@ class HumanAndPoseAnnotator(BaseAnnotator):
             )
         )
 
-        keypoints = result.keypoints.data[index].cpu().numpy().tolist()
+        keypoints = [
+            BodyKeypoint(x=x, y=y, confidence=confidence)
+            for x, y, confidence in result.keypoints.data[index].cpu().numpy().tolist()
+        ]
         hypothesis.annotations.append(
             KeypointAnnotation(
                 source=self.name,
@@ -454,29 +457,34 @@ class HumanAndPoseAnnotator(BaseAnnotator):
         )
 
     def _keypoint_clouds(
-        self, keypoints: list[list[float]], depth_frame: DepthFrame
-    ) -> list[list[Any]]:
+        self, keypoints: list[BodyKeypoint], depth_frame: DepthFrame
+    ) -> list[BodyKeypointCloud]:
         """
         Build a point cloud from the disc of
         :attr:`Descriptor.Parameters.keypoint_masking_radius` around each keypoint.
 
-        :param keypoints: The (x, y, confidence) of each keypoint in color image pixels.
+        :param keypoints: The body keypoints of one human.
         :param depth_frame: The depth measurements to build the clouds from.
-        :return: The (point cloud, confidence) of each keypoint, the cloud empty for
-            keypoints below
+        :return: The cloud around each keypoint, empty for keypoints below
             :attr:`Descriptor.Parameters.keypoint_confidence_threshold_for_clouds`.
         """
         parameters: HumanAndPoseAnnotator.Descriptor.Parameters = (
             self.descriptor.parameters
         )
-        keypoint_clouds = []
-        for x, y, confidence in keypoints:
-            if confidence < parameters.keypoint_confidence_threshold_for_clouds:
-                keypoint_clouds.append([o3d.geometry.PointCloud(), confidence])
-                continue
-            cloud = depth_frame.disc_cloud(x, y, parameters.keypoint_masking_radius)
-            keypoint_clouds.append([cloud, confidence])
-        return keypoint_clouds
+        return [
+            BodyKeypointCloud(
+                keypoint=keypoint,
+                points=(
+                    depth_frame.disc_cloud(
+                        keypoint.x, keypoint.y, parameters.keypoint_masking_radius
+                    )
+                    if keypoint.confidence
+                    >= parameters.keypoint_confidence_threshold_for_clouds
+                    else o3d.geometry.PointCloud()
+                ),
+            )
+            for keypoint in keypoints
+        ]
 
     def _visualize(self, result: Results, hypotheses: list[HumanHypothesis]) -> None:
         """

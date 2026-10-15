@@ -14,6 +14,8 @@ import torch
 from typing_extensions import Any, Dict, List, Optional
 from ultralytics.engine.results import Results
 
+from robokudo.types.human import BodyKeypoint
+
 # %% detection model
 
 
@@ -77,12 +79,14 @@ class NormalizedKeypoint:
     Confidence that the keypoint is visible at this position.
     """
 
-    def in_pixels_of(self, image: np.ndarray) -> list[float]:
+    def in_pixels_of(self, image: np.ndarray) -> BodyKeypoint:
         """
-        :return: The keypoint as (x, y, confidence) in pixels of the given image.
+        :return: The keypoint in pixels of the given image.
         """
         height, width = image.shape[:2]
-        return [self.x * width, self.y * height, self.confidence]
+        return BodyKeypoint(
+            x=self.x * width, y=self.y * height, confidence=self.confidence
+        )
 
 
 @dataclass
@@ -169,7 +173,13 @@ class MockDetectionModel:
         keypoints = (
             torch.tensor(
                 [
-                    [keypoint.in_pixels_of(image) for keypoint in detection.keypoints]
+                    [
+                        [pixel.x, pixel.y, pixel.confidence]
+                        for pixel in (
+                            keypoint.in_pixels_of(image)
+                            for keypoint in detection.keypoints
+                        )
+                    ]
                     for detection in reported
                 ],
                 dtype=torch.float32,

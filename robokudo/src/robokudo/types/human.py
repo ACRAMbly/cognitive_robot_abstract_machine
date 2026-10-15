@@ -14,6 +14,7 @@ The types support both 2D and 3D representations where applicable.
 
 from dataclasses import dataclass, field
 
+import open3d as o3d
 from typing_extensions import Any, List
 
 from robokudo.types.core import Annotation
@@ -91,6 +92,45 @@ class ActivityAnnotation(Annotation):
     interaction_with: Any = None
     """
     Target of interaction if applicable
+    """
+
+
+@dataclass
+class BodyKeypoint:
+    """
+    The position of one body part, such as the nose or the left knee, in an image.
+    """
+
+    x: float
+    """
+    Horizontal position in color image pixels.
+    """
+
+    y: float
+    """
+    Vertical position in color image pixels.
+    """
+
+    confidence: float
+    """
+    Confidence of the detector that the body part is at this position.
+    """
+
+
+@dataclass
+class BodyKeypointCloud:
+    """
+    The depth measurements around a body keypoint.
+    """
+
+    keypoint: BodyKeypoint
+    """
+    The body keypoint the cloud is built around.
+    """
+
+    points: o3d.geometry.PointCloud
+    """
+    The colored points measured around the keypoint, empty if none were built for it.
     """
 
 
