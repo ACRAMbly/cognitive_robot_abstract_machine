@@ -31,9 +31,7 @@ from probabilistic_model.probabilistic_circuit.tensorized.array_types import (
     VariableIndices,
     VariableMask,
 )
-from probabilistic_model.probabilistic_circuit.tensorized.exceptions import (
-    NumberOfWeightsMismatchError,
-)
+from probabilistic_model.exceptions import NumberOfWeightsMismatchError
 from probabilistic_model.probabilistic_circuit.tensorized.forward_sample_assignment import (
     ForwardSampleAssignment,
 )
