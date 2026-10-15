@@ -23,8 +23,8 @@ from probabilistic_model.exceptions import (
     NumberOfWeightsMismatchError,
     ProductOverSharedVariablesError,
 )
-from probabilistic_model.probabilistic_circuit.intervenable_circuit import (
-    IntervenableCircuit,
+from probabilistic_model.probabilistic_circuit.probabilistic_circuit_representation import (
+    ProbabilisticCircuitRepresentation,
 )
 from probabilistic_model.probabilistic_circuit.rx.probabilistic_circuit import (
     ProbabilisticCircuit,
@@ -41,7 +41,7 @@ from probabilistic_model.probabilistic_circuit.tensorized.layered_probabilistic_
     params=[ProbabilisticCircuit, LayeredProbabilisticCircuit],
     ids=lambda circuit_type: circuit_type.__name__,
 )
-def circuit_type(request) -> Type[IntervenableCircuit]:
+def circuit_type(request) -> Type[ProbabilisticCircuitRepresentation]:
     """
     Every circuit type the compositions are offered by.
     """
@@ -49,11 +49,11 @@ def circuit_type(request) -> Type[IntervenableCircuit]:
 
 
 def uniform_circuit(
-    circuit_type: Type[IntervenableCircuit],
+    circuit_type: Type[ProbabilisticCircuitRepresentation],
     variable: Continuous,
     lower: float,
     upper: float,
-) -> IntervenableCircuit:
+) -> ProbabilisticCircuitRepresentation:
     """
     A circuit of one uniform distribution.
 
@@ -106,7 +106,7 @@ def y() -> Continuous:
     return Continuous("y")
 
 
-def variables_of(circuit: IntervenableCircuit) -> List[Variable]:
+def variables_of(circuit: ProbabilisticCircuitRepresentation) -> List[Variable]:
     """
     :param circuit: A circuit.
     :return: Its variables, as a list that can be compared and read in a report.
@@ -240,10 +240,10 @@ def test_a_product_of_factors_over_one_variable_raises(circuit_type, x):
 
 
 def mixture_of_products(
-    circuit_type: Type[IntervenableCircuit], x: Continuous, y: Continuous
-) -> IntervenableCircuit:
+    circuit_type: Type[ProbabilisticCircuitRepresentation], x: Continuous, y: Continuous
+) -> ProbabilisticCircuitRepresentation:
     """
-    A mixture of two products, the shape an interventional distribution takes.
+    A mixture of two products, which is a composition of both kinds at once.
 
     :param circuit_type: The type to build the circuit in.
     :param x: The variable the first factor of every product is over.

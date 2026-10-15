@@ -72,10 +72,8 @@ from probabilistic_model.probabilistic_circuit.groundable_circuit import (
     GroundableCircuit,
     ProductsOfCopies,
 )
-from probabilistic_model.probabilistic_circuit.intervenable_circuit import (
-    IntervenableCircuit,
-    validate_mixture,
-    validate_product,
+from probabilistic_model.probabilistic_circuit.probabilistic_circuit_representation import (
+    ProbabilisticCircuitRepresentation,
 )
 from probabilistic_model.probabilistic_model import (
     CenterType,
@@ -121,7 +119,9 @@ class LayerNode:
 
 
 @dataclass(eq=False)
-class LayeredProbabilisticCircuit(GroundableCircuit[LayerNode], IntervenableCircuit):
+class LayeredProbabilisticCircuit(
+    GroundableCircuit[LayerNode], ProbabilisticCircuitRepresentation
+):
     """
     A probabilistic circuit whose units are grouped into layers of numpy arrays.
 
@@ -714,7 +714,7 @@ class LayeredProbabilisticCircuit(GroundableCircuit[LayerNode], IntervenableCirc
     @classmethod
     def mixture_of(cls, components: List[Self], log_weights: Iterable[float]) -> Self:
         log_weights = list(log_weights)
-        validate_mixture(components, log_weights)
+        ProbabilisticCircuitRepresentation.validate_mixture(components, log_weights)
         copies = [component.__deepcopy__() for component in components]
         root = SumLayer.mixture_of([copy.root for copy in copies], log_weights)
         root.normalize_own()
@@ -722,7 +722,7 @@ class LayeredProbabilisticCircuit(GroundableCircuit[LayerNode], IntervenableCirc
 
     @classmethod
     def product_of(cls, factors: List[Self]) -> Self:
-        validate_product(factors)
+        ProbabilisticCircuitRepresentation.validate_product(factors)
         variables = SortedSet()
         for factor in factors:
             variables |= factor.variables

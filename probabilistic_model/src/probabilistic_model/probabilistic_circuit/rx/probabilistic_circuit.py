@@ -40,10 +40,8 @@ from probabilistic_model.probabilistic_circuit.groundable_circuit import (
     GroundableCircuit,
     ProductsOfCopies,
 )
-from probabilistic_model.probabilistic_circuit.intervenable_circuit import (
-    IntervenableCircuit,
-    validate_mixture,
-    validate_product,
+from probabilistic_model.probabilistic_circuit.probabilistic_circuit_representation import (
+    ProbabilisticCircuitRepresentation,
 )
 from probabilistic_model.probabilistic_circuit.tensorized.array_types import (
     DenseEdgeValues,
@@ -993,7 +991,7 @@ class ProductUnit(InnerUnit):
 
 @dataclass
 class ProbabilisticCircuit(
-    GroundableCircuit[Unit], IntervenableCircuit, SubclassJSONSerializer
+    GroundableCircuit[Unit], ProbabilisticCircuitRepresentation, SubclassJSONSerializer
 ):
     """
     Probabilistic Circuits as a directed, rooted, acyclic graph.
@@ -1643,7 +1641,7 @@ class ProbabilisticCircuit(
     @classmethod
     def mixture_of(cls, components: List[Self], log_weights: Iterable[float]) -> Self:
         log_weights = list(log_weights)
-        validate_mixture(components, log_weights)
+        ProbabilisticCircuitRepresentation.validate_mixture(components, log_weights)
         result = cls()
         root = SumUnit(probabilistic_circuit=result)
         for component, log_weight in zip(components, log_weights):
@@ -1653,7 +1651,7 @@ class ProbabilisticCircuit(
 
     @classmethod
     def product_of(cls, factors: List[Self]) -> Self:
-        validate_product(factors)
+        ProbabilisticCircuitRepresentation.validate_product(factors)
         result = cls()
         root = ProductUnit(probabilistic_circuit=result)
         for factor in factors:
