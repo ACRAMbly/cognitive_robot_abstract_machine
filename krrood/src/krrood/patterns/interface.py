@@ -13,11 +13,21 @@ class Interface(ABC):
     """
     A class that only declares what its subclasses provide.
 
-    A class that names :class:`Interface` among its own bases cannot be instantiated;
-    its subclasses can.
+    An interface cannot be instantiated, but its subclasses can. Its annotations declare
+    attributes for its subclasses to provide, so
+    :class:`~krrood.patterns.subclass_safe_generic.SubClassSafeGeneric` never narrows
+    them into fields.
     """
 
     def __new__(cls, *args: Any, **kwargs: Any) -> Self:
-        if Interface in cls.__bases__:
+        if Interface.is_interface(cls):
             raise InterfaceInstantiationError(cls)
         return super().__new__(cls)
+
+    @staticmethod
+    def is_interface(class_: type) -> bool:
+        """
+        :param class_: The class to check.
+        :return: Whether the class names :class:`Interface` among its own bases.
+        """
+        return Interface in class_.__bases__

@@ -2,15 +2,13 @@ import numpy as np
 import pytest
 from random_events.interval import Bound, SimpleInterval
 
-from krrood.patterns.exceptions import InterfaceInstantiationError
+from krrood.bounds import BoundsInterface
 from krrood.utils import get_generic_type_parameters
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix
 from semantic_digital_twin.world import World
 from semantic_digital_twin.world_description.geometry import (
     AxisAlignedBox,
-    Bounds,
-    BoundsInterface,
     CoordinateBounds,
     PlanarBoundingBox,
     VolumetricBoundingBox,
@@ -58,16 +56,7 @@ def test_the_corners_of_a_box_are_in_the_frame_of_its_origin(box, origin):
     assert box.upper.reference_frame is origin.reference_frame
 
 
-# %% bounds stored as their corners
-
-
-def test_the_bounds_interface_itself_cannot_be_instantiated():
-    with pytest.raises(InterfaceInstantiationError):
-        BoundsInterface()
-
-
-def test_bounds_stored_as_their_corners_implement_the_bounds_interface():
-    assert isinstance(Bounds(0.0, 1.0), BoundsInterface)
+# %% coordinate bounds
 
 
 def test_a_box_gives_its_coordinates_as_bounds_that_clip_segments(box):

@@ -28,13 +28,11 @@ from typing_extensions import (
     Self,
     Tuple,
     TYPE_CHECKING,
-    Generic,
     TypeVar,
 )
 
 from krrood.adapters.json_serializer import SubclassJSONSerializer, to_json, from_json
-from krrood.patterns.interface import Interface
-from krrood.patterns.subclass_safe_generic import SubClassSafeGeneric
+from krrood.bounds import Bounds, BoundsInterface
 from random_events.interval import SimpleInterval, Bound, closed
 from random_events.product_algebra import SimpleEvent
 from semantic_digital_twin.datastructures.variables import SpatialVariables
@@ -1221,42 +1219,6 @@ class Box(Shape):
             half_z,
             self.origin,
         )
-
-
-T = TypeVar("T")
-
-
-class BoundsInterface(Generic[T], SubClassSafeGeneric, Interface):
-    """
-    The lower and upper corner of an axis-aligned region.
-    """
-
-    lower: T
-    """
-    The corner with the smallest coordinate on every axis.
-    """
-
-    upper: T
-    """
-    The corner with the largest coordinate on every axis.
-    """
-
-
-@dataclass
-class Bounds(BoundsInterface[T]):
-    """
-    The lower and upper corner of an axis-aligned region, stored as given.
-    """
-
-    lower: T
-    """
-    The corner with the smallest coordinate on every axis.
-    """
-
-    upper: T
-    """
-    The corner with the largest coordinate on every axis.
-    """
 
 
 @dataclass
