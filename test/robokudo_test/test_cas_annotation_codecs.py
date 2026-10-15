@@ -2,7 +2,12 @@ import numpy as np
 
 from robokudo.io import cas_annotation_codecs
 from robokudo.types.annotation import CloudAnnotation, Shape, Sphere, Cylinder
-from robokudo.types.human import BodyKeypoint, BodyKeypointCloud, KeypointAnnotation
+from robokudo.types.human import (
+    BodyKeypoint,
+    BodyKeypointCloud,
+    KeypointAnnotation,
+    KeypointKind,
+)
 from semantic_digital_twin.world_description.geometry import (
     Box as SemDTBox,
     Cylinder as SemDTCylinder,
@@ -137,17 +142,17 @@ def test_cylinder_annotation_serialization_roundtrip_preserves_dimensions():
     assert restored_cylinder.geometry.height == 0.6
 
 
-def test_body_keypoint_annotation_serialization_roundtrip_preserves_keypoints():
+def test_body_keypoint_annotation_serialization_roundtrip_preserves_keypoints_and_kind():
     keypoint_annotation = KeypointAnnotation(
         source="pose_annotator",
         keypoints=[BodyKeypoint(x=12.5, y=30.0, confidence=0.9)],
-        type=KeypointAnnotation.KP_TYPE_2D,
+        kind=KeypointKind.IMAGE_POSITION,
     )
 
     serialized = cas_annotation_codecs.serialize_annotations([keypoint_annotation])
     (restored,) = cas_annotation_codecs.deserialize_annotations(serialized)
 
-    assert restored.keypoints == keypoint_annotation.keypoints
+    assert restored == keypoint_annotation
 
 
 def test_body_keypoint_cloud_serialization_roundtrip_preserves_keypoint_and_points():
@@ -158,7 +163,7 @@ def test_body_keypoint_cloud_serialization_roundtrip_preserves_keypoint_and_poin
     keypoint_annotation = KeypointAnnotation(
         source="pose_annotator",
         keypoints=[BodyKeypointCloud(keypoint=keypoint, points=point_cloud)],
-        type=KeypointAnnotation.KP_TYPE_3D,
+        kind=KeypointKind.POINT_CLOUD,
     )
 
     serialized = cas_annotation_codecs.serialize_annotations([keypoint_annotation])

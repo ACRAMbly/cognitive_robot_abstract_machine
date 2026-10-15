@@ -22,7 +22,7 @@ from robokudo.annotators.human_and_pose import HumanAndPoseAnnotator, PoseKeypoi
 from robokudo.cas import CASViews
 from robokudo.types.annotation import Classification, CloudAnnotation
 from robokudo.types.core import Annotation
-from robokudo.types.human import KeypointAnnotation
+from robokudo.types.human import KeypointAnnotation, KeypointKind
 from robokudo.types.scene import HumanHypothesis
 from ._camera_scene import CameraScene
 from ._yolo_mock import (
@@ -210,16 +210,16 @@ def _annotations_of_type(
     ]
 
 
-def _keypoints_of_type(
-    hypothesis: HumanHypothesis, keypoint_type: str
+def _keypoints_of_kind(
+    hypothesis: HumanHypothesis, kind: KeypointKind
 ) -> KeypointAnnotation:
     """
-    :return: The only keypoint annotation of the hypothesis with the given type.
+    :return: The only keypoint annotation of the hypothesis of the given kind.
     """
     (keypoints,) = [
         annotation
         for annotation in _annotations_of_type(hypothesis, KeypointAnnotation)
-        if annotation.type == keypoint_type
+        if annotation.kind == kind
     ]
     return keypoints
 
@@ -331,8 +331,8 @@ def test_hypothesis_carries_two_dimensional_keypoints_in_pixels(
 
     annotator.update()
 
-    keypoints = _keypoints_of_type(
-        _only_hypothesis(annotator), KeypointAnnotation.KP_TYPE_2D
+    keypoints = _keypoints_of_kind(
+        _only_hypothesis(annotator), KeypointKind.IMAGE_POSITION
     )
     np.testing.assert_allclose(
         [astuple(keypoint) for keypoint in keypoints.keypoints],
@@ -495,8 +495,8 @@ def test_keypoint_clouds_cover_disc_around_confident_keypoints_only(
 
     annotator.update()
 
-    keypoints = _keypoints_of_type(
-        _only_hypothesis(annotator), KeypointAnnotation.KP_TYPE_3D
+    keypoints = _keypoints_of_kind(
+        _only_hypothesis(annotator), KeypointKind.POINT_CLOUD
     )
     point_counts = {
         keypoint: len(keypoint_cloud.points.points)
@@ -526,8 +526,8 @@ def test_keypoint_clouds_are_built_around_the_two_dimensional_keypoints(
     annotator.update()
 
     hypothesis = _only_hypothesis(annotator)
-    keypoint_clouds = _keypoints_of_type(hypothesis, KeypointAnnotation.KP_TYPE_3D)
-    keypoints = _keypoints_of_type(hypothesis, KeypointAnnotation.KP_TYPE_2D)
+    keypoint_clouds = _keypoints_of_kind(hypothesis, KeypointKind.POINT_CLOUD)
+    keypoints = _keypoints_of_kind(hypothesis, KeypointKind.IMAGE_POSITION)
     assert [
         keypoint_cloud.keypoint for keypoint_cloud in keypoint_clouds.keypoints
     ] == keypoints.keypoints

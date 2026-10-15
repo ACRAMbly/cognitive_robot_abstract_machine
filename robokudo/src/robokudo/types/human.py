@@ -13,9 +13,10 @@ The types support both 2D and 3D representations where applicable.
 """
 
 from dataclasses import dataclass, field
+from enum import StrEnum, auto
 
 import open3d as o3d
-from typing_extensions import Any, List
+from typing_extensions import Any
 
 from robokudo.types.core import Annotation
 from robokudo.types.cv import Points3D, ImageROI
@@ -134,34 +135,37 @@ class BodyKeypointCloud:
     """
 
 
+class KeypointKind(StrEnum):
+    """
+    What each keypoint of a :class:`KeypointAnnotation` is given as.
+    """
+
+    IMAGE_POSITION = auto()
+    """
+    Each keypoint is a :class:`BodyKeypoint`, its position in the color image.
+    """
+
+    POINT_CLOUD = auto()
+    """
+    Each keypoint is a :class:`BodyKeypointCloud`, the depth measurements around it.
+    """
+
+
 @dataclass
 class KeypointAnnotation(Annotation):
-    """Human body keypoint detection result.
-
-    Represents detected keypoints like:
-    * Joint positions
-    * Body part locations
-    * Facial landmarks
-
-    Supports both 2D and 3D keypoint types.
+    """
+    The body keypoints of one human, indexed by
+    :class:`~robokudo.annotators.human_and_pose.PoseKeypoint`.
     """
 
-    KP_TYPE_2D: str = "2D"
+    keypoints: list[BodyKeypoint] | list[BodyKeypointCloud] = field(
+        default_factory=list
+    )
     """
-    Identifier for 2D keypoint sets
-    """
-
-    KP_TYPE_3D: str = "3D"
-    """
-    Identifier for 3D keypoint sets
+    The keypoints, given as :attr:`kind` says.
     """
 
-    keypoints: List = field(default_factory=list)
+    kind: KeypointKind = field(kw_only=True)
     """
-    List of detected keypoints
-    """
-
-    type: str = None  # type of keypoints: e.g. 3D or 2D
-    """
-    Type of keypoints (2D or 3D)
+    What each of the :attr:`keypoints` is given as.
     """

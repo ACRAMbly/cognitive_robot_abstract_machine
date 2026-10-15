@@ -30,7 +30,12 @@ from robokudo.cas import CASViews
 from robokudo.defs import PACKAGE_NAME
 from robokudo.types.annotation import Classification, CloudAnnotation
 from robokudo.types.cv import Rect
-from robokudo.types.human import BodyKeypoint, BodyKeypointCloud, KeypointAnnotation
+from robokudo.types.human import (
+    BodyKeypoint,
+    BodyKeypointCloud,
+    KeypointAnnotation,
+    KeypointKind,
+)
 from robokudo.types.scene import HumanHypothesis
 from robokudo.utils.cv_helper import get_scaled_color_image_for_depth_image
 from robokudo.utils.decorators import record_time
@@ -414,7 +419,7 @@ class HumanAndPoseAnnotator(BaseAnnotator):
             KeypointAnnotation(
                 source=self.name,
                 keypoints=keypoints,
-                type=KeypointAnnotation.KP_TYPE_2D,
+                kind=KeypointKind.IMAGE_POSITION,
             )
         )
         if depth_frame is None:
@@ -435,7 +440,7 @@ class HumanAndPoseAnnotator(BaseAnnotator):
                 KeypointAnnotation(
                     source=self.name,
                     keypoints=self._keypoint_clouds(keypoints, depth_frame),
-                    type=KeypointAnnotation.KP_TYPE_3D,
+                    kind=KeypointKind.POINT_CLOUD,
                 )
             )
         return hypothesis
