@@ -131,7 +131,7 @@ class TestUtilsCVHelper(object):
         image = np.zeros((height, width, 3), dtype=np.uint8)
 
         cas.set(
-            robokudo.cas.CASViews.COLOR2DEPTH_RATIO,
+            robokudo.cas.CASViews.COLOR_TO_DEPTH_RATIO,
             ColorToDepthRatio(horizontal=scalex, vertical=scaley),
         )
 
@@ -147,7 +147,7 @@ class TestUtilsCVHelper(object):
         self, annotator_in_pipeline: BaseAnnotator
     ):
         cas = annotator_in_pipeline.get_cas()
-        cas.set(robokudo.cas.CASViews.COLOR2DEPTH_RATIO, None)
+        cas.set(robokudo.cas.CASViews.COLOR_TO_DEPTH_RATIO, None)
         image = np.zeros((640, 480, 3), dtype=np.uint8)
         assert pytest.raises(
             RuntimeError, get_scaled_color_image_for_depth_image, cas, image

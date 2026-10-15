@@ -532,7 +532,7 @@ class StaticObjectDetectorAnnotator(BaseAnnotator):
         )
         left, top, right, bottom = (
             self.get_cas()
-            .get(CASViews.COLOR2DEPTH_RATIO)
+            .get(CASViews.COLOR_TO_DEPTH_RATIO)
             .depth_region(box)
             .get_corner_points()
         )

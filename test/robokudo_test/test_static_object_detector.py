@@ -30,7 +30,7 @@ def detector_on_half_resolution_depth(
 
     depth_height, depth_width = 20, 40
     detector.get_cas().set(
-        CASViews.COLOR2DEPTH_RATIO, ColorToDepthRatio(horizontal=0.5, vertical=0.5)
+        CASViews.COLOR_TO_DEPTH_RATIO, ColorToDepthRatio(horizontal=0.5, vertical=0.5)
     )
     detector.depth = np.full((depth_height, depth_width), 1000, dtype=np.uint16)
     detector.camera_intrinsics = o3d.camera.PinholeCameraIntrinsic(

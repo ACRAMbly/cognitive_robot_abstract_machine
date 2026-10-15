@@ -90,7 +90,7 @@ class BlackWallScene:
             ),
         )
         cas.set(
-            CASViews.COLOR2DEPTH_RATIO,
+            CASViews.COLOR_TO_DEPTH_RATIO,
             ColorToDepthRatio(
                 horizontal=color_to_depth_ratio, vertical=color_to_depth_ratio
             ),

@@ -145,8 +145,8 @@ class TestStorageRoundtripPipeline:
                 reader_camera_intrinsic.intrinsic_matrix,
             )
 
-            assert writer_pipeline.cas.get(CASViews.COLOR2DEPTH_RATIO) == (
-                reader_pipeline.cas.get(CASViews.COLOR2DEPTH_RATIO)
+            assert writer_pipeline.cas.get(CASViews.COLOR_TO_DEPTH_RATIO) == (
+                reader_pipeline.cas.get(CASViews.COLOR_TO_DEPTH_RATIO)
             )
         finally:
             writer_node.destroy_node()

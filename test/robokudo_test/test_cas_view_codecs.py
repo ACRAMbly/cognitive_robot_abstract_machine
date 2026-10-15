@@ -63,9 +63,9 @@ def test_color_to_depth_ratio_roundtrip():
     registry = CASViewCodecRegistry()
     ratio = ColorToDepthRatio(horizontal=0.5, vertical=0.25)
 
-    encoded = registry.encode_view(CASViews.COLOR2DEPTH_RATIO, ratio)
+    encoded = registry.encode_view(CASViews.COLOR_TO_DEPTH_RATIO, ratio)
 
-    assert registry.decode_view(encoded) == (CASViews.COLOR2DEPTH_RATIO, ratio)
+    assert registry.decode_view(encoded) == (CASViews.COLOR_TO_DEPTH_RATIO, ratio)
 
 
 def test_decode_view_unknown_serializer_raises():

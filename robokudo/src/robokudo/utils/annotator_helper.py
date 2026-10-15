@@ -215,7 +215,7 @@ def scale_camera_intrinsics(annotator: BaseAnnotator) -> None:
     :param annotator: Annotator whose ``camera_intrinsics`` attribute is replaced by the
         scaled intrinsics.
     """
-    color_to_depth_ratio = annotator.get_cas().get(CASViews.COLOR2DEPTH_RATIO)
+    color_to_depth_ratio = annotator.get_cas().get(CASViews.COLOR_TO_DEPTH_RATIO)
     if not color_to_depth_ratio.is_identity:
         annotator.camera_intrinsics = scale_o3d_camera_intrinsics(
             annotator.camera_intrinsics,
@@ -268,13 +268,13 @@ def resize_mask(annotator: BaseAnnotator, mask: npt.NDArray) -> npt.NDArray:
 
     :param annotator: Annotator containing resolution info
     :param mask: A binary image.
-    :return: The scaled version of mask, according to the COLOR2DEPTH_RATIO.
+    :return: The scaled version of mask, according to the COLOR_TO_DEPTH_RATIO.
     """
     if not annotator.descriptor.parameters.global_with_depth:
         # nothing to do
         return mask
 
-    color_to_depth_ratio = annotator.get_cas().get(CASViews.COLOR2DEPTH_RATIO)
+    color_to_depth_ratio = annotator.get_cas().get(CASViews.COLOR_TO_DEPTH_RATIO)
 
     if color_to_depth_ratio is None:
         raise ColorToDepthRatioMissing(operation="resize mask")

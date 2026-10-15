@@ -393,7 +393,7 @@ class YoloAnnotator(ThreadedAnnotator):
         """
         if not self.descriptor.parameters.global_with_depth:
             return detection.bounding_box
-        color_to_depth_ratio = self.get_cas().get(CASViews.COLOR2DEPTH_RATIO)
+        color_to_depth_ratio = self.get_cas().get(CASViews.COLOR_TO_DEPTH_RATIO)
         left, top, right, bottom = detection.bounding_box.get_corner_points()
         return Rect.from_corner_points(
             x1=left / color_to_depth_ratio.horizontal,

@@ -159,7 +159,7 @@ def test_precision_mask_preserves_color_coordinates(
     """
     annotator = precision_mask_annotator
     annotator.descriptor.parameters.global_with_depth = color_to_depth_ratio is not None
-    annotator.get_cas().set(CASViews.COLOR2DEPTH_RATIO, color_to_depth_ratio)
+    annotator.get_cas().set(CASViews.COLOR_TO_DEPTH_RATIO, color_to_depth_ratio)
     mask = annotator.segment_anything_model.predict.return_value[
         0
     ].masks.data.cpu.return_value.numpy.return_value[0]
@@ -184,7 +184,7 @@ def test_precision_mask_does_not_require_color_to_depth_ratio(
     """
     annotator = precision_mask_annotator
     annotator.descriptor.parameters.global_with_depth = True
-    annotator.get_cas().set(CASViews.COLOR2DEPTH_RATIO, None)
+    annotator.get_cas().set(CASViews.COLOR_TO_DEPTH_RATIO, None)
 
     assert annotator.compute() == Status.SUCCESS
 
@@ -199,7 +199,7 @@ def test_precision_bounding_box_uses_segment_anything_mask_color_coordinates(
     annotator.descriptor.parameters.refine_bounding_boxes = True
     annotator.descriptor.parameters.global_with_depth = True
     annotator.get_cas().set(
-        CASViews.COLOR2DEPTH_RATIO, ColorToDepthRatio(horizontal=0.5, vertical=0.5)
+        CASViews.COLOR_TO_DEPTH_RATIO, ColorToDepthRatio(horizontal=0.5, vertical=0.5)
     )
     mask = (
         annotator.segment_anything_model.predict.return_value[

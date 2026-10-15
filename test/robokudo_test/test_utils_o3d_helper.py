@@ -27,7 +27,7 @@ class TestUtilsO3DHelper(object):
     def cas(self, kinect_intrinsics: o3d.camera.PinholeCameraIntrinsic) -> CAS:
         cas = robokudo.cas.CAS()
         cas.set(CASViews.POINTCLOUD_CAMERA_INTRINSIC, kinect_intrinsics)
-        cas.set(CASViews.COLOR2DEPTH_RATIO, ColorToDepthRatio())
+        cas.set(CASViews.COLOR_TO_DEPTH_RATIO, ColorToDepthRatio())
         return cas
 
     @pytest.fixture
@@ -244,7 +244,7 @@ class TestUtilsO3DHelper(object):
 
     def test_get_2d_corner_points_from_3d_bb_with_scaling(self, cas: CAS):
         cas.set(
-            robokudo.cas.CASViews.COLOR2DEPTH_RATIO,
+            robokudo.cas.CASViews.COLOR_TO_DEPTH_RATIO,
             ColorToDepthRatio(horizontal=2.0, vertical=2.0),
         )
 

@@ -125,7 +125,7 @@ def get_2d_corner_points_from_3d_bb(
         raise ValueError("Division by zero: Bounding box has zero depth.")
     corner_points_in_2d_x = (uvd[:, 0] / uvd[:, 2]).astype(int)
     corner_points_in_2d_y = (uvd[:, 1] / uvd[:, 2]).astype(int)
-    return cas.get(CASViews.COLOR2DEPTH_RATIO).color_pixels(
+    return cas.get(CASViews.COLOR_TO_DEPTH_RATIO).color_pixels(
         np.stack((corner_points_in_2d_x, corner_points_in_2d_y), axis=1)
     )
 
@@ -144,7 +144,7 @@ def project_points_to_image(
     u = (uvd[valid, 0] / z[valid]).astype(int)
     v = (uvd[valid, 1] / z[valid]).astype(int)
 
-    color_to_depth_ratio = cas.get(CASViews.COLOR2DEPTH_RATIO)
+    color_to_depth_ratio = cas.get(CASViews.COLOR_TO_DEPTH_RATIO)
     return color_to_depth_ratio.color_pixels(np.stack([u, v], axis=1)), valid
 
 

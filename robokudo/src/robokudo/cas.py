@@ -63,10 +63,10 @@ class CASViews(StrEnum):
     DEPTH_IMAGE = "depth_image"
     """Depth image data"""
 
-    COLOR2DEPTH_RATIO = "color2depth_ratio"
-    """Scale factor to scale the `COLOR_IMAGE` to the resolution of the `DEPTH_IMAGE` in x, y format.
-    
-    Example: 1280x960 RGB, 640x480 DEPTH -> 0.5 along X and Y
+    COLOR_TO_DEPTH_RATIO = "color_to_depth_ratio"
+    """
+    Size of the :attr:`DEPTH_IMAGE` relative to the :attr:`COLOR_IMAGE`, as a
+    :class:`~robokudo.types.cv.ColorToDepthRatio`.
     """
 
     CAMERA_INFO = "cam_info"
@@ -184,11 +184,11 @@ class CAS:
         """
         Size of the depth image relative to the color image, or None without depth.
         """
-        return self.views.get(CASViews.COLOR2DEPTH_RATIO)
+        return self.views.get(CASViews.COLOR_TO_DEPTH_RATIO)
 
     @color_to_depth_ratio.setter
     def color_to_depth_ratio(self, value: ColorToDepthRatio | None) -> None:
-        self.views[CASViews.COLOR2DEPTH_RATIO] = value
+        self.views[CASViews.COLOR_TO_DEPTH_RATIO] = value
 
     @property
     def camera_info(self) -> Optional[CameraInfo]:

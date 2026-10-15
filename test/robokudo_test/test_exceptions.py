@@ -33,7 +33,7 @@ from robokudo.utils.cv_helper import (
 
 class _FakeCAS:
     def get(self, key):
-        if key == CASViews.COLOR2DEPTH_RATIO:
+        if key == CASViews.COLOR_TO_DEPTH_RATIO:
             return None
         raise KeyError(key)
 
@@ -42,7 +42,7 @@ class TestRoboKudoExceptions:
     def test_color_to_depth_ratio_missing_message(self):
         exception = ColorToDepthRatioMissing(operation="scale coordinates")
 
-        assert "COLOR2DEPTH_RATIO is missing from the CAS" in str(exception)
+        assert "COLOR_TO_DEPTH_RATIO is missing from the CAS" in str(exception)
         assert "Can't scale coordinates" in str(exception)
         assert "Suggestion:" in str(exception)
 

@@ -356,7 +356,7 @@ class HumanAndPoseAnnotator(ThreadedAnnotator):
         :return: The depth measurements of the CAS with the matching color image.
         """
         cas = self.get_cas()
-        color_to_depth_ratio = cas.get(CASViews.COLOR2DEPTH_RATIO)
+        color_to_depth_ratio = cas.get(CASViews.COLOR_TO_DEPTH_RATIO)
         scaled_color = get_scaled_color_image_for_depth_image(
             cas, cas.get(CASViews.COLOR_IMAGE)
         )

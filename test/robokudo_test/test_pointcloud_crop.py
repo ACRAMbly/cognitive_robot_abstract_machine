@@ -68,7 +68,7 @@ def cas_with_cloud_at_world_origin(
     cas.set_ref(CASViews.CLOUD, cloud)
     cas.set(CASViews.COLOR_IMAGE, np.zeros((200, 200, 3), dtype=np.uint8))
     cas.set(CASViews.POINTCLOUD_CAMERA_INTRINSIC, camera_intrinsics)
-    cas.set(CASViews.COLOR2DEPTH_RATIO, ColorToDepthRatio())
+    cas.set(CASViews.COLOR_TO_DEPTH_RATIO, ColorToDepthRatio())
     return cas
 
 
