@@ -16,12 +16,9 @@ from semantic_digital_twin.adapters.world_entity_kwargs_tracker import (
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 from semantic_digital_twin.exceptions import CollisionDiffersFromVisualError
 from semantic_digital_twin.pipeline.mesh_decomposition.base import MeshDecomposer
-from semantic_digital_twin.pipeline.part_finding.locating import LocatedFacesFinder
-from semantic_digital_twin.pipeline.part_finding.splitting import (
-    PartSplitter,
-    MeshSplit,
-    SplitPartFromShape,
-)
+from semantic_digital_twin.part_finding.locating import LocatedFacesFinder
+from semantic_digital_twin.part_finding.splitting import MeshSplit, PartSplitter
+from semantic_digital_twin.pipeline.part_finding import SplitPartFromShape
 from semantic_digital_twin.semantic_annotations.semantic_annotations import (
     Handle,
     Mug,

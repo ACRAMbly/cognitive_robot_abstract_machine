@@ -1,17 +1,21 @@
 # Finding the parts of an object
 
 An object often comes as a single mesh, while a robot needs its parts: the handle of a
-mug to grasp it, the legs of a table to avoid them. {py:class}`~semantic_digital_twin.pipeline.part_finding.annotation_part_finder.AnnotationPartFinder`
+mug to grasp it, the legs of a table to avoid them. {py:class}`~semantic_digital_twin.part_finding.annotation_part_finder.AnnotationPartFinder`
 gives an annotation the parts its part-whole relationships call for, by finding them in
 the shape of its root body and splitting each one off into a body and annotation of its
 own.
 
 ```python
-from semantic_digital_twin.pipeline.part_finding.annotation_part_finder import AnnotationPartFinder
+from semantic_digital_twin.part_finding.annotation_part_finder import AnnotationPartFinder
 
 parts = AnnotationPartFinder().find_parts(mug)
 mug.handle  # the handle that was found, or still None
 ```
+
+In a pipeline, the step
+{py:class}`~semantic_digital_twin.pipeline.part_finding.FindParts` does the same for
+every annotation of a type, such as `FindParts(whole_type=Mug)`.
 
 Only relationships the annotation has no part in yet are looked at. An optional part,
 such as a mug's handle, and each of any number of parts, such as a table's legs, is
@@ -49,7 +53,7 @@ kitchen objects this found 78 of 87 handles and marked nothing on any of six cup
 without one, at about 5 seconds per object on an A40.
 
 Every setting is a field of
-{py:class}`~semantic_digital_twin.pipeline.part_finding.vision_language.VisionLanguagePartLocator`
+{py:class}`~semantic_digital_twin.part_finding.vision_language.VisionLanguagePartLocator`
 and the classes it is made of.
 
 ## Where the models run
@@ -80,7 +84,7 @@ uv pip install -e "semantic_digital_twin[vision]"
 from semantic_digital_twin.adapters.part_finding.vision_language_models import (
     QwenBoxDetector, QwenModel, Quantization, Sam2BoxSegmenter,
 )
-from semantic_digital_twin.pipeline.part_finding.vision_language import (
+from semantic_digital_twin.part_finding.vision_language import (
     VisionLanguagePartLocator,
 )
 

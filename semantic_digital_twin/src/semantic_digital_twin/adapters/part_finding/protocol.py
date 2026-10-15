@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from datetime import timedelta
 from enum import StrEnum
 
-from semantic_digital_twin.pipeline.part_finding.locating import LocatedPart
+from semantic_digital_twin.part_finding.locating import LocatedPart
 
 
 class PartFindingRoute(StrEnum):
@@ -19,7 +19,7 @@ class PartFindingRoute(StrEnum):
     PARTS = "/parts"
     """
     Takes a gzip-compressed
-    :class:`~semantic_digital_twin.pipeline.part_finding.locating.PartQuery` and answers
+    :class:`~semantic_digital_twin.part_finding.locating.PartQuery` and answers
     with a :class:`PartFindingAnswer`.
     """
 

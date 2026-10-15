@@ -29,7 +29,7 @@ from semantic_digital_twin.adapters.part_finding.protocol import (
     PartFindingRoute,
     PartFindingServerStatus,
 )
-from semantic_digital_twin.pipeline.part_finding.locating import (
+from semantic_digital_twin.part_finding.locating import (
     LocatedPart,
     PartLocator,
     PartQuery,

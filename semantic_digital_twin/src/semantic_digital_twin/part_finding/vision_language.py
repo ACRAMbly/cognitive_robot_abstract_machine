@@ -23,7 +23,7 @@ from numpy.typing import NDArray
 from scipy.spatial import cKDTree
 from typing_extensions import Optional
 
-from semantic_digital_twin.pipeline.part_finding.locating import (
+from semantic_digital_twin.part_finding.locating import (
     LocatedPart,
     PartLocator,
     PartQuery,

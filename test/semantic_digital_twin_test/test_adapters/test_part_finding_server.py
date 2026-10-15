@@ -23,8 +23,8 @@ from semantic_digital_twin.adapters.part_finding.server import (
     PartFindingCache,
     PartFindingServer,
 )
-from semantic_digital_twin.pipeline.part_finding.locating import PartQuery
-from semantic_digital_twin.pipeline.part_finding.vision_language import (
+from semantic_digital_twin.part_finding.locating import PartQuery
+from semantic_digital_twin.part_finding.vision_language import (
     FilledBoxSegmenter,
     KnownPartBoxDetector,
     VisionLanguagePartLocator,

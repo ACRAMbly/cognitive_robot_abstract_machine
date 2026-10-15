@@ -23,7 +23,7 @@ from scipy.spatial import cKDTree
 from typing_extensions import Optional, Type
 
 from semantic_digital_twin.exceptions import UnknownPartWholeRelationshipField
-from semantic_digital_twin.pipeline.part_finding.splitting import PartFinder, MeshSplit
+from semantic_digital_twin.part_finding.splitting import PartFinder, MeshSplit
 from semantic_digital_twin.semantic_annotations.mixins import (
     HasRootBody,
     PartWholeRelationship,

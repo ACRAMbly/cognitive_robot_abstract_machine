@@ -1,6 +1,6 @@
 """
 The models behind
-:class:`~semantic_digital_twin.pipeline.part_finding.vision_language.VisionLanguagePartLocator`:
+:class:`~semantic_digital_twin.part_finding.vision_language.VisionLanguagePartLocator`:
 Qwen3-VL puts boxes around a part, SAM 2 masks it inside them.
 
 Needs the ``vision`` extra of this package. The weights are downloaded from Hugging Face
@@ -29,7 +29,7 @@ from transformers import (
     Sam2Processor,
 )
 
-from semantic_digital_twin.pipeline.part_finding.vision_language import (
+from semantic_digital_twin.part_finding.vision_language import (
     BoxSegmenter,
     PartBoxDetector,
     PartBoxPrompt,

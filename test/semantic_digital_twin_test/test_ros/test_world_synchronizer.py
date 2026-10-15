@@ -51,7 +51,7 @@ from semantic_digital_twin.exceptions import (
 )
 from semantic_digital_twin.orm.ormatic_interface import WorldMappingDAO
 from semantic_digital_twin.robots.pr2 import PR2
-from test.semantic_digital_twin_test.test_pipeline.test_part_finding.test_splitting import (
+from test.semantic_digital_twin_test.test_part_finding.test_splitting import (
     BODY_OUTER_RADIUS,
     annotated_mug,
     mug,

@@ -18,7 +18,6 @@ from typing_extensions import TYPE_CHECKING, Callable, Optional, Type, TypeVar
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 from semantic_digital_twin.exceptions import CollisionDiffersFromVisualError
 from semantic_digital_twin.pipeline.mesh_decomposition.base import MeshDecomposer
-from semantic_digital_twin.pipeline.pipeline import Step
 from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix
 from semantic_digital_twin.world_description.connections import FixedConnection
 from semantic_digital_twin.world_description.geometry import Mesh, Shape
@@ -31,7 +30,6 @@ if TYPE_CHECKING:
         HasRootBody,
         PartWholeRelationship,
     )
-    from semantic_digital_twin.world import World
 
 T = TypeVar("T")
 
@@ -345,29 +343,3 @@ class ColoredShape:
         """
         values = [attribute(shape) for shape in self.shapes]
         return values[0] if all(value == values[0] for value in values) else None
-
-
-# %% the pipeline step
-
-
-@dataclass
-class SplitPartFromShape(Step):
-    """
-    Gives every annotation of a type that has no such part yet the part its shape has,
-    as a body of its own.
-    """
-
-    whole_type: Type[PartWholeRelationship]
-    """
-    The type of annotation whose shapes are split.
-    """
-
-    splitter: PartSplitter
-    """
-    Splits the part off each annotation's shape.
-    """
-
-    def _apply(self, world: World) -> World:
-        for whole in world.get_semantic_annotations_by_type(self.whole_type):
-            self.splitter.part_of(whole)
-        return world

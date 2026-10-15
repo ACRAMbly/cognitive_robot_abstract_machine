@@ -25,7 +25,7 @@ from semantic_digital_twin.adapters.part_finding.vision_language_models import (
     Quantization,
     Sam2BoxSegmenter,
 )
-from semantic_digital_twin.pipeline.part_finding.vision_language import (
+from semantic_digital_twin.part_finding.vision_language import (
     VisionLanguagePartLocator,
 )
 from semantic_digital_twin.utils import create_cache_dir

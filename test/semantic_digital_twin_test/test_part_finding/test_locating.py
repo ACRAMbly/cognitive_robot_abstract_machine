@@ -18,17 +18,18 @@ from krrood.adapters.json_serializer import from_json, to_json
 from semantic_digital_twin.datastructures.camera_resolution import CameraResolution
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 from semantic_digital_twin.exceptions import UnknownPartWholeRelationshipField
-from semantic_digital_twin.pipeline.part_finding.annotation_part_finder import (
+from semantic_digital_twin.part_finding.annotation_part_finder import (
     AnnotationPartFinder,
 )
-from semantic_digital_twin.pipeline.part_finding.locating import (
+from semantic_digital_twin.pipeline.part_finding import FindParts
+from semantic_digital_twin.part_finding.locating import (
     KnownPartLocator,
     LocatedFacesFinder,
     LocatedPart,
     PartQuery,
     PartRelationshipInspector,
 )
-from semantic_digital_twin.pipeline.part_finding.vision_language import (
+from semantic_digital_twin.part_finding.vision_language import (
     FilledBoxSegmenter,
     KnownPartBoxDetector,
     PartBoxPrompt,
@@ -311,6 +312,22 @@ def test_each_located_leg_becomes_a_leg_of_the_table():
     assert table.legs == legs
     assert len(legs) == 2
     assert len(table._world.bodies) == 3
+
+
+def test_the_pipeline_step_gives_every_mug_its_handle():
+    mesh, handle_faces = mug_with_handle()
+    mug = annotate(mesh, Mug)
+    step = FindParts(
+        whole_type=Mug,
+        finder=AnnotationPartFinder(
+            locator=stand_in_locator({"handle": [handle_faces]})
+        ),
+    )
+
+    step.apply(mug._world)
+
+    assert isinstance(mug.handle, Handle)
+    assert len(mug._world.bodies) == 2
 
 
 # %% the question asked about each view

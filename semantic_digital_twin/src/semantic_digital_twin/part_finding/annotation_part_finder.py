@@ -11,14 +11,14 @@ from typing_extensions import Optional
 
 from semantic_digital_twin.adapters.part_finding.client import RemotePartLocator
 from semantic_digital_twin.pipeline.mesh_decomposition.base import MeshDecomposer
-from semantic_digital_twin.pipeline.part_finding.locating import (
+from semantic_digital_twin.part_finding.locating import (
     LocatedFacesFinder,
     LocatedPart,
     PartLocator,
     PartQuery,
     PartRelationshipInspector,
 )
-from semantic_digital_twin.pipeline.part_finding.splitting import PartSplitter
+from semantic_digital_twin.part_finding.splitting import PartSplitter
 from semantic_digital_twin.semantic_annotations.mixins import (
     HasRootBody,
     PartWholeRelationship,
