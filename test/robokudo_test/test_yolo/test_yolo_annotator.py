@@ -1,7 +1,7 @@
 """
 Tests for detecting objects with YOLO and annotating them as hypotheses.
 
-The YOLO and SAM models are replaced by stand-ins reporting scripted results, so no
+The YOLO and SAM models are replaced by mocks reporting predefined results, so no
 weights are downloaded.
 """
 
@@ -27,11 +27,11 @@ from robokudo.types.annotation import Classification
 from robokudo.types.scene import HumanHypothesis, ObjectHypothesis
 from robokudo.utils.annotator_helper import draw_bounding_boxes_from_object_hypotheses
 from robokudo.utils.file_loader import FileLoader
-from ._yolo_stand_in import (
+from ._yolo_mock import (
     NormalizedBox,
-    ScriptedDetection,
-    ScriptedUltralytics,
-    ScriptedYoloModel,
+    MockDetection,
+    MockDetectionModel,
+    MockModelLoader,
 )
 
 pytestmark = pytest.mark.usefixtures("annotator_output_buffer")
@@ -42,7 +42,7 @@ pytestmark = pytest.mark.usefixtures("annotator_output_buffer")
 @dataclass
 class CupScene:
     """
-    A camera view of a cup at a constant distance, which the scripted model detects.
+    A camera view of a cup at a constant distance, which the mock model detects.
     """
 
     models_directory: Path
@@ -58,12 +58,12 @@ class CupScene:
         }
     )
     """
-    The classes the scripted model detects, by class id.
+    The classes the mock model detects, by class id.
     """
 
     cup_class_id: int = 41
     """
-    Class id of the cup the scripted model detects.
+    Class id of the cup the mock model detects.
     """
 
     cup_box: NormalizedBox = field(
@@ -178,26 +178,27 @@ def scene(tmp_path: Path) -> CupScene:
 
 
 @pytest.fixture
-def ultralytics(monkeypatch, scene: CupScene) -> ScriptedUltralytics:
+def model_loader(monkeypatch, scene: CupScene) -> MockModelLoader:
     """
-    Make the annotator load scripted models detecting the scene's cup instead of real
-    ones.
+    Make the annotator load mock models detecting the scene's cup instead of real ones.
     """
-    scripted = ScriptedUltralytics(
-        model=ScriptedYoloModel(
+    model_loader = MockModelLoader(
+        model=MockDetectionModel(
             names=scene.class_names,
             detections=[
-                ScriptedDetection(
+                MockDetection(
                     class_id=scene.cup_class_id, confidence=0.8, box=scene.cup_box
                 )
             ],
         )
     )
-    monkeypatch.setattr(robokudo.annotators.yolo_annotator, "YOLO", scripted.load_model)
     monkeypatch.setattr(
-        robokudo.annotators.yolo_annotator, "SAM", scripted.load_segmentation_model
+        robokudo.annotators.yolo_annotator, "YOLO", model_loader.load_model
     )
-    return scripted
+    monkeypatch.setattr(
+        robokudo.annotators.yolo_annotator, "SAM", model_loader.load_segmentation_model
+    )
+    return model_loader
 
 
 def _depth_descriptor(scene: CupScene) -> YoloAnnotator.Descriptor:
@@ -242,34 +243,34 @@ def test_models_directory_defaults_to_models_folder_of_robokudo_package():
     assert parameters.models_directory == Path(robokudo.__file__).parent / "models"
 
 
-def test_pretrained_model_is_loaded_from_models_directory(ultralytics, scene):
+def test_pretrained_model_is_loaded_from_models_directory(model_loader, scene):
     descriptor = scene.descriptor()
 
     YoloAnnotator(descriptor=descriptor).setup()
 
-    assert ultralytics.loaded_model_locations == [
+    assert model_loader.loaded_model_locations == [
         str(scene.models_directory / descriptor.parameters.pretrained_model)
     ]
 
 
-def test_segmentation_model_is_loaded_from_models_directory(ultralytics, scene):
+def test_segmentation_model_is_loaded_from_models_directory(model_loader, scene):
     descriptor = scene.descriptor()
     descriptor.parameters.precision_mode = True
 
     YoloAnnotator(descriptor=descriptor).setup()
 
-    assert ultralytics.loaded_segmentation_model_locations == [
+    assert model_loader.loaded_segmentation_model_locations == [
         str(scene.models_directory / descriptor.parameters.segmentation_model)
     ]
 
 
-def test_setup_creates_missing_models_directory(ultralytics, scene):
+def test_setup_creates_missing_models_directory(model_loader, scene):
     YoloAnnotator(descriptor=scene.descriptor()).setup()
 
     assert scene.models_directory.is_dir()
 
 
-def test_annotator_without_model_raises(ultralytics, scene):
+def test_annotator_without_model_raises(model_loader, scene):
     descriptor = scene.descriptor()
     descriptor.parameters.pretrained_model = None
 
@@ -278,7 +279,7 @@ def test_annotator_without_model_raises(ultralytics, scene):
 
 
 def test_custom_weights_and_class_names_are_read_from_ros_package(
-    ultralytics, scene, monkeypatch, tmp_path
+    model_loader, scene, monkeypatch, tmp_path
 ):
     monkeypatch.setattr(
         FileLoader,
@@ -301,7 +302,7 @@ def test_custom_weights_and_class_names_are_read_from_ros_package(
     annotator = YoloAnnotator(descriptor=descriptor)
     annotator.setup()
 
-    assert ultralytics.loaded_model_locations == [
+    assert model_loader.loaded_model_locations == [
         str(tmp_path / parameters.ros_package_name / parameters.weights_path)
     ]
     assert annotator.class_names == {3: "mug"}
@@ -310,7 +311,7 @@ def test_custom_weights_and_class_names_are_read_from_ros_package(
 # %% detection
 
 
-def test_detection_becomes_hypothesis_classified_as_detected_class(ultralytics, scene):
+def test_detection_becomes_hypothesis_classified_as_detected_class(model_loader, scene):
     annotator = scene.annotator_in_pipeline(scene.descriptor())
 
     status = annotator.compute()
@@ -322,12 +323,12 @@ def test_detection_becomes_hypothesis_classified_as_detected_class(ultralytics, 
     assert classification.classname == scene.class_names[scene.cup_class_id]
     assert classification.class_id == scene.cup_class_id
     assert classification.confidence == pytest.approx(
-        ultralytics.model.detections[0].confidence
+        model_loader.model.detections[0].confidence
     )
     assert classification.source == annotator.name
 
 
-def test_hypothesis_region_is_detection_bounding_box(ultralytics, scene):
+def test_hypothesis_region_is_detection_bounding_box(model_loader, scene):
     annotator = scene.annotator_in_pipeline(scene.descriptor())
 
     annotator.compute()
@@ -337,14 +338,14 @@ def test_hypothesis_region_is_detection_bounding_box(ultralytics, scene):
     )
 
 
-def test_person_detection_becomes_human_hypothesis(ultralytics, scene):
+def test_person_detection_becomes_human_hypothesis(model_loader, scene):
     descriptor = scene.descriptor()
     person_class_id = next(
         class_id
         for class_id, name in scene.class_names.items()
         if name == descriptor.parameters.person_class_name
     )
-    ultralytics.model.detections[0].class_id = person_class_id
+    model_loader.model.detections[0].class_id = person_class_id
     annotator = scene.annotator_in_pipeline(descriptor)
 
     annotator.compute()
@@ -353,7 +354,7 @@ def test_person_detection_becomes_human_hypothesis(ultralytics, scene):
 
 
 def test_detection_of_configured_person_class_becomes_human_hypothesis(
-    ultralytics, scene
+    model_loader, scene
 ):
     descriptor = scene.descriptor()
     descriptor.parameters.person_class_name = scene.class_names[scene.cup_class_id]
@@ -364,7 +365,7 @@ def test_detection_of_configured_person_class_becomes_human_hypothesis(
     assert type(_only_hypothesis(annotator)) is HumanHypothesis
 
 
-def test_detection_of_ignored_class_is_not_annotated(ultralytics, scene):
+def test_detection_of_ignored_class_is_not_annotated(model_loader, scene):
     descriptor = scene.descriptor()
     descriptor.parameters.ignored_class_names = [
         f" {scene.class_names[scene.cup_class_id]} "
@@ -376,20 +377,20 @@ def test_detection_of_ignored_class_is_not_annotated(ultralytics, scene):
     assert _hypotheses(annotator) == []
 
 
-def test_model_predicts_with_configured_threshold(ultralytics, scene):
+def test_model_predicts_with_configured_threshold(model_loader, scene):
     descriptor = scene.descriptor()
     descriptor.parameters.threshold = 0.42
     annotator = scene.annotator_in_pipeline(descriptor)
 
     annotator.compute()
 
-    assert ultralytics.model.received_confidence == descriptor.parameters.threshold
+    assert model_loader.model.received_confidence == descriptor.parameters.threshold
 
 
 # %% masks
 
 
-def test_mask_fills_bounding_box_without_precision_mode(ultralytics, scene):
+def test_mask_fills_bounding_box_without_precision_mode(model_loader, scene):
     annotator = scene.annotator_in_pipeline(scene.descriptor())
 
     annotator.compute()
@@ -407,31 +408,29 @@ def _precision_descriptor(scene: CupScene) -> YoloAnnotator.Descriptor:
     return descriptor
 
 
-def _segmented_cup_mask(
-    ultralytics: ScriptedUltralytics, scene: CupScene
-) -> np.ndarray:
+def _segmented_cup_mask(model_loader: MockModelLoader, scene: CupScene) -> np.ndarray:
     """
     :return: The segmentation of the cup, cropped to its bounding box.
     """
     image = scene.color_image()
-    segmentation = ultralytics.segmentation_model.segment(
+    segmentation = model_loader.segmentation_model.segment(
         image, scene.cup_box.corners_in(image)
     )
     x1, y1, x2, y2 = scene.cup_corners()
     return (segmentation[y1:y2, x1:x2] * YoloAnnotator.mask_foreground).astype(np.uint8)
 
 
-def test_precision_mode_mask_is_segmentation_of_detection(ultralytics, scene):
+def test_precision_mode_mask_is_segmentation_of_detection(model_loader, scene):
     annotator = scene.annotator_in_pipeline(_precision_descriptor(scene))
 
     annotator.compute()
 
     np.testing.assert_array_equal(
-        _only_hypothesis(annotator).roi.mask, _segmented_cup_mask(ultralytics, scene)
+        _only_hypothesis(annotator).roi.mask, _segmented_cup_mask(model_loader, scene)
     )
 
 
-def test_precision_mode_erosion_shrinks_segmentation(ultralytics, scene):
+def test_precision_mode_erosion_shrinks_segmentation(model_loader, scene):
     descriptor = _precision_descriptor(scene)
     descriptor.parameters.precision_mode_apply_erosion = True
     descriptor.parameters.precision_mode_erosion_kernel_size = 3
@@ -440,7 +439,9 @@ def test_precision_mode_erosion_shrinks_segmentation(ultralytics, scene):
     annotator.compute()
 
     eroded = _only_hypothesis(annotator).roi.mask == YoloAnnotator.mask_foreground
-    segmented = _segmented_cup_mask(ultralytics, scene) == YoloAnnotator.mask_foreground
+    segmented = (
+        _segmented_cup_mask(model_loader, scene) == YoloAnnotator.mask_foreground
+    )
     assert np.all(segmented[eroded])
     assert eroded.sum() < segmented.sum()
 
@@ -449,7 +450,7 @@ def test_precision_mode_erosion_shrinks_segmentation(ultralytics, scene):
 
 
 def test_visualization_draws_labelled_bounding_box_of_each_detection(
-    ultralytics, scene
+    model_loader, scene
 ):
     annotator = scene.annotator_in_pipeline(scene.descriptor())
 
@@ -468,7 +469,7 @@ def test_visualization_draws_labelled_bounding_box_of_each_detection(
     )
 
 
-def test_precision_mode_visualization_paints_mask_in_palette_color(ultralytics, scene):
+def test_precision_mode_visualization_paints_mask_in_palette_color(model_loader, scene):
     annotator = scene.annotator_in_pipeline(_precision_descriptor(scene))
 
     annotator.compute()
@@ -485,7 +486,7 @@ def test_precision_mode_visualization_paints_mask_in_palette_color(ultralytics, 
 # %% depth
 
 
-def test_point_cloud_holds_depth_measured_inside_bounding_box(ultralytics, scene):
+def test_point_cloud_holds_depth_measured_inside_bounding_box(model_loader, scene):
     annotator = scene.annotator_in_pipeline(_depth_descriptor(scene))
 
     annotator.compute()
@@ -499,7 +500,7 @@ def test_point_cloud_holds_depth_measured_inside_bounding_box(ultralytics, scene
 
 
 def test_region_detected_on_smaller_depth_resolution_is_in_color_pixels(
-    ultralytics, scene
+    model_loader, scene
 ):
     annotator = scene.annotator_in_pipeline(
         _depth_descriptor(scene), color_to_depth_ratio=0.5
@@ -530,7 +531,7 @@ def _annotator_with_existing_hypothesis(
     return annotator
 
 
-def test_detection_overlapping_existing_hypothesis_classifies_it(ultralytics, scene):
+def test_detection_overlapping_existing_hypothesis_classifies_it(model_loader, scene):
     existing = scene.cup_shaped_hypothesis()
     annotator = _annotator_with_existing_hypothesis(
         scene, _existing_hypothesis_descriptor(scene), existing
@@ -542,7 +543,7 @@ def test_detection_overlapping_existing_hypothesis_classifies_it(ultralytics, sc
     assert _classification(existing).classname == scene.class_names[scene.cup_class_id]
 
 
-def test_detection_apart_from_existing_hypothesis_creates_new_one(ultralytics, scene):
+def test_detection_apart_from_existing_hypothesis_creates_new_one(model_loader, scene):
     existing = _hypothesis_at(x=0, y=0, width=5, height=5)
     annotator = _annotator_with_existing_hypothesis(
         scene, _existing_hypothesis_descriptor(scene), existing
@@ -554,7 +555,7 @@ def test_detection_apart_from_existing_hypothesis_creates_new_one(ultralytics, s
     assert existing.annotations == []
 
 
-def test_existing_hypotheses_are_left_alone_unless_enabled(ultralytics, scene):
+def test_existing_hypotheses_are_left_alone_unless_enabled(model_loader, scene):
     existing = scene.cup_shaped_hypothesis()
     annotator = _annotator_with_existing_hypothesis(scene, scene.descriptor(), existing)
 
