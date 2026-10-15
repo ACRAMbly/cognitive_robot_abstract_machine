@@ -2082,6 +2082,48 @@ class MujocoBuilder(MultiSimBuilder):
 
         trimesh_mesh.export(stl_file_path)
 
+    def _asset_file_path_for(self, source_file_path: str, suffix: str) -> str:
+        """
+        The path in the asset folder that a file derived from a source mesh is written
+        to, distinct for every source file so that meshes sharing a file name never
+        overwrite or reuse each other's derived files.
+
+        :param source_file_path: The mesh the file is derived from.
+        :param suffix: The text replacing the source file's extension, such as
+            ``".stl"``.
+        :return: The path, whose directory exists.
+        """
+        source_without_extension, _ = os.path.splitext(
+            os.path.abspath(source_file_path)
+        )
+        asset_file_path = os.path.join(
+            self.asset_folder_path, source_without_extension.lstrip(os.sep) + suffix
+        )
+        os.makedirs(os.path.dirname(asset_file_path), exist_ok=True)
+        return asset_file_path
+
+    def _mesh_name_for(self, mesh_file_path: str, mesh_scale: list[float]) -> str:
+        """
+        The name of the mesh asset for a mesh file at a scale, adding the asset to the
+        spec if no geom used this file at this scale yet.
+
+        :param mesh_file_path: The mesh file MuJoCo loads.
+        :param mesh_scale: The scale along x, y and z.
+        :return: The name, unique to this file and scale.
+        """
+        for mesh in self.spec.meshes:
+            if mesh.file == mesh_file_path and numpy.allclose(mesh.scale, mesh_scale):
+                return mesh.name
+        mesh_name = os.path.splitext(os.path.basename(mesh_file_path))[0]
+        if not numpy.allclose(mesh_scale, [1.0, 1.0, 1.0]):
+            mesh_name += f"_{'_'.join(map(str, mesh_scale))}"
+        if mesh_name in [mesh.name for mesh in self.spec.meshes]:
+            mesh_name += f"_{len(self.spec.meshes)}"
+        mesh = self.spec.add_mesh(name=mesh_name)
+        mesh.file = mesh_file_path
+        mesh.scale = mesh_scale
+        return mesh_name
+
     def _thicken_if_near_planar(self, mesh_file_path: str) -> str:
         """
         MuJoCo cannot compute a convex hull for a mesh whose vertices are (near-)
@@ -2120,9 +2162,8 @@ class MujocoBuilder(MultiSimBuilder):
             self._thickened_mesh_paths[mesh_file_path] = mesh_file_path
             return mesh_file_path
 
-        base_name = os.path.splitext(os.path.basename(mesh_file_path))[0]
-        thickened_file_path = os.path.join(
-            self.asset_folder_path, base_name + "_thickened.stl"
+        thickened_file_path = self._asset_file_path_for(
+            mesh_file_path, suffix="_thickened.stl"
         )
         # Always (re)written rather than reused when already present on disk: two
         # different source meshes can share a basename (e.g. two objects each
@@ -2164,10 +2205,7 @@ class MujocoBuilder(MultiSimBuilder):
             )
         mesh_ext = os.path.splitext(mesh_file_path)[1].lower()
         if mesh_ext == ".dae":
-            # Build output .stl path
-            base_name = os.path.splitext(os.path.basename(mesh_file_path))[0]
-            stl_file_path = os.path.join(self.asset_folder_path, base_name + ".stl")
-
+            stl_file_path = self._asset_file_path_for(mesh_file_path, suffix=".stl")
             # create a .stl mesh from the original .dae mesh, as a replacement. If it not already exists.
             if not os.path.exists(stl_file_path):
                 self._create_stl_from_dae_mesh(
@@ -2177,15 +2215,8 @@ class MujocoBuilder(MultiSimBuilder):
 
         mesh_file_path = self._thicken_if_near_planar(mesh_file_path)
 
-        mesh_name = os.path.splitext(os.path.basename(mesh_file_path))[0]
         mesh_scale = [mesh_entity.scale.x, mesh_entity.scale.y, mesh_entity.scale.z]
-        if not numpy.allclose(mesh_scale, [1.0, 1.0, 1.0]):
-            mesh_name += f"_{'_'.join(map(str, mesh_scale))}"
-        if mesh_name not in [mesh.name for mesh in self.spec.meshes]:
-            mesh = self.spec.add_mesh(name=mesh_name)
-            mesh.file = mesh_file_path
-            mesh.scale = mesh_scale
-        geom_props["meshname"] = mesh_name
+        geom_props["meshname"] = self._mesh_name_for(mesh_file_path, mesh_scale)
         texture_file_path = geom_props.pop("texture_file_path", None)
         if isinstance(texture_file_path, str):
             geom_props["material"] = self._register_texture_material(
