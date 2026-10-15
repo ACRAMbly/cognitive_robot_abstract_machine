@@ -26,7 +26,6 @@ if TYPE_CHECKING:
     import cv2.typing as cv2t
     import numpy.typing as npt
     from robokudo.cas import CAS
-    from robokudo.types.cv import ColorToDepthRatio
 
 
 def crop_image(image: npt.NDArray, xy: tuple, wh: tuple) -> npt.NDArray:
@@ -96,29 +95,6 @@ def get_scaled_color_image_for_depth_image(
         fx=color_to_depth_ratio.horizontal,
         fy=color_to_depth_ratio.vertical,
         interpolation=cv2.INTER_NEAREST,
-    )
-
-
-def get_scale_coordinates(
-    color_to_depth_ratio: ColorToDepthRatio | None, coordinates: Tuple[float, float]
-) -> Tuple[float, float]:
-    """
-    Scale color image coordinates to the depth image resolution.
-
-    :param color_to_depth_ratio: Size of the depth image relative to the color image.
-    :param coordinates: Input coordinates (x, y)
-    :return: Scaled coordinates
-    :raises ColorToDepthRatioMissing: If color-to-depth ratio not provided
-    """
-    if color_to_depth_ratio is None:
-        raise ColorToDepthRatioMissing(operation="scale coordinates")
-
-    if color_to_depth_ratio.is_identity:
-        return coordinates
-
-    return (
-        color_to_depth_ratio.horizontal * coordinates[0],
-        color_to_depth_ratio.vertical * coordinates[1],
     )
 
 
