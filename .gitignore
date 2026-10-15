@@ -195,6 +195,9 @@ basstler/src/basstler/board.json
 /.coverage
 /.coverage.*
 
+# Some robokudo annotators have default models downloaded
+robokudo/src/robokudo/models/
+
 # basstler's own virtual environment, created by every session start that finds it
 # missing (see create_basstler_environment in .claude/hooks/resolve-personal-notes-config.sh).
 basstler/.venv/
