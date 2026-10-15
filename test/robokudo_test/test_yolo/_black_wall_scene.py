@@ -9,6 +9,7 @@ from pathlib import Path
 
 import numpy as np
 import open3d as o3d
+from krrood.ormatic.utils import classproperty
 from semantic_digital_twin.datastructures.camera_resolution import CameraResolution
 
 from robokudo.annotators.core import BaseAnnotator
@@ -38,15 +39,19 @@ class BlackWallScene:
     Resolution of the color images in the CAS.
     """
 
-    depth_in_millimeters: int = 1000
+    wall_distance: float = 1.0
     """
-    Distance every depth image pixel measures.
+    Distance in meters between the camera and the wall, which every depth image pixel
+    measures.
     """
 
-    millimeters_per_meter: float = 1000.0
-    """
-    Scale between the depth image values and point coordinates.
-    """
+    @classproperty
+    def depth_image_units_per_meter(cls) -> float:
+        """
+        Depth image value per meter of measured distance, since RoboKudo stores depth
+        images in millimeters.
+        """
+        return 1000.0
 
     def color_image(self) -> np.ndarray:
         """
@@ -80,7 +85,7 @@ class BlackWallScene:
             CASViews.DEPTH_IMAGE,
             np.full(
                 (depth_height, depth_width),
-                self.depth_in_millimeters,
+                round(self.wall_distance * self.depth_image_units_per_meter),
                 dtype=np.uint16,
             ),
         )

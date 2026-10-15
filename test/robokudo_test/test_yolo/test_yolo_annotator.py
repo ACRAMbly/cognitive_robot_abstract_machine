@@ -433,9 +433,7 @@ def test_point_cloud_holds_depth_measured_inside_bounding_box(model_loader, scen
     x1, y1, x2, y2 = scene.cup_corners()
     points = np.asarray(_only_hypothesis(annotator).points.points)
     assert len(points) == (x2 - x1) * (y2 - y1)
-    np.testing.assert_allclose(
-        points[:, 2], scene.depth_in_millimeters / scene.millimeters_per_meter
-    )
+    np.testing.assert_allclose(points[:, 2], scene.wall_distance)
 
 
 def test_region_detected_on_smaller_depth_resolution_is_in_color_pixels(

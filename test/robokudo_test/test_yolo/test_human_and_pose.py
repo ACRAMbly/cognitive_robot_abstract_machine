@@ -429,9 +429,7 @@ def test_point_cloud_holds_depth_measured_inside_bounding_box(
 
     points = np.asarray(_only_hypothesis(annotator).points.points)
     assert len(points) == _area(scene.person_box_in(scene.color_image()))
-    np.testing.assert_allclose(
-        points[:, 2], scene.depth_in_millimeters / scene.millimeters_per_meter
-    )
+    np.testing.assert_allclose(points[:, 2], scene.wall_distance)
 
 
 def test_point_cloud_is_built_on_smaller_depth_resolution(
