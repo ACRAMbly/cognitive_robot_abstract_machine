@@ -43,6 +43,7 @@ so users who do not need them are spared the download. They are bundled in the `
 | Package | Annotators that need it                                |
 |---------|--------------------------------------------------------|
 | `torch` | `CLIPAnnotator` (`robokudo.annotators.clip_annotator`) |
+| `ultralytics` | `YoloAnnotator` (`robokudo.annotators.yolo_annotator`)                                                        |
 
 Install them together with RoboKudo:
 
