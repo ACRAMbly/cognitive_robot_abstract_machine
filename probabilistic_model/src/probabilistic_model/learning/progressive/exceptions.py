@@ -15,7 +15,6 @@ if TYPE_CHECKING:
         CircuitColumn,
     )
     from probabilistic_model.probabilistic_circuit.rx.probabilistic_circuit import Unit
-    from probabilistic_model.probabilistic_model import ProbabilisticModel
 
 
 @dataclass
@@ -47,6 +46,28 @@ class ColumnStructureMismatchError(DataclassException, ValueError):
 
 
 @dataclass
+class EarlierColumnShareOutOfRangeError(DataclassException, ValueError):
+    """
+    Exception raised when the start weight share of earlier columns is not in
+    ``[0, 1)``.
+    """
+
+    earlier_column_share: float
+    """
+    The share that is out of range.
+    """
+
+    def error_message(self) -> str:
+        return f"The earlier column share {self.earlier_column_share} is not in [0, 1)."
+
+    def suggest_correction(self) -> str:
+        return (
+            "Use 0 for columns that do not read from earlier columns, or a value below "
+            "1 so new columns keep weight on their own children."
+        )
+
+
+@dataclass
 class UnregisteredColumnError(DataclassException, ValueError):
     """
     Exception raised when a column is used with a progressive circuit it does not belong
@@ -65,24 +86,3 @@ class UnregisteredColumnError(DataclassException, ValueError):
 
     def suggest_correction(self) -> str:
         return "Create columns with ProgressiveProbabilisticCircuit.add_column."
-
-
-@dataclass
-class UnsupportedLeafDistributionError(DataclassException, TypeError):
-    """
-    Exception raised when a leaf distribution cannot be learned from weighted rows.
-    """
-
-    distribution: ProbabilisticModel
-    """
-    The distribution that cannot be learned.
-    """
-
-    def error_message(self) -> str:
-        return (
-            f"Leaf distributions of type {type(self.distribution).__name__} cannot be "
-            f"learned from weighted rows."
-        )
-
-    def suggest_correction(self) -> str:
-        return "Use Gaussian, discrete or symbolic leaf distributions."

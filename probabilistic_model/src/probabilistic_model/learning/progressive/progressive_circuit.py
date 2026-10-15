@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 
 from probabilistic_model.learning.progressive.exceptions import (
     ColumnStructureMismatchError,
+    EarlierColumnShareOutOfRangeError,
     UnregisteredColumnError,
 )
 from probabilistic_model.probabilistic_circuit.rx.probabilistic_circuit import (
@@ -135,6 +136,8 @@ class ProgressiveProbabilisticCircuit:
     Share of the start weight of every sum unit of a new column that goes to the aligned
     sum units of the earlier columns, split equally among them; the column's own
     children keep the rest in the proportions of :attr:`template`.
+
+    In ``[0, 1)``; with ``0`` new columns do not read from earlier columns.
     """
 
     columns: list[CircuitColumn] = field(default_factory=list, init=False)
@@ -155,7 +158,12 @@ class ProgressiveProbabilisticCircuit:
     def __post_init__(self):
         """
         Create the empty circuit and its root, which the columns are added below.
+
+        :raises EarlierColumnShareOutOfRangeError: If :attr:`earlier_column_share` is
+            not in ``[0, 1)``.
         """
+        if not 0.0 <= self.earlier_column_share < 1.0:
+            raise EarlierColumnShareOutOfRangeError(self.earlier_column_share)
         self.circuit = ProbabilisticCircuit()
         self.root = SumUnit(probabilistic_circuit=self.circuit)
 
@@ -210,10 +218,12 @@ class ProgressiveProbabilisticCircuit:
         with :attr:`earlier_column_share` of the start weight split equally among the
         earlier columns.
 
+        With an :attr:`earlier_column_share` of ``0``, the new column is not connected.
+
         :param aligned_sum_units: The sum units of the new column, already in the
             circuit, paired with the aligned sum unit of each earlier column.
         """
-        if not aligned_sum_units:
+        if not aligned_sum_units or self.earlier_column_share == 0.0:
             return
         own_log_share = math.log(1 - self.earlier_column_share)
         for sum_unit in {aligned.left for aligned in aligned_sum_units}:

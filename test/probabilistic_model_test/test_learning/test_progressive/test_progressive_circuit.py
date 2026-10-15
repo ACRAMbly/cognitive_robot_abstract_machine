@@ -7,12 +7,19 @@ from random_events.set import Set
 from random_events.variable import Continuous, Symbolic
 
 from probabilistic_model.distributions.distributions import SymbolicDistribution
-from probabilistic_model.distributions.gaussian import GaussianDistribution
+from probabilistic_model.distributions.gaussian import (
+    GaussianDistribution,
+    TruncatedGaussianDistribution,
+)
 from probabilistic_model.distributions.uniform import UniformDistribution
+from probabilistic_model.learning.exceptions import UnsupportedLeafDistributionError
+from probabilistic_model.learning.expectation_maximization import (
+    ExpectationMaximization,
+)
 from probabilistic_model.learning.progressive.exceptions import (
     ColumnStructureMismatchError,
+    EarlierColumnShareOutOfRangeError,
     UnregisteredColumnError,
-    UnsupportedLeafDistributionError,
 )
 from probabilistic_model.learning.progressive.expectation_maximization import (
     ProgressiveExpectationMaximization,
@@ -258,6 +265,38 @@ def test_first_column_keeps_template_start_weights():
     )
 
 
+def test_new_column_without_earlier_column_share_is_independent_of_earlier_columns():
+    progressive_circuit = ProgressiveProbabilisticCircuit(
+        template=_make_mixture_template("x", "y"), earlier_column_share=0.0
+    )
+    earlier_column = progressive_circuit.add_column(task_name="task-a")
+
+    column = progressive_circuit.add_column(task_name="task-b")
+
+    assert not progressive_circuit.circuit.has_edge(column.root, earlier_column.root)
+    assert [
+        float(log_weight) for log_weight, _ in column.root.log_weighted_subcircuits
+    ] == pytest.approx(
+        [
+            float(log_weight)
+            for log_weight, _ in progressive_circuit.template.root.log_weighted_subcircuits
+        ]
+    )
+
+
+@pytest.mark.parametrize("earlier_column_share", [-0.1, 1.0, 1.5])
+def test_progressive_circuit_rejects_earlier_column_share_outside_zero_to_one(
+    earlier_column_share: float,
+):
+    with pytest.raises(EarlierColumnShareOutOfRangeError) as error:
+        ProgressiveProbabilisticCircuit(
+            template=_make_mixture_template("x", "y"),
+            earlier_column_share=earlier_column_share,
+        )
+
+    assert error.value.earlier_column_share == earlier_column_share
+
+
 def test_adding_column_leaves_earlier_column_unchanged():
     progressive_circuit = ProgressiveProbabilisticCircuit(
         template=_make_mixture_template("x", "y")
@@ -415,15 +454,16 @@ def test_learn_floors_gaussian_variance_at_minimum_gaussian_variance():
         template=_make_factorized_template("x")
     )
     column = progressive_circuit.add_column(task_name="task-a")
+    expectation_maximization = ExpectationMaximization(minimum_gaussian_variance=0.25)
     learner = ProgressiveExpectationMaximization(
-        progressive_circuit, minimum_gaussian_variance=0.25
+        progressive_circuit, expectation_maximization=expectation_maximization
     )
 
     learner.learn(np.full((10, 1), 3.0), column)
 
     [gaussian_leaf] = _gaussian_leaves(progressive_circuit, column)
     assert gaussian_leaf.distribution.scale == pytest.approx(
-        np.sqrt(learner.minimum_gaussian_variance)
+        np.sqrt(expectation_maximization.minimum_gaussian_variance)
     )
 
 
@@ -648,6 +688,26 @@ def test_learn_rejects_unsupported_leaf_distribution():
         ProgressiveExpectationMaximization(progressive_circuit).learn(
             np.array([[0.5]]), column
         )
+
+
+def test_learn_rejects_truncated_gaussian_leaf():
+    truncated_gaussian = TruncatedGaussianDistribution(
+        variable=Continuous("x"),
+        interval=closed(0.0, np.inf).simple_sets[0],
+        location=0.0,
+        scale=1.0,
+    )
+    template = ProbabilisticCircuit()
+    leaf(truncated_gaussian, template)
+    progressive_circuit = ProgressiveProbabilisticCircuit(template=template)
+    column = progressive_circuit.add_column(task_name="task-a")
+
+    with pytest.raises(UnsupportedLeafDistributionError) as error:
+        ProgressiveExpectationMaximization(progressive_circuit).learn(
+            np.array([[0.5]]), column
+        )
+
+    assert error.value.distribution == truncated_gaussian
 
 
 def test_learn_returns_empty_history_for_empty_data():

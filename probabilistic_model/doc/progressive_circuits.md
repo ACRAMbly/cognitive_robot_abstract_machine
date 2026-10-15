@@ -43,7 +43,11 @@ it raises a {py:class}`~probabilistic_model.learning.progressive.exceptions.Colu
 ## Learning
 
 {py:class}`~probabilistic_model.learning.progressive.expectation_maximization.ProgressiveExpectationMaximization`
-learns one column at a time with expectation maximization:
+learns one column at a time with the ordinary
+{py:class}`~probabilistic_model.learning.expectation_maximization.ExpectationMaximization`
+that also fits classic circuits through
+{py:class}`~probabilistic_model.learning.expectation_maximization.ExpectationMaximizationLearning`.
+What is progressive:
 
 - While a column is learned, the root gives it the whole weight, so it is trained as the
   only model of its task. It still reaches the earlier columns through its edges to them.
@@ -52,8 +56,8 @@ learns one column at a time with expectation maximization:
 - Afterwards the root weights every column by its share of all rows the columns were
   learned from.
 
-Gaussian, discrete and symbolic leaves can be learned; any other leaf raises an
-{py:class}`~probabilistic_model.learning.progressive.exceptions.UnsupportedLeafDistributionError`.
+Untruncated Gaussian, discrete and symbolic leaves can be learned; any other leaf raises
+an {py:class}`~probabilistic_model.learning.exceptions.UnsupportedLeafDistributionError`.
 
 ```{warning}
 Later columns read from earlier ones, so learning an earlier column again also changes
