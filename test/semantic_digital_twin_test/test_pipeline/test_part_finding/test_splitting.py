@@ -7,13 +7,15 @@ import numpy as np
 import pytest
 import trimesh
 from numpy.typing import NDArray
-from typing_extensions import Optional
+from typing_extensions import List, Optional
 
 from krrood.adapters.json_serializer import from_json, to_json
 from semantic_digital_twin.adapters.world_entity_kwargs_tracker import (
     WorldEntityWithIDKwargsTracker,
 )
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
+from semantic_digital_twin.exceptions import CollisionDiffersFromVisualError
+from semantic_digital_twin.pipeline.mesh_decomposition.base import MeshDecomposer
 from semantic_digital_twin.pipeline.part_finding.locating import LocatedFacesFinder
 from semantic_digital_twin.pipeline.part_finding.splitting import (
     PartSplitter,
@@ -26,7 +28,7 @@ from semantic_digital_twin.semantic_annotations.semantic_annotations import (
 )
 from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix
 from semantic_digital_twin.world import World
-from semantic_digital_twin.world_description.geometry import Color, Mesh
+from semantic_digital_twin.world_description.geometry import Color, Mesh, Shape
 from semantic_digital_twin.world_description.shape_collection import ShapeCollection
 from semantic_digital_twin.world_description.world_entity import Body
 
@@ -275,4 +277,80 @@ def test_shapes_without_a_reference_frame_are_taken_relative_to_the_body():
     assert all(
         shape.origin.reference_frame is annotation.root
         for shape in annotation.root.collision
+    )
+
+
+# %% bodies whose collision shapes differ from their visual shapes
+
+
+class ConvexHullDecomposer(MeshDecomposer):
+    """
+    Decomposes a mesh into its convex hull: a stand-in for a real decomposer.
+    """
+
+    def apply_to_mesh(self, mesh: Mesh) -> List[Shape]:
+        return [Mesh.from_trimesh(mesh=mesh.mesh.convex_hull, origin=mesh.origin)]
+
+    def apply_to_mesh_and_save(self, mesh: Mesh, output_path: str) -> str:
+        self.apply_to_mesh(mesh)[0].mesh.export(output_path, file_type="obj")
+        return output_path
+
+
+def mug_with_own_collision() -> Mug:
+    """
+    :return: The mug, colliding as its convex hull instead of as it looks.
+    """
+    annotation = annotated_mug()
+    body = annotation.root
+    hull = ShapeCollection(
+        [
+            Mesh.from_trimesh(
+                mesh=mug().convex_hull,
+                origin=HomogeneousTransformationMatrix(reference_frame=body),
+            )
+        ],
+        reference_frame=body,
+    )
+    with annotation._world.modify_world():
+        body.update_shapes(visual=body.visual, collision=hull)
+    return annotation
+
+
+def test_a_body_whose_collision_differs_from_how_it_looks_is_not_split():
+    annotation = mug_with_own_collision()
+
+    with pytest.raises(CollisionDiffersFromVisualError):
+        split_handle(annotation)
+
+    assert annotation.handle is None
+    assert len(annotation._world.bodies) == 1
+
+
+def test_a_decomposer_gives_the_pieces_new_collision_shapes():
+    annotation = mug_with_own_collision()
+    splitter = PartSplitter(
+        part_type=Handle,
+        finder=located(handle_faces()),
+        decomposer=ConvexHullDecomposer(),
+    )
+
+    handle = splitter.split(annotation)
+
+    for body in (handle.root, annotation.root):
+        assert body.collision.combined_mesh.is_convex
+    assert annotation.root.collision.combined_mesh.bounds[1][0] == pytest.approx(
+        BODY_OUTER_RADIUS
+    )
+
+
+def test_splitting_before_decomposing_decomposes_each_piece():
+    annotation = annotated_mug()
+    world = annotation._world
+
+    SplitPartFromShape(whole_type=Mug, splitter=handle_splitter()).apply(world)
+    ConvexHullDecomposer().apply(world)
+
+    assert annotation.handle.root.collision.combined_mesh.is_convex
+    assert annotation.root.collision.combined_mesh.bounds[1][0] == pytest.approx(
+        BODY_OUTER_RADIUS
     )

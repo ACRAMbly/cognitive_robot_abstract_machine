@@ -7,7 +7,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from typing_extensions import Optional
+
 from semantic_digital_twin.adapters.part_finding.client import RemotePartLocator
+from semantic_digital_twin.pipeline.mesh_decomposition.base import MeshDecomposer
 from semantic_digital_twin.pipeline.part_finding.locating import (
     LocatedFacesFinder,
     LocatedPart,
@@ -45,6 +48,13 @@ class AnnotationPartFinder:
     With the default locator the confidence is the share of the views showing the part
     that agree on it; every handle that was found correctly in the handle finder
     benchmark had at least 0.5.
+    """
+
+    decomposer: Optional[MeshDecomposer] = None
+    """
+    Gives the parts and the rest new collision shapes, for annotations whose root body's
+    collision shapes differ from its visual shapes; see :attr:`~semantic_digital_twin.pi
+    peline.part_finding.splitting.PartSplitter.decomposer`.
     """
 
     def find_parts(self, whole: PartWholeRelationship) -> list[HasRootBody]:
@@ -90,6 +100,7 @@ class AnnotationPartFinder:
             return None
         splitter = PartSplitter(
             part_type=relationship.part_type,
+            decomposer=self.decomposer,
             finder=LocatedFacesFinder(
                 face_centers=query.mesh.triangles_center[located.faces]
             ),

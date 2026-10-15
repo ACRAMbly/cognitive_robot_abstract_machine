@@ -16,6 +16,8 @@ from trimesh.visual.texture import TextureVisuals
 from typing_extensions import TYPE_CHECKING, Callable, Optional, Type, TypeVar
 
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
+from semantic_digital_twin.exceptions import CollisionDiffersFromVisualError
+from semantic_digital_twin.pipeline.mesh_decomposition.base import MeshDecomposer
 from semantic_digital_twin.pipeline.pipeline import Step
 from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix
 from semantic_digital_twin.world_description.connections import FixedConnection
@@ -96,6 +98,10 @@ class PartSplitter:
 
     The body keeps its inertial properties, which describe the whole object; each split
     is one block of the world's modification history.
+
+    The visual shapes are cut, and the pieces collide as they look. A body whose
+    collision shapes differ from its visual shapes, such as a convex decomposition, is
+    only split with a :attr:`decomposer`; otherwise split before decomposing.
     """
 
     part_type: Type[HasRootBody]
@@ -106,6 +112,12 @@ class PartSplitter:
     finder: PartFinder
     """
     Finds the part in a body's shape.
+    """
+
+    decomposer: Optional[MeshDecomposer] = None
+    """
+    Gives the part and the rest new collision shapes from their visual shapes, for
+    bodies whose collision shapes differ from their visual shapes.
     """
 
     def part_of(self, whole: PartWholeRelationship) -> Optional[HasRootBody]:
@@ -163,10 +175,15 @@ class PartSplitter:
         :param body: The body whose shape is split.
         :return: The part's body and the rest of the shape, not yet in the world;
             ``None`` if the finder finds no part or the body has no shape.
+        :raises CollisionDiffersFromVisualError: If the body's collision shapes differ
+            from its visual shapes and there is no :attr:`decomposer`.
         """
         shapes = body.visual or body.collision
         if not shapes:
             return None
+        has_own_collision = self._has_own_collision(body)
+        if has_own_collision and self.decomposer is None:
+            raise CollisionDiffersFromVisualError(body.name)
         colored = ColoredShape(shapes=shapes)
         split = self.finder.split(colored.mesh)
         if split is None:
@@ -174,12 +191,48 @@ class PartSplitter:
         part = Body(name=self._part_name(body), inertial=Inertial.negligible())
         part.visual = colored.piece(split.part, part)
         rest = colored.piece(split.rest, body)
-        if body.collision:
-            part.collision = colored.piece(split.part, part)
-            rest_collision = colored.piece(split.rest, body)
+        if has_own_collision:
+            part.collision = self._decomposed(part.visual, part)
+            rest_collision = self._decomposed(rest, body)
+        elif body.collision:
+            part.collision = part.visual
+            rest_collision = rest
         else:
             rest_collision = ShapeCollection()
         return CutBody(body=body, part=part, visual=rest, collision=rest_collision)
+
+    @staticmethod
+    def _has_own_collision(body: Body) -> bool:
+        """
+        :param body: A body.
+        :return: Whether it has both visual and collision shapes, and they differ.
+        """
+        if not body.visual or not body.collision:
+            return False
+        if [id(shape) for shape in body.visual] == [
+            id(shape) for shape in body.collision
+        ]:
+            return False
+        visual, collision = body.visual.combined_mesh, body.collision.combined_mesh
+        return not (
+            np.array_equal(visual.vertices, collision.vertices)
+            and np.array_equal(visual.faces, collision.faces)
+        )
+
+    def _decomposed(self, shapes: ShapeCollection, body: Body) -> ShapeCollection:
+        """
+        :param shapes: The visual shapes of a piece.
+        :param body: The body the piece belongs to.
+        :return: The collision shapes :attr:`decomposer` makes of them.
+        """
+        return ShapeCollection(
+            [
+                convex
+                for shape in shapes
+                for convex in self.decomposer.apply_to_shape(shape)
+            ],
+            reference_frame=body,
+        )
 
     def _part_name(self, body: Body) -> PrefixedName:
         """

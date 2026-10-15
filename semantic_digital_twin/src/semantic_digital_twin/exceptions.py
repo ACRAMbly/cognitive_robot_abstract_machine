@@ -700,6 +700,32 @@ class UnknownPartWholeRelationshipField(UsageError):
 
 
 @dataclass
+class CollisionDiffersFromVisualError(UsageError):
+    """
+    Raised when a part is split off a body whose collision shapes are not its visual
+    shapes, such as a convex decomposition, which cutting the visual shapes would throw
+    away.
+    """
+
+    body_name: PrefixedName
+    """
+    The name of the body.
+    """
+
+    def error_message(self) -> str:
+        return (
+            f"The collision shapes of '{self.body_name}' differ from its visual shapes, "
+            f"so splitting a part off would replace them by pieces of the visual shapes."
+        )
+
+    def suggest_correction(self) -> str:
+        return (
+            "split the parts off before decomposing the collision shapes, or give the "
+            "PartSplitter a decomposer that decomposes each piece again."
+        )
+
+
+@dataclass
 class PartWholeCardinalityError(UsageError):
     """
     Raised when a part specification supplies a list of parts for a singular (non-to-

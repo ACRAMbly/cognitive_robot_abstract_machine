@@ -21,6 +21,27 @@ A relationship that holds a single part, such as a mug's handle, gets the piece 
 finder is most sure of. Annotations that may have several parts of a kind hold them in
 a list, such as a pot's `handles`, and get each piece found as a part of its own.
 
+## Collision shapes
+
+The parts are cut out of the visual shapes, and the pieces collide as they look. A body
+whose collision shapes differ from its visual shapes, such as the convex decompositions
+most RoboCasa objects come with, is not split, since that would throw its collision
+shapes away. Either find the parts before decomposing, so that the decomposition runs
+on each piece:
+
+```python
+from semantic_digital_twin.pipeline.mesh_decomposition.coacd import COACDMeshDecomposer
+
+AnnotationPartFinder().find_parts(mug)
+COACDMeshDecomposer().apply(mug._world)
+```
+
+or let the finder decompose the pieces again:
+
+```python
+AnnotationPartFinder(decomposer=COACDMeshDecomposer()).find_parts(mug)
+```
+
 ## How the parts are found
 
 The parts are found by a combination of Qwen3-VL and SAM 2.1. In a benchmark on 93
