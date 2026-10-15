@@ -17,7 +17,7 @@ from py_trees.common import Status
 
 import robokudo
 import robokudo.annotators.human_and_pose
-from robokudo.annotators.exceptions import PoseModelRequired
+from robokudo.annotators.exceptions import NotAPoseModelException
 from robokudo.annotators.human_and_pose import HumanAndPoseAnnotator, PoseKeypoint
 from robokudo.cas import CASViews
 from robokudo.types.annotation import Classification, CloudAnnotation
@@ -386,7 +386,7 @@ def test_model_without_keypoints_raises(
     ]
     annotator = scene.annotator_in_pipeline(scene.descriptor())
 
-    with pytest.raises(PoseModelRequired):
+    with pytest.raises(NotAPoseModelException):
         annotator.update()
 
 

@@ -12,7 +12,7 @@ from robokudo.exceptions import RoboKudoError
 
 
 @dataclass
-class PoseModelRequired(RoboKudoError, ValueError):
+class NotAPoseModelException(RoboKudoError, ValueError):
     """
     Raised when an annotator that reads body keypoints loaded a model reporting none.
     """

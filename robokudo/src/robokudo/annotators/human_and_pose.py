@@ -25,7 +25,7 @@ from typing_extensions import TYPE_CHECKING, Any
 from ultralytics import YOLO
 
 from robokudo.annotators.core import BaseAnnotator
-from robokudo.annotators.exceptions import PoseModelRequired
+from robokudo.annotators.exceptions import NotAPoseModelException
 from robokudo.cas import CASViews
 from robokudo.defs import PACKAGE_NAME
 from robokudo.types.annotation import Classification, CloudAnnotation
@@ -214,7 +214,7 @@ class HumanAndPoseAnnotator(BaseAnnotator):
                 .. note::
                    The model must report body keypoints, otherwise
                    :meth:`HumanAndPoseAnnotator.update` raises
-                   :class:`~robokudo.annotators.exceptions.PoseModelRequired`.
+                   :class:`~robokudo.annotators.exceptions.NotAPoseModelException`.
                 """
                 self.person_class_name: str = "person"
                 """
@@ -336,7 +336,8 @@ class HumanAndPoseAnnotator(BaseAnnotator):
         its keypoints per detection to the CAS.
 
         :return: :attr:`Status.SUCCESS` once the hypotheses are added.
-        :raises PoseModelRequired: If the model reports no keypoints for a detection.
+        :raises NotAPoseModelException: If the model reports no keypoints for a
+            detection.
         """
         parameters: HumanAndPoseAnnotator.Descriptor.Parameters = (
             self.descriptor.parameters
@@ -389,13 +390,13 @@ class HumanAndPoseAnnotator(BaseAnnotator):
         :param depth_frame: The depth measurements to build point clouds from, or None
             to build none.
         :return: The human hypothesis of the detection.
-        :raises PoseModelRequired: If the model reports no keypoints.
+        :raises NotAPoseModelException: If the model reports no keypoints.
         """
         parameters: HumanAndPoseAnnotator.Descriptor.Parameters = (
             self.descriptor.parameters
         )
         if result.keypoints is None:
-            raise PoseModelRequired(
+            raise NotAPoseModelException(
                 annotator_name=self.name, model=parameters.pretrained_model
             )
         box = Rect.from_corner_points(*result.boxes.xyxy[index].cpu().numpy())
