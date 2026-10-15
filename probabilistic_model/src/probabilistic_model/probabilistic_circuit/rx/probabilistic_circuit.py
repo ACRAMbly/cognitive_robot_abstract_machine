@@ -1007,11 +1007,7 @@ class ProductUnit(InnerUnit):
 
 
 @dataclass
-class ProbabilisticCircuit(
-    GroundableCircuit[Unit],
-    ProbabilisticCircuitRepresentation[Unit],
-    SubclassJSONSerializer,
-):
+class ProbabilisticCircuit(GroundableCircuit[Unit], SubclassJSONSerializer):
     """
     Probabilistic Circuits as a directed, rooted, acyclic graph.
 
@@ -1670,35 +1666,44 @@ class ProbabilisticCircuit(
         self, variables: SortedSet[Variable]
     ) -> List[MixtureOverVariable]:
         _ = self.support
-        result = []
-        for layer in self.layers:
-            for node in layer:
-                components = node.mixture_components()
-                if len(components) < 2:
-                    continue
-                for variable in variables:
-                    if variable not in node.variables:
-                        continue
-                    result.append(
-                        MixtureOverVariable(
-                            node.index,
-                            variable,
-                            [
-                                component.result_of_current_query.marginal([variable])
-                                for component in components
-                            ],
-                        )
-                    )
-        return result
+        return [
+            report
+            for layer in self.layers
+            for node in layer
+            for report in self._mixtures_of_unit_over(node, variables)
+        ]
+
+    def _mixtures_of_unit_over(
+        self, unit: Unit, variables: SortedSet[Variable]
+    ) -> List[MixtureOverVariable[Unit]]:
+        """
+        :param unit: The unit to read.
+        :param variables: The variables to read it through.
+        :return: One report per variable the unit models, or nothing if it mixes fewer
+            than two components.
+        """
+        components = unit.mixture_components()
+        if len(components) < 2:
+            return []
+        return [
+            MixtureOverVariable(
+                unit.index,
+                variable,
+                [
+                    component.result_of_current_query.marginal([variable])
+                    for component in components
+                ],
+            )
+            for variable in variables
+            if variable in unit.variables
+        ]
 
     # %% composition
 
     @classmethod
     def mixture_of(cls, components: List[Self], log_weights: Iterable[float]) -> Self:
         log_weights = list(log_weights)
-        ProbabilisticCircuitRepresentation.validate_mixture(
-            components, log_weights
-        )
+        ProbabilisticCircuitRepresentation.validate_mixture(components, log_weights)
         result = cls()
         root = SumUnit(probabilistic_circuit=result)
         for component, log_weight in zip(components, log_weights):

@@ -121,9 +121,7 @@ class LayerNode:
 
 
 @dataclass(eq=False)
-class LayeredProbabilisticCircuit(
-    GroundableCircuit[LayerNode], ProbabilisticCircuitRepresentation[LayerNode]
-):
+class LayeredProbabilisticCircuit(GroundableCircuit[LayerNode]):
     """
     A probabilistic circuit whose units are grouped into layers of numpy arrays.
 
@@ -734,55 +732,88 @@ class LayeredProbabilisticCircuit(
     def unnormalized_mixtures(
         self, tolerance: float = 1e-6
     ) -> List[UnnormalizedMixture]:
-        result = []
-        for layer in self.layers:
-            log_weight_sums = layer.log_normalization_constants
-            unnormalized = np.abs(log_weight_sums) >= tolerance
-            for node in np.flatnonzero(unnormalized & layer.nodes_with_components()):
-                result.append(
-                    UnnormalizedMixture(
-                        LayerNode(layer, int(node)), float(log_weight_sums[node])
-                    )
-                )
-        return result
+        return [
+            report
+            for layer in self.layers
+            for report in self._unnormalized_mixtures_of_layer(layer, tolerance)
+        ]
+
+    def _unnormalized_mixtures_of_layer(
+        self, layer: Layer, tolerance: float
+    ) -> List[UnnormalizedMixture[LayerNode]]:
+        """
+        :param layer: The layer to read.
+        :param tolerance: How far a mixture's logarithmic weights may sum from zero.
+        :return: One report per node of the layer that mixes and is not normalized.
+        """
+        mixing = layer.nodes_with_components()
+        if not mixing.any():
+            return []
+        log_weight_sums = layer.log_normalization_constants
+        return [
+            UnnormalizedMixture(
+                LayerNode(layer, int(node)), float(log_weight_sums[node])
+            )
+            for node in np.flatnonzero(mixing & (np.abs(log_weight_sums) >= tolerance))
+        ]
 
     def mixtures_over(
         self, variables: SortedSet[Variable]
     ) -> List[MixtureOverVariable]:
         cache = QueryCache()
-        result = []
-        for layer in reversed(self.layers):
-            modelled = [
-                variable
-                for variable in variables
-                if variable in self.variables
-                and self.variables.index(variable) in layer.variables
-            ]
-            if not modelled:
-                continue
+        return [
+            report
+            for layer in reversed(self.layers)
+            for report in self._mixtures_of_layer_over(layer, variables, cache)
+        ]
+
+    def _mixtures_of_layer_over(
+        self, layer: Layer, variables: SortedSet[Variable], cache: QueryCache
+    ) -> List[MixtureOverVariable[LayerNode]]:
+        """
+        :param layer: The layer to read.
+        :param variables: The variables to read it through.
+        :param cache: The shared cache of the current pass.
+        :return: One report per mixing node and variable the layer models, or nothing
+            if it models none of them.
+        """
+        modelled = self._variables_of_layer(layer, variables)
+        if not modelled:
+            return []
+        return [
+            MixtureOverVariable(
+                LayerNode(layer, node),
+                variable,
+                [support.marginal([variable]) for support in supports],
+            )
             for node, supports in enumerate(
                 layer.component_supports(self.variables, cache=cache)
-            ):
-                if len(supports) < 2:
-                    continue
-                for variable in modelled:
-                    result.append(
-                        MixtureOverVariable(
-                            LayerNode(layer, node),
-                            variable,
-                            [support.marginal([variable]) for support in supports],
-                        )
-                    )
-        return result
+            )
+            if len(supports) >= 2
+            for variable in modelled
+        ]
+
+    def _variables_of_layer(
+        self, layer: Layer, variables: SortedSet[Variable]
+    ) -> List[Variable]:
+        """
+        :param layer: The layer to ask about.
+        :param variables: The variables of interest.
+        :return: Those of them the layer models.
+        """
+        return [
+            variable
+            for variable in variables
+            if variable in self.variables
+            and self.variables.index(variable) in layer.variables
+        ]
 
     # %% composition
 
     @classmethod
     def mixture_of(cls, components: List[Self], log_weights: Iterable[float]) -> Self:
         log_weights = list(log_weights)
-        ProbabilisticCircuitRepresentation.validate_mixture(
-            components, log_weights
-        )
+        ProbabilisticCircuitRepresentation.validate_mixture(components, log_weights)
         copies = [component.__deepcopy__() for component in components]
         root = SumLayer.mixture_of([copy.root for copy in copies], log_weights)
         root.normalize_own()

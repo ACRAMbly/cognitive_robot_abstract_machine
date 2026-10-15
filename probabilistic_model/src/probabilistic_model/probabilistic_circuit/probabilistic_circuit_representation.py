@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from random_events.product_algebra import Event
 from random_events.variable import Variable
 from sortedcontainers import SortedSet
-from typing_extensions import Generic, Iterable, List, Self
+from typing_extensions import Generic, Iterable, List, Self, TypeVar
 
 from probabilistic_model.exceptions import (
     EmptyCompositionError,
@@ -14,8 +14,12 @@ from probabilistic_model.exceptions import (
     NumberOfWeightsMismatchError,
     ProductOverSharedVariablesError,
 )
-from probabilistic_model.probabilistic_circuit.groundable_circuit import NodeType
 from probabilistic_model.probabilistic_model import ProbabilisticModel
+
+NodeType = TypeVar("NodeType")
+"""
+How a representation refers to one node of a circuit it holds.
+"""
 
 # %% what the mixtures of a circuit look like
 
@@ -63,9 +67,7 @@ class MixtureOverVariable(Generic[NodeType]):
 
 
 @dataclass(eq=False)
-class ProbabilisticCircuitRepresentation(
-    ProbabilisticModel, Generic[NodeType], ABC
-):
+class ProbabilisticCircuitRepresentation(ProbabilisticModel, Generic[NodeType], ABC):
     """
     A way of representing a probabilistic circuit, which composes circuits of its own
     kind.
@@ -166,11 +168,12 @@ class ProbabilisticCircuitRepresentation(
         self, tolerance: float = 1e-6
     ) -> List[UnnormalizedMixture[NodeType]]:
         """
-        Find the mixtures whose component weights do not sum to one. A mixture of no
-        component counts as normalized.
+        Find the mixtures whose component weights do not sum to one.
 
-        :param tolerance: How far the logarithmic weights of a mixture may sum away
-            from zero.
+        A mixture of no component counts as normalized.
+
+        :param tolerance: How far the logarithmic weights of a mixture may sum away from
+            zero.
         :return: Every mixture of the circuit that is not normalized.
         """
         raise NotImplementedError

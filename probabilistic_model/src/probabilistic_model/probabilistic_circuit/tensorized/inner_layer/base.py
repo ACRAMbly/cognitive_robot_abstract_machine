@@ -61,9 +61,9 @@ class Layer(SubclassJSONSerializer, ABC):
     """
     Abstract base class for the layers of a layered probabilistic circuit.
 
-    A layer groups nodes that have the same scope and stores their parameters in
-    arrays, so that every query is evaluated for all nodes of the layer at once.
-    Variables are referred to by their index in the variables of the circuit.
+    A layer groups nodes that have the same scope and stores their parameters in arrays,
+    so that every query is evaluated for all nodes of the layer at once. Variables are
+    referred to by their index in the variables of the circuit.
     """
 
     # %% structure
@@ -137,9 +137,9 @@ class Layer(SubclassJSONSerializer, ABC):
         Append the layers of the circuit rooted here to ``result``, every layer after
         all of its descendants and each exactly once.
 
-        Reversed, this order has every layer after all of its parents, which a
-        breadth-first or a pre-order traversal does not guarantee for a layer that
-        several parents share.
+        Reversed, this order has every layer after all of its parents, which a breadth-
+        first or a pre-order traversal does not guarantee for a layer that several
+        parents share.
 
         :param result: The list to append to.
         :param visited: The ids of the layers already visited.
@@ -174,8 +174,8 @@ class Layer(SubclassJSONSerializer, ABC):
 
     def nodes_with_components(self) -> NodeMask:
         """
-        :return: The nodes of this layer that mix at least one component, none if this
-            layer does not mix.
+        :return: One flag per node of this layer, set where the node mixes at least one
+            component.
         """
         return np.zeros(self.number_of_nodes, dtype=bool)
 
@@ -186,9 +186,9 @@ class Layer(SubclassJSONSerializer, ABC):
         :param variables: The variables of the circuit.
         :param cache: The shared cache of the current pass.
         :return: The support of every component of every node of this layer, one list
-            per node, or nothing if this layer does not mix.
+            per node, which is empty for a node that mixes nothing.
         """
-        return []
+        return [[] for _ in range(self.number_of_nodes)]
 
     @abstractmethod
     def log_likelihood_of_nodes(
@@ -351,8 +351,8 @@ class Layer(SubclassJSONSerializer, ABC):
         :meth:`prune` pass.
 
         :param event: The simple event to truncate to.
-        :param query: The arguments of the truncation, which records the
-            log-probabilities of the new layers.
+        :param query: The arguments of the truncation, which records the log-
+            probabilities of the new layers.
         :param cache: The shared cache of the current query.
         :return: The truncated layer and the log-probabilities of its nodes.
         """
@@ -412,8 +412,8 @@ class Layer(SubclassJSONSerializer, ABC):
         See :meth:`log_truncated_of_simple_event` for the contract of the result.
 
         :param point: The partial point.
-        :param query: The arguments of the conditioning, which records the
-            log-probabilities of the new layers.
+        :param query: The arguments of the conditioning, which records the log-
+            probabilities of the new layers.
         :param cache: The shared cache of the current query.
         :return: The conditioned layer and the log-probabilities of its nodes.
         """
@@ -451,8 +451,8 @@ class Layer(SubclassJSONSerializer, ABC):
         """
         Remove every impossible and every unreachable node of the circuit rooted here.
 
-        The pass first propagates liveness downwards, parents before children, so that
-        a layer shared by several parents is pruned once against the union of what its
+        The pass first propagates liveness downwards, parents before children, so that a
+        layer shared by several parents is pruned once against the union of what its
         parents need, and then rebuilds the layers bottom-up.
 
         :param log_probabilities: The log-probabilities of the structural query that
