@@ -42,6 +42,7 @@ from semantic_digital_twin.world_description.geometry import (
     Mesh,
     Texture,
 )
+from semantic_digital_twin.world_description.inertial_properties import Inertial
 from semantic_digital_twin.world_description.shape_collection import ShapeCollection
 from semantic_digital_twin.world_description.world_entity import (
     Body,
@@ -533,9 +534,11 @@ def test_builder_writes_a_geoms_contact_bitmasks(tmp_path):
         root = Body(name=PrefixedName("root"))
         world.add_body(root)
         box_shape = Box(scale=Scale(1, 1, 1))
-        box_shape.add_simulator_property(MujocoGeom(
-            contact_type=ContactCategories(2), contact_affinity=ContactCategories(4)
-        ))
+        box_shape.add_simulator_property(
+            MujocoGeom(
+                contact_type=ContactCategories(2), contact_affinity=ContactCategories(4)
+            )
+        )
         link = Body(
             name=PrefixedName("link"),
             visual=ShapeCollection([box_shape]),
@@ -587,6 +590,33 @@ def test_contact_declarations_and_gravity_compensation_survive_a_round_trip(tmp_
     assert parsed_shape.get_simulator_property_of_type(ContactParameters) == contact
 
 
+def test_a_simulated_body_weighs_what_its_inertial_says_not_what_its_shapes_would():
+    """
+    A body's mass comes from its inertial; its shapes only stand in for a body that has
+    none.
+    """
+    world = World()
+    with world.modify_world():
+        root = Body(name=PrefixedName("root"))
+        world.add_body(root)
+        link = Body(
+            name=PrefixedName("link"),
+            collision=ShapeCollection([Box(scale=Scale(1, 1, 1))]),
+            inertial=Inertial(mass=2.0),
+        )
+        world.add_kinematic_structure_entity(link)
+        world.add_connection(FixedConnection(parent=root, child=link))
+
+    simulation = MujocoSim(world=world, headless=True)
+    simulation.start_stepped_simulation()
+    try:
+        simulated_mass = simulation.simulator._mj_model.body("link").mass[0]
+    finally:
+        simulation.stop_simulation()
+
+    assert simulated_mass == pytest.approx(link.inertial.mass)
+
+
 def test_builder_keeps_a_visual_only_geom_contactless_despite_its_bitmasks(tmp_path):
     """
     A shape that is visual only never collides, whatever ``MujocoGeom`` bitmasks it
@@ -598,9 +628,11 @@ def test_builder_keeps_a_visual_only_geom_contactless_despite_its_bitmasks(tmp_p
         root = Body(name=PrefixedName("root"))
         world.add_body(root)
         box_shape = Box(scale=Scale(1, 1, 1))
-        box_shape.add_simulator_property(MujocoGeom(
-            contact_type=ContactCategories(2), contact_affinity=ContactCategories(4)
-        ))
+        box_shape.add_simulator_property(
+            MujocoGeom(
+                contact_type=ContactCategories(2), contact_affinity=ContactCategories(4)
+            )
+        )
         link = Body(name=PrefixedName("link"), visual=ShapeCollection([box_shape]))
         world.add_kinematic_structure_entity(link)
         world.add_connection(FixedConnection(parent=root, child=link))

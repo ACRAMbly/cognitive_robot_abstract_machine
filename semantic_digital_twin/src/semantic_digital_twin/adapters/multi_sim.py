@@ -67,6 +67,7 @@ from semantic_digital_twin.world_description.connections import (
     OmniDrive,
     DifferentialDrive,
 )
+from semantic_digital_twin.world_description.degree_of_freedom import DegreeOfFreedom
 from semantic_digital_twin.world_description.geometry import (
     Box,
     Cylinder,
@@ -888,7 +889,7 @@ class MujocoActuator(UniqueSimulatorProperty):
         """
         The MuJoCo actuator realising a position servo: a PD law with the servo's
         gains, clamped to its torque limit and to the driven degree of freedom's own
-        position limits.
+        position limits, if it has any.
 
         :param servo: The servo to realise; it drives exactly one degree of freedom.
         :return: The actuator.
@@ -896,15 +897,19 @@ class MujocoActuator(UniqueSimulatorProperty):
         gains = servo.gains
         [degree_of_freedom] = servo.dofs
         limits = degree_of_freedom.limits
-        return cls(
+        actuator = cls(
             dynamics_type=mujoco.mjtDyn.mjDYN_NONE,
             gain_type=mujoco.mjtGain.mjGAIN_FIXED,
             gain_parameters=[gains.stiffness] + [0.0] * 9,
             bias_type=mujoco.mjtBias.mjBIAS_AFFINE,
             bias_parameters=[0.0, -gains.stiffness, -gains.damping] + [0.0] * 7,
-            control_range=[limits.lower.position, limits.upper.position],
             force_range=[-gains.torque_limit, gains.torque_limit],
         )
+        if limits.lower.position is None or limits.upper.position is None:
+            actuator.control_limited = mujoco.mjtLimited.mjLIMITED_FALSE
+            return actuator
+        actuator.control_range = [limits.lower.position, limits.upper.position]
+        return actuator
 
 
 @dataclass
@@ -1878,6 +1883,18 @@ class MujocoBuilder(MultiSimBuilder):
 
     spec: mujoco.MjSpec = field(default=mujoco.MjSpec())
 
+    minimum_mass: float = 1e-3
+    """
+    The mass, in kilograms, every body weighs at least, so that a frame without an
+    inertial or a shape can still move.
+    """
+
+    minimum_inertia: float = 1e-6
+    """
+    The moment of inertia, in kilogram square metres, every body has at least about each
+    of its principal axes.
+    """
+
     planar_thickness_epsilon: float = 1e-4
     """
     Below this thickness (in meters, measured along a mesh's own best-fit-plane
@@ -1897,6 +1914,12 @@ class MujocoBuilder(MultiSimBuilder):
         self.spec = mujoco.MjSpec()
         self.spec.modelname = "scene"
         self.spec.compiler.degree = 0
+        # Some descriptions, such as the PR2's, give links an inertia no rigid body can
+        # have, which MuJoCo refuses to compile unless it may correct them.
+        self.spec.compiler.balanceinertia = True
+        # A frame with neither an inertial nor a shape still needs some mass to move.
+        self.spec.compiler.boundmass = self.minimum_mass
+        self.spec.compiler.boundinertia = self.minimum_inertia
         self._thickened_mesh_paths = {}
 
     def _end_build(self, file_path: str):
@@ -1910,7 +1933,11 @@ class MujocoBuilder(MultiSimBuilder):
         tree = ET.parse(file_path)
         root = tree.getroot()
         for compiler_element in root.iter("compiler"):
-            compiler_element.set("inertiafromgeom", "true")
+            # A body's own inertial wins; its geoms only stand in for one it lacks.
+            compiler_element.set("inertiafromgeom", "auto")
+            compiler_element.set("balanceinertia", "true")
+            compiler_element.set("boundmass", str(self.minimum_mass))
+            compiler_element.set("boundinertia", str(self.minimum_inertia))
         for body_id, body_element in enumerate(root.findall(".//body")):
             body_spec = self.spec.bodies[body_id + 1]
             if numpy.isclose(body_spec.mass, 0.0):
@@ -1934,6 +1961,14 @@ class MujocoBuilder(MultiSimBuilder):
         qpos = []
         for body in self.world.bodies_topologically_sorted:
             parent_connection = body.parent_connection
+            if isinstance(parent_connection, OmniDrive) and self._is_servoed(
+                parent_connection
+            ):
+                qpos += [
+                    self.world.state[degree_of_freedom.id].position
+                    for degree_of_freedom in self._drive_joint_axes(parent_connection)
+                ]
+                continue
             if (
                 isinstance(parent_connection, self._ignore_connection_types)
                 or parent_connection is None
@@ -2216,6 +2251,9 @@ class MujocoBuilder(MultiSimBuilder):
         return material_name
 
     def _build_connection(self, connection: Connection):
+        if isinstance(connection, OmniDrive) and self._is_servoed(connection):
+            self._build_drive_joints(connection)
+            return
         if isinstance(connection, self._ignore_connection_types):
             return
         joint_props = MujocoJointConverter.convert(connection)
@@ -2254,11 +2292,71 @@ class MujocoBuilder(MultiSimBuilder):
                 action="add",
             )
 
+    def _is_servoed(self, drive: OmniDrive) -> bool:
+        """
+        :param drive: A drive in the world being built.
+        :return: Whether servos drive the x, y and yaw of the drive, which then moves its
+            base in the simulation instead of keeping it where it is built.
+        """
+        actuated = {
+            degree_of_freedom.id
+            for actuator in self.world.actuators
+            for degree_of_freedom in actuator.dofs
+        }
+        return {drive.x.id, drive.y.id, drive.yaw.id} <= actuated
+
+    @staticmethod
+    def _drive_joint_axes(
+        drive: OmniDrive,
+    ) -> Dict[DegreeOfFreedom, Tuple[mujoco.mjtJoint, numpy.ndarray]]:
+        """
+        :param drive: A servoed drive.
+        :return: The joint moving each of the drive's x, y and yaw, as its type and its
+            axis in the drive's ``odom`` frame, in the order the joints are built in.
+        """
+        return {
+            drive.x: (mujoco.mjtJoint.mjJNT_SLIDE, numpy.array([1.0, 0.0, 0.0])),
+            drive.y: (mujoco.mjtJoint.mjJNT_SLIDE, numpy.array([0.0, 1.0, 0.0])),
+            drive.yaw: (mujoco.mjtJoint.mjJNT_HINGE, numpy.array([0.0, 0.0, 1.0])),
+        }
+
+    def _build_drive_joints(self, drive: OmniDrive) -> None:
+        """
+        Build the joints a servoed drive moves its base with: a slide along x, a slide
+        along y and a hinge about z, all in the drive's ``odom`` frame and named as
+        :attr:`~semantic_digital_twin.world_description.connections.OmniDrive.single_axis_joint_names`
+        says.
+
+        :param drive: The servoed drive.
+        """
+        child_body_name = drive.child.name.name
+        child_body_spec = self._find_entity(
+            entity_type=mujoco.mjtObj.mjOBJ_BODY, entity_name=child_body_name
+        )
+        if child_body_spec is None:
+            raise MujocoEntityNotFoundError(
+                entity_name=child_body_name,
+                entity_type=mujoco.mjtObj.mjOBJ_BODY,
+            )
+        child_T_connection = inverse_frame(drive.connection_T_child_expression.to_np())
+        joint_names = drive.single_axis_joint_names
+        for degree_of_freedom, (joint_type, axis) in self._drive_joint_axes(
+            drive
+        ).items():
+            child_body_spec.add_joint(
+                name=joint_names[degree_of_freedom],
+                type=joint_type,
+                axis=(child_T_connection[:3, :3] @ axis).tolist(),
+                pos=child_T_connection[:3, 3].tolist(),
+            )
+
     def _build_actuator(self, actuator: Actuator):
         actuator_props = MujocoActuatorConverter.convert(actuator)
-        dof_names = actuator_props.pop("dof_names")
-        assert len(dof_names) == 1, "Actuator must be associated with exactly one DOF."
-        actuator_props.update(self._transmission_for_degree_of_freedom(dof_names[0]))
+        actuator_props.pop("dof_names")
+        [degree_of_freedom] = actuator.dofs
+        actuator_props.update(
+            self._transmission_for_degree_of_freedom(degree_of_freedom)
+        )
         actuator_name = actuator.name.name
         actuator_spec = self.spec.add_actuator(**actuator_props)
         if actuator_spec is None:
@@ -2268,22 +2366,32 @@ class MujocoBuilder(MultiSimBuilder):
                 action="add",
             )
 
-    def _transmission_for_degree_of_freedom(self, dof_name: str) -> Dict[str, Any]:
+    def _transmission_for_degree_of_freedom(
+        self, degree_of_freedom: DegreeOfFreedom
+    ) -> Dict[str, Any]:
         """
-        :param dof_name: The name of the degree of freedom an actuator drives.
+        :param degree_of_freedom: The degree of freedom an actuator drives.
         :return: The actuator's transmission properties: the joint moving that degree
-            of freedom, or the tendon of that name if no joint does.
+            of freedom, or the tendon of its name if no joint does.
         """
         connection = next(
             (
                 conn
                 for conn in self.world.connections
-                if dof_name in [dof.name.name for dof in conn.dofs]
+                if any(dof.id == degree_of_freedom.id for dof in conn.dofs)
             ),
             None,
         )
         if connection is None:
-            return {"target": dof_name, "trntype": mujoco.mjtTrn.mjTRN_TENDON}
+            return {
+                "target": degree_of_freedom.name.name,
+                "trntype": mujoco.mjtTrn.mjTRN_TENDON,
+            }
+        if isinstance(connection, OmniDrive):
+            return {
+                "target": connection.single_axis_joint_names[degree_of_freedom],
+                "trntype": mujoco.mjtTrn.mjTRN_JOINT,
+            }
         connection_name = connection.name.name
         joint_spec = self._find_entity(
             entity_type=mujoco.mjtObj.mjOBJ_JOINT, entity_name=connection_name
@@ -3282,27 +3390,22 @@ class MujocoSynchronizer(MultiSimSynchronizer):
                             state_index,
                         )
                     case ActiveConnection1DOF():
-                        actuator_name = actuator_name_by_dof_id.get(
-                            connection.raw_dof.id
+                        # An actuated joint is commanded by
+                        # :meth:`_command_actuators` instead.
+                        if connection.raw_dof.id in actuator_name_by_dof_id:
+                            continue
+                        self._write_1dof_to_qpos(
+                            connection,
+                            joint_backed.qpos_address,
+                            positions,
+                            previous_positions,
+                            state_index,
                         )
-                        if actuator_name is None:
-                            self._write_1dof_to_qpos(
-                                connection,
-                                joint_backed.qpos_address,
-                                positions,
-                                previous_positions,
-                                state_index,
-                            )
-                        else:
-                            self._command_actuator(
-                                connection,
-                                actuator_name,
-                                positions,
-                                previous_positions,
-                                state_index,
-                            )
                     case _:
                         self._warn_unsupported_connection("world→sim", connection)
+            self._command_actuators(
+                actuator_name_by_dof_id, positions, previous_positions, state_index
+            )
 
     def _actuator_names_by_degree_of_freedom(self) -> Dict[Any, str]:
         """
@@ -3315,33 +3418,33 @@ class MujocoSynchronizer(MultiSimSynchronizer):
             for degree_of_freedom in actuator.dofs
         }
 
-    def _command_actuator(
+    def _command_actuators(
         self,
-        connection: ActiveConnection1DOF,
-        actuator_name: str,
+        actuator_name_by_dof_id: Dict[Any, str],
         positions: numpy.ndarray,
         previous_positions: numpy.ndarray,
         state_index: Dict[Any, int],
     ) -> None:
         """
-        Hand the world's position for ``connection`` to its actuator as a set point,
-        instead of writing it into ``qpos``: the joint then reaches it through the
-        actuator's own dynamics, as fast and as hard as its gains allow, rather than
-        being teleported there. No-op if the value is unchanged.
+        Hand the world's position of every actuated degree of freedom whose position
+        changed to its actuator as a set point, instead of writing it into ``qpos``:
+        the joint then reaches it through the actuator's own dynamics, as fast and as
+        hard as its gains allow, rather than being teleported there.
 
-        :param connection: The actuated 1DoF connection whose value is commanded.
-        :param actuator_name: Name of the actuator driving it.
+        :param actuator_name_by_dof_id: The name of the actuator driving each actuated
+            degree of freedom, by the degree of freedom's id.
         :param positions: The current ``world.state`` positions.
         :param previous_positions: The positions as of the last notification,
             compared against ``positions`` to decide whether to command.
         :param state_index: Maps a DoF id to its column in those two arrays.
         """
-        column = state_index[connection.raw_dof.id]
-        if positions[column] == previous_positions[column]:
-            return
-        self.simulator.set_actuator_control(
-            actuator_name=actuator_name, value=float(positions[column])
-        )
+        for degree_of_freedom_id, actuator_name in actuator_name_by_dof_id.items():
+            column = state_index[degree_of_freedom_id]
+            if positions[column] == previous_positions[column]:
+                continue
+            self.simulator.set_actuator_control(
+                actuator_name=actuator_name, value=float(positions[column])
+            )
 
     def command_actuators_from_world_state(self) -> None:
         """
