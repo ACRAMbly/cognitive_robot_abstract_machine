@@ -4,11 +4,12 @@ A camera facing a black wall, which the YOLO annotators under test are run on.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import numpy as np
 import open3d as o3d
+from semantic_digital_twin.datastructures.camera_resolution import CameraResolution
 
 from robokudo.annotators.core import BaseAnnotator
 from robokudo.cas import CASViews
@@ -30,9 +31,11 @@ class BlackWallScene:
     Directory the annotators under test load pretrained models from.
     """
 
-    color_image_shape: tuple[int, int, int] = (40, 80, 3)
+    resolution: CameraResolution = field(
+        default_factory=lambda: CameraResolution(width=80, height=40)
+    )
     """
-    Shape of the color images in the CAS.
+    Resolution of the color images in the CAS.
     """
 
     depth_in_millimeters: int = 1000
@@ -47,9 +50,11 @@ class BlackWallScene:
 
     def color_image(self) -> np.ndarray:
         """
-        :return: A black color image of the scene's shape.
+        :return: A black color image of the scene's resolution.
         """
-        return np.zeros(self.color_image_shape, dtype=np.uint8)
+        return np.zeros(
+            (self.resolution.height, self.resolution.width, 3), dtype=np.uint8
+        )
 
     def place_in_pipeline(
         self, annotator: BaseAnnotator, color_to_depth_ratio: float = 1.0
@@ -66,7 +71,7 @@ class BlackWallScene:
         pipeline.add_child(annotator)
         pipeline.setup()
 
-        color_height, color_width = self.color_image_shape[:2]
+        color_height, color_width = self.resolution.height, self.resolution.width
         depth_height = int(color_height * color_to_depth_ratio)
         depth_width = int(color_width * color_to_depth_ratio)
         cas = annotator.get_cas()

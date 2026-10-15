@@ -498,7 +498,7 @@ def test_keypoint_clouds_cover_disc_around_confident_keypoints_only(
     }
     nose = scene.person_keypoints()[PoseKeypoint.NOSE].in_pixels_of(scene.color_image())
     nose_disc = cv2.circle(
-        np.zeros(scene.color_image_shape[:2], dtype=np.uint8),
+        np.zeros((scene.resolution.height, scene.resolution.width), dtype=np.uint8),
         (int(nose.x), int(nose.y)),
         descriptor.parameters.keypoint_masking_radius,
         1,
