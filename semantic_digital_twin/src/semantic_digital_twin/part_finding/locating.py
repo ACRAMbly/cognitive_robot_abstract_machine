@@ -15,119 +15,14 @@ from functools import cached_property
 
 import numpy as np
 import trimesh
-from krrood.class_diagrams.class_diagram import WrappedClass
-from krrood.class_diagrams.wrapped_field import WrappedField
 from krrood.entity_query_language.utils import camel_case_to_words
 from numpy.typing import NDArray
 from scipy.spatial import cKDTree
 from typing_extensions import Optional, Type
 
-from semantic_digital_twin.exceptions import UnknownPartWholeRelationshipField
+from semantic_digital_twin.part_finding.relationships import PartRelationshipInspector
 from semantic_digital_twin.part_finding.splitting import PartFinder, MeshSplit
-from semantic_digital_twin.semantic_annotations.mixins import (
-    HasRootBody,
-    PartWholeRelationship,
-)
-from semantic_digital_twin.semantic_annotations.part_whole import (
-    IsPartWholeRelationship,
-)
-
-# %% the parts an annotation calls for
-
-
-@dataclass
-class PartRelationshipInspector:
-    """
-    Tells what a part-whole relationship field of an annotation type asks for: which
-    type of part, how many, and whether they are optional.
-
-    Only covers relationships whose parts have a body of their own, so that they can be
-    split off the mesh of the annotation's root body.
-    """
-
-    relationship_field: WrappedField
-    """
-    The field of the annotation type that holds the parts.
-    """
-
-    @classmethod
-    def all_of_type(
-        cls, whole_type: Type[PartWholeRelationship]
-    ) -> list[PartRelationshipInspector]:
-        """
-        :param whole_type: A type of annotation.
-        :return: Its part-whole relationships whose parts have a body of their own, in
-            declaration order.
-        """
-        return [
-            cls(relationship_field=wrapped_field)
-            for wrapped_field in WrappedClass(whole_type).fields_with_metadata(
-                IsPartWholeRelationship
-            )
-            if issubclass(wrapped_field.type_endpoint, HasRootBody)
-        ]
-
-    @classmethod
-    def named(
-        cls, whole_type: Type[PartWholeRelationship], name: str
-    ) -> PartRelationshipInspector:
-        """
-        :param whole_type: A type of annotation.
-        :param name: The name of one of its part-whole relationship fields.
-        :return: That relationship.
-        """
-        relationships = cls.all_of_type(whole_type)
-        for relationship in relationships:
-            if relationship.name == name:
-                return relationship
-        raise UnknownPartWholeRelationshipField(
-            whole_type, name, [relationship.name for relationship in relationships]
-        )
-
-    @property
-    def name(self) -> str:
-        """
-        :return: The name of the field that holds the parts.
-        """
-        return self.relationship_field.field.name
-
-    @property
-    def part_type(self) -> Type[HasRootBody]:
-        """
-        :return: The type of annotation each part is.
-        """
-        return self.relationship_field.type_endpoint
-
-    @property
-    def part_name(self) -> str:
-        """
-        :return: What a part is called in plain words, such as ``"handle"``.
-        """
-        return camel_case_to_words(self.part_type.__name__)
-
-    @property
-    def holds_many(self) -> bool:
-        """
-        :return: Whether the relationship holds any number of parts rather than one.
-        """
-        return self.relationship_field.is_many_to_many_relationship
-
-    @property
-    def may_be_empty(self) -> bool:
-        """
-        :return: Whether an annotation may lack the parts of this relationship, which is
-            the case for an optional part and for any number of parts.
-        """
-        return self.relationship_field.is_optional or self.holds_many
-
-    def is_filled_in(self, whole: PartWholeRelationship) -> bool:
-        """
-        :param whole: An annotation of the type this relationship belongs to.
-        :return: Whether the annotation has a part in this relationship already.
-        """
-        value = getattr(whole, self.name)
-        return bool(value) if self.holds_many else value is not None
-
+from semantic_digital_twin.semantic_annotations.mixins import PartWholeRelationship
 
 # %% the question and its answer
 

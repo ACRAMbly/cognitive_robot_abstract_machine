@@ -37,10 +37,10 @@ from semantic_digital_twin.adapters.part_finding.protocol import (
     PartFindingRoute,
     PartFindingServerStatus,
 )
+from semantic_digital_twin.part_finding.relationships import PartRelationshipInspector
 from semantic_digital_twin.part_finding.locating import (
     LocatedPart,
     PartQuery,
-    PartRelationshipInspector,
 )
 from semantic_digital_twin.part_finding.vision_language import (
     VisionLanguagePartLocator,

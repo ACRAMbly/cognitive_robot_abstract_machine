@@ -11,12 +11,12 @@ from typing_extensions import Optional
 
 from semantic_digital_twin.adapters.part_finding.client import RemotePartLocator
 from semantic_digital_twin.pipeline.mesh_decomposition.base import MeshDecomposer
+from semantic_digital_twin.part_finding.relationships import PartRelationshipInspector
 from semantic_digital_twin.part_finding.locating import (
     LocatedFacesFinder,
     LocatedPart,
     PartLocator,
     PartQuery,
-    PartRelationshipInspector,
 )
 from semantic_digital_twin.part_finding.splitting import PartSplitter
 from semantic_digital_twin.semantic_annotations.mixins import (
@@ -53,8 +53,8 @@ class AnnotationPartFinder:
     decomposer: Optional[MeshDecomposer] = None
     """
     Gives the parts and the rest new collision shapes, for annotations whose root body's
-    collision shapes differ from its visual shapes; see :attr:`~semantic_digital_twin.pi
-    peline.part_finding.splitting.PartSplitter.decomposer`.
+    collision shapes differ from its visual shapes; see
+    :attr:`~semantic_digital_twin.part_finding.splitting.PartSplitter.decomposer`.
     """
 
     def find_parts(self, whole: PartWholeRelationship) -> list[HasRootBody]:

@@ -17,6 +17,7 @@ from typing_extensions import TYPE_CHECKING, Callable, Optional, Type, TypeVar
 
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 from semantic_digital_twin.exceptions import CollisionDiffersFromVisualError
+from semantic_digital_twin.part_finding.relationships import PartRelationshipInspector
 from semantic_digital_twin.pipeline.mesh_decomposition.base import MeshDecomposer
 from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix
 from semantic_digital_twin.world_description.connections import FixedConnection
@@ -42,14 +43,14 @@ class MeshSplit:
     A mesh cut into a part and the rest of it.
     """
 
-    part: trimesh.Trimesh
+    mesh: trimesh.Trimesh
     """
-    The part.
+    The mesh that is cut.
     """
 
-    rest: trimesh.Trimesh
+    belongs_to_part_mask: NDArray[np.bool_]
     """
-    The rest of the mesh.
+    For each face of :attr:`mesh`, whether it belongs to the part.
     """
 
     @classmethod
@@ -65,10 +66,35 @@ class MeshSplit:
         """
         if not belongs_to_part_mask.any() or belongs_to_part_mask.all():
             return None
-        return cls(
-            part=mesh.submesh([np.flatnonzero(belongs_to_part_mask)], append=True),
-            rest=mesh.submesh([np.flatnonzero(~belongs_to_part_mask)], append=True),
-        )
+        return cls(mesh=mesh, belongs_to_part_mask=belongs_to_part_mask)
+
+    @property
+    def part_faces(self) -> NDArray[np.int64]:
+        """
+        :return: The indices of the faces of :attr:`mesh` that belong to the part.
+        """
+        return np.flatnonzero(self.belongs_to_part_mask)
+
+    @property
+    def rest_faces(self) -> NDArray[np.int64]:
+        """
+        :return: The indices of the remaining faces of :attr:`mesh`.
+        """
+        return np.flatnonzero(~self.belongs_to_part_mask)
+
+    @cached_property
+    def part(self) -> trimesh.Trimesh:
+        """
+        :return: The faces of the part, as a mesh.
+        """
+        return self.mesh.submesh([self.part_faces], append=True)
+
+    @cached_property
+    def rest(self) -> trimesh.Trimesh:
+        """
+        :return: The remaining faces, as a mesh.
+        """
+        return self.mesh.submesh([self.rest_faces], append=True)
 
 
 class PartFinder(ABC):
@@ -80,7 +106,7 @@ class PartFinder(ABC):
     def split(self, mesh: trimesh.Trimesh) -> Optional[MeshSplit]:
         """
         :param mesh: The object's mesh, in its root body's frame.
-        :return: The mesh split into the part and the rest; ``None`` if the mesh has
+        :return: ``mesh`` split into the part and the rest; ``None`` if the mesh has
             no such part.
         """
 
@@ -123,10 +149,12 @@ class PartSplitter:
         The part of one annotation, split off its shape the first time it is asked for.
 
         :param whole: The annotation whose part is wanted.
-        :return: The part the annotation already has, if any; otherwise the part split
-            off its shape, ``None`` if there is none to split off.
+        :return: The first part the annotation already has in the relationship field for
+            :attr:`part_type`, if any; otherwise the part split off its shape, ``None``
+            if there is none to split off.
         """
-        existing = [part for part in whole.parts if isinstance(part, self.part_type)]
+        relationship = PartRelationshipInspector.for_part(type(whole), self.part_type)
+        existing = relationship.parts_of(whole)
         if existing:
             return existing[0]
         return self.split(whole)
@@ -136,14 +164,20 @@ class PartSplitter:
     ) -> Optional[HasRootBody]:
         """
         Split the part off the shape of one annotation's root body and add it to the
-        annotation, whether or not the annotation has such a part already.
+        annotation, unless the relationship field holds a single part and is set
+        already.
 
         :param whole: The annotation whose root body's shape is split.
         :param field_name: The part-whole relationship field of the annotation the part
             is added to; found by the part's type if not given.
-        :return: The part, added to the annotation and its world; ``None`` if the finder
-            finds none or the root body has no shape.
+        :return: The part, added to the annotation and its world; ``None`` if the field
+            is set already, the finder finds none or the root body has no shape.
         """
+        relationship = PartRelationshipInspector.for_part(
+            type(whole), self.part_type, field_name
+        )
+        if relationship.is_filled_in(whole) and not relationship.holds_many:
+            return None
         cut = self._cut(whole.root)
         if cut is None:
             return None
@@ -151,7 +185,7 @@ class PartSplitter:
         with world.modify_world():
             part = self.part_type(root=cut.apply())
             world.add_semantic_annotation(part)
-            whole.add(part, field_name=field_name)
+            whole.add(part, field_name=relationship.name)
         return part
 
     def split_body(self, body: Body) -> Optional[Body]:
@@ -187,8 +221,8 @@ class PartSplitter:
         if split is None:
             return None
         part = Body(name=self._part_name(body), inertial=Inertial.negligible())
-        part.visual = colored.piece(split.part, part)
-        rest = colored.piece(split.rest, body)
+        part.visual = colored.piece(split.part_faces, part)
+        rest = colored.piece(split.rest_faces, body)
         if has_own_collision:
             part.collision = self._decomposed(part.visual, part)
             rest_collision = self._decomposed(rest, body)
@@ -312,16 +346,16 @@ class ColoredShape:
             meshes.append(mesh)
         return trimesh.util.concatenate(meshes)
 
-    def piece(self, mesh: trimesh.Trimesh, body: Body) -> ShapeCollection:
+    def piece(self, faces: NDArray[np.int64], body: Body) -> ShapeCollection:
         """
-        :param mesh: A piece cut from :attr:`mesh`, in the frame of ``body``.
-        :param body: The body the piece belongs to.
-        :return: The piece as the shapes of ``body``, colored like the faces it was cut
-            from, and with the surface finish and simulator properties that all of
-            :attr:`shapes` share.
+        :param faces: The indices of the faces of :attr:`mesh` that make up the piece.
+        :param body: The body the piece belongs to, whose frame is the frame of
+            :attr:`mesh`.
+        :return: The piece as the shapes of ``body``, colored like its faces, and with
+            the surface finish and simulator properties that all of :attr:`shapes`
+            share.
         """
-        mesh = mesh.copy()
-        _, _, faces = trimesh.proximity.closest_point(self.mesh, mesh.triangles_center)
+        mesh = self.mesh.submesh([faces], append=True)
         mesh.visual = trimesh.visual.ColorVisuals(
             mesh, face_colors=self.mesh.visual.face_colors[faces]
         )

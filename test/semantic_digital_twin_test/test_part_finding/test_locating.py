@@ -22,12 +22,12 @@ from semantic_digital_twin.part_finding.annotation_part_finder import (
     AnnotationPartFinder,
 )
 from semantic_digital_twin.pipeline.part_finding import FindParts
+from semantic_digital_twin.part_finding.relationships import PartRelationshipInspector
 from semantic_digital_twin.part_finding.locating import (
     KnownPartLocator,
     LocatedFacesFinder,
     LocatedPart,
     PartQuery,
-    PartRelationshipInspector,
 )
 from semantic_digital_twin.part_finding.vision_language import (
     FilledBoxSegmenter,

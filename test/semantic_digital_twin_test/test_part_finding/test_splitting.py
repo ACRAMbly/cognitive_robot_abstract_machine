@@ -22,6 +22,7 @@ from semantic_digital_twin.pipeline.part_finding import SplitPartFromShape
 from semantic_digital_twin.semantic_annotations.semantic_annotations import (
     Handle,
     Mug,
+    Pot,
 )
 from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix
 from semantic_digital_twin.world import World
@@ -147,6 +148,34 @@ def test_a_part_is_split_off_only_the_first_time_it_is_asked_for():
     assert annotation.handle is handle
     assert splitter.part_of(annotation) is handle
     assert len(annotation._world.bodies) == 2
+
+
+def test_a_set_handle_field_is_not_split_again():
+    annotation = annotated_mug()
+    handle = split_handle(annotation)
+    faces = len(annotation.root.visual.combined_mesh.faces)
+
+    assert split_handle(annotation) is None
+    assert annotation.handle is handle
+    assert len(annotation._world.bodies) == 2
+    assert len(annotation.root.visual.combined_mesh.faces) == faces
+
+
+def test_a_field_of_many_handles_gets_every_handle_split_off():
+    annotation = annotated_mug()
+    world = annotation._world
+    pot = Pot(root=annotation.root)
+    with world.modify_world():
+        world.remove_semantic_annotation(annotation)
+        world.add_semantic_annotation(pot)
+    bottom = mug().triangles_center[:, 2] < 0.0
+
+    first = handle_splitter().split(pot)
+    second = PartSplitter(
+        part_type=Handle, finder=located(bottom & ~handle_faces())
+    ).split(pot)
+
+    assert pot.handles == [first, second]
 
 
 def test_applying_the_split_again_leaves_the_world_as_it_is():

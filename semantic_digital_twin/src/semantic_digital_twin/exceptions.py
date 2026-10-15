@@ -726,6 +726,40 @@ class CollisionDiffersFromVisualError(UsageError):
 
 
 @dataclass
+class NoSinglePartWholeRelationshipField(UsageError):
+    """
+    Raised when the part-whole relationship field a part goes to is chosen by the part's
+    type alone, but not exactly one field of the annotation holds parts of that type.
+    """
+
+    annotation: Type[HasRootBody]
+    """
+    The annotation type the part is for.
+    """
+
+    part_type: Type[HasRootBody]
+    """
+    The type of the part.
+    """
+
+    matching_fields: List[str]
+    """
+    The names of the annotation's part-whole relationship fields that hold parts of that
+    type.
+    """
+
+    def error_message(self) -> str:
+        return (
+            f"{self.annotation.__name__} has {len(self.matching_fields)} part-whole "
+            f"relationship fields for a {self.part_type.__name__}: "
+            f"{', '.join(self.matching_fields) or '(none)'}."
+        )
+
+    def suggest_correction(self) -> str:
+        return "name the field the part goes to."
+
+
+@dataclass
 class PartWholeCardinalityError(UsageError):
     """
     Raised when a part specification supplies a list of parts for a singular (non-to-
