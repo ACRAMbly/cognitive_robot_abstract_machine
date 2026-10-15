@@ -34,7 +34,7 @@ from robokudo.cas import CASViews
 from robokudo.defs import PACKAGE_NAME
 from robokudo.exceptions import DetectionModelNotConfigured
 from robokudo.types.annotation import Classification
-from robokudo.types.cv import Point2D, Rect
+from robokudo.types.cv import Rect
 from robokudo.types.scene import HumanHypothesis, ObjectHypothesis
 from robokudo.utils.annotator_helper import (
     draw_bounding_boxes_from_object_hypotheses,
@@ -65,9 +65,9 @@ class YoloDetection:
     The detected class and the confidence of the detection.
     """
 
-    corners: npt.NDArray[np.float32]
+    bounding_box: Rect
     """
-    Corners (x1, y1, x2, y2) of the bounding box, in detection image pixels.
+    The bounding box of the detected object, in detection image pixels.
     """
 
 
@@ -343,7 +343,7 @@ class YoloAnnotator(ThreadedAnnotator):
                             confidence=float(confidence),
                             class_id=int(class_id),
                         ),
-                        corners=corners,
+                        bounding_box=Rect.from_corner_points(*corners),
                     )
                 )
         return detections
@@ -391,13 +391,13 @@ class YoloAnnotator(ThreadedAnnotator):
         """
         :return: The bounding box of the detection, in color image pixels.
         """
-        x1, y1, x2, y2 = detection.corners
-        if self.descriptor.parameters.global_with_depth:
-            ratio_x, ratio_y = self.get_cas().get(CASViews.COLOR2DEPTH_RATIO)
-            x1, x2 = x1 / ratio_x, x2 / ratio_x
-            y1, y2 = y1 / ratio_y, y2 / ratio_y
-        x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)
-        return Rect(pos=Point2D(x=x1, y=y1), width=x2 - x1, height=y2 - y1)
+        if not self.descriptor.parameters.global_with_depth:
+            return detection.bounding_box
+        ratio_x, ratio_y = self.get_cas().get(CASViews.COLOR2DEPTH_RATIO)
+        x1, y1, x2, y2 = detection.bounding_box.get_corner_points()
+        return Rect.from_corner_points(
+            x1=x1 / ratio_x, y1=y1 / ratio_y, x2=x2 / ratio_x, y2=y2 / ratio_y
+        )
 
     def _most_overlapped_hypothesis(
         self, region: Rect, hypotheses: List[ObjectHypothesis]
@@ -458,14 +458,14 @@ class YoloAnnotator(ThreadedAnnotator):
         """
         parameters: YoloAnnotator.Descriptor.Parameters = self.descriptor.parameters
         if not parameters.precision_mode:
-            x1, y1, x2, y2 = detection.corners.astype(int)
+            x1, y1, x2, y2 = detection.bounding_box.get_corner_points()
             mask = np.zeros(detection_image.shape[:2], dtype=np.uint8)
             mask[y1:y2, x1:x2] = self.mask_foreground
             return mask
 
         segmentation = self.segmentation_model.predict(
             detection_image,
-            bboxes=[detection.corners.tolist()],
+            bboxes=[list(detection.bounding_box.get_corner_points())],
         )[0]
         mask = (
             segmentation.masks.data.cpu().numpy()[0].astype(np.uint8)
