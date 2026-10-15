@@ -1,5 +1,5 @@
 """
-A camera view at a constant distance that YOLO annotators under test are run on.
+A camera facing a black wall, which the YOLO annotators under test are run on.
 """
 
 from __future__ import annotations
@@ -10,18 +10,19 @@ from pathlib import Path
 import numpy as np
 import open3d as o3d
 
-from robokudo.types.cv import ColorToDepthRatio
 from robokudo.annotators.core import BaseAnnotator
 from robokudo.cas import CASViews
 from robokudo.pipeline import Pipeline
+from robokudo.types.cv import ColorToDepthRatio
 
-# %% camera scene
+# %% black wall scene
 
 
 @dataclass
-class CameraScene:
+class BlackWallScene:
     """
-    A black color image and a depth image measuring the same distance everywhere.
+    A camera facing a black wall square-on: a black color image and a depth image that
+    measures the wall's distance at every pixel.
     """
 
     models_directory: Path

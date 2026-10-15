@@ -24,7 +24,7 @@ from robokudo.types.annotation import Classification
 from robokudo.types.scene import HumanHypothesis, ObjectHypothesis
 from robokudo.utils.annotator_helper import draw_bounding_boxes_from_object_hypotheses
 from robokudo.utils.file_loader import FileLoader
-from ._camera_scene import CameraScene
+from ._black_wall_scene import BlackWallScene
 from ._yolo_mock import (
     NormalizedBox,
     MockDetection,
@@ -36,9 +36,9 @@ from ._yolo_mock import (
 
 
 @dataclass
-class CupScene(CameraScene):
+class CupScene(BlackWallScene):
     """
-    A camera view of a cup at a constant distance, which the mock model detects.
+    The black wall scene, in which the mock model detects a cup.
     """
 
     class_names: dict[int, str] = field(

@@ -22,9 +22,10 @@ from robokudo.annotators.human_and_pose import HumanAndPoseAnnotator, PoseKeypoi
 from robokudo.cas import CASViews
 from robokudo.types.annotation import Classification, CloudAnnotation
 from robokudo.types.core import Annotation
+from robokudo.types.cv import Rect
 from robokudo.types.human import KeypointAnnotation, KeypointKind
 from robokudo.types.scene import HumanHypothesis
-from ._camera_scene import CameraScene
+from ._black_wall_scene import BlackWallScene
 from ._yolo_mock import (
     MockDetection,
     MockDetectionModel,
@@ -37,9 +38,9 @@ from ._yolo_mock import (
 
 
 @dataclass
-class PersonScene(CameraScene):
+class PersonScene(BlackWallScene):
     """
-    A camera view of a person at a constant distance, which the mock pose model detects.
+    The black wall scene, in which the mock pose model detects a person.
     """
 
     person_class_name: str = field(
@@ -107,29 +108,27 @@ class PersonScene(CameraScene):
             keypoints=self.person_keypoints(),
         )
 
-    def person_corners(self, image: np.ndarray) -> list[int]:
+    def person_box_in(self, image: np.ndarray) -> Rect:
         """
-        :return: The corners (x1, y1, x2, y2) of the person in pixels of the given
-            image.
+        :return: The box of the person in pixels of the given image.
         """
-        return [int(corner) for corner in self.person_box.corners_in(image)]
+        return Rect.from_corner_points(*self.person_box.corners_in(image))
 
-    def person_corners_shrunk_by(self, fraction: float) -> list[int]:
+    def person_box_shrunk_by(self, fraction: float) -> Rect:
         """
         :param fraction: Fraction of its width and height the box is shrunk by around
             its center.
-        :return: The corners (x1, y1, x2, y2) of the shrunk person box in color image
-            pixels.
+        :return: The shrunk box of the person in color image pixels.
         """
-        x1, y1, x2, y2 = self.person_corners(self.color_image())
-        margin_x = (x2 - x1) * fraction / 2
-        margin_y = (y2 - y1) * fraction / 2
-        return [
-            int(x1 + margin_x),
-            int(y1 + margin_y),
-            int(x2 - margin_x),
-            int(y2 - margin_y),
-        ]
+        box = self.person_box_in(self.color_image())
+        horizontal_margin = box.width * fraction / 2
+        vertical_margin = box.height * fraction / 2
+        return Rect.from_corner_points(
+            x1=box.pos.x + horizontal_margin,
+            y1=box.pos.y + vertical_margin,
+            x2=box.pos.x + box.width - horizontal_margin,
+            y2=box.pos.y + box.height - vertical_margin,
+        )
 
     def descriptor(self) -> HumanAndPoseAnnotator.Descriptor:
         """
@@ -224,12 +223,11 @@ def _keypoints_of_kind(
     return keypoints
 
 
-def _area(corners: list[int]) -> int:
+def _area(box: Rect) -> int:
     """
-    :return: The number of pixels inside the corners (x1, y1, x2, y2).
+    :return: The number of pixels inside the box.
     """
-    x1, y1, x2, y2 = corners
-    return (x2 - x1) * (y2 - y1)
+    return box.width * box.height
 
 
 # %% model loading
@@ -306,8 +304,8 @@ def test_hypothesis_region_is_person_bounding_box(
 
     annotator.update()
 
-    assert _only_hypothesis(annotator).roi.roi.get_corner_points() == tuple(
-        scene.person_corners(scene.color_image())
+    assert _only_hypothesis(annotator).roi.roi == (
+        scene.person_box_in(scene.color_image())
     )
 
 
@@ -399,8 +397,8 @@ def test_shrinking_narrows_hypothesis_region_around_its_center(
 
     annotator.update()
 
-    assert _only_hypothesis(annotator).roi.roi.get_corner_points() == tuple(
-        scene.person_corners_shrunk_by(descriptor.parameters.shrink_bounding_box)
+    assert _only_hypothesis(annotator).roi.roi == (
+        scene.person_box_shrunk_by(descriptor.parameters.shrink_bounding_box)
     )
 
 
@@ -414,8 +412,8 @@ def test_shrink_as_annotation_without_depth_shrinks_region(
 
     annotator.update()
 
-    assert _only_hypothesis(annotator).roi.roi.get_corner_points() == tuple(
-        scene.person_corners_shrunk_by(descriptor.parameters.shrink_bounding_box)
+    assert _only_hypothesis(annotator).roi.roi == (
+        scene.person_box_shrunk_by(descriptor.parameters.shrink_bounding_box)
     )
 
 
@@ -430,7 +428,7 @@ def test_point_cloud_holds_depth_measured_inside_bounding_box(
     annotator.update()
 
     points = np.asarray(_only_hypothesis(annotator).points.points)
-    assert len(points) == _area(scene.person_corners(scene.color_image()))
+    assert len(points) == _area(scene.person_box_in(scene.color_image()))
     np.testing.assert_allclose(
         points[:, 2], scene.depth_in_millimeters / scene.millimeters_per_meter
     )
@@ -447,7 +445,7 @@ def test_point_cloud_is_built_on_smaller_depth_resolution(
 
     depth_image = annotator.get_cas().get(CASViews.DEPTH_IMAGE)
     points = np.asarray(_only_hypothesis(annotator).points.points)
-    assert len(points) == _area(scene.person_corners(depth_image))
+    assert len(points) == _area(scene.person_box_in(depth_image))
 
 
 def test_shrunk_cloud_is_added_as_annotation_when_requested(
@@ -462,11 +460,9 @@ def test_shrunk_cloud_is_added_as_annotation_when_requested(
 
     hypothesis = _only_hypothesis(annotator)
     (shrunk_cloud,) = _annotations_of_type(hypothesis, CloudAnnotation)
-    assert hypothesis.roi.roi.get_corner_points() == tuple(
-        scene.person_corners(scene.color_image())
-    )
+    assert hypothesis.roi.roi == (scene.person_box_in(scene.color_image()))
     assert len(shrunk_cloud.points.points) == _area(
-        scene.person_corners_shrunk_by(descriptor.parameters.shrink_bounding_box)
+        scene.person_box_shrunk_by(descriptor.parameters.shrink_bounding_box)
     )
 
 
@@ -480,9 +476,7 @@ def test_shrink_as_annotation_without_shrinking_keeps_box_and_adds_no_cloud(
     annotator.update()
 
     hypothesis = _only_hypothesis(annotator)
-    assert hypothesis.roi.roi.get_corner_points() == tuple(
-        scene.person_corners(scene.color_image())
-    )
+    assert hypothesis.roi.roi == (scene.person_box_in(scene.color_image()))
     assert _annotations_of_type(hypothesis, CloudAnnotation) == []
 
 
@@ -560,7 +554,7 @@ def test_visualization_shows_point_clouds_of_hypotheses(
     annotator.update()
 
     assert len(annotator.get_annotator_output_struct().geometries.points) == _area(
-        scene.person_corners(scene.color_image())
+        scene.person_box_in(scene.color_image())
     )
 
 
