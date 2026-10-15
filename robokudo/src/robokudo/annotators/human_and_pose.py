@@ -395,7 +395,7 @@ class HumanAndPoseAnnotator(BaseAnnotator):
             )
         box = Rect.from_corner_points(*result.boxes.xyxy[index].cpu().numpy())
         shrunk_box = (
-            box if parameters.shrink_bounding_box is None else self._shrunk(box)
+            box if parameters.shrink_bounding_box is None else self._shrink_box(box)
         )
         keeps_full_box = depth_frame is not None and parameters.shrink_as_annotation
 
@@ -445,7 +445,7 @@ class HumanAndPoseAnnotator(BaseAnnotator):
             )
         return hypothesis
 
-    def _shrunk(self, box: Rect) -> Rect:
+    def _shrink_box(self, box: Rect) -> Rect:
         """
         Shrink a box around its center by
         :attr:`Descriptor.Parameters.shrink_bounding_box` of its width and height.
@@ -453,12 +453,14 @@ class HumanAndPoseAnnotator(BaseAnnotator):
         :param box: The box in color image pixels.
         :return: The shrunk box in color image pixels.
         """
-        x1, y1, x2, y2 = box.get_corner_points()
         shrink_fraction = self.descriptor.parameters.shrink_bounding_box
-        margin_x = box.width * shrink_fraction / 2
-        margin_y = box.height * shrink_fraction / 2
+        horizontal_margin = box.width * shrink_fraction / 2
+        vertical_margin = box.height * shrink_fraction / 2
         return Rect.from_corner_points(
-            x1=x1 + margin_x, y1=y1 + margin_y, x2=x2 - margin_x, y2=y2 - margin_y
+            x1=box.pos.x + horizontal_margin,
+            y1=box.pos.y + vertical_margin,
+            x2=box.pos.x + box.width - horizontal_margin,
+            y2=box.pos.y + box.height - vertical_margin,
         )
 
     def _keypoint_clouds(
