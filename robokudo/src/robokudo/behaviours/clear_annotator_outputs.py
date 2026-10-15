@@ -3,6 +3,7 @@ Behaviour that resets the visualization outputs of a pipeline's annotators.
 """
 
 import logging
+from dataclasses import dataclass, field
 
 from py_trees.behaviour import Behaviour
 from py_trees.blackboard import Blackboard
@@ -14,14 +15,28 @@ from robokudo.exceptions import ParentPipelineMissing
 from robokudo.pipeline import Pipeline
 
 
+@dataclass(eq=False)
 class ClearAnnotatorOutputs(Behaviour):
     """
     Clears the annotator outputs of the nearest pipeline it is part of.
     """
 
-    def __init__(self, name: str = "ClearAnnotatorOutputs") -> None:
-        super().__init__(name)
-        self.rk_logger = logging.getLogger(defs.PACKAGE_NAME)
+    name: str = "ClearAnnotatorOutputs"
+    """
+    The name of this behaviour in the behaviour tree.
+    """
+
+    rk_logger: logging.Logger = field(
+        default_factory=lambda: logging.getLogger(defs.PACKAGE_NAME),
+        init=False,
+        repr=False,
+    )
+    """
+    The logger of the RoboKudo package.
+    """
+
+    def __post_init__(self) -> None:
+        super().__init__(self.name)
 
     def update(self) -> Status:
         self.rk_logger.debug("%s.update()" % (self.__class__.__name__))

@@ -1,5 +1,5 @@
 """
-Stand-ins for the ultralytics YOLO and SAM models that report scripted results.
+Mocks of the ultralytics YOLO and SAM models that report predefined results.
 
 They return genuine ultralytics result objects, so the annotators read them exactly as
 they read the results of a real model, without downloading weights.
@@ -86,9 +86,9 @@ class NormalizedKeypoint:
 
 
 @dataclass
-class ScriptedDetection:
+class MockDetection:
     """
-    A detection the scripted model reports on every image.
+    A detection the mock model reports on every image.
     """
 
     class_id: int
@@ -113,9 +113,9 @@ class ScriptedDetection:
 
 
 @dataclass
-class ScriptedYoloModel:
+class MockDetectionModel:
     """
-    YOLO stand-in reporting its scripted detections on any image.
+    YOLO mock reporting its predefined detections on any image.
     """
 
     names: Dict[int, str]
@@ -123,7 +123,7 @@ class ScriptedYoloModel:
     Name of each class the model detects, by class id.
     """
 
-    detections: List[ScriptedDetection] = field(default_factory=list)
+    detections: List[MockDetection] = field(default_factory=list)
     """
     The detections reported on every image.
     """
@@ -142,8 +142,7 @@ class ScriptedYoloModel:
         self, image: np.ndarray, conf: float, **prediction_settings: Any
     ) -> List[Results]:
         """
-        :param prediction_settings: Further ultralytics prediction settings, ignored.
-        :return: The scripted detections at least as confident as the threshold.
+        :return: The predefined detections at least as confident as the threshold.
         """
         self.received_confidence = conf
         self.received_image_shape = image.shape
@@ -183,7 +182,7 @@ class ScriptedYoloModel:
 @dataclass
 class TopHalfSegmentationModel:
     """
-    SAM stand-in segmenting the upper half of every prompted bounding box.
+    SAM mock segmenting the upper half of every prompted bounding box.
     """
 
     def segment(self, image: np.ndarray, corners: List[float]) -> np.ndarray:
@@ -195,9 +194,7 @@ class TopHalfSegmentationModel:
         mask[y1 : (y1 + y2) // 2, x1:x2] = 1.0
         return mask
 
-    def predict(
-        self, image: np.ndarray, bboxes: List[List[float]], labels: List[int]
-    ) -> List[Results]:
+    def predict(self, image: np.ndarray, bboxes: List[List[float]]) -> List[Results]:
         """
         :return: The segmentation of the first prompted box.
         """
@@ -209,12 +206,12 @@ class TopHalfSegmentationModel:
 
 
 @dataclass
-class ScriptedUltralytics:
+class MockModelLoader:
     """
     The models handed out in place of the ones ultralytics would load.
     """
 
-    model: ScriptedYoloModel
+    model: MockDetectionModel
     """
     The detection model handed out for every model location.
     """
@@ -223,7 +220,7 @@ class ScriptedUltralytics:
         default_factory=TopHalfSegmentationModel
     )
     """
-    The segmentation model handed out for every SAM model name.
+    The segmentation model handed out for every SAM model location.
     """
 
     loaded_model_locations: List[str] = field(default_factory=list)
@@ -231,15 +228,21 @@ class ScriptedUltralytics:
     The locations the detection model was loaded from.
     """
 
-    def load_model(self, location: str) -> ScriptedYoloModel:
+    loaded_segmentation_model_locations: List[str] = field(default_factory=list)
+    """
+    The locations the segmentation model was loaded from.
+    """
+
+    def load_model(self, location: str) -> MockDetectionModel:
         """
-        Stand-in for constructing a YOLO model from the given location.
+        Mock of constructing a YOLO model from the given location.
         """
         self.loaded_model_locations.append(location)
         return self.model
 
-    def load_segmentation_model(self, name: str) -> TopHalfSegmentationModel:
+    def load_segmentation_model(self, location: str) -> TopHalfSegmentationModel:
         """
-        Stand-in for constructing a SAM model with the given name.
+        Mock of constructing a SAM model from the given location.
         """
+        self.loaded_segmentation_model_locations.append(location)
         return self.segmentation_model

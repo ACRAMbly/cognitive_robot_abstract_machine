@@ -16,3 +16,16 @@ class TestClearAnnotatorOutputs:
 
         with pytest.raises(ParentPipelineMissing):
             clear_outputs.update()
+
+    def test_removing_one_of_two_instances_keeps_the_other(self):
+        """
+        Instances with the same name stay distinct children of a composite.
+        """
+        root = py_trees.composites.Sequence("Sequence", memory=True)
+        first = ClearAnnotatorOutputs()
+        second = ClearAnnotatorOutputs()
+        root.add_children([first, second])
+
+        root.remove_child(second)
+
+        assert [child.id for child in root.children] == [first.id]

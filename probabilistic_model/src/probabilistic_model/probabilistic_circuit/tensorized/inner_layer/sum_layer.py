@@ -31,9 +31,7 @@ from probabilistic_model.probabilistic_circuit.tensorized.array_types import (
     VariableIndices,
     VariableMask,
 )
-from probabilistic_model.probabilistic_circuit.tensorized.exceptions import (
-    NumberOfWeightsMismatchError,
-)
+from probabilistic_model.exceptions import NumberOfWeightsMismatchError
 from probabilistic_model.probabilistic_circuit.tensorized.forward_sample_assignment import (
     ForwardSampleAssignment,
 )
@@ -248,6 +246,17 @@ class SumLayer(InnerLayer):
             child_layer_indices,
             columns - offsets[child_layer_indices],
         )
+
+    def mixture_components(self) -> List[Tuple[Layer, int]]:
+        if self.number_of_nodes != 1:
+            return []
+        edges = self.inner_layer_edges
+        return [
+            (self.child_layers[child_layer_index], int(child_node))
+            for child_layer_index, child_node in zip(
+                edges.child_layer_indices, edges.child_nodes
+            )
+        ]
 
     def values_of_edges(self, child_results: List[npt.NDArray]) -> npt.NDArray:
         """

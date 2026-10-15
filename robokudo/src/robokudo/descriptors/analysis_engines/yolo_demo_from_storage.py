@@ -9,16 +9,6 @@ from robokudo.descriptors.factories.cr_descriptor_factory import (
 from robokudo.idioms import pipeline_init
 from robokudo.pipeline import Pipeline
 
-DEMO_MODEL = "yolov8m.pt"
-"""
-Pretrained YOLO model the demo detects objects with.
-"""
-
-DEMO_DETECTION_THRESHOLD = 0.2
-"""
-Minimum confidence of the detections the demo annotates.
-"""
-
 
 class AnalysisEngine(AnalysisEngineInterface):
     """
@@ -42,8 +32,8 @@ class AnalysisEngine(AnalysisEngineInterface):
         cr_storage_config = CollectionReaderDescriptorFactory.create_descriptor("mongo")
 
         yolo_descriptor = YoloAnnotator.Descriptor()
-        yolo_descriptor.parameters.pretrained_model = DEMO_MODEL
-        yolo_descriptor.parameters.threshold = DEMO_DETECTION_THRESHOLD
+        yolo_descriptor.parameters.pretrained_model = "yolov8m.pt"
+        yolo_descriptor.parameters.threshold = 0.2
         yolo_descriptor.parameters.precision_mode = True
 
         seq = Pipeline("StoragePipeline")
