@@ -62,7 +62,7 @@ class FileReaderCameraConfig(BaseCameraConfig, StaticCameraTransformComponent):
     Otherwise, append target_dir to target_ros_package and load the files from there.
     """
 
-    color2depth_ratio: ColorToDepthRatio | None = field(
+    color_to_depth_ratio: ColorToDepthRatio | None = field(
         default_factory=lambda: ColorToDepthRatio(horizontal=0.5, vertical=0.5)
     )
     """

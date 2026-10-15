@@ -92,7 +92,7 @@ class OpenCVCameraConfig(BaseCameraConfig):
     Camera intrinsic parameters.
     """
 
-    color2depth_ratio: ColorToDepthRatio = field(default_factory=ColorToDepthRatio)
+    color_to_depth_ratio: ColorToDepthRatio = field(default_factory=ColorToDepthRatio)
     """
     Size of the depth image relative to the color image.
     """

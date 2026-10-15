@@ -95,7 +95,7 @@ class WorldDescriptorComponent:
 class RGBDComponent(DepthComponent, ColorComponent):
     """Camera component with configuration for RGB-D input data."""
 
-    color2depth_ratio: ColorToDepthRatio = field(default_factory=ColorToDepthRatio)
+    color_to_depth_ratio: ColorToDepthRatio = field(default_factory=ColorToDepthRatio)
     """
     Size of the depth image relative to the color image, for example half along both
     axes for a 640x480 depth image next to a 1280x960 color image.

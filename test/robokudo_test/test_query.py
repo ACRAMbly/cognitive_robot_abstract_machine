@@ -50,7 +50,7 @@ def query_simple_pipeline(node):
         loop=True,
         target_dir=robokudo.utils.data_downloader.test_data_path() / Path("data"),
         kinect_height_fix_mode=True,
-        color2depth_ratio=ColorToDepthRatio(horizontal=0.5, vertical=0.5),
+        color_to_depth_ratio=ColorToDepthRatio(horizontal=0.5, vertical=0.5),
     )
 
     # Restrict FOV of pointcloud to robustly get only one object

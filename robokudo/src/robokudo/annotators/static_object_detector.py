@@ -528,10 +528,10 @@ class StaticObjectDetectorAnnotator(BaseAnnotator):
             self.descriptor.parameters.bounding_box_y
             + self.descriptor.parameters.bounding_box_height
         )
-        # Respect possible color2depth scaling also for BoundingBox coordinates
-        color2depth_ratio = self.get_cas().get(CASViews.COLOR2DEPTH_RATIO)
-        sx1, sy1 = get_scale_coordinates(color2depth_ratio, (x1, y1))
-        sx2, sy2 = get_scale_coordinates(color2depth_ratio, (x2, y2))
+        # Respect possible color-to-depth scaling also for BoundingBox coordinates
+        color_to_depth_ratio = self.get_cas().get(CASViews.COLOR2DEPTH_RATIO)
+        sx1, sy1 = get_scale_coordinates(color_to_depth_ratio, (x1, y1))
+        sx2, sy2 = get_scale_coordinates(color_to_depth_ratio, (x2, y2))
         mask[int(sy1) : int(sy2), int(sx1) : int(sx2)] = 255
         cloud = get_cloud_from_rgb_depth_and_mask(
             color_rgb, self.depth, mask, self.camera_intrinsics, mask_true_val=255

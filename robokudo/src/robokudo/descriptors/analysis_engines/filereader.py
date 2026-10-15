@@ -92,7 +92,7 @@ class AnalysisEngine(AnalysisEngineInterface):
             target_ros_package="robokudo_test_data",
             target_dir="data",
             kinect_height_fix_mode=True,
-            color2depth_ratio=ColorToDepthRatio(horizontal=0.5, vertical=0.5),
+            color_to_depth_ratio=ColorToDepthRatio(horizontal=0.5, vertical=0.5),
         )
 
         # Restrict FOV of pointcloud to robustly get only one object

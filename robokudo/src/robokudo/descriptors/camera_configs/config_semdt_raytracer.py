@@ -64,7 +64,7 @@ class SemDTRayTracerCameraConfig(BaseCameraConfig):
     RayTracer hit distance interval in meters.
     """
 
-    color2depth_ratio: ColorToDepthRatio = field(default_factory=ColorToDepthRatio)
+    color_to_depth_ratio: ColorToDepthRatio = field(default_factory=ColorToDepthRatio)
     """
     Scale factor from RGB image to depth image resolution.
     """

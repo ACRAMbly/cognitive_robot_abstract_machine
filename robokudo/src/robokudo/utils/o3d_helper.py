@@ -144,8 +144,8 @@ def project_points_to_image(
     u = (uvd[valid, 0] / z[valid]).astype(int)
     v = (uvd[valid, 1] / z[valid]).astype(int)
 
-    color2depth_ratio = cas.get(CASViews.COLOR2DEPTH_RATIO)
-    return color2depth_ratio.color_pixels(np.stack([u, v], axis=1)), valid
+    color_to_depth_ratio = cas.get(CASViews.COLOR2DEPTH_RATIO)
+    return color_to_depth_ratio.color_pixels(np.stack([u, v], axis=1)), valid
 
 
 def draw_mesh_wireframe_on_image(
@@ -186,7 +186,7 @@ def get_2d_bounding_rect_from_3d_bb(
 ) -> cv2t.Rect:
     """
     Get a cv2.boundingRect which represents the space taken by a open3d boundingbox.
-    Perspective projection and color2depth ratio are taken into account.
+    Perspective projection and color-to-depth ratio are taken into account.
 
     :param cas:
     :param object_bb:

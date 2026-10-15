@@ -215,12 +215,12 @@ def scale_camera_intrinsics(annotator: BaseAnnotator) -> None:
     :param annotator: Annotator whose ``camera_intrinsics`` attribute is replaced by the
         scaled intrinsics.
     """
-    color2depth_ratio = annotator.get_cas().get(CASViews.COLOR2DEPTH_RATIO)
-    if not color2depth_ratio.is_identity:
+    color_to_depth_ratio = annotator.get_cas().get(CASViews.COLOR2DEPTH_RATIO)
+    if not color_to_depth_ratio.is_identity:
         annotator.camera_intrinsics = scale_o3d_camera_intrinsics(
             annotator.camera_intrinsics,
-            color2depth_ratio.horizontal,
-            color2depth_ratio.vertical,
+            color_to_depth_ratio.horizontal,
+            color_to_depth_ratio.vertical,
         )
 
 
@@ -274,18 +274,18 @@ def resize_mask(annotator: BaseAnnotator, mask: npt.NDArray) -> npt.NDArray:
         # nothing to do
         return mask
 
-    color2depth_ratio = annotator.get_cas().get(CASViews.COLOR2DEPTH_RATIO)
+    color_to_depth_ratio = annotator.get_cas().get(CASViews.COLOR2DEPTH_RATIO)
 
-    if color2depth_ratio is None:
+    if color_to_depth_ratio is None:
         raise ColorToDepthRatioMissing(operation="resize mask")
 
-    if color2depth_ratio.is_identity:
+    if color_to_depth_ratio.is_identity:
         return mask
     return cv2.resize(
         mask,
         None,
-        fx=1 / color2depth_ratio.horizontal,
-        fy=1 / color2depth_ratio.vertical,
+        fx=1 / color_to_depth_ratio.horizontal,
+        fy=1 / color_to_depth_ratio.vertical,
         interpolation=cv2.INTER_NEAREST,
     )
 

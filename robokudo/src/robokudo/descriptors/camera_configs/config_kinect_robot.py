@@ -53,7 +53,7 @@ class KinectCameraConfig(
     Overwrite RGBDComponent.
     """
 
-    color2depth_ratio: ColorToDepthRatio = field(
+    color_to_depth_ratio: ColorToDepthRatio = field(
         default_factory=lambda: ColorToDepthRatio(horizontal=0.5, vertical=0.5)
     )
     """

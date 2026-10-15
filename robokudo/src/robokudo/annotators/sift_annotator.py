@@ -52,8 +52,8 @@ class SIFTAnnotator(ThreadedAnnotator):
         if intrinsic is None:
             return Status.FAILURE
 
-        depth_ratio = cas.color2depth_ratio
-        if depth_ratio is None:
+        color_to_depth_ratio = cas.color_to_depth_ratio
+        if color_to_depth_ratio is None:
             return Status.FAILURE
 
         color_image = cas.get_copy(CASViews.COLOR_IMAGE)
@@ -93,7 +93,7 @@ class SIFTAnnotator(ThreadedAnnotator):
             )
 
         pcd = self._keypoints_to_point_cloud(
-            all_keypoints, depth_image, intrinsic, depth_ratio
+            all_keypoints, depth_image, intrinsic, color_to_depth_ratio
         )
         self.get_annotator_output_struct().set_image(vis_image)
         self.get_annotator_output_struct().set_geometries(pcd)
@@ -126,7 +126,7 @@ class SIFTAnnotator(ThreadedAnnotator):
         keypoints: List[cv2.KeyPoint],
         depth_image: npt.NDArray,
         intrinsics: o3d.camera.PinholeCameraIntrinsic,
-        depth_ratio: ColorToDepthRatio,
+        color_to_depth_ratio: ColorToDepthRatio,
         depth_scale: float = 1000.0,
         max_depth: float = 3.0,
     ) -> o3d.geometry.PointCloud:
@@ -136,7 +136,8 @@ class SIFTAnnotator(ThreadedAnnotator):
         :param keypoints: The keypoints to project to 3D.
         :param depth_image: The depth image used for projection.
         :param intrinsics: The camera intrinsics used for projection.
-        :param depth_ratio: Size of the depth image relative to the color image.
+        :param color_to_depth_ratio: Size of the depth image relative to the color
+            image.
         :param depth_scale: The depth scale of the depth image.
         :param max_depth: The maximum depth to project.
         :return: The 3D point cloud.
@@ -148,8 +149,8 @@ class SIFTAnnotator(ThreadedAnnotator):
         points_3d = []
         responses = []
         for kp in keypoints:
-            u = round(kp.pt[0] * depth_ratio.horizontal)
-            v = round(kp.pt[1] * depth_ratio.vertical)
+            u = round(kp.pt[0] * color_to_depth_ratio.horizontal)
+            v = round(kp.pt[1] * color_to_depth_ratio.vertical)
             if not (0 <= v < depth_image.shape[0] and 0 <= u < depth_image.shape[1]):
                 continue
 

@@ -116,7 +116,7 @@ class TSDFAnnotator(ThreadedAnnotator):
         if len(ohs) == 0:
             return Status.FAILURE
 
-        color2depth_ratio: ColorToDepthRatio = cas.get(CASViews.COLOR2DEPTH_RATIO)
+        color_to_depth_ratio: ColorToDepthRatio = cas.get(CASViews.COLOR2DEPTH_RATIO)
 
         # Only process ohs with pose
         oh_data: List[
@@ -125,7 +125,7 @@ class TSDFAnnotator(ThreadedAnnotator):
         for oh in ohs:
             poses = cas.filter_by_type(PoseAnnotation, oh.annotations)
             if len(poses) > 0:
-                roi: Tuple[int, int, int, int] = color2depth_ratio.depth_region(
+                roi: Tuple[int, int, int, int] = color_to_depth_ratio.depth_region(
                     oh.roi.roi
                 ).get_corner_points()
                 oh_data.append((oh, poses[0], roi))
@@ -138,8 +138,8 @@ class TSDFAnnotator(ThreadedAnnotator):
         camera_intrinsic: o3d.camera.PinholeCameraIntrinsic = (
             scale_o3d_camera_intrinsics(
                 cas.get(CASViews.CAMERA_INTRINSIC),
-                color2depth_ratio.horizontal,
-                color2depth_ratio.vertical,
+                color_to_depth_ratio.horizontal,
+                color_to_depth_ratio.vertical,
             )
         )
         color_image: npt.NDArray[np.uint8] = get_scaled_color_image_for_depth_image(

@@ -478,7 +478,7 @@ class KinectCameraInterface(ROSCameraInterface):
         Open3D camera intrinsics
         """
 
-        self.color2depth_ratio: ColorToDepthRatio | None = None
+        self.color_to_depth_ratio: ColorToDepthRatio | None = None
         """
         Ratio between color and depth image sizes
         """
@@ -630,13 +630,13 @@ class KinectCameraInterface(ROSCameraInterface):
         cy = self.camera_info.k[5]
         self.camera_intrinsic.set_intrinsics(width, height, fx, fy, cx, cy)
 
-        self.color2depth_ratio = self.camera_config.color2depth_ratio
+        self.color_to_depth_ratio = self.camera_config.color_to_depth_ratio
 
         cas.set(CASViews.COLOR_IMAGE, self.color)
         cas.set(CASViews.DEPTH_IMAGE, self.depth)
         cas.set(CASViews.CAMERA_INFO, self.camera_info)
         cas.set(CASViews.CAMERA_INTRINSIC, self.camera_intrinsic)
-        cas.set(CASViews.COLOR2DEPTH_RATIO, self.color2depth_ratio)
+        cas.set(CASViews.COLOR2DEPTH_RATIO, self.color_to_depth_ratio)
 
         self.store_camera_to_world_transform_from_tf(cas, self.timestamp)
 

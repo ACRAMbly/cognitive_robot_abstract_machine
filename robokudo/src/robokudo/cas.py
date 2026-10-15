@@ -180,14 +180,14 @@ class CAS:
         self.views[CASViews.DEPTH_IMAGE] = value
 
     @property
-    def color2depth_ratio(self) -> ColorToDepthRatio | None:
+    def color_to_depth_ratio(self) -> ColorToDepthRatio | None:
         """
         Size of the depth image relative to the color image, or None without depth.
         """
         return self.views.get(CASViews.COLOR2DEPTH_RATIO)
 
-    @color2depth_ratio.setter
-    def color2depth_ratio(self, value: ColorToDepthRatio | None) -> None:
+    @color_to_depth_ratio.setter
+    def color_to_depth_ratio(self, value: ColorToDepthRatio | None) -> None:
         self.views[CASViews.COLOR2DEPTH_RATIO] = value
 
     @property

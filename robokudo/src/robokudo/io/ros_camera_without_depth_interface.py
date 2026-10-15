@@ -91,7 +91,7 @@ class ROSCameraWithoutDepthInterface(ROSCameraInterface):
         self.camera_intrinsic: Optional[o3d.camera.PinholeCameraIntrinsic] = None
         """Camera intrinsic parameters in Open3D format"""
 
-        self.color2depth_ratio: ColorToDepthRatio = ColorToDepthRatio()
+        self.color_to_depth_ratio: ColorToDepthRatio = ColorToDepthRatio()
         """
         The identity, since there is no depth image.
         """
@@ -263,7 +263,7 @@ class ROSCameraWithoutDepthInterface(ROSCameraInterface):
         cas.set(CASViews.DEPTH_IMAGE, None)
         cas.set(CASViews.CAMERA_INFO, self.camera_info)
         cas.set(CASViews.CAMERA_INTRINSIC, self.camera_intrinsic)
-        cas.set(CASViews.COLOR2DEPTH_RATIO, self.color2depth_ratio)
+        cas.set(CASViews.COLOR2DEPTH_RATIO, self.color_to_depth_ratio)
         self.store_camera_to_world_transform_from_tf(cas, self.timestamp)
 
         self._has_new_data = False
