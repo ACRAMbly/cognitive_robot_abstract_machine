@@ -165,15 +165,16 @@ class Unit(SubclassJSONSerializer, ABC):
 
     def mixture_components(self) -> List[Unit]:
         """
-        :return: The subcircuits this unit mixes if it is a sum unit, otherwise nothing.
+        :return: Nothing, since a unit that does not mix has no components. A unit that
+            mixes answers the subcircuits it mixes.
         """
         return []
 
     @property
     def log_normalization_constant(self) -> float:
         """
-        :return: ``log(sum(exp(w)))`` over the weights of the components this unit
-            mixes, or ``0.0`` if it mixes nothing.
+        :return: ``0.0``, since a unit that mixes nothing has no weights to normalize.
+            A unit that mixes answers what its weights sum to.
         """
         return 0.0
 
@@ -526,6 +527,10 @@ class SumUnit(InnerUnit):
 
     @property
     def log_normalization_constant(self) -> float:
+        """
+        :return: ``log(sum(exp(w)))`` over the weights of the components this unit
+            mixes, which is ``0.0`` while it mixes nothing.
+        """
         log_weights = self.log_weights
         if len(log_weights) == 0:
             return 0.0

@@ -167,15 +167,17 @@ class Layer(SubclassJSONSerializer, ABC):
     @property
     def log_normalization_constants(self) -> NodeValues:
         """
-        :return: ``log(sum(exp(w)))`` over the weights of each node of this layer,
-            shape (#nodes,), zero everywhere if this layer has no weights.
+        :return: Zero for every node, shape (#nodes,), since a layer without weights
+            has nothing to normalize. A layer that mixes answers what each node's
+            weights sum to.
         """
         return np.zeros(self.number_of_nodes)
 
     def nodes_with_components(self) -> NodeMask:
         """
-        :return: One flag per node of this layer, set where the node mixes at least one
-            component.
+        :return: One flag per node of this layer, all unset, since a layer that does
+            not mix has no node that mixes. A layer that mixes sets the flag of every
+            node that does.
         """
         return np.zeros(self.number_of_nodes, dtype=bool)
 
@@ -185,8 +187,9 @@ class Layer(SubclassJSONSerializer, ABC):
         """
         :param variables: The variables of the circuit.
         :param cache: The shared cache of the current pass.
-        :return: The support of every component of every node of this layer, one list
-            per node, which is empty for a node that mixes nothing.
+        :return: One empty list per node of this layer, since a layer that does not
+            mix has no components to describe. A layer that mixes answers the support of
+            every component of every node.
         """
         return [[] for _ in range(self.number_of_nodes)]
 
