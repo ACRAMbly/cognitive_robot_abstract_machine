@@ -1225,26 +1225,10 @@ class Box(Shape):
 T = TypeVar("T")
 
 
-class AxisAlignedRegion(Generic[T], SubClassSafeGeneric):
-    """
-    A region bounded along every axis by a lower and an upper corner.
-    """
-
-    lower: T
-    """
-    The corner with the smallest coordinate on every axis.
-    """
-
-    upper: T
-    """
-    The corner with the largest coordinate on every axis.
-    """
-
-
 @dataclass
-class Bounds(AxisAlignedRegion[T]):
+class Bounds(Generic[T], SubClassSafeGeneric):
     """
-    An axis-aligned region given by its two corners.
+    The lower and upper corner of an axis-aligned region.
     """
 
     lower: T
@@ -1312,7 +1296,7 @@ plane.
 
 
 @dataclass(eq=False)
-class AxisAlignedBox(AxisAlignedRegion[PointT], ABC):
+class AxisAlignedBox(Generic[PointT], SubClassSafeGeneric, ABC):
     """
     Shared behaviour for an axis-aligned box expressed over a fixed set of spatial axes.
 
@@ -1408,20 +1392,23 @@ class AxisAlignedBox(AxisAlignedRegion[PointT], ABC):
         )
 
     @property
-    def lower(self) -> PointT:
-        return self._corner_at([interval.lower for interval in self._ordered_intervals])
-
-    @property
-    def upper(self) -> PointT:
-        return self._corner_at([interval.upper for interval in self._ordered_intervals])
-
-    def _corner_at(self, coordinates: List[float]) -> PointT:
+    def bounds(self) -> Bounds[PointT]:
         """
-        :param coordinates: The corner's coordinate along each of :meth:`axes`.
-        :return: The corner, in the reference frame of the box's origin.
+        :return: This box's lower and upper corner, in the reference frame of its origin.
         """
         point_type = self.get_type_of_generic_parameter(PointT)
-        return point_type(*coordinates, reference_frame=self.origin.reference_frame)
+        intervals = self._ordered_intervals
+        reference_frame = self.origin.reference_frame
+        return Bounds(
+            point_type(
+                *(interval.lower for interval in intervals),
+                reference_frame=reference_frame,
+            ),
+            point_type(
+                *(interval.upper for interval in intervals),
+                reference_frame=reference_frame,
+            ),
+        )
 
     def to_array_bounds(self) -> CoordinateBounds:
         """

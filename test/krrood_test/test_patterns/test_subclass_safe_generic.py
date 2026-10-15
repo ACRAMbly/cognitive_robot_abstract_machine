@@ -788,34 +788,3 @@ def test_a_parameter_only_renamed_by_a_subclass_is_rejected():
 
     with pytest.raises(UnboundGenericParameter):
         RenamingContainer.get_type_of_generic_parameter(ContentType)
-
-
-# %% an annotated attribute a subclass implements as a property
-
-
-def test_an_annotated_attribute_implemented_as_a_property_stays_a_property():
-    """
-    A generic base may only declare an attribute that a subclass computes, so binding
-    the parameter further down leaves the property in place instead of making it a
-    field.
-    """
-    CornerType = TypeVar("CornerType")
-
-    class Region(Generic[CornerType], SubClassSafeGeneric):
-        lower: CornerType
-
-    @dataclass
-    class ShiftedRegion(Region[CornerType]):
-        @property
-        def lower(self) -> CornerType:
-            return self.offset
-
-    @dataclass
-    class IntegerShiftedRegion(ShiftedRegion[int]):
-        offset: int
-
-    shift = 3
-    assert [region_field.name for region_field in fields(IntegerShiftedRegion)] == [
-        "offset"
-    ]
-    assert IntegerShiftedRegion(shift).lower == shift

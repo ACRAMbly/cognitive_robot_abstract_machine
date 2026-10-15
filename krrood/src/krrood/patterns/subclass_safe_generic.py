@@ -112,8 +112,7 @@ class SubClassSafeGeneric(ABC):
             logger.debug(message)
             return
         for name, result in resolution_results.items():
-            # An annotation a class implements as a property is not a field to narrow.
-            if not result.resolved or isinstance(getattr(cls, name, None), property):
+            if not result.resolved:
                 continue
             cls._update_field_kwargs(name, {"type": result.resolved_type})
 

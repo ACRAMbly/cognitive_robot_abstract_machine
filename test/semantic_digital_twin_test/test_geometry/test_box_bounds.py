@@ -8,15 +8,13 @@ from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix
 from semantic_digital_twin.world import World
 from semantic_digital_twin.world_description.geometry import (
     AxisAlignedBox,
-    AxisAlignedRegion,
-    Bounds,
     CoordinateBounds,
     PlanarBoundingBox,
     VolumetricBoundingBox,
 )
 from semantic_digital_twin.world_description.world_entity import Body
 
-# %% boxes in space
+# %% the corners of a box in space
 
 
 @pytest.fixture
@@ -36,32 +34,24 @@ def box(request, origin):
     return VolumetricBoundingBox(-1, -2, -3, 4, 5, 6, origin)
 
 
-def test_a_box_in_space_is_an_axis_aligned_region(box):
-    assert isinstance(box, AxisAlignedRegion)
-
-
-def test_a_box_has_its_corners_as_points_of_its_own_type(box):
+def test_the_bounds_of_a_box_are_points_of_its_own_type(box):
     [point_type] = get_generic_type_parameters(type(box), AxisAlignedBox)
-    assert (type(box.lower), type(box.upper)) == (point_type, point_type)
+    bounds = box.bounds
+    assert (type(bounds.lower), type(bounds.upper)) == (point_type, point_type)
 
 
-def test_the_corners_of_a_box_are_where_its_intervals_start_and_end(box):
+def test_the_bounds_of_a_box_are_where_its_intervals_start_and_end(box):
+    bounds = box.bounds
     coordinates = box.to_array_bounds()
     dimensionality = box.dimensionality()
-    assert np.array_equal(box.lower.to_np()[:dimensionality], coordinates.lower)
-    assert np.array_equal(box.upper.to_np()[:dimensionality], coordinates.upper)
+    assert np.array_equal(bounds.lower.to_np()[:dimensionality], coordinates.lower)
+    assert np.array_equal(bounds.upper.to_np()[:dimensionality], coordinates.upper)
 
 
-def test_the_corners_of_a_box_are_in_the_frame_of_its_origin(box, origin):
-    assert box.lower.reference_frame is origin.reference_frame
-    assert box.upper.reference_frame is origin.reference_frame
-
-
-# %% bounds given by their corners
-
-
-def test_bounds_given_by_their_corners_are_an_axis_aligned_region():
-    assert isinstance(Bounds(0.0, 1.0), AxisAlignedRegion)
+def test_the_bounds_of_a_box_are_in_the_frame_of_its_origin(box, origin):
+    bounds = box.bounds
+    assert bounds.lower.reference_frame is origin.reference_frame
+    assert bounds.upper.reference_frame is origin.reference_frame
 
 
 def test_a_box_gives_its_coordinates_as_bounds_that_clip_segments(box):
