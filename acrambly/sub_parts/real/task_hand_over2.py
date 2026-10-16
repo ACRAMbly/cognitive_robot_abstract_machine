@@ -29,8 +29,8 @@ from sub_parts.shared.utils import spawn_body
 
 # perception classname -> (grasp key in available_plans, mesh file)
 CUBES = {
-    "child_cube_0": ("cube0", "child_cube_0_scaled.stl"),
-    "child_cube_2": ("cube2", "child_cube_2_scaled.stl"),
+    "child_cube_0": ("cube0", "cubes/child_cube_0_scaled.stl"),
+    "child_cube_2": ("cube2", "cubes/child_cube_2_scaled.stl"),
 }
 
 

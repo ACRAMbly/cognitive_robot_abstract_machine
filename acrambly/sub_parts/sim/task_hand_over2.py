@@ -21,9 +21,9 @@ from sub_parts.shared.available_plans import build_hand_over2_plan
 from sub_parts.shared.utils import spawn_body
 
 CUBES = {
-    "child_cube_0": ("cube0", "child_cube_0_scaled.stl"),
-    #"child_cube_1": ("cube1", "child_cube_1_scaled.stl"),
-    "child_cube_2": ("cube2", "child_cube_2_scaled.stl"),
+    "child_cube_0": ("cube0", "cubes/child_cube_0_scaled.stl"),
+    "child_cube_1": ("cube1", "cubes/child_cube_1_scaled.stl"),
+    "child_cube_2": ("cube2", "cubes/child_cube_2_scaled.stl"),
 }
 
 def setup_and_build_plan(
