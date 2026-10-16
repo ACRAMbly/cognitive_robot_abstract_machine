@@ -45,6 +45,9 @@ from probabilistic_model.probabilistic_circuit.tensorized.inner_layer.inner_laye
 from probabilistic_model.probabilistic_circuit.tensorized.moment_query import (
     MomentQuery,
 )
+from probabilistic_model.probabilistic_circuit.tensorized.node_component_supports import (
+    NodeComponentSupports,
+)
 from probabilistic_model.probabilistic_circuit.tensorized.query_cache import (
     QueryCache,
     memoized,
@@ -254,14 +257,16 @@ class SumLayer(InnerLayer):
 
     def component_supports(
         self, variables: SortedSet, cache: Optional[QueryCache] = None
-    ) -> List[List[Event]]:
+    ) -> List[NodeComponentSupports]:
         child_supports = [
             child_layer.support_of_nodes(variables, cache=cache)
             for child_layer in self.child_layers
         ]
-        result: List[List[Event]] = [[] for _ in range(self.number_of_nodes)]
+        result = [
+            NodeComponentSupports(node, []) for node in range(self.number_of_nodes)
+        ]
         for edge in self.iterate_edges():
-            result[edge.node].append(
+            result[edge.node].supports.append(
                 child_supports[edge.child_layer_index][edge.child_node]
             )
         return result

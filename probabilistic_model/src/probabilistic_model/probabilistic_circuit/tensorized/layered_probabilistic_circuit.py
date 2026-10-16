@@ -731,7 +731,7 @@ class LayeredProbabilisticCircuit(GroundableCircuit[LayerNode]):
 
     def unnormalized_mixtures(
         self, tolerance: float = 1e-6
-    ) -> List[UnnormalizedMixture]:
+    ) -> List[UnnormalizedMixture[LayerNode]]:
         return [
             report
             for layer in self.layers
@@ -759,7 +759,7 @@ class LayeredProbabilisticCircuit(GroundableCircuit[LayerNode]):
 
     def mixtures_over(
         self, variables: SortedSet[Variable]
-    ) -> List[MixtureOverVariable]:
+    ) -> List[MixtureOverVariable[LayerNode]]:
         cache = QueryCache()
         return [
             report
@@ -782,14 +782,12 @@ class LayeredProbabilisticCircuit(GroundableCircuit[LayerNode]):
             return []
         return [
             MixtureOverVariable(
-                LayerNode(layer, node),
+                LayerNode(layer, mixing.node),
                 variable,
-                [support.marginal([variable]) for support in supports],
+                [support.marginal([variable]) for support in mixing.supports],
             )
-            for node, supports in enumerate(
-                layer.component_supports(self.variables, cache=cache)
-            )
-            if len(supports) >= 2
+            for mixing in layer.component_supports(self.variables, cache=cache)
+            if mixing.mixes()
             for variable in modelled
         ]
 

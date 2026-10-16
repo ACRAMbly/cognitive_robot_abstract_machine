@@ -8,6 +8,8 @@ from random_events.variable import Variable
 from sortedcontainers import SortedSet
 from typing_extensions import Generic, Iterable, List, Self, TypeVar
 
+from krrood.patterns.subclass_safe_generic import SubClassSafeGeneric
+
 from probabilistic_model.exceptions import (
     EmptyCompositionError,
     MixtureOverDifferentVariablesError,
@@ -25,7 +27,7 @@ How a representation refers to one node of a circuit it holds.
 
 
 @dataclass
-class UnnormalizedMixture(Generic[NodeType]):
+class UnnormalizedMixture(Generic[NodeType], SubClassSafeGeneric):
     """
     A mixture of a circuit whose component weights do not sum to one.
     """
@@ -42,7 +44,7 @@ class UnnormalizedMixture(Generic[NodeType]):
 
 
 @dataclass
-class MixtureOverVariable(Generic[NodeType]):
+class MixtureOverVariable(Generic[NodeType], SubClassSafeGeneric):
     """
     One mixture of a circuit, seen through one variable it models.
     """
@@ -67,7 +69,9 @@ class MixtureOverVariable(Generic[NodeType]):
 
 
 @dataclass(eq=False)
-class ProbabilisticCircuitRepresentation(ProbabilisticModel, Generic[NodeType], ABC):
+class ProbabilisticCircuitRepresentation(
+    ProbabilisticModel, Generic[NodeType], SubClassSafeGeneric, ABC
+):
     """
     A way of representing a probabilistic circuit, which composes circuits of its own
     kind.

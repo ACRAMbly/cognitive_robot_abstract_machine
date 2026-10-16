@@ -1660,16 +1660,16 @@ class ProbabilisticCircuit(GroundableCircuit[Unit], SubclassJSONSerializer):
 
     def unnormalized_mixtures(
         self, tolerance: float = 1e-6
-    ) -> List[UnnormalizedMixture]:
+    ) -> List[UnnormalizedMixture[Unit]]:
         return [
-            UnnormalizedMixture(node.index, node.log_normalization_constant)
+            UnnormalizedMixture(node, node.log_normalization_constant)
             for node in self.nodes()
             if abs(node.log_normalization_constant) >= tolerance
         ]
 
     def mixtures_over(
         self, variables: SortedSet[Variable]
-    ) -> List[MixtureOverVariable]:
+    ) -> List[MixtureOverVariable[Unit]]:
         _ = self.support
         return [
             report
@@ -1692,7 +1692,7 @@ class ProbabilisticCircuit(GroundableCircuit[Unit], SubclassJSONSerializer):
             return []
         return [
             MixtureOverVariable(
-                unit.index,
+                unit,
                 variable,
                 [
                     component.result_of_current_query.marginal([variable])
