@@ -56,15 +56,9 @@ class ActionServerTask(
     Fully specified goal message that can be send out.
     """
 
-    # Class-level cache: (node_id, topic) → ActionClient
-    # This prevents creating a new ActionClient on every build() call, which
-    # races with the rclpy spin thread (spin calls get_num_entities() before
-    # ActionClient.__init__ has finished setting _lock).
-    _client_cache: dict = field(init=False, default=None)
-
     _action_client: ActionClient = field(init=False)
     """
-    ROS action client, retrieved from cache or created in `build`.
+    ROS action client, is created in `build`.
     """
 
     _msg: ActionGoal = field(init=False, default=None)
@@ -77,11 +71,6 @@ class ActionServerTask(
     ROS action server result.
     """
 
-    def __post_init__(self):
-        # Use a class-level dict so all instances share the same cache
-        if not hasattr(ActionServerTask, '_shared_client_cache'):
-            ActionServerTask._shared_client_cache = {}
-
     @abstractmethod
     def build_msg(self, context: MotionStatechartContext):
         """
@@ -91,7 +80,7 @@ class ActionServerTask(
 
     def build(self, context: MotionStatechartContext) -> NodeArtifacts:
         """
-        Creates (or reuses a cached) action client.
+        Creates the action client.
         """
         ros_context_extension = context.require_extension(RosContextExtension)
         self._action_client = ros_context_extension.get_or_create_action_client(
