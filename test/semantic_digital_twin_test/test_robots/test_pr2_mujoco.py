@@ -20,10 +20,10 @@ from ...pytest_environment import runs_in_continuous_integration
 from semantic_digital_twin.adapters.multi_sim import (
     MujocoBuilder,
     MujocoConnectionJoints,
-    MujocoNoJoint,
+    MujocoConnectionJoint,
+    MujocoFixedConnectionJoints,
     MujocoOmniDriveJoints,
     MujocoSim,
-    MujocoSingleJoint,
 )
 from semantic_digital_twin.datastructures.definitions import (
     GripperState,
@@ -193,8 +193,10 @@ def test_each_connection_is_built_by_the_realisation_for_its_type(pr2):
     )
 
     assert type(MujocoConnectionJoints.of(pr2.drive, world)) is MujocoOmniDriveJoints
-    assert type(MujocoConnectionJoints.of(revolute, world)) is MujocoSingleJoint
-    assert type(MujocoConnectionJoints.of(fixed, world)) is MujocoNoJoint
+    assert type(MujocoConnectionJoints.of(revolute, world)) is MujocoConnectionJoint
+    assert type(MujocoConnectionJoints.of(fixed, world)) is (
+        MujocoFixedConnectionJoints
+    )
 
 
 def test_a_drive_without_servos_keeps_the_base_where_it_is_built(pr2, tmp_path):

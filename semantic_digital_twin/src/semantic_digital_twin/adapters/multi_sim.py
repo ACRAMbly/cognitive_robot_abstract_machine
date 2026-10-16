@@ -4,6 +4,7 @@ import logging
 import inspect
 import hashlib
 import os
+import tempfile
 from typing import Tuple
 
 import time
@@ -17,11 +18,13 @@ from enum import IntEnum, IntFlag
 from types import NoneType
 from typing_extensions import (
     Dict,
+    Generic,
     List,
     Any,
     ClassVar,
     Iterator,
     Type,
+    TypeVar,
     Optional,
     Union,
 )
@@ -35,6 +38,8 @@ from physics_simulators.base_simulator import (
     SimulatorCallbackResult,
     SimulatorConstraints,
 )
+from krrood.exceptions import UnboundGenericParameter
+from krrood.patterns.subclass_safe_generic import SubClassSafeGeneric
 from krrood.utils import recursive_subclasses
 from scipy.spatial.transform import Rotation
 from trimesh.visual import TextureVisuals
@@ -1591,25 +1596,27 @@ class Mujoco6DOFJointConverter(MujocoJointConverter, Connection6DOFConverter):
     type: mujoco.mjtJoint = mujoco.mjtJoint.mjJNT_FREE
 
 
+ConnectionType = TypeVar("ConnectionType", bound=Connection)
+"""
+The type of connection a realisation realises.
+"""
+
+
 @dataclass
-class MujocoConnectionJoints(ABC):
+class MujocoConnectionJoints(Generic[ConnectionType], SubClassSafeGeneric, ABC):
     """
     How a connection is realised by the joints of a MuJoCo model: which joints it is
     built as, which values they start at, and which of them moves each of its degrees of
     freedom.
 
-    The builder looks up the realisation of a connection by the connection's type, so a
-    new kind of connection is simulated by adding a subclass for it instead of changing
-    the builder.
+    A realisation binds the type of connection it realises; a subclass of that type is
+    realised the same way unless a realisation for a more specific type exists. The
+    builder looks up the realisation of a connection by the connection's type, so a new
+    kind of connection is simulated by adding a subclass for it instead of changing the
+    builder.
     """
 
-    entity_type: ClassVar[Type[Connection]] = Connection
-    """
-    The type of connection realised; a subclass of it is realised the same way unless a
-    realisation for a more specific type exists.
-    """
-
-    connection: Connection
+    connection: ConnectionType
     """
     The connection realised.
     """
@@ -1638,11 +1645,15 @@ class MujocoConnectionJoints(ABC):
         :return: The realisation for the most specific type a connection of that type
             is of.
         """
-        realisation_by_type = {
-            realisation.entity_type: realisation
-            for realisation in recursive_subclasses(cls) + [cls]
-            if not inspect.isabstract(realisation)
-        }
+        realisation_by_type = {}
+        for realisation in recursive_subclasses(cls) + [cls]:
+            try:
+                realised_type = realisation.get_type_of_generic_parameter(
+                    ConnectionType
+                )
+            except UnboundGenericParameter:
+                continue
+            realisation_by_type[realised_type] = realisation
         for base_type in connection_type.__mro__:
             if base_type in realisation_by_type:
                 return realisation_by_type[base_type]
@@ -1659,7 +1670,7 @@ class MujocoConnectionJoints(ABC):
         """
 
     @abstractmethod
-    def home_qpos(self) -> List[float]:
+    def home_joint_positions(self) -> List[float]:
         """
         :return: The values the joints start at, in the order they are built in.
         """
@@ -1708,7 +1719,7 @@ class MujocoConnectionJoints(ABC):
 
 
 @dataclass
-class MujocoSingleJoint(MujocoConnectionJoints):
+class MujocoSingleJoint(MujocoConnectionJoints[ConnectionType]):
     """
     A connection built as the one joint :class:`MujocoJointConverter` converts it to,
     named after the connection.
@@ -1741,7 +1752,7 @@ class MujocoSingleJoint(MujocoConnectionJoints):
                 action="add",
             )
 
-    def home_qpos(self) -> List[float]:
+    def home_joint_positions(self) -> List[float]:
         return [
             self.world.state[degree_of_freedom.id].position
             for degree_of_freedom in self.connection.active_dofs
@@ -1753,38 +1764,47 @@ class MujocoSingleJoint(MujocoConnectionJoints):
 
 
 @dataclass
-class MujocoFreeJoint(MujocoSingleJoint):
+class MujocoConnectionJoint(MujocoSingleJoint[Connection]):
+    """
+    A connection no more specific realisation exists for, built as a single joint.
+    """
+
+
+@dataclass
+class MujocoFreeJoint(MujocoSingleJoint[Connection6DoF]):
     """
     A 6DoF connection, built as a free joint.
     """
 
-    entity_type: ClassVar[Type[Connection]] = Connection6DoF
-
-    def home_qpos(self) -> List[float]:
+    def home_joint_positions(self) -> List[float]:
         # A free joint's DOF state is relative to the connection frame and stays at the
         # identity by default; the body's actual placement lives in
         # parent_T_connection_expression instead. Reading the raw DOF state here would
         # bake a zero pose into the keyframe regardless of where the body is actually
         # placed, so use the fully evaluated origin instead.
-        px, py, pz, qx, qy, qz, qw = (
-            self.connection.origin_as_position_quaternion().evaluate()[0]
-        )
-        return [px, py, pz, qw, qx, qy, qz]
+        (
+            x,
+            y,
+            z,
+            quaternion_x,
+            quaternion_y,
+            quaternion_z,
+            quaternion_w,
+        ) = self.connection.origin_as_position_quaternion().evaluate()[0]
+        return [x, y, z, quaternion_w, quaternion_x, quaternion_y, quaternion_z]
 
 
 @dataclass
-class MujocoNoJoint(MujocoConnectionJoints):
+class MujocoNoJoint(MujocoConnectionJoints[ConnectionType]):
     """
-    A fixed connection, built as no joint at all: in MuJoCo, every body not connected
-    to its parent by a joint is fixed to it.
+    A connection built as no joint at all: in MuJoCo, every body not connected to its
+    parent by a joint is fixed to it.
     """
-
-    entity_type: ClassVar[Type[Connection]] = FixedConnection
 
     def build(self, builder: MujocoBuilder) -> None:
         pass
 
-    def home_qpos(self) -> List[float]:
+    def home_joint_positions(self) -> List[float]:
         return []
 
     def joint_name_of(self, degree_of_freedom: DegreeOfFreedom) -> str:
@@ -1795,16 +1815,21 @@ class MujocoNoJoint(MujocoConnectionJoints):
 
 
 @dataclass
-class MujocoDifferentialDriveJoints(MujocoNoJoint):
+class MujocoFixedConnectionJoints(MujocoNoJoint[FixedConnection]):
+    """
+    A fixed connection, built as no joint at all.
+    """
+
+
+@dataclass
+class MujocoDifferentialDriveJoints(MujocoNoJoint[DifferentialDrive]):
     """
     A differential drive, which is not simulated yet: its base stays where it is built.
     """
 
-    entity_type: ClassVar[Type[Connection]] = DifferentialDrive
-
 
 @dataclass
-class MujocoOmniDriveJoints(MujocoConnectionJoints):
+class MujocoOmniDriveJoints(MujocoConnectionJoints[OmniDrive]):
     """
     An omnidirectional drive. If servos drive the velocities it is commanded with, it is
     built as a slide along x, a slide along y and a hinge about z, all in the drive's
@@ -1812,10 +1837,6 @@ class MujocoOmniDriveJoints(MujocoConnectionJoints):
     velocity, and the positions the joints reach are the drive's odometry. Otherwise it
     is built as no joint at all and its base stays where it is built.
     """
-
-    entity_type: ClassVar[Type[Connection]] = OmniDrive
-
-    connection: OmniDrive
 
     @property
     def servoed(self) -> bool:
@@ -1882,7 +1903,7 @@ class MujocoOmniDriveJoints(MujocoConnectionJoints):
                 pos=child_T_connection[:3, 3].tolist(),
             )
 
-    def home_qpos(self) -> List[float]:
+    def home_joint_positions(self) -> List[float]:
         return [
             self.world.state[measured.id].position for _, measured, _, _ in self.axes
         ]
@@ -1937,16 +1958,16 @@ class MujocoOmniDriveJoints(MujocoConnectionJoints):
         :param simulator: The simulator running the model.
         :return: The drive's odometry: the x, y and yaw its joints have reached.
         """
-        mj_model = simulator._mj_model
+        model = simulator._mj_model
         measured_positions = {}
         for commanded, measured, _, _ in self.axes:
             joint_id = mujoco.mj_name2id(
-                mj_model, mujoco.mjtObj.mjOBJ_JOINT, self.joint_name_of(commanded)
+                model, mujoco.mjtObj.mjOBJ_JOINT, self.joint_name_of(commanded)
             )
             if joint_id == -1:
                 continue
             measured_positions[measured] = float(
-                simulator._mj_data.qpos[mj_model.jnt_qposadr[joint_id]]
+                simulator._mj_data.qpos[model.jnt_qposadr[joint_id]]
             )
         return measured_positions
 
@@ -2354,7 +2375,7 @@ class MujocoBuilder(MultiSimBuilder):
                 continue
             qpos += MujocoConnectionJoints.of(
                 body.parent_connection, self.world
-            ).home_qpos()
+            ).home_joint_positions()
         key_element.set("qpos", " ".join(map(str, qpos)))
         tree.write(file_path, encoding="utf-8", xml_declaration=True)
 
@@ -4021,9 +4042,15 @@ class MultiSim(ABC):
     The MultiSimSynchronizer instance.
     """
 
-    default_file_path: str
+    file_path: str
     """
-    The default file path to save the world to.
+    The file the world is saved to for the simulator to load.
+    """
+
+    _scene_directory: Optional[tempfile.TemporaryDirectory]
+    """
+    The temporary directory holding the scene file and its assets when no file path was
+    given, removed together with this simulation; ``None`` otherwise.
     """
 
     def __init__(
@@ -4031,20 +4058,32 @@ class MultiSim(ABC):
         world: World,
         headless: bool = False,
         step_size: float = 1e-3,
+        file_path: Optional[str] = None,
         **kwargs,
     ):
         """
         Initializes the MultiSim class.
 
         :param world: The world to simulate.
-        :param viewer: The MultiverseViewer to read/write objects.
         :param headless: Whether to run the simulation in headless mode.
         :param step_size: The step size for the simulation.
+        :param file_path: The file to save the world to. If not given, every simulation
+            saves its world to its own temporary directory, so that simulations built at
+            the same time, e.g. by parallel test workers, never overwrite each other's
+            scene.
         """
         self.world = world
-        self.builder_class().build_world(world=world, file_path=self.default_file_path)
+        if file_path is None:
+            self._scene_directory = tempfile.TemporaryDirectory(
+                prefix=f"{type(self).__name__.lower()}_"
+            )
+            file_path = os.path.join(self._scene_directory.name, "scene.xml")
+        else:
+            self._scene_directory = None
+        self.file_path = file_path
+        self.builder_class().build_world(world=world, file_path=self.file_path)
         self.simulator = self.simulator_class(
-            file_path=self.default_file_path,
+            file_path=self.file_path,
             _headless=headless,
             _step_size=step_size,
             config=kwargs,
@@ -4102,7 +4141,6 @@ class MujocoSim(MultiSim):
     builder_class: ClassVar[Type[MultiSimBuilder]] = MujocoBuilder
     simulator: MujocoSimulator
     synchronizer: MujocoSynchronizer
-    default_file_path: str = "/tmp/scene.xml"
 
     def start_stepped_simulation(self) -> None:
         """
