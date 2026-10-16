@@ -65,10 +65,7 @@ class ReachAction(ActionDescription, ReachTuningParameters, HasGraspDetectionThr
     """
     The grasp description that should be used for picking up the object.
     """
-
-    object_designator: Optional[Body] = None
-    """
-    Object designator_description describing the object that should be picked up.
+    The grasp the fingers should close on, which also names the object it is on.
     """
 
     reverse_reach_order: bool = False
