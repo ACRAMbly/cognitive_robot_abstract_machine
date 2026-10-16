@@ -997,14 +997,14 @@ class AbstractRobot(Agent, HasRobotParts, ABC):
     @property
     def is_in_collision(self) -> bool:
         """
-        :return: Whether any body of this robot is at or below the violated distance the
+        :return: Whether any body of this robot is below the violated distance the
             active collision rules set for it.
         """
         own_bodies = set(self.bodies_with_collision)
         collision_manager = self._world.collision_manager
         return any(
             contact.distance
-            <= collision_manager.get_violated_distance(contact.body_a, contact.body_b)
+            < collision_manager.get_violated_distance(contact.body_a, contact.body_b)
             for contact in collision_manager.compute_collisions().contacts
             if contact.body_a in own_bodies or contact.body_b in own_bodies
         )
