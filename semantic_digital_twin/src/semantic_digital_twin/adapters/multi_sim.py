@@ -5,6 +5,7 @@ import inspect
 import hashlib
 import os
 import tempfile
+from pathlib import Path
 from typing import Tuple
 
 import time
@@ -4042,7 +4043,7 @@ class MultiSim(ABC):
     The MultiSimSynchronizer instance.
     """
 
-    file_path: str
+    file_path: Path
     """
     The file the world is saved to for the simulator to load.
     """
@@ -4058,7 +4059,7 @@ class MultiSim(ABC):
         world: World,
         headless: bool = False,
         step_size: float = 1e-3,
-        file_path: Optional[str] = None,
+        file_path: Optional[Path] = None,
         **kwargs,
     ):
         """
@@ -4077,13 +4078,13 @@ class MultiSim(ABC):
             self._scene_directory = tempfile.TemporaryDirectory(
                 prefix=f"{type(self).__name__.lower()}_"
             )
-            file_path = os.path.join(self._scene_directory.name, "scene.xml")
+            file_path = Path(self._scene_directory.name) / "scene.xml"
         else:
             self._scene_directory = None
-        self.file_path = file_path
-        self.builder_class().build_world(world=world, file_path=self.file_path)
+        self.file_path = Path(file_path)
+        self.builder_class().build_world(world=world, file_path=str(self.file_path))
         self.simulator = self.simulator_class(
-            file_path=self.file_path,
+            file_path=str(self.file_path),
             _headless=headless,
             _step_size=step_size,
             config=kwargs,

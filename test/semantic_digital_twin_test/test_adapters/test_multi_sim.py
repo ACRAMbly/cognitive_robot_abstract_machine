@@ -137,18 +137,16 @@ def test_every_simulation_saves_its_world_to_a_file_of_its_own(tmp_path):
     """
     first = MujocoSim(world=World(), headless=True)
     second = MujocoSim(world=World(), headless=True)
-    chosen = MujocoSim(
-        world=World(), headless=True, file_path=str(tmp_path / "chosen.xml")
-    )
+    chosen = MujocoSim(world=World(), headless=True, file_path=tmp_path / "chosen.xml")
 
     assert first.file_path != second.file_path
-    assert os.path.isfile(first.file_path) and os.path.isfile(second.file_path)
-    assert chosen.file_path == str(tmp_path / "chosen.xml")
-    assert os.path.isfile(chosen.file_path)
+    assert first.file_path.is_file() and second.file_path.is_file()
+    assert chosen.file_path == tmp_path / "chosen.xml"
+    assert chosen.file_path.is_file()
 
-    first_scene_directory = os.path.dirname(first.file_path)
+    first_scene_directory = first.file_path.parent
     first._scene_directory.cleanup()
-    assert not os.path.exists(first_scene_directory)
+    assert not first_scene_directory.exists()
 
 
 def test_empty_multi_sim_in_5s():
@@ -157,7 +155,7 @@ def test_empty_multi_sim_in_5s():
 
     try:
         assert isinstance(multi_sim.simulator, MujocoSimulator)
-        assert multi_sim.simulator.file_path == multi_sim.file_path
+        assert multi_sim.simulator.file_path == str(multi_sim.file_path)
         assert multi_sim.simulator.headless is headless
         assert multi_sim.simulator.step_size == STEP_SIZE
 
@@ -176,7 +174,7 @@ def test_world_multi_sim_in_5s(test_urdf_1_world):
 
     try:
         assert isinstance(multi_sim.simulator, MujocoSimulator)
-        assert multi_sim.simulator.file_path == multi_sim.file_path
+        assert multi_sim.simulator.file_path == str(multi_sim.file_path)
         assert multi_sim.simulator.headless is headless
         assert multi_sim.simulator.step_size == STEP_SIZE
 
@@ -200,7 +198,7 @@ def test_apartment_multi_sim_in_5s():
 
     try:
         assert isinstance(multi_sim.simulator, MujocoSimulator)
-        assert multi_sim.simulator.file_path == multi_sim.file_path
+        assert multi_sim.simulator.file_path == str(multi_sim.file_path)
         assert multi_sim.simulator.headless is headless
         assert multi_sim.simulator.step_size == STEP_SIZE
 
@@ -219,7 +217,7 @@ def test_world_multi_sim_with_change(test_urdf_1_world):
 
     try:
         assert isinstance(multi_sim.simulator, MujocoSimulator)
-        assert multi_sim.simulator.file_path == multi_sim.file_path
+        assert multi_sim.simulator.file_path == str(multi_sim.file_path)
         assert multi_sim.simulator.headless is headless
         assert multi_sim.simulator.step_size == STEP_SIZE
 
@@ -732,7 +730,7 @@ def test_mujoco_with_tracy_dae_files():
 
     try:
         assert isinstance(multi_sim.simulator, MujocoSimulator)
-        assert multi_sim.simulator.file_path == multi_sim.file_path
+        assert multi_sim.simulator.file_path == str(multi_sim.file_path)
         assert multi_sim.simulator.headless is headless
         assert multi_sim.simulator.step_size == STEP_SIZE
 
@@ -770,7 +768,7 @@ def test_mujocosim_world_with_added_objects(test_urdf_1_world):
 
     try:
         assert isinstance(multi_sim.simulator, MujocoSimulator)
-        assert multi_sim.simulator.file_path == multi_sim.file_path
+        assert multi_sim.simulator.file_path == str(multi_sim.file_path)
         assert multi_sim.simulator.headless is headless
         assert multi_sim.simulator.step_size == STEP_SIZE
 
