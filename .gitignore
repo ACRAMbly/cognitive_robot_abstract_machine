@@ -197,3 +197,7 @@ basstler/board.json
 
 # FoundationPose model weights.
 /robokudo_foundation_pose/robokudo_foundation_pose/robokudo_foundation_pose/weights/
+
+# Recorded Orbbec pose results and diagnostic overlays.
+/orbbec_pose_results/
+/recorded_sensor_data/

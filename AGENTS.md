@@ -1,5 +1,7 @@
 # Code Quality Rules
 
+Before using Matt Pocock engineering skills, read `docs/agents/issue-tracker.md`, `docs/agents/triage-labels.md`, and `docs/agents/domain.md`.
+
 ## Avoid Behaviour
 - Avoid using global variables
 - Avoid accessing any ormatic_interface.py files. if there are issues regarding the ormatic interface run the script `scripts/regenerate_all_orm.py`. If it does not fix the issue, consider consulting the developer.
