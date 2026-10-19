@@ -1,5 +1,8 @@
 """
-The montessori demo carried out by the real Tracy, through giskard.
+The montessori demo carried out by the real Tracy, through giskard. Run it from this
+folder::
+
+    python real_demo.py
 
 The world is not built here but fetched from the running stack, so the robot the plan
 addresses is the one the controllers already hold, and a synchronizer keeps it in step
@@ -14,8 +17,9 @@ import subprocess
 import threading
 import time
 from contextlib import contextmanager
-from dataclasses import dataclass
-from typing import TYPE_CHECKING, Iterator
+from dataclasses import dataclass, field
+from datetime import timedelta
+from typing_extensions import Iterator
 
 import rclpy
 from rclpy.executors import MultiThreadedExecutor
@@ -24,13 +28,11 @@ from rclpy.node import Node
 from coraplex.datastructures.dataclasses import Context
 from coraplex.datastructures.enums import ExecutionType
 from coraplex.execution_environment import ExecutionEnvironment
+from demo import DemoRunner, ShapeSortingPlan
 from semantic_digital_twin.adapters.ros.world_fetcher import fetch_world_from_service
 from semantic_digital_twin.adapters.ros.world_synchronizer import WorldSynchronizer
 from semantic_digital_twin.robots.tracy import Tracy
 from semantic_digital_twin.world import World
-
-if TYPE_CHECKING:
-    from demo import MontessoriEnvironment
 
 
 @dataclass
@@ -51,56 +53,86 @@ class RunningRobot:
     """
 
 
-@contextmanager
-def running_robot() -> Iterator[RunningRobot]:
+@dataclass
+class RealRunner(DemoRunner):
     """
-    Bring the robot's controllers up and fetch the world they hold; shut them down when
-    the demo is done.
+    Carries the sorting plan out on the real robot, bringing its controllers up first.
+    """
 
-    :return: The running robot, for as long as the context lasts.
-    """
-    giskard_process = subprocess.Popen(
-        ["ros2", "launch", "giskardpy_ros", "giskardpy_tracy_standalone.launch.py"],
-        start_new_session=True,
+    controller_launch_command: list[str] = field(
+        default_factory=lambda: [
+            "ros2",
+            "launch",
+            "giskardpy_ros",
+            "giskardpy_tracy_standalone.launch.py",
+        ]
     )
-    # Give the controllers time to come up before anything talks to them.
-    time.sleep(8)
-    try:
-        rclpy.init()
-        node = rclpy.create_node("tracy_montessori_demo_real")
-        executor = MultiThreadedExecutor()
-        executor.add_node(node)
-        threading.Thread(
-            target=executor.spin, daemon=True, name="rclpy-executor"
-        ).start()
-
-        # As long as giskardpy's own client waits: the server may still be parsing the
-        # robot's description, and a shorter budget would expire.
-        world = fetch_world_from_service(node=node, timeout_seconds=300)
-        WorldSynchronizer(_world=world, node=node)
-        yield RunningRobot(world=world, node=node)
-    finally:
-        os.killpg(os.getpgid(giskard_process.pid), signal.SIGTERM)
-        giskard_process.wait()
-
-
-def run(environment: MontessoriEnvironment, robot: RunningRobot) -> None:
     """
-    Carry the sorting plan out on the real robot.
-
-    :param environment: The scene, its board and pieces already stood in the fetched
-        world.
-    :param robot: The running robot the scene was built in.
+    The command that brings the robot's controllers up.
     """
-    [tracy] = robot.world.get_semantic_annotations_by_type(Tracy)
-    context = Context(
-        world=robot.world,
-        robot=tracy,
-        ros_node=robot.node,
-        evaluate_conditions=False,
-    )
-    with ExecutionEnvironment(
-        execution_type=ExecutionType.REAL,
-        collision_avoidance=False,
-    ):
-        environment.build_plan(context).perform()
+
+    controller_start_up_time: timedelta = timedelta(seconds=8)
+    """
+    How long the controllers are given to come up before anything talks to them.
+    """
+
+    world_fetch_timeout: timedelta = timedelta(seconds=300)
+    """
+    How long fetching the world may take: as long as giskardpy's own client waits, since
+    the server may still be parsing the robot's description.
+    """
+
+    node_name: str = "tracy_montessori_demo_real"
+    """
+    The name of the demo's own ROS node.
+    """
+
+    def run(self) -> None:
+        with self.running_robot() as robot:
+            self.scene.populate(robot.world)
+            [tracy] = robot.world.get_semantic_annotations_by_type(Tracy)
+            context = Context(
+                world=robot.world,
+                robot=tracy,
+                ros_node=robot.node,
+                evaluate_conditions=False,
+            )
+            with ExecutionEnvironment(
+                execution_type=ExecutionType.REAL,
+                collision_avoidance=False,
+            ):
+                ShapeSortingPlan(scene=self.scene).build(context).perform()
+
+    @contextmanager
+    def running_robot(self) -> Iterator[RunningRobot]:
+        """
+        Bring the robot's controllers up and fetch the world they hold; shut them down
+        when the demo is done.
+
+        :return: The running robot, for as long as the context lasts.
+        """
+        controllers = subprocess.Popen(
+            self.controller_launch_command, start_new_session=True
+        )
+        time.sleep(self.controller_start_up_time.total_seconds())
+        try:
+            rclpy.init()
+            node = rclpy.create_node(self.node_name)
+            executor = MultiThreadedExecutor()
+            executor.add_node(node)
+            threading.Thread(
+                target=executor.spin, daemon=True, name="rclpy-executor"
+            ).start()
+
+            world = fetch_world_from_service(
+                node=node, timeout_seconds=self.world_fetch_timeout.total_seconds()
+            )
+            WorldSynchronizer(_world=world, node=node)
+            yield RunningRobot(world=world, node=node)
+        finally:
+            os.killpg(os.getpgid(controllers.pid), signal.SIGTERM)
+            controllers.wait()
+
+
+if __name__ == "__main__":
+    RealRunner().run()

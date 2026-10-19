@@ -2,46 +2,48 @@
 Tracy sorting the Montessori pieces from its table into the holes of the shape-sorting
 board.
 
-The scene and the plan are the same however the demo is carried out; only the execution
-type differs. Choose it at the bottom of this file, then run the file from its own
-folder::
+The scene and the plan are the same however the demo is carried out; only the runner
+differs. Run the runner for the execution type wanted from this folder::
 
-    python demo.py
+    python mujoco_demo.py  # physically simulated, in a MuJoCo viewer
+    python rviz_demo.py    # kinematically simulated, drawn in RViz
+    python real_demo.py    # on the real robot
 """
 
 from __future__ import annotations
 
 import copy
+from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import timedelta
-from typing import Dict
 
 from coraplex.datastructures.dataclasses import Context
-from coraplex.datastructures.enums import ExecutionType
 from coraplex.plans.factories import sequential
 from coraplex.plans.plan import Plan
 from coraplex.robot_plans.actions.core.pick_up import PickUpAction
 from coraplex.robot_plans.actions.core.placing import PlaceAction
 from coraplex.robot_plans.actions.core.robot_body import ParkArmsAction
-from montessori_board import BoardGeometry, HoleShape, board_body
+from montessori_board import HoleShape, ShapeSortingBoard
 from semantic_digital_twin.adapters.urdf import URDFParser
+from semantic_digital_twin.datastructures.definitions import StaticJointState
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
+from semantic_digital_twin.robots.robot_part_mixins import HasTwoFingers
+from semantic_digital_twin.robots.robot_parts import Arm
 from semantic_digital_twin.robots.tracy import Tracy
 from semantic_digital_twin.semantic_annotations.semantic_annotations import (
-    MontessoriPiece,
+    ShapeSortingPiece,
 )
 from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix, Pose
 from semantic_digital_twin.world import World
-from semantic_digital_twin.datastructures.definitions import StaticJointState
+from semantic_digital_twin.world_description.connections import (
+    Connection6DoF,
+    FixedConnection,
+)
 from semantic_digital_twin.world_description.contact import (
     ContactFriction,
     ContactImpedance,
     ContactParameters,
     ContactStiffness,
-)
-from semantic_digital_twin.world_description.connections import (
-    Connection6DoF,
-    FixedConnection,
 )
 from semantic_digital_twin.world_description.geometry import (
     Box,
@@ -54,29 +56,161 @@ from semantic_digital_twin.world_description.geometry import (
 from semantic_digital_twin.world_description.shape_collection import ShapeCollection
 from semantic_digital_twin.world_description.world_entity import Body
 
-# %% when the demo cannot run
+# %% the pieces
 
 
 @dataclass
-class DemoCannotBeCarriedOut(Exception):
+class ShapeSortingPieceSet:
     """
-    Raised when the demo is asked to run with an execution type it has no runner for.
-    """
-
-    execution_type: ExecutionType
-    """
-    The execution type asked for.
+    The loose pieces of the set, with the sizes and colours measured off the real set.
     """
 
-    def __str__(self) -> str:
-        return f"The demo cannot be carried out as {self.execution_type.name}."
+    piece_height: float = 0.03
+    """
+    How tall every piece of the set stands.
+    """
+
+    cube_edge_length: float = 0.03
+    """
+    Edge length of the cube, which goes through the square hole.
+    """
+
+    cylinder_diameter: float = 0.028
+    """
+    Diameter of the cylinder, which goes through a circular hole.
+    """
+
+    rectangular_prism_width: float = 0.02
+    """
+    Short side of the rectangular prism, which goes through the rectangular hole.
+    """
+
+    rectangular_prism_length: float = 0.04
+    """
+    Long side of the rectangular prism, along y as the rectangular hole's long side is.
+    """
+
+    triangular_prism_side: float = 0.037
+    """
+    Side of the triangular prism's equilateral cross-section, which goes through the
+    triangular hole.
+    """
+
+    def shapes(self) -> dict[HoleShape, Shape]:
+        """
+        :return: The shape of the piece that goes through each hole, turned the way that
+            hole is, in the order the pieces are sorted.
+        """
+        return {
+            HoleShape.SQUARE: Box(
+                scale=Scale(
+                    self.cube_edge_length, self.cube_edge_length, self.piece_height
+                ),
+                color=Color.CYAN(),
+            ),
+            HoleShape.CIRCLE: Cylinder(
+                width=self.cylinder_diameter,
+                height=self.piece_height,
+                color=Color.CYAN(),
+            ),
+            HoleShape.RECTANGLE: Box(
+                scale=Scale(
+                    self.rectangular_prism_width,
+                    self.rectangular_prism_length,
+                    self.piece_height,
+                ),
+                color=Color.YELLOW(),
+            ),
+            HoleShape.TRIANGLE: Mesh.triangular_prism(
+                self.triangular_prism_side, self.piece_height
+            ),
+        }
 
 
-# %% the scene the demo runs in
+# %% solid bodies
 
 
 @dataclass
-class MontessoriEnvironment:
+class SolidContact:
+    """
+    How the solid bodies of the scene push back once something touches them.
+
+    The wooden pieces, the board and the robot are solid, so nothing may sink into them;
+    MuJoCo's soft defaults let a firmly held piece sink several millimetres into the pads.
+    """
+
+    stiffness: ContactStiffness = field(
+        default_factory=lambda: ContactStiffness(
+            time_constant=timedelta(milliseconds=2), damping_ratio=1.0
+        )
+    )
+    """
+    As stiff as a physics engine stepping every millisecond stays stable at: a time
+    constant of two steps, where MuJoCo's default is 20 ms.
+    """
+
+    impedance: ContactImpedance = field(
+        default_factory=lambda: ContactImpedance(
+            minimum=0.99, maximum=0.999, width=0.001
+        )
+    )
+    """
+    How little the solid bodies give way under load: nearly not at all.
+    """
+
+    def with_friction(self, friction: ContactFriction) -> ContactParameters:
+        """
+        :param friction: The friction the surface offers.
+        :return: The contact of a solid surface offering ``friction``.
+        """
+        return ContactParameters(
+            friction=friction, stiffness=self.stiffness, impedance=self.impedance
+        )
+
+
+# %% gripping a piece
+
+
+@dataclass
+class PieceGrip:
+    """
+    How low on a piece the sorting gripper takes hold of it.
+    """
+
+    closed_pad_clearance: float = 0.005
+    """
+    How far the closed finger pads stay above what a gripped piece stands on.
+    """
+
+    def grasp_height(self, gripper: HasTwoFingers) -> float:
+        """
+        A grasp is aimed at where the closed fingers meet. The pads reach further along
+        the gripper than that point: open, they end at the tool frame, as on Tracy's
+        Robotiq gripper, and closing carries them
+        :attr:`~semantic_digital_twin.robots.robot_part_mixins.HasTwoFingers.travel_when_closing`
+        further. Gripped this high, the closed pads stay :attr:`closed_pad_clearance`
+        above what the piece stands on, and the piece hangs as little as possible below
+        them when it is let go of over its hole.
+
+        :param gripper: The gripper that takes hold of the pieces.
+        :return: How far above its bottom face a piece is gripped, at the point the
+            closed fingers meet.
+        """
+        tool_frame_above_the_meeting_point = -float(
+            gripper.tool_P_grasp_when_closed.vector3.dot(gripper.approach_axis)
+        )
+        return (
+            self.closed_pad_clearance
+            + gripper.travel_when_closing
+            + tool_frame_above_the_meeting_point
+        )
+
+
+# %% the scene
+
+
+@dataclass
+class MontessoriScene:
     """
     Tracy's table, with the shape-sorting board standing on it and a row of loose pieces
     in front of the board, each to be sorted into the hole it fits through.
@@ -118,147 +252,53 @@ class MontessoriEnvironment:
     its neighbour.
     """
 
-    release_height: float = 0.01
-    """
-    How far above the board's lid a piece is let go of, so it drops into its hole rather
-    than being pushed against the lid.
-    """
-
     resting_clearance: float = 0.001
     """
     Gap left between a piece and what it stands on, so it rests rather than intersects.
     """
 
-    piece_height: float = 0.03
+    pieces: ShapeSortingPieceSet = field(default_factory=ShapeSortingPieceSet)
     """
-    How tall every piece of the set stands.
-    """
-
-    cube_edge_length: float = 0.03
-    """
-    Edge length of the cube, which goes through the square hole.
+    The loose pieces.
     """
 
-    cylinder_diameter: float = 0.028
+    solid_contact: SolidContact = field(default_factory=SolidContact)
     """
-    Diameter of the cylinder, which goes through a circular hole.
-    """
-
-    rectangular_prism_width: float = 0.02
-    """
-    Short side of the rectangular prism, which goes through the rectangular hole.
+    How the robot, the board and the pieces push back once touched.
     """
 
-    rectangular_prism_length: float = 0.04
+    grip: PieceGrip = field(default_factory=PieceGrip)
     """
-    Long side of the rectangular prism, along y as the rectangular hole's long side is.
-    """
-
-    triangular_prism_side: float = 0.037
-    """
-    Side of the triangular prism's equilateral cross-section, which goes through the
-    triangular hole.
+    How low on a piece the sorting gripper takes hold of it.
     """
 
-    finger_pad_closing_travel: float = 0.0135
+    shape_sorting_board: ShapeSortingBoard = field(default_factory=ShapeSortingBoard)
     """
-    How far Tracy's finger pads move out along the gripper's reach as it closes.
-
-    Measured on the robot's own description: open, the pads end at the tool frame;
-    closed, 13.5 mm past it. The Robotiq linkage swings the pads down onto whatever the
-    hand is lowered over.
-    """
-
-    closed_pad_clearance: float = 0.005
-    """
-    How far the closed finger pads stay above what a grasped piece stands on.
-    """
-
-    solid_contact_stiffness: ContactStiffness = field(
-        default_factory=lambda: ContactStiffness(
-            time_constant=timedelta(milliseconds=2), damping_ratio=1.0
-        )
-    )
-    """
-    How stiffly the solid bodies of the scene push back once something touches them: as
-    stiffly as a physics engine stepping every millisecond stays stable at, a time
-    constant of two steps.
-
-    The wooden pieces, the board and the robot are solid, so nothing may sink into them;
-    MuJoCo's default of 20 ms lets a firmly held piece sink several millimetres into the
-    pads.
-    """
-
-    solid_contact_impedance: ContactImpedance = field(
-        default_factory=lambda: ContactImpedance(
-            minimum=0.99, maximum=0.999, width=0.001
-        )
-    )
-    """
-    How little the solid bodies of the scene give way under load: nearly not at all.
-    """
-
-    board_geometry: BoardGeometry = field(default_factory=BoardGeometry.from_mesh)
-    """
-    The board's holes and lid, read off its mesh.
+    The board, as read off its mesh, and the body it becomes.
     """
 
     board: Body = field(init=False)
     """
-    The board, once :meth:`populate` has stood it on the table.
+    The board's body, once :meth:`populate` has stood it on the table.
     """
 
-    holes_of_pieces: Dict[MontessoriPiece, HoleShape] = field(
+    holes_of_pieces: dict[ShapeSortingPiece, HoleShape] = field(
         init=False, default_factory=dict
     )
     """
     The hole each loose piece is sorted into, in the order the pieces are sorted.
     """
 
-    @property
-    def grasp_height(self) -> float:
+    @staticmethod
+    def sorting_arm(tracy: Tracy) -> Arm:
         """
-        How far above its bottom face a piece is gripped.
+        :param tracy: The robot.
+        :return: The arm that sorts the pieces: the left one, as in every Tracy demo in
+            this repository.
+        """
+        return tracy.left_arm
 
-        A grasp brings the tool frame to the grasp point, and the pads end there while
-        the hand is open; closing, they travel :attr:`finger_pad_closing_travel` further
-        down. Gripped this high, the closed pads stay :attr:`closed_pad_clearance` above
-        the table. Gripped at its middle instead, the closing pads would reach below the
-        piece's bottom face and press into the table.
-        """
-        return self.finger_pad_closing_travel + self.closed_pad_clearance
-
-    def piece_shapes(self) -> Dict[HoleShape, Shape]:
-        """
-        :return: The shape of the piece that goes through each hole, turned the way that
-            hole is, in the order the pieces are sorted.
-        """
-        return {
-            HoleShape.SQUARE: Box(
-                scale=Scale(
-                    self.cube_edge_length, self.cube_edge_length, self.piece_height
-                ),
-                color=Color.CYAN(),
-            ),
-            HoleShape.CIRCLE: Cylinder(
-                width=self.cylinder_diameter,
-                height=self.piece_height,
-                color=Color.CYAN(),
-            ),
-            HoleShape.RECTANGLE: Box(
-                scale=Scale(
-                    self.rectangular_prism_width,
-                    self.rectangular_prism_length,
-                    self.piece_height,
-                ),
-                color=Color.YELLOW(),
-            ),
-            HoleShape.TRIANGLE: Mesh.triangular_prism(
-                self.triangular_prism_side, self.piece_height
-            ),
-        }
-
-    def get_world(self) -> World:
+    def build_world(self) -> World:
         """
         Create a world holding Tracy, read from its own description, which also equips
         its arms and grippers with the servos a physical simulation needs, with its arms
@@ -267,25 +307,18 @@ class MontessoriEnvironment:
 
         A contact is as soft as the softer of the two shapes in it, so a solid piece held
         between soft pads would still sink into them.
+
+        :return: The world.
         """
         world = URDFParser.from_file(Tracy.get_ros_file_path()).parse()
-        robot = Tracy.from_world(world)
-        self.solid(ContactFriction()).apply_to(world.bodies_with_collision)
-        for arm in robot.all_arms:
+        tracy = Tracy.from_world(world)
+        self.solid_contact.with_friction(ContactFriction()).apply_to(
+            world.bodies_with_collision
+        )
+        for arm in tracy.all_arms:
             arm.get_joint_state_by_type(StaticJointState.PARK).apply_to(world)
         self.populate(world)
         return world
-
-    def solid(self, friction: ContactFriction) -> ContactParameters:
-        """
-        :param friction: The friction the surface offers.
-        :return: The contact of a solid surface offering ``friction``.
-        """
-        return ContactParameters(
-            friction=friction,
-            stiffness=self.solid_contact_stiffness,
-            impedance=self.solid_contact_impedance,
-        )
 
     def populate(self, world: World) -> None:
         """
@@ -296,53 +329,19 @@ class MontessoriEnvironment:
 
         :param world: The world holding Tracy.
         """
+        [tracy] = world.get_semantic_annotations_by_type(Tracy)
+        grasp_height = self.grip.grasp_height(self.sorting_arm(tracy).end_effector)
         with world.modify_world():
             self._stand_the_board(world)
-            for index, (hole, shape) in enumerate(self.piece_shapes().items()):
+            for index, (hole, shape) in enumerate(self.pieces.shapes().items()):
                 piece = self._stand_piece(
                     world,
                     PrefixedName(f"{hole}_piece"),
                     shape,
                     self.piece_row_start_y + index * self.piece_row_spacing,
+                    grasp_height,
                 )
                 self.holes_of_pieces[piece] = hole
-
-    def build_plan(self, context: Context) -> Plan:
-        """
-        Pick every piece up in turn and let it go over the hole it fits through.
-
-        The plan begins by parking the arms: a simulated Tracy starts parked already, the
-        real one wherever it was left.
-
-        :param context: The context the actions are built in.
-        :return: The plan that sorts the pieces.
-        """
-        robot = context.robot
-        actions = [ParkArmsAction(robot.all_arms)]
-        for piece, hole in self.holes_of_pieces.items():
-            [grasp] = piece.grasp_candidates()
-            actions.append(PickUpAction(grasp, robot.left_arm))
-            actions.append(
-                PlaceAction(piece, self.release_pose_over(hole, context.world))
-            )
-        actions.append(ParkArmsAction(robot.all_arms))
-        return sequential(actions, context=context).plan
-
-    def release_pose_over(self, hole: HoleShape, world: World) -> Pose:
-        """
-        :param hole: The hole a piece is sorted into.
-        :param world: The world the board stands in.
-        :return: Where that piece is let go of: straight above the hole and turned the
-            way it is, :attr:`release_height` above the lid.
-        """
-        hole_x, hole_y = self.board_geometry.hole_of_shape(hole).bounding_box_center
-        board_T_release = Pose.from_xyz_rpy(
-            hole_x,
-            hole_y,
-            self.board_geometry.lid_top + self.release_height + self.piece_height / 2,
-            reference_frame=self.board,
-        )
-        return world.transform(board_T_release, world.root)
 
     def _stand_the_board(self, world: World) -> None:
         """
@@ -350,10 +349,8 @@ class MontessoriEnvironment:
 
         :param world: The world being built, already open for modification.
         """
-        self.board = board_body(
-            PrefixedName("shape_sorting_board"), self.board_geometry
-        )
-        self.solid(ContactFriction()).apply_to([self.board])
+        self.board = self.shape_sorting_board.body(PrefixedName("shape_sorting_board"))
+        self.solid_contact.with_friction(ContactFriction()).apply_to([self.board])
         world.add_kinematic_structure_entity(self.board)
         world.add_connection(
             FixedConnection.create_with_dofs(
@@ -364,14 +361,19 @@ class MontessoriEnvironment:
                 parent_T_connection_expression=HomogeneousTransformationMatrix.from_xyz_rpy(
                     self.board_x,
                     self.board_y,
-                    self.table_top_z - self.board_geometry.bottom,
+                    self.table_top_z - self.shape_sorting_board.geometry.bottom,
                 ),
             )
         )
 
     def _stand_piece(
-        self, world: World, name: PrefixedName, shape: Shape, row_y: float
-    ) -> MontessoriPiece:
+        self,
+        world: World,
+        name: PrefixedName,
+        shape: Shape,
+        row_y: float,
+        grasp_height: float,
+    ) -> ShapeSortingPiece:
         """
         Stand one loose piece in the row in front of Tracy.
 
@@ -379,6 +381,7 @@ class MontessoriEnvironment:
         :param name: The name the piece's body carries.
         :param shape: The piece's geometry, centred on its own origin.
         :param row_y: Where along the row it stands.
+        :param grasp_height: How far above its bottom face the piece is gripped.
         :return: The piece.
         """
         body = Body(name=name)
@@ -395,49 +398,99 @@ class MontessoriEnvironment:
                 parent_T_connection_expression=HomogeneousTransformationMatrix.from_xyz_rpy(
                     self.piece_row_x,
                     row_y,
-                    self.table_top_z + self.resting_clearance + self.piece_height / 2,
+                    self.table_top_z
+                    + self.resting_clearance
+                    + self.pieces.piece_height / 2,
                 ),
             )
         )
-        self.solid(ContactParameters.create_for_grasped_object().friction).apply_to(
-            [body]
-        )
-        piece = MontessoriPiece(root=body, grasp_height=self.grasp_height)
+        self.solid_contact.with_friction(
+            ContactParameters.create_for_grasped_object().friction
+        ).apply_to([body])
+        piece = ShapeSortingPiece(root=body, grasp_height=grasp_height)
         world.add_semantic_annotations([piece])
         return piece
+
+
+# %% the plan
+
+
+@dataclass
+class ShapeSortingPlan:
+    """
+    The plan that picks every piece of a scene up in turn and lets it go over the hole it
+    fits through.
+    """
+
+    scene: MontessoriScene
+    """
+    The scene whose pieces are sorted.
+    """
+
+    release_height: float = 0.01
+    """
+    How far above the board's lid a piece is let go of, so it drops into its hole rather
+    than being pushed against the lid.
+    """
+
+    def build(self, context: Context) -> Plan:
+        """
+        The plan begins by parking the arms: a simulated Tracy starts parked already, the
+        real one wherever it was left.
+
+        :param context: The context the actions are built in.
+        :return: The plan that sorts the pieces.
+        """
+        robot = context.robot
+        actions = [ParkArmsAction(robot.all_arms)]
+        for piece, hole in self.scene.holes_of_pieces.items():
+            [grasp] = piece.grasp_candidates()
+            actions.append(PickUpAction(grasp, self.scene.sorting_arm(robot)))
+            actions.append(
+                PlaceAction(piece, self.release_pose_over(hole, context.world))
+            )
+        actions.append(ParkArmsAction(robot.all_arms))
+        return sequential(actions, context=context).plan
+
+    def release_pose_over(self, hole: HoleShape, world: World) -> Pose:
+        """
+        :param hole: The hole a piece is sorted into.
+        :param world: The world the board stands in.
+        :return: Where that piece is let go of: straight above the hole,
+            :attr:`release_height` above the lid. The piece keeps the orientation it
+            stood in, which is the hole's.
+        """
+        center = self.scene.shape_sorting_board.geometry.hole_of_shape(
+            hole
+        ).bounds.center
+        board_T_release = Pose.from_xyz_rpy(
+            center.x,
+            center.y,
+            self.scene.shape_sorting_board.geometry.lid_top
+            + self.release_height
+            + self.scene.pieces.piece_height / 2,
+            reference_frame=self.scene.board,
+        )
+        return world.transform(board_T_release, world.root)
 
 
 # %% running it
 
 
-def main(execution_type: ExecutionType) -> None:
+@dataclass
+class DemoRunner(ABC):
     """
-    Carry the demo out the way ``execution_type`` names.
-
-    Each runner is imported only once it is chosen, so a run needs nothing installed for
-    the execution types it does not use.
-
-    :param execution_type: How the plan is carried out.
+    Carries the sorting plan out in one way: physically simulated, kinematically
+    simulated, or on the real robot.
     """
-    environment = MontessoriEnvironment()
-    match execution_type:
-        case ExecutionType.PHYSICALLY_SIMULATED:
-            import mujoco_demo
 
-            mujoco_demo.run(environment, environment.get_world())
-        case ExecutionType.KINEMATICALLY_SIMULATED:
-            import rviz_demo
+    scene: MontessoriScene = field(default_factory=MontessoriScene)
+    """
+    The scene the pieces are sorted in.
+    """
 
-            rviz_demo.run(environment, environment.get_world())
-        case ExecutionType.REAL:
-            import real_demo
-
-            with real_demo.running_robot() as robot:
-                environment.populate(robot.world)
-                real_demo.run(environment, robot)
-        case _:
-            raise DemoCannotBeCarriedOut(execution_type)
-
-
-if __name__ == "__main__":
-    main(ExecutionType.KINEMATICALLY_SIMULATED)
+    @abstractmethod
+    def run(self) -> None:
+        """
+        Build the scene, build the plan that sorts its pieces, and carry the plan out.
+        """

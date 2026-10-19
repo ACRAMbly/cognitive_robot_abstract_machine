@@ -1452,9 +1452,9 @@ class Pen(HasGraspCandidates):
 
 
 @dataclass(eq=False)
-class MontessoriPiece(HasGraspCandidates):
+class ShapeSortingPiece(HasGraspCandidates):
     """
-    A loose piece of a Montessori shape-sorting toy, which drops through the hole of its
+    A loose piece of a shape-sorting toy, which drops through the hole of its
     own outline.
     """
 
