@@ -290,17 +290,11 @@ class SupportRegion:
 @dataclass
 class CausalCircuit(Generic[RepresentationType], SubClassSafeGeneric):
     """
-    A circuit extended with exact, tractable causal inference using the marginal
-    determinism framework. The Marginal Determinism Variable Tree structure groups the
-    registered cause variables for the support-determinism check that enables polytime
-    backdoor adjustment for any valid adjustment set Z; it does not represent the causal
-    graph itself, which the caller supplies implicitly by registering causal_variables,
-    effect_variables, and an adjustment set known to satisfy the backdoor criterion.
+    A circuit that answers what the effect's distribution becomes when the cause is
+    intervened on.
 
-    The circuit is read and the interventional circuit is built through the operations
-    every representation offers, so the same inference runs on a graph of units and on a
-    stack of layers alike, and the interventional circuit comes back in the type it was
-    read from.
+    The interventional circuit comes back in the representation the circuit was read
+    from.
     """
 
     probabilistic_circuit: RepresentationType
@@ -749,22 +743,9 @@ class CausalCircuit(Generic[RepresentationType], SubClassSafeGeneric):
         base_circuit: RepresentationType = None,
     ) -> List[SupportRegion]:
         """
-        Return a :class:`SupportRegion` for each structurally disjoint support region of
-        variable, read from the circuit's unmarginalized joint support.
-
-        Reads variable's value directly off the joint support's own disjoint simple
-        sets, rather than marginalizing down to variable alone first: marginalizing
-        first would coalesce separate mixture branches into one region, which
-        `backdoor_adjustment` cannot use since it builds one product per region here,
-        pairing each region's own cause branch with its own effect branch. Support
-        determinism (see `verify_support_determinism`) guarantees these branches are
-        genuinely disjoint, so the regions returned here correspond to actual circuit
-        branches rather than an arbitrary decomposition.
-
-        A single branch can itself hold several of the variable's ranges or values, so
-        `_split_into_atomic_values` splits each branch's value into its elements and the
-        regions are grouped by element. A range two branches both hold is then one
-        region carrying the probability of both, not one region per branch.
+        The disjoint support regions a variable takes, one per distinct value the
+        circuit's branches hold, each carrying the probability of every branch holding
+        it.
 
         :param variable: The Variable whose disjoint support regions to extract.
         :param base_circuit: Circuit to query. Defaults to self.probabilistic_circuit.
@@ -818,18 +799,10 @@ class CausalCircuit(Generic[RepresentationType], SubClassSafeGeneric):
         interventional_circuit: RepresentationType,
     ) -> Optional[Event]:
         """
-        Return the structurally disjoint support region of variable (see
-        `_extract_disjoint_regions_for_variable`) with the highest interventional
-        probability, or None if no regions are found.
+        The disjoint support region of a variable the interventional circuit gives the
+        highest probability, or None where it has none.
 
-        The disjoint counterpart of `_best_region`: use this when telling one mixture
-        branch's region apart from another's matters (for example, ranking several
-        candidate cause Variables against each other), since `_best_region` cannot --
-        its regions come from `_extract_leaf_regions_for_variable`, which always
-        collapses to variable's whole support as a single region.
-
-        Regions of equal probability are decided by the order they come in, which is the
-        order of their values.
+        Regions of equal probability are decided by the order of their values.
 
         :param variable: The Variable whose disjoint support regions to search.
         :param interventional_circuit: Joint circuit used to score each region.
