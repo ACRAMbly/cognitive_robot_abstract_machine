@@ -1504,26 +1504,31 @@ class OrthogonalProjection:
     :class:`Point2` ``p`` on the plane, ``project(embed(p, h)) == p``. The reverse,
     ``embed(project(q), h) == q``, holds only for a :class:`Point3` ``q`` whose
     z-coordinate in :attr:`plane_frame` is ``h``.
-
-    .. seealso::
-        G. Strang, *Introduction to Linear Algebra*, 5th ed., Wellesley-Cambridge
-        Press, 2016, Section 4.2 "Projections", for orthogonal projection onto a
-        subspace. S. Mac Lane, *Categories for the Working Mathematician*, 2nd ed.,
-        Springer, 1998, Section I.5, for right inverses.
     """
 
     plane_frame: KinematicStructureEntity | None
     """
-    The frame whose x-y plane points are projected onto, or ``None`` for the plane of
-    points that have no reference frame.
+    The frame whose x-y plane points are projected onto.
+
+    ``None`` is the plane of points that have no reference frame. Their coordinates
+    are taken as they are, so such a projection only relates points without a
+    reference frame to each other.
     """
 
     def project(self, point: Point3) -> Point2:
         """
         :param point: A point in :attr:`plane_frame` or in any frame of its world.
         :return: The point on the plane directly below or above ``point``.
+        :raises ReferenceFrameMismatchError: If exactly one of ``point`` and this
+            projection has no reference frame.
         """
         if point.reference_frame is not self.plane_frame:
+            if point.reference_frame is None or self.plane_frame is None:
+                raise ReferenceFrameMismatchError(
+                    expected_frame=self.plane_frame,
+                    actual_frame=point.reference_frame,
+                    context="the projected Point3",
+                )
             point = self.plane_frame._world.transform(point, self.plane_frame)
         return Point2(point.x, point.y, reference_frame=self.plane_frame)
 

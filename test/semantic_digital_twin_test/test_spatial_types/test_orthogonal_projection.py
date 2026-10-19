@@ -135,6 +135,48 @@ class TestInverseLaws:
         np.testing.assert_allclose(round_trip.to_np()[:3], [*point.to_np()[:2], height])
 
 
+# %% plane without reference frame
+
+
+class TestPlaneWithoutReferenceFrame:
+    """
+    A projection with no :attr:`OrthogonalProjection.plane_frame` relates only points
+    that have no reference frame either.
+    """
+
+    def test_projects_a_point_without_reference_frame(self):
+        point = Point3(1.0, 2.0, 3.0)
+
+        projected = OrthogonalProjection(None).project(point)
+
+        assert projected.reference_frame is None
+        np.testing.assert_allclose(projected.to_np(), point.to_np()[:2])
+
+    def test_rejects_projecting_a_point_with_reference_frame(self):
+        point = Point3(1.0, 2.0, 3.0, reference_frame=Body(name=PrefixedName("world")))
+
+        with pytest.raises(ReferenceFrameMismatchError):
+            OrthogonalProjection(None).project(point)
+
+    def test_rejects_embedding_a_point_with_reference_frame(self):
+        point = Point2(1.0, 2.0, reference_frame=Body(name=PrefixedName("world")))
+
+        with pytest.raises(ReferenceFrameMismatchError):
+            OrthogonalProjection(None).embed(point)
+
+    def test_plane_with_reference_frame_rejects_projecting_a_point_without_one(self):
+        frame = Body(name=PrefixedName("world"))
+
+        with pytest.raises(ReferenceFrameMismatchError):
+            OrthogonalProjection(frame).project(Point3(1.0, 2.0, 3.0))
+
+    def test_plane_with_reference_frame_rejects_embedding_a_point_without_one(self):
+        frame = Body(name=PrefixedName("world"))
+
+        with pytest.raises(ReferenceFrameMismatchError):
+            OrthogonalProjection(frame).embed(Point2(1.0, 2.0))
+
+
 # %% preimage
 
 
