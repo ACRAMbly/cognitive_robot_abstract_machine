@@ -1459,9 +1459,16 @@ class OrthogonalProjection:
     The orthogonal projection of 3D space onto the x-y plane of one frame, together
     with its right inverse.
 
-    For every :class:`Point2` ``p`` on the plane, ``project(embed(p)) == p``. The
-    reverse, ``embed(project(q)) == q``, holds only for a :class:`Point3` ``q`` that
-    already lies on the plane at the chosen height.
+    :meth:`embed` at any height is a right inverse of :meth:`project`: for every
+    :class:`Point2` ``p`` on the plane, ``project(embed(p, h)) == p``. The reverse,
+    ``embed(project(q), h) == q``, holds only for a :class:`Point3` ``q`` whose
+    z-coordinate in :attr:`plane_frame` is ``h``.
+
+    .. seealso::
+        G. Strang, *Introduction to Linear Algebra*, 5th ed., Wellesley-Cambridge
+        Press, 2016, Section 4.2 "Projections", for orthogonal projection onto a
+        subspace. S. Mac Lane, *Categories for the Working Mathematician*, 2nd ed.,
+        Springer, 1998, Section I.5, for right inverses.
     """
 
     plane_frame: KinematicStructureEntity | None

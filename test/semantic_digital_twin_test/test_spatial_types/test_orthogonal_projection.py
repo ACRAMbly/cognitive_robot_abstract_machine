@@ -97,6 +97,18 @@ class TestEmbed:
 
         np.testing.assert_allclose(round_trip.to_np(), point.to_np())
 
+    def test_restores_a_point_only_at_the_embedding_height(self):
+        frame = Body(name=PrefixedName("world"))
+        projection = OrthogonalProjection(frame)
+        point_at_height = Point3(1.0, 2.0, 4.0, reference_frame=frame)
+        point_elsewhere = Point3(1.0, 2.0, 3.0, reference_frame=frame)
+
+        restored = projection.embed(projection.project(point_at_height), height=4.0)
+        moved = projection.embed(projection.project(point_elsewhere), height=4.0)
+
+        np.testing.assert_allclose(restored.to_np(), point_at_height.to_np())
+        np.testing.assert_allclose(moved.to_np(), point_at_height.to_np())
+
     def test_point_on_another_plane_is_rejected(self):
         frame = Body(name=PrefixedName("world"))
         other_frame = Body(name=PrefixedName("other"))
