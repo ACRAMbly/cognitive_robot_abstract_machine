@@ -1371,7 +1371,8 @@ class Point2(Point):
     Stored as a bare 2×1 symbolic vector ``[x, y]``, with no homogeneous augmentation --
     the same convention :class:`Pose2D` uses. The point lies on its reference frame's
     own x-y plane and has no height; it relates to 3D space only through an
-    :class:`OrthogonalProjection` onto that plane.
+    :class:`OrthogonalProjection` onto that plane, which :meth:`from_point3`,
+    :meth:`from_pose` and :meth:`to_point3` apply.
     """
 
     def __init__(
@@ -1394,6 +1395,50 @@ class Point2(Point):
             raise WrongDimensionsError(
                 expected_dimensions=(2, 1), actual_dimensions=self.shape
             )
+
+    @classmethod
+    def from_point3(
+        cls,
+        point: Point3,
+        plane_frame: KinematicStructureEntity | None = None,
+    ) -> Point2:
+        """
+        The :meth:`OrthogonalProjection.project` of ``point`` onto the x-y plane of
+        ``plane_frame``.
+
+        :param point: The point to project.
+        :param plane_frame: The frame whose x-y plane to project onto. Defaults to
+            ``point``'s reference frame.
+        :return: The point on the plane directly below or above ``point``.
+        """
+        frame = plane_frame if plane_frame is not None else point.reference_frame
+        return OrthogonalProjection(frame).project(point)
+
+    @classmethod
+    def from_pose(
+        cls,
+        pose: Pose,
+        plane_frame: KinematicStructureEntity | None = None,
+    ) -> Point2:
+        """
+        The :meth:`from_point3` of ``pose``'s position.
+
+        :param pose: The pose whose position to project.
+        :param plane_frame: The frame whose x-y plane to project onto. Defaults to
+            ``pose``'s reference frame.
+        :return: The point on the plane directly below or above ``pose``.
+        """
+        return cls.from_point3(pose.position, plane_frame)
+
+    def to_point3(self, height: sm.ScalarData = 0) -> Point3:
+        """
+        The :meth:`OrthogonalProjection.embed` of this point into its own reference
+        frame.
+
+        :param height: The z-coordinate the point is placed at.
+        :return: The 3D point at ``height`` above this point.
+        """
+        return OrthogonalProjection(self.reference_frame).embed(self, height)
 
     @classmethod
     def _from_constant_json(cls, data: Dict[str, Any], **kwargs) -> Self:
@@ -1424,11 +1469,7 @@ class Point2(Point):
             reference frame to the frame it should be expressed in.
         :return: The point in the transformation's reference frame.
         """
-        reference_frame_P_point = OrthogonalProjection(self.reference_frame).embed(self)
-        target_frame_P_point = target_frame_T_reference_frame @ reference_frame_P_point
-        return OrthogonalProjection(target_frame_P_point.reference_frame).project(
-            target_frame_P_point
-        )
+        return Point2.from_point3(target_frame_T_reference_frame @ self.to_point3())
 
     def __hash__(self):
         if self.is_constant():

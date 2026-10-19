@@ -41,7 +41,6 @@ from semantic_digital_twin.exceptions import MalformedHexColor
 from semantic_digital_twin.mixin import HasSimulatorProperties
 from semantic_digital_twin.spatial_types import (
     HomogeneousTransformationMatrix,
-    OrthogonalProjection,
     Point,
     Point2,
     Point3,
@@ -1449,11 +1448,7 @@ class AxisAlignedBox(Generic[PointT], SubClassSafeGeneric, ABC):
 
         list_self_T_corner = [
             HomogeneousTransformationMatrix.from_point_rotation_matrix(
-                (
-                    OrthogonalProjection(corner.reference_frame).embed(corner)
-                    if isinstance(corner, Point2)
-                    else corner
-                )
+                corner.to_point3() if isinstance(corner, Point2) else corner
             ).to_np()
             for corner in self.get_points()
         ]

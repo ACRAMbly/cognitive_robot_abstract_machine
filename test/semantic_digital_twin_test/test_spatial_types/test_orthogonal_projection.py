@@ -88,7 +88,17 @@ class TestEmbed:
 
         np.testing.assert_allclose(embedded.to_np()[:3], [1.0, 2.0, 5.0])
 
-    def test_is_a_right_inverse_of_project(self):
+
+# %% inverse laws
+
+
+class TestInverseLaws:
+    """
+    ``project(embed(p, h)) == p`` holds for every point on the plane, and
+    ``embed(project(q), h) == q`` holds only for a point at height ``h``.
+    """
+
+    def test_project_after_embed_restores_a_point_on_the_plane(self):
         frame = Body(name=PrefixedName("world"))
         point = Point2(1.0, 2.0, reference_frame=frame)
         projection = OrthogonalProjection(frame)
@@ -97,25 +107,32 @@ class TestEmbed:
 
         np.testing.assert_allclose(round_trip.to_np(), point.to_np())
 
-    def test_restores_a_point_only_at_the_embedding_height(self):
-        frame = Body(name=PrefixedName("world"))
-        projection = OrthogonalProjection(frame)
-        point_at_height = Point3(1.0, 2.0, 4.0, reference_frame=frame)
-        point_elsewhere = Point3(1.0, 2.0, 3.0, reference_frame=frame)
-
-        restored = projection.embed(projection.project(point_at_height), height=4.0)
-        moved = projection.embed(projection.project(point_elsewhere), height=4.0)
-
-        np.testing.assert_allclose(restored.to_np(), point_at_height.to_np())
-        np.testing.assert_allclose(moved.to_np(), point_at_height.to_np())
-
-    def test_point_on_another_plane_is_rejected(self):
+    def test_project_after_embed_rejects_a_point_on_another_plane(self):
         frame = Body(name=PrefixedName("world"))
         other_frame = Body(name=PrefixedName("other"))
         point = Point2(1.0, 2.0, reference_frame=other_frame)
 
         with pytest.raises(ReferenceFrameMismatchError):
             OrthogonalProjection(frame).embed(point)
+
+    def test_embed_after_project_restores_a_point_at_the_embedding_height(self):
+        frame = Body(name=PrefixedName("world"))
+        projection = OrthogonalProjection(frame)
+        point = Point3(1.0, 2.0, 4.0, reference_frame=frame)
+
+        round_trip = projection.embed(projection.project(point), height=4.0)
+
+        np.testing.assert_allclose(round_trip.to_np(), point.to_np())
+
+    def test_embed_after_project_moves_a_point_off_the_embedding_height(self):
+        frame = Body(name=PrefixedName("world"))
+        projection = OrthogonalProjection(frame)
+        point = Point3(1.0, 2.0, 3.0, reference_frame=frame)
+        height = 4.0
+
+        round_trip = projection.embed(projection.project(point), height=height)
+
+        np.testing.assert_allclose(round_trip.to_np()[:3], [*point.to_np()[:2], height])
 
 
 # %% preimage

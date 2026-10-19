@@ -30,7 +30,6 @@ from semantic_digital_twin.semantic_annotations.semantic_annotations import (
 from semantic_digital_twin.spatial_types.spatial_types import (
     Pose,
     HomogeneousTransformationMatrix,
-    OrthogonalProjection,
     Point2,
     Point3,
     RotationMatrix,
@@ -242,10 +241,7 @@ class PathPlanningNavigateAction(ActionDescription):
             bloat_obstacles=self.robot.mobile_base.base_radius,
         )
         return free_space.path_from_to(
-            OrthogonalProjection(base_pose.reference_frame).project(base_pose.position),
-            OrthogonalProjection(self.target.reference_frame).project(
-                self.target.position
-            ),
+            Point2.from_pose(base_pose), Point2.from_pose(self.target)
         )
 
 
