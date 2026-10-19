@@ -23,8 +23,8 @@ class JSONField(StrEnum):
 
     COLLECTION_TYPE = "__collection_type__"
     """
-    The fully qualified name of the class of a ``list``-like or ``dict`` field, so that
-    reading it restores that class instead of defaulting to ``list`` or ``dict``.
+    The fully qualified name of the class of a ``list``-like field, so that reading it
+    restores that class instead of defaulting to ``list``.
     """
 
     ITEMS = "__items__"
@@ -40,10 +40,4 @@ class JSONField(StrEnum):
     VALUES = "values"
     """
     The serialized values of a ``dict`` field, in the order of :attr:`KEYS`.
-    """
-
-    DEFAULT_FACTORY = "__default_factory__"
-    """
-    The serialized :attr:`collections.defaultdict.default_factory` of a ``dict`` field
-    that has one.
     """

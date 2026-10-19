@@ -5,7 +5,6 @@ import inspect
 import pathlib
 import re
 import uuid
-from collections import defaultdict
 from datetime import timedelta, timezone
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, fields, is_dataclass
@@ -993,12 +992,11 @@ class DataclassJSONSerializer(ExternalClassJSONSerializer[None]):
     Generic JSON serializer for dataclasses.
 
     It creates a dict where all fields are serialized using the to_json function. A
-    ``list``-like field (see :data:`list_like_classes`) and a ``dict`` field always
-    serialize as a JSON object that also records their collection type as a fully
-    qualified class name, and a :class:`collections.defaultdict` its default factory, so
+    ``list``-like field (see :data:`list_like_classes`) always serializes as a JSON
+    object that also records its collection type as a fully qualified class name, so
     ``from_json`` restores that same type on the way back rather than guessing or
-    defaulting to ``list`` or ``dict``. If this is not enough, you still need to
-    implement a custom serializer.
+    defaulting to ``list``. If this is not enough, you still need to implement a custom
+    serializer.
     """
 
     @classmethod
@@ -1014,15 +1012,9 @@ class DataclassJSONSerializer(ExternalClassJSONSerializer[None]):
                     JSONField.ITEMS: [to_json(item, **kwargs) for item in value],
                 }
             elif isinstance(value, dict):
-                current_result = {
-                    JSONField.COLLECTION_TYPE: get_full_class_name(type(value)),
-                    JSONField.KEYS: [to_json(k, **kwargs) for k in value.keys()],
-                    JSONField.VALUES: [to_json(v, **kwargs) for v in value.values()],
-                }
-                if isinstance(value, defaultdict):
-                    current_result[JSONField.DEFAULT_FACTORY] = to_json(
-                        value.default_factory, **kwargs
-                    )
+                keys = [to_json(k, **kwargs) for k in value.keys()]
+                values = [to_json(v, **kwargs) for v in value.values()]
+                current_result = {JSONField.KEYS: keys, JSONField.VALUES: values}
             else:
                 current_result = to_json(value, **kwargs)
             result[field_.public_name] = current_result
@@ -1071,20 +1063,7 @@ class DataclassJSONSerializer(ExternalClassJSONSerializer[None]):
                 values = [
                     from_json(item, **kwargs) for item in current_data[JSONField.VALUES]
                 ]
-                items = dict(zip(keys, values))
-                # JSON written before dict fields recorded their class holds a dict.
-                mapping_type = resolve_class_from_full_name(
-                    current_data.get(
-                        JSONField.COLLECTION_TYPE, get_full_class_name(dict)
-                    )
-                )
-                if issubclass(mapping_type, defaultdict):
-                    current_result = mapping_type(
-                        from_json(current_data[JSONField.DEFAULT_FACTORY], **kwargs),
-                        items,
-                    )
-                else:
-                    current_result = mapping_type(items)
+                current_result = dict(zip(keys, values))
             else:
                 current_result = from_json(current_data, **kwargs)
 

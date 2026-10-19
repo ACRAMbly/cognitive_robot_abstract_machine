@@ -3,7 +3,6 @@ import json
 import pathlib
 import re
 import uuid
-from collections import OrderedDict, defaultdict
 from dataclasses import dataclass, field
 from datetime import timedelta
 from enum import Enum
@@ -172,16 +171,6 @@ class ClassThatNeedsKWARGSInList(SubclassJSONSerializer):
 @dataclass
 class ClassWithDict(DataclassJSONSerializer):
     a: Dict[str, int]
-
-
-@dataclass
-class ClassWithDefaultDict(DataclassJSONSerializer):
-    a: defaultdict
-
-
-@dataclass
-class ClassWithOrderedDict(DataclassJSONSerializer):
-    a: OrderedDict
 
 
 @dataclass
@@ -460,21 +449,6 @@ def test_dataclass_dict():
     data = to_json(cls)
     result = from_json(data)
     assert result == cls
-
-
-def test_dataclass_dict_subclass_keeps_its_class():
-    cls = ClassWithOrderedDict(OrderedDict([("b", 2), ("a", 1)]))
-    result = from_json(json.loads(json.dumps(to_json(cls))))
-    assert result == cls
-    assert type(result.a) is OrderedDict
-
-
-def test_dataclass_defaultdict_keeps_its_default_factory():
-    cls = ClassWithDefaultDict(defaultdict(int, {"foo": 1}))
-    result = from_json(json.loads(json.dumps(to_json(cls))))
-    assert result == cls
-    assert type(result.a) is defaultdict
-    assert result.a.default_factory is int
 
 
 def test_dataclass_list():
