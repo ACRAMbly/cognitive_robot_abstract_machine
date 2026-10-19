@@ -7,7 +7,6 @@ from typing import Iterable, Iterator, Optional, Self, Tuple, TYPE_CHECKING, Uni
 import math
 
 import numpy as np
-import trimesh
 from typing_extensions import List
 
 from krrood.ormatic.utils import classproperty
@@ -45,6 +44,7 @@ from semantic_digital_twin.semantic_annotations.mixins import (
     HasSink,
     HasShelfLayers,
     HasGraspCandidates,
+    HasPinchableWall,
     HasRim,
 )
 from krrood.entity_query_language.factories import and_, or_
@@ -985,14 +985,9 @@ class Plate(HasSupportingSurface, Tableware):
 
 
 @dataclass(eq=False)
-class Rim(HasGraspCandidates):
+class Rim(HasPinchableWall):
     """
     The upper edge of an open container's wall, which a gripper pinches from above.
-    """
-
-    wall_probe_count: int = field(default=12, kw_only=True)
-    """
-    In how many directions around the rim its wall is measured.
     """
 
     def default_grasp_candidates(self) -> List[GraspCandidate]:
@@ -1006,56 +1001,10 @@ class Rim(HasGraspCandidates):
     ) -> Match[SurfaceGrasp]:
         """
         :param require_lifting: Whether to ask only for grasps that lift the container.
-        :return: The middle of the rim's height, all around, closing on the middle half
-            of the wall's thickness, from above or tilted a little towards the wall.
+        :return: The middle of the rim's height, pinched across its wall.
         :raises NoGraspGeometry: If the rim has no wall to measure.
         """
-        thickness = self.wall_thickness()
-        grasp = any_surface_grasp(require_lifting)
-        return grasp.where(
-            grasp.height >= 0.25,
-            grasp.height < 0.75,
-            grasp.depth >= 0.25 * thickness,
-            grasp.depth < 0.75 * thickness,
-            grasp.azimuth >= 0.0,
-            grasp.azimuth < 2 * math.pi,
-            grasp.pitch >= 0.0,
-            grasp.pitch < 0.5,
-            grasp.roll >= -math.pi / 8,
-            grasp.roll < math.pi / 8,
-        )
-
-    def wall_thickness(self) -> float:
-        """
-        Cast rays outward from the middle of the rim and take the distance between the
-        first two surfaces each ray passes, the inside and the outside of the wall, as
-        the wall's thickness.
-
-        :return: The median thickness over the directions that hit the wall.
-        :raises NoGraspGeometry: If no direction hits a wall.
-        """
-        shape = self.grasp_surface()
-        yaws = np.linspace(0, 2 * np.pi, self.wall_probe_count, endpoint=False)
-        directions = np.column_stack([np.cos(yaws), np.sin(yaws), np.zeros(len(yaws))])
-        lowest, highest = shape.bounds
-        middle = (lowest + highest) / 2
-        # Embree reports only the inner wall here, so the exact intersector is used.
-        intersector = trimesh.ray.ray_triangle.RayMeshIntersector(shape)
-        locations, ray_indices, _ = intersector.intersects_location(
-            ray_origins=np.tile(middle, (len(yaws), 1)), ray_directions=directions
-        )
-        thicknesses = []
-        for index in range(len(yaws)):
-            distances = np.sort(
-                np.linalg.norm(
-                    locations[ray_indices == index][:, :2] - middle[:2], axis=1
-                )
-            )
-            if len(distances) > 1:
-                thicknesses.append(float(distances[1] - distances[0]))
-        if not thicknesses:
-            raise NoGraspGeometry(self)
-        return float(np.median(thicknesses))
+        return self.wall_grasp_statement(0.25, 0.75, require_lifting)
 
 
 @dataclass(eq=False)

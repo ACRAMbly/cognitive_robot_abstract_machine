@@ -61,8 +61,16 @@ def bowl() -> Bowl:
     annotation = Bowl(root=world.get_body_by_name("bowl.stl"))
     with world.modify_world():
         world.add_semantic_annotation(annotation)
-    split_off_rim(annotation)
     return annotation
+
+
+@pytest.fixture
+def bowl_with_rim(bowl) -> Bowl:
+    """
+    The bowl with its rim split off as a part of its own.
+    """
+    split_off_rim(bowl)
+    return bowl
 
 
 def distances_to_surface(
@@ -72,7 +80,7 @@ def distances_to_surface(
     :param bowl: The bowl whose surface to measure against.
     :param positions: Points in the bowl's own frame.
     :return: Each point's distance to the nearest point of the bowl's surface: that of
-        its body and of its rim, which shares the body's frame.
+        its body and of its rim, if split off, which shares the body's frame.
     """
     surface = trimesh.util.concatenate([body.combined_mesh for body in bowl.bodies])
     _, distances, _ = closest_point(surface, positions)
@@ -95,6 +103,15 @@ def test_bowl_grasps_close_on_the_bowls_wall(bowl):
 
     assert len(positions) == bowl.grasp_candidate_count
     assert np.all(distances_to_surface(bowl, positions) < GRIPPABLE_DISTANCE)
+
+
+def test_grasps_of_a_split_off_rim_close_on_the_bowls_wall(bowl_with_rim):
+    positions = np.array(
+        [grasp.grasp_pose.to_np()[:3, 3] for grasp in bowl_with_rim.grasp_candidates()]
+    )
+
+    assert len(positions) == bowl_with_rim.rim.grasp_candidate_count
+    assert np.all(distances_to_surface(bowl_with_rim, positions) < GRIPPABLE_DISTANCE)
 
 
 def test_the_bowls_origin_is_not_grippable(bowl):
@@ -127,7 +144,6 @@ def pr2_and_bowl(simple_pr2_context):
     annotation = Bowl(root=world.get_body_by_name("bowl.stl"))
     with world.modify_world():
         world.add_semantic_annotations([annotation])
-    split_off_rim(annotation)
     return world, robot, annotation
 
 
