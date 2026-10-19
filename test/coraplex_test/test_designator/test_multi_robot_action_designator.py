@@ -15,10 +15,7 @@ from coraplex.alternative_motion_mappings.stretch_motion_mapping import (
 )
 from coraplex.alternative_motion_mappings.tiago_motion_mapping import TiagoMoveSim
 from coraplex.datastructures.dataclasses import Context
-from coraplex.datastructures.enums import (
-    AxisIdentifier,
-    DetectionTechnique,
-)
+from coraplex.datastructures.enums import DetectionTechnique
 from coraplex.datastructures.trajectory import PoseTrajectory
 from coraplex.exceptions import NoFloorBelowRobot
 from coraplex.execution_environment import kinematically_simulated_robot
@@ -51,6 +48,7 @@ from coraplex.robot_plans.actions.core.robot_body import (
 from giskardpy.utils.utils_for_tests import compare_axis_angle, compare_orientations
 from semantic_digital_twin.callbacks.callback import ModelChangeCallback
 from semantic_digital_twin.datastructures.definitions import (
+    AxisIdentifier,
     TorsoState,
     GripperState,
     StaticJointState,
