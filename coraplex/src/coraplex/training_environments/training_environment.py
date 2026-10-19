@@ -227,14 +227,16 @@ class MoveToReachTrainingEnvironment(TrainingEnvironment):
         :return: The probabilistic backend
         """
         parameters = UnderspecifiedParameters(underspecified_action)
-        robot_x = parameters.variables[
-            "MoveToReach.target_pose_offset_robot.position.x"
-        ]
-        robot_y = parameters.variables[
-            "MoveToReach.target_pose_offset_robot.position.y"
-        ]
-        hip_rotation = parameters.variables["MoveToReach.hip_rotation"]
-        approach_clearance = parameters.variables["MoveToReach.approach_clearance"]
+        robot_x = parameters.variable_of(
+            underspecified_action.target_pose_offset_robot.position.x
+        )
+        robot_y = parameters.variable_of(
+            underspecified_action.target_pose_offset_robot.position.y
+        )
+        hip_rotation = parameters.variable_of(underspecified_action.hip_rotation)
+        approach_clearance = parameters.variable_of(
+            underspecified_action.approach_clearance
+        )
 
         distribution = fully_factorized(
             means={approach_clearance: 0.05},
