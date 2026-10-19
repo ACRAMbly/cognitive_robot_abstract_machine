@@ -21,13 +21,7 @@ from probabilistic_model.probabilistic_circuit.relational.relational_probabilist
     GroundingMode,
     RelationalProbabilisticCircuit,
 )
-from probabilistic_model.probabilistic_circuit.rx.helper import (
-    fully_factorized,
-    uniform_measure_of_event,
-)
-from probabilistic_model.adapters.rustworkx_tensorized.rustworkx_to_tensorized import (
-    RustworkxCircuitToLayeredCircuitConverter,
-)
+from probabilistic_model.probabilistic_circuit.rx.helper import fully_factorized
 from probabilistic_model.probabilistic_circuit.rx.probabilistic_circuit import (
     ProbabilisticCircuit,
 )
@@ -96,10 +90,9 @@ class UniformPriorRegistry(ModelRegistry):
             if variable not in allowed.variables:
                 raise UnboundedParameterError(parameter_name=name)
         try:
-            uniform_measure = uniform_measure_of_event(allowed)
+            return LayeredProbabilisticCircuit.uniform_measure_of_event(allowed)
         except UnboundedEventError as error:
             raise UnboundedParameterError(parameter_name=error.variable.name) from error
-        return RustworkxCircuitToLayeredCircuitConverter.convert(uniform_measure)
 
 
 @dataclass

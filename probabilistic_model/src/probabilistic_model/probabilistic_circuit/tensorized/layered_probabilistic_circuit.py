@@ -4,17 +4,24 @@ from dataclasses import dataclass
 
 import numpy as np
 from random_events.product_algebra import Event, SimpleEvent, VariableMap
-from random_events.variable import Symbolic, Variable
+from random_events.sigma_algebra import AbstractCompositeSet
+from random_events.variable import Continuous, Integer, Symbolic, Variable
 from sortedcontainers import SortedSet
 from typing_extensions import Dict, Iterable, List, Optional, Self, Tuple, Type
 
 from probabilistic_model.distributions.distributions import (
+    DiracDeltaDistribution,
     IntegerDistribution,
     SymbolicDistribution,
     UnivariateDistribution,
 )
 from probabilistic_model.distributions.helper import make_dirac
-from probabilistic_model.exceptions import IntractableError
+from probabilistic_model.distributions.uniform import UniformDistribution
+from probabilistic_model.exceptions import (
+    EventMixesPointsAndIntervalsError,
+    IntractableError,
+    UnboundedEventError,
+)
 from probabilistic_model.probabilistic_circuit.tensorized.array_types import (
     DenseEdgeValues,
     NodeMask,
@@ -50,6 +57,9 @@ from probabilistic_model.probabilistic_circuit.tensorized.input_layer.discrete_l
 from probabilistic_model.probabilistic_circuit.tensorized.input_layer.probability_table import (
     ProbabilityTable,
 )
+from probabilistic_model.probabilistic_circuit.tensorized.input_layer.uniform_layer import (
+    UniformLayer,
+)
 from probabilistic_model.probabilistic_circuit.tensorized.layered_products import (
     LayeredProducts,
 )
@@ -83,7 +93,11 @@ from probabilistic_model.probabilistic_model import (
     OrderType,
     PartialPointType,
 )
-from probabilistic_model.utils import logsumexp
+from probabilistic_model.utils import (
+    MissingDict,
+    event_compatible_for_truncation_with_singletons,
+    logsumexp,
+)
 
 
 @dataclass
@@ -190,6 +204,133 @@ class LayeredProbabilisticCircuit(GroundableCircuit[LayerNode]):
             f"{self.__class__.__name__} over {list(self.variables)} "
             f"with {len(self.layers)} layers and {self.number_of_nodes} nodes"
         )
+
+    # %% uniform measures
+
+    @classmethod
+    def uniform_measure_of_event(cls, event: Event) -> Self:
+        """
+        :param event: The event to spread the measure over.
+        :return: The circuit that is uniform over the event.
+        :raises UnboundedEventError: If the event does not bound a continuous variable
+            from below and above.
+        :raises EventMixesPointsAndIntervalsError: If a continuous variable takes points
+            and intervals in the box bounding the event.
+        """
+        uniform_measure = cls.uniform_measure_of_simple_event(event.bounding_box())
+        uniform_measure.log_truncated_in_place(event)
+        return uniform_measure
+
+    @classmethod
+    def uniform_measure_of_simple_event(cls, simple_event: SimpleEvent) -> Self:
+        """
+        :param simple_event: The simple event to spread the measure over.
+        :return: The circuit that is uniform over the simple event.
+        :raises UnboundedEventError: If the simple event does not bound a continuous
+            variable from below and above.
+        :raises EventMixesPointsAndIntervalsError: If a continuous variable takes points
+            and intervals.
+        """
+        if not event_compatible_for_truncation_with_singletons(
+            simple_event.as_composite_set()
+        ):
+            raise EventMixesPointsAndIntervalsError(simple_event)
+        variables = SortedSet(simple_event.keys())
+        return cls(
+            variables,
+            ProductLayer.product_of(
+                [
+                    cls.uniform_layer_of_assignment(
+                        variables.index(variable), variable, assignment
+                    )
+                    for variable, assignment in simple_event.items()
+                ]
+            ),
+        )
+
+    @staticmethod
+    def uniform_layer_of_assignment(
+        variable_index: int, variable: Variable, assignment: AbstractCompositeSet
+    ) -> Layer:
+        """
+        :param variable_index: The index of the variable in the circuit.
+        :param variable: The variable.
+        :param assignment: The values the variable may take.
+        :return: A layer with one node that is uniform over the values.
+        :raises UnboundedEventError: If the variable is continuous and the values are
+            not bounded from below and above.
+        """
+        if isinstance(variable, Symbolic):
+            return SymbolicLayer.from_distributions(
+                variable_index,
+                [
+                    SymbolicDistribution(
+                        variable=variable,
+                        probabilities=MissingDict(
+                            float,
+                            {
+                                hash(value): 1 / len(assignment.simple_sets)
+                                for value in assignment
+                            },
+                        ),
+                    )
+                ],
+            )
+        if isinstance(variable, Integer):
+            return IntegerLayer.from_distributions(
+                variable_index,
+                [
+                    IntegerDistribution(
+                        variable=variable,
+                        probabilities=MissingDict(
+                            float,
+                            {
+                                value.lower: 1 / len(assignment.simple_sets)
+                                for value in assignment
+                            },
+                        ),
+                    )
+                ],
+            )
+        if not (
+            np.isfinite(assignment.simple_sets[0].lower)
+            and np.isfinite(assignment.simple_sets[-1].upper)
+        ):
+            raise UnboundedEventError(variable=variable)
+        pieces = list(assignment)
+        if all(piece.is_singleton() for piece in pieces):
+            pieces_layer = DiracDeltaLayer.from_distributions(
+                variable_index,
+                [
+                    DiracDeltaDistribution(
+                        variable=variable, location=piece.lower, density_cap=1.0
+                    )
+                    for piece in pieces
+                ],
+            )
+            log_weights = np.zeros(len(pieces))
+        else:
+            pieces_layer = UniformLayer.from_distributions(
+                variable_index,
+                [
+                    UniformDistribution(variable=variable, interval=piece)
+                    for piece in pieces
+                ],
+            )
+            log_weights = np.log([piece.upper - piece.lower for piece in pieces])
+        number_of_pieces = len(pieces)
+        mixture = SumLayer.from_edges(
+            [pieces_layer],
+            InnerLayerEdges(
+                np.zeros(number_of_pieces, dtype=np.int64),
+                np.zeros(number_of_pieces, dtype=np.int64),
+                np.arange(number_of_pieces),
+            ),
+            log_weights,
+            1,
+        )
+        mixture.normalize_own()
+        return mixture
 
     # %% symbolic values
 
