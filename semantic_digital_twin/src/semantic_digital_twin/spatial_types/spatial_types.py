@@ -2680,7 +2680,7 @@ class Pose2D(sm.SymbolicMathType, SpatialType, SubclassJSONSerializer):
         """
         _, _, yaw = pose.rotation_matrix.rpy
         frame = reference_frame if reference_frame is not None else pose.reference_frame
-        return cls.from_xy_yaw(x=pose.x, y=pose.y, yaw=yaw, reference_frame=frame)
+        return cls.from_x_y_yaw(x=pose.x, y=pose.y, yaw=yaw, reference_frame=frame)
 
     def transform(
         self, target_frame_T_reference_frame: HomogeneousTransformationMatrix
@@ -2701,7 +2701,7 @@ class Pose2D(sm.SymbolicMathType, SpatialType, SubclassJSONSerializer):
         return Pose2D.from_pose(target_frame_T_reference_frame @ self.pose)
 
     @classmethod
-    def from_xy_yaw(
+    def from_x_y_yaw(
         cls,
         x: sm.ScalarData = 0,
         y: sm.ScalarData = 0,
@@ -2726,7 +2726,7 @@ class Pose2D(sm.SymbolicMathType, SpatialType, SubclassJSONSerializer):
         reference_frame = cls._parse_optional_frame_from_json(
             data, frame=SpatialFrameKey.REFERENCE, **kwargs
         )
-        return cls.from_xy_yaw(*data["data"], reference_frame=reference_frame)
+        return cls.from_x_y_yaw(*data["data"], reference_frame=reference_frame)
 
     def _constant_to_json(self) -> Dict[str, Any]:
         return {
