@@ -7,6 +7,7 @@ from typing import Iterable, Iterator, Optional, Self, Tuple, TYPE_CHECKING, Uni
 import math
 
 import numpy as np
+import trimesh
 from typing_extensions import List
 
 from krrood.ormatic.utils import classproperty
@@ -1039,7 +1040,9 @@ class Rim(HasGraspCandidates):
         directions = np.column_stack([np.cos(yaws), np.sin(yaws), np.zeros(len(yaws))])
         lowest, highest = shape.bounds
         middle = (lowest + highest) / 2
-        locations, ray_indices, _ = shape.ray.intersects_location(
+        # Embree reports only the inner wall here, so the exact intersector is used.
+        intersector = trimesh.ray.ray_triangle.RayMeshIntersector(shape)
+        locations, ray_indices, _ = intersector.intersects_location(
             ray_origins=np.tile(middle, (len(yaws), 1)), ray_directions=directions
         )
         thicknesses = []
