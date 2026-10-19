@@ -25,8 +25,14 @@ from probabilistic_model.probabilistic_circuit.rx.helper import (
     fully_factorized,
     uniform_measure_of_event,
 )
+from probabilistic_model.adapters.rustworkx_tensorized.rustworkx_to_tensorized import (
+    RustworkxCircuitToLayeredCircuitConverter,
+)
 from probabilistic_model.probabilistic_circuit.rx.probabilistic_circuit import (
     ProbabilisticCircuit,
+)
+from probabilistic_model.probabilistic_circuit.tensorized.layered_probabilistic_circuit import (
+    LayeredProbabilisticCircuit,
 )
 from probabilistic_model.exceptions import UnboundedEventError
 from probabilistic_model.probabilistic_model import ProbabilisticModel
@@ -67,7 +73,9 @@ class UniformPriorRegistry(ModelRegistry):
     form several separate regions.
     """
 
-    def get_model(self, parameters: ModelQueryParameters) -> ProbabilisticCircuit:
+    def get_model(
+        self, parameters: ModelQueryParameters
+    ) -> LayeredProbabilisticCircuit:
         """
         :param parameters: The parameters of the statement. Only a ``Match`` brings
             ``where`` conditions; the bare selection of ``average(...)`` and the
@@ -88,9 +96,10 @@ class UniformPriorRegistry(ModelRegistry):
             if variable not in allowed.variables:
                 raise UnboundedParameterError(parameter_name=name)
         try:
-            return uniform_measure_of_event(allowed)
+            uniform_measure = uniform_measure_of_event(allowed)
         except UnboundedEventError as error:
             raise UnboundedParameterError(parameter_name=error.variable.name) from error
+        return RustworkxCircuitToLayeredCircuitConverter.convert(uniform_measure)
 
 
 @dataclass
