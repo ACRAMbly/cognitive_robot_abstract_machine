@@ -25,6 +25,9 @@ from probabilistic_model.probabilistic_circuit.rx.helper import fully_factorized
 from probabilistic_model.probabilistic_circuit.rx.probabilistic_circuit import (
     ProbabilisticCircuit,
 )
+from probabilistic_model.probabilistic_circuit.tensorized.factories import (
+    uniform_measure_of_event,
+)
 from probabilistic_model.probabilistic_circuit.tensorized.layered_probabilistic_circuit import (
     LayeredProbabilisticCircuit,
 )
@@ -90,7 +93,7 @@ class UniformPriorRegistry(ModelRegistry):
             if variable not in allowed.variables:
                 raise UnboundedParameterError(parameter_name=name)
         try:
-            return LayeredProbabilisticCircuit.uniform_measure_of_event(allowed)
+            return uniform_measure_of_event(allowed)
         except UnboundedEventError as error:
             raise UnboundedParameterError(parameter_name=error.variable.name) from error
 
