@@ -41,6 +41,7 @@ from semantic_digital_twin.exceptions import MalformedHexColor
 from semantic_digital_twin.mixin import HasSimulatorProperties
 from semantic_digital_twin.spatial_types import (
     HomogeneousTransformationMatrix,
+    OrthogonalProjection,
     Point,
     Point2,
     Point3,
@@ -1448,7 +1449,11 @@ class AxisAlignedBox(Generic[PointT], SubClassSafeGeneric, ABC):
 
         list_self_T_corner = [
             HomogeneousTransformationMatrix.from_point_rotation_matrix(
-                corner.to_point3() if isinstance(corner, Point2) else corner
+                (
+                    OrthogonalProjection(corner.reference_frame).embed(corner)
+                    if isinstance(corner, Point2)
+                    else corner
+                )
             ).to_np()
             for corner in self.get_points()
         ]
@@ -1911,7 +1916,7 @@ class PlanarBoundingBox(AxisAlignedBox[Point2]):
         Check if the bounding box contains a point.
         """
         point_in_bb = point.reference_frame._world.transform(
-            point.to_point3(), self.origin.reference_frame
+            point, self.origin.reference_frame
         )
         x, y = float(point_in_bb.x), float(point_in_bb.y)
         return self.simple_event.contains((x, y))

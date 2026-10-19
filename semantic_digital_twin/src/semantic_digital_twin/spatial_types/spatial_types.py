@@ -1088,6 +1088,11 @@ class Point(sm.SymbolicMathType, SpatialType, SubclassJSONSerializer, ABC):
     point has (e.g. path plotting) can accept either without a ``Union``. Only
     :class:`Point3` has a ``z``: a 2D point has no height of its own, so :class:`Point2`
     does not carry the attribute at all.
+
+    .. warning::
+        Reading :attr:`x` and :attr:`y` of a :class:`Point3` through this interface
+        ignores its height but is not a projection. Code that needs the 2D point a
+        :class:`Point3` corresponds to uses :meth:`OrthogonalProjection.project`.
     """
 
     @property
@@ -1364,9 +1369,9 @@ class Point2(Point):
     Represents a 2D point with reference frame handling.
 
     Stored as a bare 2×1 symbolic vector ``[x, y]``, with no homogeneous augmentation --
-    the same convention :class:`Pose2D` uses. The point always lies on its reference
-    frame's own x-y plane (z=0 relative to that frame); :meth:`to_point3` converts to
-    the equivalent 3D :class:`Point3` whenever a 3D calculation is required.
+    the same convention :class:`Pose2D` uses. The point lies on its reference frame's
+    own x-y plane and has no height; it relates to 3D space only through an
+    :class:`OrthogonalProjection` onto that plane.
     """
 
     def __init__(
@@ -1391,22 +1396,6 @@ class Point2(Point):
             )
 
     @classmethod
-    def from_pose(
-        cls,
-        pose: Pose,
-        reference_frame: Optional[KinematicStructureEntity] = None,
-    ) -> Point2:
-        """
-        Extract a Point2 from a 3D Pose by dropping z, roll, pitch and yaw.
-
-        :param pose: The pose to extract the point from.
-        :param reference_frame: The reference frame. Defaults to ``pose``'s.
-        :return: The Point2 instance.
-        """
-        frame = reference_frame if reference_frame is not None else pose.reference_frame
-        return cls(x=pose.x, y=pose.y, reference_frame=frame)
-
-    @classmethod
     def _from_constant_json(cls, data: Dict[str, Any], **kwargs) -> Self:
         reference_frame = cls._parse_optional_frame_from_json(
             data, frame=SpatialFrameKey.REFERENCE, **kwargs
@@ -1419,32 +1408,6 @@ class Point2(Point):
             "data": self.to_np().tolist(),
         }
 
-    def to_point3(self, z: sm.ScalarData = 0) -> Point3:
-        """
-        Convert to a 3D :class:`Point3`.
-
-        :param z: The z-coordinate the resulting point should have. Defaults to 0.
-        """
-        return Point3(self.x, self.y, z, reference_frame=self.reference_frame)
-
-    @classmethod
-    def from_point3(
-        cls,
-        point: Point3,
-        reference_frame: Optional[KinematicStructureEntity] = None,
-    ) -> Point2:
-        """
-        Extract a Point2 from a 3D :class:`Point3` by dropping z.
-
-        :param point: The point to extract from.
-        :param reference_frame: The reference frame. Defaults to ``point``'s.
-        :return: The Point2 instance.
-        """
-        frame = (
-            reference_frame if reference_frame is not None else point.reference_frame
-        )
-        return cls(x=point.x, y=point.y, reference_frame=frame)
-
     def transform(
         self, target_frame_T_reference_frame: HomogeneousTransformationMatrix
     ) -> Point2:
@@ -1452,21 +1415,94 @@ class Point2(Point):
         This point re-expressed in ``target_frame_T_reference_frame``'s reference frame.
 
         .. warning::
-            A Point2 carries no z, so it is transformed as the point at z=0 and the
-            result is projected back onto the target frame's x-y plane. Transforming
-            into a frame tilted against this one therefore loses the height the rotation
-            produced.
+            Between frames whose x-y planes are not parallel this is not a change of
+            coordinates but a projection: the point is embedded at height 0 through an
+            :class:`OrthogonalProjection`, moved, and projected onto the target plane.
+            The height the rotation produced is lost.
 
         :param target_frame_T_reference_frame: The transformation from this point's
             reference frame to the frame it should be expressed in.
         :return: The point in the transformation's reference frame.
         """
-        return Point2.from_point3(target_frame_T_reference_frame @ self.to_point3())
+        reference_frame_P_point = OrthogonalProjection(self.reference_frame).embed(self)
+        target_frame_P_point = target_frame_T_reference_frame @ reference_frame_P_point
+        return OrthogonalProjection(target_frame_P_point.reference_frame).project(
+            target_frame_P_point
+        )
 
     def __hash__(self):
         if self.is_constant():
             return hash((*self.to_np().tolist(), self.reference_frame))
         return super().__hash__()
+
+
+@dataclass(eq=False)
+class Line3:
+    """
+    An infinite straight line in 3D space.
+    """
+
+    point: Point3
+    """
+    A point the line passes through.
+    """
+
+    direction: Vector3
+    """
+    The direction the line runs in, in the same reference frame as :attr:`point`.
+    """
+
+
+@dataclass(frozen=True)
+class OrthogonalProjection:
+    """
+    The orthogonal projection of 3D space onto the x-y plane of one frame, together
+    with its right inverse.
+
+    For every :class:`Point2` ``p`` on the plane, ``project(embed(p)) == p``. The
+    reverse, ``embed(project(q)) == q``, holds only for a :class:`Point3` ``q`` that
+    already lies on the plane at the chosen height.
+    """
+
+    plane_frame: KinematicStructureEntity | None
+    """
+    The frame whose x-y plane points are projected onto, or ``None`` for the plane of
+    points that have no reference frame.
+    """
+
+    def project(self, point: Point3) -> Point2:
+        """
+        :param point: A point in :attr:`plane_frame` or in any frame of its world.
+        :return: The point on the plane directly below or above ``point``.
+        """
+        if point.reference_frame is not self.plane_frame:
+            point = self.plane_frame._world.transform(point, self.plane_frame)
+        return Point2(point.x, point.y, reference_frame=self.plane_frame)
+
+    def embed(self, point: Point2, height: sm.ScalarData = 0) -> Point3:
+        """
+        :param point: A point on the x-y plane of :attr:`plane_frame`.
+        :param height: The z-coordinate the point is placed at.
+        :return: The 3D point at ``height`` above ``point``, in :attr:`plane_frame`.
+        :raises ReferenceFrameMismatchError: If ``point`` lies on another frame's plane.
+        """
+        if point.reference_frame is not self.plane_frame:
+            raise ReferenceFrameMismatchError(
+                expected_frame=self.plane_frame,
+                actual_frame=point.reference_frame,
+                context="the embedded Point2",
+            )
+        return Point3(point.x, point.y, height, reference_frame=self.plane_frame)
+
+    def preimage(self, point: Point2) -> Line3:
+        """
+        :param point: A point on the x-y plane of :attr:`plane_frame`.
+        :return: The line of every 3D point that projects onto ``point``.
+        """
+        return Line3(
+            point=self.embed(point),
+            direction=Vector3.Z(reference_frame=self.plane_frame),
+        )
 
 
 @dataclass(eq=False, init=False, repr=False)

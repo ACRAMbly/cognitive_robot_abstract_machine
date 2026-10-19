@@ -1,10 +1,8 @@
-import math
-
 import pytest
 
 import krrood.symbolic_math.symbolic_math as sm
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
-from semantic_digital_twin.spatial_types import Point2, Point3, Pose
+from semantic_digital_twin.spatial_types import Point2
 from semantic_digital_twin.world_description.world_entity import Body
 
 
@@ -43,48 +41,6 @@ class TestPoint2Construction:
         p.y = -3.0
         assert p.x.to_np() == pytest.approx(5.0)
         assert p.y.to_np() == pytest.approx(-3.0)
-
-
-class TestPoint2ToPoint3:
-    def test_to_point3_default_z(self):
-        p2 = Point2(x=1.0, y=2.0)
-        p3 = p2.to_point3()
-        assert isinstance(p3, Point3)
-        assert p3.x.to_np() == pytest.approx(1.0)
-        assert p3.y.to_np() == pytest.approx(2.0)
-        assert p3.z.to_np() == pytest.approx(0.0)
-
-    def test_to_point3_explicit_z(self):
-        p2 = Point2(x=1.0, y=2.0)
-        p3 = p2.to_point3(z=5.0)
-        assert p3.z.to_np() == pytest.approx(5.0)
-
-    def test_to_point3_reference_frame_propagated(self):
-        frame = Body(name=PrefixedName("world"))
-        p2 = Point2(x=1.0, y=2.0, reference_frame=frame)
-        p3 = p2.to_point3()
-        assert p3.reference_frame is frame
-
-
-class TestPoint2FromPose:
-    def test_drops_z_roll_pitch_yaw(self):
-        pose = Pose.from_xyz_rpy(x=1.5, y=-2.5, z=3.0, roll=0.1, pitch=0.2, yaw=0.3)
-        p2 = Point2.from_pose(pose)
-        assert p2.x.to_np() == pytest.approx(1.5)
-        assert p2.y.to_np() == pytest.approx(-2.5)
-
-    def test_from_pose_inherits_reference_frame(self):
-        frame = Body(name=PrefixedName("world"))
-        pose = Pose.from_xyz_rpy(x=1.0, y=2.0, reference_frame=frame)
-        p2 = Point2.from_pose(pose)
-        assert p2.reference_frame is frame
-
-    def test_from_pose_override_reference_frame(self):
-        frame = Body(name=PrefixedName("world"))
-        other_frame = Body(name=PrefixedName("other"))
-        pose = Pose.from_xyz_rpy(x=1.0, y=2.0, reference_frame=frame)
-        p2 = Point2.from_pose(pose, reference_frame=other_frame)
-        assert p2.reference_frame is other_frame
 
 
 class TestPoint2Symbolic:

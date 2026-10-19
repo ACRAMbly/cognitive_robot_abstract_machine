@@ -22,7 +22,12 @@ from semantic_digital_twin.spatial_types import (
     Point3,
     HomogeneousTransformationMatrix,
 )
-from semantic_digital_twin.spatial_types.spatial_types import Pose, Point2, Pose2D
+from semantic_digital_twin.spatial_types.spatial_types import (
+    OrthogonalProjection,
+    Pose,
+    Point2,
+    Pose2D,
+)
 from semantic_digital_twin.spatial_types.spatial_types import Pose, SpatialType
 from semantic_digital_twin.world_description.world_entity import Body
 from .reference_implementations import (
@@ -1502,7 +1507,7 @@ class TestTransformationMatrix:
         assert isinstance(transformed, Point2)
         np.testing.assert_allclose(
             transformed.to_np(),
-            (transformation @ point.to_point3()).to_np()[:2],
+            (transformation @ OrthogonalProjection(None).embed(point)).to_np()[:2],
             atol=1e-12,
         )
 
