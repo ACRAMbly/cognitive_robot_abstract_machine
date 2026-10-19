@@ -49,7 +49,6 @@ from semantic_digital_twin.semantic_annotations.mixins import (
 )
 from krrood.entity_query_language.factories import and_, or_
 from krrood.entity_query_language.query.match import Match
-from semantic_digital_twin.datastructures.definitions import AxisIdentifier
 from semantic_digital_twin.grasping.grasp_candidates import GraspCandidate
 from semantic_digital_twin.grasping.surface_grasp import (
     SurfaceGrasp,
@@ -1452,15 +1451,12 @@ class Cutlery(HasHandle, Tableware):
         lowest, highest = self.grasp_surface().bounds
         extents = highest - lowest
         length_axis = max(
-            (AxisIdentifier.X, AxisIdentifier.Y),
-            key=lambda axis: np.dot(extents, axis.value),
+            (Vector3.X().to_np()[:3], Vector3.Y().to_np()[:3]),
+            key=lambda axis: np.dot(extents, axis),
         )
-        length = float(np.dot(extents, length_axis.value))
-        end_azimuths = (
-            (0.0, np.pi)
-            if length_axis == AxisIdentifier.X
-            else (np.pi / 2, 3 * np.pi / 2)
-        )
+        length = float(np.dot(extents, length_axis))
+        azimuth_of_length_axis = math.atan2(length_axis[1], length_axis[0])
+        end_azimuths = (azimuth_of_length_axis, azimuth_of_length_axis + np.pi)
         tolerance = np.pi / 16
         grasp = any_surface_grasp(require_lifting)
         return grasp.where(

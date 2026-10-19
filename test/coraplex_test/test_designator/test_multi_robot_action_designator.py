@@ -48,7 +48,6 @@ from coraplex.robot_plans.actions.core.robot_body import (
 from giskardpy.utils.utils_for_tests import compare_axis_angle, compare_orientations
 from semantic_digital_twin.callbacks.callback import ModelChangeCallback
 from semantic_digital_twin.datastructures.definitions import (
-    AxisIdentifier,
     TorsoState,
     GripperState,
     StaticJointState,
@@ -441,16 +440,13 @@ def test_follow_tcp_path_multi(multiple_robot_apartment_context):
         world.notify_state_change()
     # robot.full_body_controlled = True
     left_arm = left_or_only_arm(context.robot)
-    front_axis = tuple(int(v) for v in left_arm.end_effector.approach_axis.to_np()[:3])
-    grasp_axis = AxisIdentifier.from_tuple(front_axis)
+    approach_axis = left_arm.end_effector.approach_axis.to_np()
 
     pose_T = world.get_body_by_name("milk.stl").global_transform
     pose = pose_T.pose
-    if grasp_axis == AxisIdentifier.X:
-        target_pose = pose
-    elif grasp_axis == AxisIdentifier.Z:
+    if np.allclose(approach_axis, Vector3.Z().to_np()):
         offset_T = HomogeneousTransformationMatrix.from_xyz_axis_angle(
-            axis=AxisIdentifier.Y.value,
+            axis=Vector3.Y(),
             angle=np.pi / 2,
             reference_frame=world.root,
         )
