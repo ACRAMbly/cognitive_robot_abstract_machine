@@ -844,11 +844,6 @@ class HasPinchableWall(HasGraspCandidates):
     pinches from above.
     """
 
-    wall_probe_count: int = field(default=12, kw_only=True)
-    """
-    In how many directions around the annotation its wall is measured.
-    """
-
     def wall_grasp_statement(
         self, lowest_height: float, highest_height: float, require_lifting: bool
     ) -> Match[SurfaceGrasp]:
@@ -876,7 +871,9 @@ class HasPinchableWall(HasGraspCandidates):
             grasp.roll < math.pi / 8,
         )
 
-    def wall_thickness(self, height: float = 0.5) -> float:
+    def wall_thickness(
+        self, height: float = 0.5, number_of_directions: int = 12
+    ) -> float:
         """
         Cast rays outward from the middle of the grasp surface, at ``height``, and take
         the distance between the first two surfaces each ray passes, the inside and the
@@ -884,11 +881,13 @@ class HasPinchableWall(HasGraspCandidates):
 
         :param height: Where to measure, as a fraction of the grasp surface's bounding
             box from its bottom to its top.
+        :param number_of_directions: In how many directions around the annotation the
+            wall is measured.
         :return: The median thickness over the directions that hit the wall.
         :raises NoGraspGeometry: If no direction hits a wall.
         """
         shape = self.grasp_surface()
-        yaws = np.linspace(0, 2 * np.pi, self.wall_probe_count, endpoint=False)
+        yaws = np.linspace(0, 2 * np.pi, number_of_directions, endpoint=False)
         directions = np.column_stack([np.cos(yaws), np.sin(yaws), np.zeros(len(yaws))])
         lowest, highest = shape.bounds
         middle = (lowest + highest) / 2
@@ -919,11 +918,6 @@ class HasRim(HasPinchableWall, PartWholeRelationship):
     have one.
     """
 
-    rim_depth: float = field(default=0.02, kw_only=True)
-    """
-    How far below the container's highest point its rim reaches, in meters.
-    """
-
     rim: Optional[Rim] = field(
         default=None,
         metadata=IsPartWholeRelationship().as_dict(),
@@ -948,16 +942,18 @@ class HasRim(HasPinchableWall, PartWholeRelationship):
         return self.drawn_grasp_candidates()
 
     def surface_grasp_statement(
-        self, require_lifting: bool = False
+        self, require_lifting: bool = False, rim_depth: float = 0.02
     ) -> Match[SurfaceGrasp]:
         """
         :param require_lifting: Whether to ask only for grasps that lift the container.
-        :return: The middle of the top :attr:`rim_depth` of the container's own
-            surface, pinched across its wall, as a :class:`Rim` part is.
+        :param rim_depth: How far below the container's highest point its rim reaches,
+            in meters.
+        :return: The middle of the top ``rim_depth`` of the container's own surface,
+            pinched across its wall, as a :class:`Rim` part is.
         :raises NoGraspGeometry: If the container has no wall to measure there.
         """
         lowest, highest = self.grasp_surface().bounds
-        rim_fraction = self.rim_depth / float(highest[2] - lowest[2])
+        rim_fraction = rim_depth / float(highest[2] - lowest[2])
         return self.wall_grasp_statement(
             1 - 0.75 * rim_fraction, 1 - 0.25 * rim_fraction, require_lifting
         )
