@@ -13,7 +13,6 @@ from enum import IntEnum
 import numpy as np
 import rustworkx as rx
 import rustworkx.visualization
-import tqdm
 from sortedcontainers import SortedSet
 from typing_extensions import (
     List,
@@ -2260,59 +2259,61 @@ class ShallowProbabilisticCircuit(ProbabilisticCircuit):
             root.add_subcircuit(product, weighted_product.log_weight)
         return result
 
-    def events_of_higher_density_product(
-        self, other: Self, own_pro_unit, other_pro_unit, tolerance: float = 10e-8
-    ):
+    def cells_of_constant_density(self, other: Self) -> list[Event]:
         """
-        Construct E_p of a product unit in a shallow context.
+        Partition the union of the supports of this and another shallow circuit into
+        disjoint cells that each lie either entirely inside or entirely outside the
+        support of every product unit of both circuits.
 
-        :own_pro_unit: product unit which is part of E_p :other: other product unit
-        which is part of E_p :tolerance: float as how close to zero is zero, because of
-        imprecision.
+        :param other: The other shallow circuit.
+        :return: The cells of the partition.
         """
-        # supp_own = own_pro_unit.support
-        # supp_other = other_pro_unit.support
-        # intersection: Event = (supp_own & supp_other)
-        own_copy = self.subgraph_of(own_pro_unit)
-        other_copy = other.subgraph_of(other_pro_unit)
-        intersection = own_copy.support & other_copy.support
+        cells: list[Event] = []
+        for circuit in [self, other]:
+            for product in circuit.root.subcircuits:
+                support = circuit.subgraph_of(product).support
+                uncovered = support
+                refined_cells = []
+                for cell in cells:
+                    refined_cells.extend(
+                        part
+                        for part in [cell & support, cell - support]
+                        if not part.is_empty()
+                    )
+                    uncovered = uncovered - cell
+                if not uncovered.is_empty():
+                    refined_cells.append(uncovered)
+                cells = refined_cells
+        return cells
 
-        if intersection.is_empty():
-            return Event()
-
-        center = np.array(
-            [
-                assignment.simple_sets[0].center()
-                for variable, assignment in intersection.simple_sets[0].items()
-            ]
-        ).reshape(1, -1)
-
-        likelihood_own = self.likelihood(center)
-        likelihood_other = other.likelihood(center)
-        diff = likelihood_own - likelihood_other
-        if diff > tolerance:
-            return intersection
-        else:
-            return Event()
-
-    def events_of_higher_density_sum(self, other: Self, tolerance: float = 10e-8):
+    def event_of_higher_density(self, other: Self, tolerance: float = 10e-8) -> Event:
         """
-        Construct E_p of a sum unit in a shallow context.
+        Construct the event where this shallow circuit has a higher density than
+        another one.
 
-        :other: the other Root shallow PC node to create the E_p :tolerance: float as
-        how close to zero is zero, because of imprecisions
+        .. note::
+
+            The densities are compared at one point per cell of
+            :meth:`cells_of_constant_density`, which is exact when every leaf is
+            uniform.
+
+        :param other: The other shallow circuit.
+        :param tolerance: The likelihood difference below which two likelihoods count
+            as equal.
+        :return: The event where this circuit is more likely.
         """
-        progress_bar = tqdm.tqdm(
-            total=len(self.root.subcircuits) * len(other.root.subcircuits)
-        )
-        result = self.support - other.support
-        for own_prod, other_prod in itertools.product(
-            self.root.subcircuits, other.root.subcircuits
-        ):
-            result |= self.events_of_higher_density_product(
-                other, own_prod, other_prod, tolerance
+        result = Event.from_simple_sets()
+        for cell in self.cells_of_constant_density(other):
+            point = np.array(
+                [
+                    [
+                        assignment.simple_sets[0].center()
+                        for assignment in cell.simple_sets[0].values()
+                    ]
+                ]
             )
-            progress_bar.update()
+            if self.likelihood(point)[0] - other.likelihood(point)[0] > tolerance:
+                result |= cell
         return result
 
     def total_variation_distance(self, other: Self, tolerance: float = 10e-8) -> float:
@@ -2330,7 +2331,7 @@ class ShallowProbabilisticCircuit(ProbabilisticCircuit):
             as equal when constructing the event where this circuit is more likely.
         :return: The total variation distance between the two circuits.
         """
-        event_of_higher_density = self.events_of_higher_density_sum(other, tolerance)
+        event_of_higher_density = self.event_of_higher_density(other, tolerance)
         return self.probability(event_of_higher_density) - other.probability(
             event_of_higher_density
         )

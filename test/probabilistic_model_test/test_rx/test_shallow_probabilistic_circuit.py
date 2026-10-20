@@ -71,3 +71,15 @@ def test_total_variation_distance_of_identical_models_is_zero(variable: Continuo
     model = shallow_uniform_mixture(variable, [SimpleInterval.from_data(0, 1)])
 
     assert model.total_variation_distance(model) == pytest.approx(0)
+
+
+def test_total_variation_distance_where_a_component_boundary_splits_an_overlap(
+    variable: Continuous,
+):
+    model = shallow_uniform_mixture(
+        variable, [SimpleInterval.from_data(0, 2), SimpleInterval.from_data(1, 3)]
+    )
+    other = shallow_uniform_mixture(variable, [SimpleInterval.from_data(0, 3)])
+
+    # The model has density 1/4, 1/2, 1/4 on [0, 1), [1, 2), [2, 3); the other has 1/3.
+    assert model.total_variation_distance(other) == pytest.approx(1 / 6)
