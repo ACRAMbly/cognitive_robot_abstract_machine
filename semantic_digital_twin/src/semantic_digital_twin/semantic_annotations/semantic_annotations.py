@@ -997,14 +997,20 @@ class Rim(HasPinchableWall):
         return self.drawn_grasp_candidates()
 
     def surface_grasp_statement(
-        self, require_lifting: bool = False
+        self,
+        require_lifting: bool = False,
+        lowest_height: float = 0.25,
+        highest_height: float = 0.75,
     ) -> Match[SurfaceGrasp]:
         """
         :param require_lifting: Whether to ask only for grasps that lift the container.
-        :return: The middle of the rim's height, pinched across its wall.
+        :param lowest_height: The lowest height to pinch the rim at, as a fraction of
+            its height.
+        :param highest_height: The height to pinch the rim below, as such a fraction.
+        :return: The rim between the two heights, pinched across its wall.
         :raises NoGraspGeometry: If the rim has no wall to measure.
         """
-        return self.wall_grasp_statement(0.25, 0.75, require_lifting)
+        return self.wall_grasp_statement(lowest_height, highest_height, require_lifting)
 
 
 @dataclass(eq=False)

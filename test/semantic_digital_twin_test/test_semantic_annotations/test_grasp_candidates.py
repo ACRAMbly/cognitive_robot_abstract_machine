@@ -311,6 +311,62 @@ def test_bowl_grasps_close_on_the_middle_of_the_wall(bowl):
     )
 
 
+def test_a_wall_is_pinched_as_deep_as_asked(bowl):
+    shallowest_depth, deepest_depth = 0.1, 0.9
+    allowed = allowed_intervals(
+        bowl.rim.wall_grasp_statement(
+            0.25,
+            0.75,
+            False,
+            shallowest_depth=shallowest_depth,
+            deepest_depth=deepest_depth,
+        )
+    )
+    wall_thickness = bowl.rim.wall_thickness()
+
+    assert allowed["depth"].simple_sets[0].lower == pytest.approx(
+        shallowest_depth * wall_thickness
+    )
+    assert allowed["depth"].simple_sets[-1].upper == pytest.approx(
+        deepest_depth * wall_thickness
+    )
+
+
+def test_a_rim_is_pinched_between_the_heights_asked(bowl):
+    lowest_height, highest_height = 0.1, 0.9
+    allowed = allowed_intervals(
+        bowl.rim.surface_grasp_statement(
+            lowest_height=lowest_height, highest_height=highest_height
+        )
+    )
+
+    assert allowed["height"].simple_sets[0].lower == pytest.approx(lowest_height)
+    assert allowed["height"].simple_sets[-1].upper == pytest.approx(highest_height)
+
+
+def test_a_container_without_a_rim_is_pinched_as_far_into_its_rim_depth_as_asked(
+    bowl,
+):
+    bowl.rim = None
+    rim_depth, shallowest_rim_fraction, deepest_rim_fraction = 0.02, 0.1, 0.9
+    allowed = allowed_intervals(
+        bowl.surface_grasp_statement(
+            rim_depth=rim_depth,
+            shallowest_rim_fraction=shallowest_rim_fraction,
+            deepest_rim_fraction=deepest_rim_fraction,
+        )
+    )
+    lowest, highest = bowl.grasp_surface().bounds
+    rim_fraction = rim_depth / float(highest[2] - lowest[2])
+
+    assert allowed["height"].simple_sets[0].lower == pytest.approx(
+        1 - deepest_rim_fraction * rim_fraction
+    )
+    assert allowed["height"].simple_sets[-1].upper == pytest.approx(
+        1 - shallowest_rim_fraction * rim_fraction
+    )
+
+
 # %% cutlery grasp poses
 
 

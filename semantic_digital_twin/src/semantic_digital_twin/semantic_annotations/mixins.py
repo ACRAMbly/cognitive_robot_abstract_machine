@@ -845,15 +845,24 @@ class HasPinchableWall(HasGraspCandidates):
     """
 
     def wall_grasp_statement(
-        self, lowest_height: float, highest_height: float, require_lifting: bool
+        self,
+        lowest_height: float,
+        highest_height: float,
+        require_lifting: bool,
+        shallowest_depth: float = 0.25,
+        deepest_depth: float = 0.75,
     ) -> Match[SurfaceGrasp]:
         """
         :param lowest_height: The lowest height to pinch the wall at, as a fraction of
             the grasp surface's bounding box from its bottom to its top.
         :param highest_height: The height to pinch the wall below, as such a fraction.
         :param require_lifting: Whether to ask only for grasps that lift the object.
-        :return: The wall between the two heights, all around, closing on the middle
-            half of its thickness, from above or tilted a little towards it.
+        :param shallowest_depth: The least depth to close the fingers at, as a fraction
+            of the wall's thickness.
+        :param deepest_depth: The depth to close the fingers short of, as such a
+            fraction.
+        :return: The wall between the two heights, all around, closing between the two
+            depths, from above or tilted a little towards it.
         :raises NoGraspGeometry: If there is no wall to measure.
         """
         thickness = self.wall_thickness((lowest_height + highest_height) / 2)
@@ -861,8 +870,8 @@ class HasPinchableWall(HasGraspCandidates):
         return grasp.where(
             grasp.height >= lowest_height,
             grasp.height < highest_height,
-            grasp.depth >= 0.25 * thickness,
-            grasp.depth < 0.75 * thickness,
+            grasp.depth >= shallowest_depth * thickness,
+            grasp.depth < deepest_depth * thickness,
             grasp.azimuth >= 0.0,
             grasp.azimuth < 2 * math.pi,
             grasp.pitch >= 0.0,
@@ -942,20 +951,30 @@ class HasRim(HasPinchableWall, PartWholeRelationship):
         return self.drawn_grasp_candidates()
 
     def surface_grasp_statement(
-        self, require_lifting: bool = False, rim_depth: float = 0.02
+        self,
+        require_lifting: bool = False,
+        rim_depth: float = 0.02,
+        shallowest_rim_fraction: float = 0.25,
+        deepest_rim_fraction: float = 0.75,
     ) -> Match[SurfaceGrasp]:
         """
         :param require_lifting: Whether to ask only for grasps that lift the container.
         :param rim_depth: How far below the container's highest point its rim reaches,
             in meters.
-        :return: The middle of the top ``rim_depth`` of the container's own surface,
-            pinched across its wall, as a :class:`Rim` part is.
+        :param shallowest_rim_fraction: How far below the highest point to pinch at
+            least, as a fraction of ``rim_depth``.
+        :param deepest_rim_fraction: How far below the highest point to pinch at most,
+            as such a fraction.
+        :return: The container's own surface between the two fractions of its top
+            ``rim_depth``, pinched across its wall, as a :class:`Rim` part is.
         :raises NoGraspGeometry: If the container has no wall to measure there.
         """
         lowest, highest = self.grasp_surface().bounds
         rim_fraction = rim_depth / float(highest[2] - lowest[2])
         return self.wall_grasp_statement(
-            1 - 0.75 * rim_fraction, 1 - 0.25 * rim_fraction, require_lifting
+            1 - deepest_rim_fraction * rim_fraction,
+            1 - shallowest_rim_fraction * rim_fraction,
+            require_lifting,
         )
 
 
