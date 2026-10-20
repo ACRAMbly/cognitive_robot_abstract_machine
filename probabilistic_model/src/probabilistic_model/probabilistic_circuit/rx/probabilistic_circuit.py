@@ -1978,9 +1978,8 @@ class ProbabilisticCircuit(GroundableCircuit[Unit], SubclassJSONSerializer):
         :param node: The root of the subgraph.
         :return: The subgraph.
         """
-        nodes_to_keep = list(rx.descendants(self.graph, node)) + [node]
         result = self.__class__()
-        result.graph = self.graph.subgraph(nodes_to_keep)
+        result.mount(node)
         return result
 
     def fill_node_colors(self, node_colors: Dict[Unit, str]):
@@ -2344,19 +2343,25 @@ class ShallowProbabilisticCircuit(ProbabilisticCircuit):
             progress_bar.update()
         return result
 
-    def l1(self, other: Self, tolerance: float = 10e-8) -> float:
+    def total_variation_distance(self, other: Self, tolerance: float = 10e-8) -> float:
         """
-        The L1 metric between shallow Circuits are calculated.
+        Calculate the total variation distance :math:`\\frac{1}{2} \\int |p(x) - q(x)| dx`
+        between this circuit and another shallow circuit, which lies in :math:`[0, 1]`.
 
-        It is important, that before the shallowing the PC replace_discrete_distribution_with_deterministic_sum called on.´
-        :other: the other shallow PC which the L1 metric is calculated
-        :tolerance: float as how close to zero is zero, because of imprecision for the Creation of E_p.
+        .. note::
+
+            Call :meth:`replace_discrete_distribution_with_deterministic_sum` on a
+            circuit before making it shallow.
+
+        :param other: The other shallow circuit.
+        :param tolerance: The likelihood difference below which two likelihoods count
+            as equal when constructing the event where this circuit is more likely.
+        :return: The total variation distance between the two circuits.
         """
-        e = self.events_of_higher_density_sum(other, tolerance)
-        p_e = self.probability(e)
-        q_e = other.probability(e)
-
-        return 2 * (p_e - q_e)
+        event_of_higher_density = self.events_of_higher_density_sum(other, tolerance)
+        return self.probability(event_of_higher_density) - other.probability(
+            event_of_higher_density
+        )
 
     def remove_node_and_successor_structure(self, node: Unit):
         """
