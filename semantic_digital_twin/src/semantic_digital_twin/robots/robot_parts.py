@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import inspect
 import logging
+import os
 import types
 from abc import ABC, abstractmethod
 from collections import defaultdict
@@ -32,6 +33,7 @@ from krrood.class_diagrams.attribute_introspector import (
 from krrood.entity_query_language.factories import variable, contains, a, entity
 from krrood.ormatic.utils import classproperty
 from krrood.utils import get_generic_type_parameters
+from semantic_digital_twin.adapters.package_resolver import CompositePathResolver
 from semantic_digital_twin.adapters.urdf import URDFParser
 from semantic_digital_twin.datastructures.definitions import JointStateType
 from semantic_digital_twin.datastructures.field_of_view import FieldOfView
@@ -42,6 +44,7 @@ from semantic_digital_twin.exceptions import (
     MoreThanOneBodyHeld,
     NoJointStateWithType,
     NothingHeld,
+    PathResolutionError,
     UselessConceptError,
     DuplicateRobotAssignmentsError,
     MissingDefaultCameraError,
@@ -1077,6 +1080,19 @@ class AbstractRobot(Agent, HasRobotParts, ABC):
         Returns a ROS file path pointing to the description of this robot, for example a
         URDF file.
         """
+
+    @classmethod
+    def is_description_installed(cls) -> bool:
+        """
+        :return: Whether the file :meth:`get_ros_file_path` points to is on this
+            machine.
+        """
+        try:
+            return os.path.isfile(
+                CompositePathResolver().resolve(cls.get_ros_file_path())
+            )
+        except PathResolutionError:
+            return False
 
     @classproperty
     def uses_visual_as_collision_backup(cls) -> bool:

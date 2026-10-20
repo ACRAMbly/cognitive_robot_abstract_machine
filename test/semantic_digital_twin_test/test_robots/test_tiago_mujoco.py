@@ -23,7 +23,6 @@ from semantic_digital_twin.datastructures.definitions import (
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 from semantic_digital_twin.robots.tiago import TiagoMujoco
 from semantic_digital_twin.specifications.robots import RobotSpecification
-from semantic_digital_twin.utils import iai_tiago_description_installed
 from semantic_digital_twin.world import World
 from semantic_digital_twin.world_description.connections import (
     ActiveConnection1DOF,
@@ -36,8 +35,8 @@ from semantic_digital_twin.world_description.world_entity import (
 )
 
 pytestmark = pytest.mark.skipif(
-    not iai_tiago_description_installed(),
-    reason="iai_tiago_description is not installed",
+    not TiagoMujoco.is_description_installed(),
+    reason="The MuJoCo model of the Tiago is not installed",
 )
 
 

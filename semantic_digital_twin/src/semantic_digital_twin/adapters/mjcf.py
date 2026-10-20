@@ -23,11 +23,7 @@ from semantic_digital_twin.adapters.multi_sim import (
     MujocoLight,
     MujocoTendon,
 )
-from semantic_digital_twin.adapters.package_resolver import (
-    CompositePathResolver,
-    FileUriResolver,
-    PackageUriResolver,
-)
+from semantic_digital_twin.adapters.package_resolver import PackageUriResolver
 from semantic_digital_twin.adapters.world_model_parser import WorldModelParser
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 from semantic_digital_twin.exceptions import WorldEntityNotFoundError
@@ -112,21 +108,12 @@ class MJCFParser(WorldModelParser):
     """
 
     def __post_init__(self):
+        package_uri_resolver = PackageUriResolver()
+        if package_uri_resolver.supports(self.file_path):
+            self.file_path = package_uri_resolver.resolve(self.file_path)
         if self.prefix is None:
             self.prefix = os.path.basename(self.file_path).split(".")[0]
         self.spec: mujoco.MjSpec = mujoco.MjSpec.from_file(self.file_path)
-        mesh_file_resolver = CompositePathResolver(
-            [
-                FileUriResolver(
-                    base_directory=os.path.join(
-                        os.path.dirname(self.file_path), self.spec.meshdir
-                    )
-                ),
-                PackageUriResolver(),
-            ]
-        )
-        for mujoco_mesh in self.spec.meshes:
-            mujoco_mesh.file = mesh_file_resolver.resolve(mujoco_mesh.file)
         self.tree = ET.fromstring(self.spec.to_xml())
 
     @classmethod
@@ -514,7 +501,10 @@ class MJCFParser(WorldModelParser):
                 return ellipsoid
             case mujoco.mjtGeom.mjGEOM_MESH:
                 mujoco_mesh: mujoco.MjsMesh = self.spec.mesh(mujoco_geom.meshname)
-                filename = mujoco_mesh.file
+                meshdir = os.path.join(
+                    os.path.dirname(self.file_path), self.spec.meshdir
+                )
+                filename = str(os.path.join(meshdir, mujoco_mesh.file))
                 mujoco_material: mujoco.MjsMaterial = self.spec.material(
                     mujoco_geom.material
                 )

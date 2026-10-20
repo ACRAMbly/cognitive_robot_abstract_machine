@@ -35,7 +35,6 @@ def create_cache_dir(folder_name: str) -> Path:
     cache_dir.mkdir(parents=True, exist_ok=True)
     return cache_dir
 
-
 class suppress_stdout_stderr(object):
     """
     A context manager for doing a "deep suppression" of stdout and stderr in
@@ -146,22 +145,6 @@ def hsrb_installed() -> bool:
         from ament_index_python.packages import get_package_share_directory
 
         pkg_name = "hsr_description"
-
-        if get_package_share_directory(pkg_name):
-            return True
-        return False
-    except (ImportError, PackageNotFoundError, ValueError):
-        return False
-
-
-def iai_tiago_description_installed() -> bool:
-    """
-    :return: Whether the ROS package the Tiago is described by is installed.
-    """
-    try:
-        from ament_index_python.packages import get_package_share_directory
-
-        pkg_name = "iai_tiago_description"
 
         if get_package_share_directory(pkg_name):
             return True

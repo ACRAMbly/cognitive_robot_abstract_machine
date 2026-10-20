@@ -1,8 +1,8 @@
 import os.path
+import shutil
 
 import numpy
 import pytest
-import trimesh
 
 from semantic_digital_twin.adapters.mjcf import MJCFParser
 from semantic_digital_twin.adapters.multi_sim import MujocoLight
@@ -375,20 +375,21 @@ def test_primitive_box_geom_resolves_its_material_texture(tmp_path):
     assert box_shape.texture.uniform is True
 
 
-# %% meshes from ROS packages
+# %% descriptions in ROS packages
 
 
-def test_a_mesh_named_by_a_package_uri_is_read_from_that_package(tmp_path, monkeypatch):
-    package_directory = tmp_path / "mesh_package"
-    mesh_file_path = package_directory / "meshes" / "cube.stl"
-    mesh_file_path.parent.mkdir(parents=True)
-    trimesh.creation.box(extents=(0.1, 0.1, 0.1)).export(mesh_file_path)
+def test_a_scene_named_by_a_package_uri_is_read_from_that_package(
+    tmp_path, monkeypatch
+):
+    scene_file_name = "frame_wrapped_scene.xml"
+    package_directory = tmp_path / "scene_package"
+    package_directory.mkdir()
+    shutil.copy(os.path.join(DATASET_DIR, scene_file_name), package_directory)
     monkeypatch.setenv("ROS_PACKAGE_PATH", str(package_directory))
 
-    world = MJCFParser(os.path.join(DATASET_DIR, "package_mesh_scene.xml")).parse()
+    from_package = MJCFParser(f"package://scene_package/{scene_file_name}").parse()
 
-    [crate] = [
-        body for body in world.kinematic_structure_entities if body.name.name == "crate"
+    from_file = MJCFParser(os.path.join(DATASET_DIR, scene_file_name)).parse()
+    assert [body.name for body in from_package.kinematic_structure_entities] == [
+        body.name for body in from_file.kinematic_structure_entities
     ]
-    [mesh] = crate.collision.shapes
-    assert mesh.filename == str(mesh_file_path)
