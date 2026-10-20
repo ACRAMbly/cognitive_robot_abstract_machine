@@ -93,6 +93,23 @@ class PlotAlignment(IntEnum):
 
 
 @dataclass
+class WeightedLeafProduct:
+    """
+    A product of leaves with the logarithmic weight it carries in a mixture.
+    """
+
+    log_weight: float
+    """
+    The logarithmic weight of the product.
+    """
+
+    leaves: list[LeafUnit]
+    """
+    The leaves whose distributions are multiplied.
+    """
+
+
+@dataclass
 class Unit(SubclassJSONSerializer, ABC):
     """
     Class for all units of a probabilistic circuit.
@@ -140,6 +157,14 @@ class Unit(SubclassJSONSerializer, ABC):
     def support(self):
         """
         Calculate the support of this unit.
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    def weighted_leaf_products(self) -> list[WeightedLeafProduct]:
+        """
+        :return: The weighted products of leaves whose mixture is the distribution of
+            this unit.
         """
         raise NotImplementedError
 
@@ -322,6 +347,9 @@ class LeafUnit(Unit):
     @property
     def leaves(self) -> List[LeafUnit]:
         return [self]
+
+    def weighted_leaf_products(self) -> list[WeightedLeafProduct]:
+        return [WeightedLeafProduct(log_weight=0.0, leaves=[self])]
 
     def log_likelihood(self, events: npt.NDArray):
         self.result_of_current_query = self.distribution.log_likelihood(events)
@@ -549,6 +577,15 @@ class SumUnit(InnerUnit):
                 subcircuit,
             )
             for subcircuit in self.subcircuits
+        ]
+
+    def weighted_leaf_products(self) -> list[WeightedLeafProduct]:
+        return [
+            WeightedLeafProduct(
+                log_weight=log_weight + product.log_weight, leaves=product.leaves
+            )
+            for log_weight, subcircuit in self.log_weighted_subcircuits
+            for product in subcircuit.weighted_leaf_products()
         ]
 
     @property
@@ -914,6 +951,20 @@ class ProductUnit(InnerUnit):
             support &= subcircuit.result_of_current_query
 
         self.result_of_current_query = support
+
+    def weighted_leaf_products(self) -> list[WeightedLeafProduct]:
+        return [
+            WeightedLeafProduct(
+                log_weight=sum(factor.log_weight for factor in factors),
+                leaves=[leaf_unit for factor in factors for leaf_unit in factor.leaves],
+            )
+            for factors in itertools.product(
+                *(
+                    subcircuit.weighted_leaf_products()
+                    for subcircuit in self.subcircuits
+                )
+            )
+        ]
 
     def is_decomposable(self):
         for index, subcircuit in enumerate(self.subcircuits):
@@ -2187,106 +2238,27 @@ class ShallowProbabilisticCircuit(ProbabilisticCircuit):
     """
 
     @classmethod
-    def from_probabilistic_circuit(cls, probabilistic_circuit: ProbabilisticCircuit):
+    def from_probabilistic_circuit(
+        cls, probabilistic_circuit: ProbabilisticCircuit
+    ) -> Self:
         """
-        Initialization function, to input a PC to create its shallow version.
+        Create the shallow circuit with the same distribution as a circuit, leaving that
+        circuit unchanged.
+
+        :param probabilistic_circuit: The circuit to convert.
+        :return: The shallow circuit.
         """
         result = cls()
-        shallow_pc = probabilistic_circuit.__copy__()
-        cls.shallowing(result, node=shallow_pc.root, presucc=None)
-        result.add_nodes_from(shallow_pc.nodes)
-        result.add_edges_from(shallow_pc.edges)
-        result.add_weighted_edges_from(shallow_pc.log_weighted_edges)
+        root = SumUnit(probabilistic_circuit=result)
+        copies_of_leaves: dict[int, LeafUnit] = {}
+        for weighted_product in probabilistic_circuit.root.weighted_leaf_products():
+            product = ProductUnit(probabilistic_circuit=result)
+            for leaf_unit in weighted_product.leaves:
+                if leaf_unit.index not in copies_of_leaves:
+                    copies_of_leaves[leaf_unit.index] = leaf_unit.copy_without_graph()
+                product.add_subcircuit(copies_of_leaves[leaf_unit.index])
+            root.add_subcircuit(product, weighted_product.log_weight)
         return result
-
-    def shallowing(self, node: Unit, presucc: Unit | None):
-        """
-        This function transforms the PC into it shallow form, in place.
-
-        This function uses recursion and need to be called on the root of the PC. :node:
-        the Node in focus to be shallowed :presucc: the predecessor of the node of
-        before shallowing.
-        """
-        probabilistic_circuit = node.probabilistic_circuit
-        succ_list: List = list(probabilistic_circuit.successors(node))
-        if not isinstance(node, SumUnit) and not isinstance(node, ProductUnit):
-            sum_unit = SumUnit()
-            product_unit = ProductUnit()
-            probabilistic_circuit.add_node(sum_unit)
-            probabilistic_circuit.add_node(product_unit)
-            probabilistic_circuit.add_edge(product_unit, node)
-            probabilistic_circuit.add_edge(sum_unit, product_unit, log_weight=0.0)
-            if presucc is not None:
-                data = probabilistic_circuit.get_edge_data(presucc, node, {"weight": 1})
-                probabilistic_circuit.add_edge(presucc, sum_unit, **data)
-                probabilistic_circuit.remove_edge(presucc, node)
-            return
-        elif isinstance(node, SumUnit):
-            for succ in succ_list:
-                self.shallowing(succ, presucc=node)
-            new_succ_list = list(probabilistic_circuit.successors(node))
-            for sum_succ in new_succ_list:
-                first_weight = probabilistic_circuit.get_edge_data(
-                    node, sum_succ, {"log_weight": 0}
-                ).get("log_weight", 0)
-                for succ_succ in list(probabilistic_circuit.successors(sum_succ)):
-                    second_weight = probabilistic_circuit.get_edge_data(
-                        sum_succ, succ_succ, {"log_weight": 0}
-                    ).get("weight", 1)
-                    probabilistic_circuit.add_edge(
-                        node, succ_succ, log_weight=first_weight + second_weight
-                    )
-                probabilistic_circuit.remove_edge(node, sum_succ)
-                if len(list(probabilistic_circuit.predecessors(sum_succ))) == 0:
-                    self.remove_node_and_successor_structure(sum_succ)
-            return
-        elif isinstance(node, ProductUnit):
-            for succ in succ_list:
-                self.shallowing(succ, presucc=node)
-            new_succ_list = list(probabilistic_circuit.successors(node))
-            combination_li = list()
-            sum_unit = SumUnit()
-            probabilistic_circuit.add_node(sum_unit)
-            if presucc is not None:
-                data = probabilistic_circuit.get_edge_data(presucc, node, {"weight": 1})
-                probabilistic_circuit.add_edge(presucc, sum_unit, **data)
-                probabilistic_circuit.remove_edge(presucc, node)
-                if len(list(probabilistic_circuit.predecessors(node))) == 0:
-                    probabilistic_circuit.remove_node(node)
-            elif presucc is None:
-                # None only happen if this Instance is root
-                probabilistic_circuit.remove_node(node)
-            for sum_succ in new_succ_list:
-                pro_li = []
-                for pro_succ in list(probabilistic_circuit.successors(sum_succ)):
-                    data = probabilistic_circuit.get_edge_data(
-                        sum_succ, pro_succ, {"weight": 1}
-                    )
-                    pro_li.append((pro_succ, data.get("weight", 1)))
-                combination_li.append(pro_li)
-            for combination in itertools.product(*combination_li):
-                product_unit = ProductUnit()
-                probabilistic_circuit.add_node(product_unit)
-                total_weight = 1
-                for pro_tuple in combination:
-                    under_node, weight = pro_tuple[0], pro_tuple[1]
-                    total_weight *= weight
-                    under_succ_li = probabilistic_circuit.successors(under_node)
-                    for under_succ in under_succ_li:
-                        data = probabilistic_circuit.get_edge_data(
-                            under_node, under_succ, {"log_weight": 0.0}
-                        )
-                        probabilistic_circuit.add_edge(product_unit, under_succ, **data)
-                probabilistic_circuit.add_edge(
-                    sum_unit, product_unit, log_weight=total_weight
-                )
-            for sum_succ in new_succ_list:
-                if len(list(probabilistic_circuit.predecessors(sum_succ))) == 0:
-                    self.remove_node_and_successor_structure(sum_succ)
-            return
-
-        else:
-            raise TypeError(f"{type(node)} is not supported")
 
     def events_of_higher_density_product(
         self, other: Self, own_pro_unit, other_pro_unit, tolerance: float = 10e-8
@@ -2362,19 +2334,6 @@ class ShallowProbabilisticCircuit(ProbabilisticCircuit):
         return self.probability(event_of_higher_density) - other.probability(
             event_of_higher_density
         )
-
-    def remove_node_and_successor_structure(self, node: Unit):
-        """
-        This is an assist function for pruning disconnected subgraphs from the PC.
-
-        :node: the node that needs to be checked if to be pruned and its children.
-        """
-        probabilistic_circuit = node.probabilistic_circuit
-        succ_list: List = list(probabilistic_circuit.successors(node))
-        probabilistic_circuit.remove_node(node)
-        for succ in succ_list:
-            if len(list(probabilistic_circuit.predecessors(succ))) == 0:
-                self.remove_node_and_successor_structure(succ)
 
 
 @dataclass
