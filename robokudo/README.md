@@ -59,6 +59,8 @@ Things to note:
 
 https://robokudo.ai.uni-bremen.de/
 
+For deterministic perception data, see [Scripted Tetris observations](scripted_tetris.md).
+
 ### How to cite
 
 ```

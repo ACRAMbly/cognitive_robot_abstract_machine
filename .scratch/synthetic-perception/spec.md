@@ -25,7 +25,7 @@ output. Reuse the repository's ROS and blackboard fixtures. Read checked-in mesh
 use a controllable clock instead of waiting. Tests must run in the existing RoboKudo
 CI suite without cameras, inference workers, external calls, or credentials.
 
-## Intended entry point
+## Usage
 
-The runnable analysis engine will be named `scripted_tetris`. Add its run guide
-with the implementation.
+See [the run guide](../../robokudo/scripted_tetris.md) for the engine command,
+scenario data, playback settings, and test command.

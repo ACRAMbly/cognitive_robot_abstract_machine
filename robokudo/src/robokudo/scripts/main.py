@@ -246,7 +246,9 @@ def main() -> None:
     # If you have a custom version of `setup_with_descendants`, call it:
     setup_with_descendants_rk(ae_root)
 
-    viz = VizMarkerPublisher(_world=world_instance(), node=node1)
+    perception_world = world_instance()
+    if perception_world.root is not None:
+        viz = VizMarkerPublisher(_world=perception_world, node=node1)
 
     try:
         # 9. Start ticking the Behavior Tree
