@@ -4,8 +4,6 @@ Tests for the check that this machine can receive the large messages the robot s
 
 from __future__ import annotations
 
-import operator
-
 import pytest
 
 from experiments.network_limits import (
@@ -13,10 +11,8 @@ from experiments.network_limits import (
     LargeMessageReceiver,
     LargeMessagesCannotArrive,
     MachineSettings,
-    SettingReading,
-    SettingRequirement,
+    SettingValue,
 )
-from krrood.entity_query_language.factories import evaluate_condition, variable_from
 
 # %% fixtures
 
@@ -59,13 +55,15 @@ def build_machine(
     (network_root / interface).mkdir(parents=True)
     if wireless:
         (network_root / interface / "wireless").mkdir()
-    sysctl_root = tmp_path / "sys"
+    kernel_settings_root = tmp_path / "sys"
     for setting in KernelSetting:
-        path = sysctl_root / str(setting).replace(".", "/")
+        path = kernel_settings_root / str(setting).replace(".", "/")
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(f"{settings[setting.name]}\n")
     return MachineSettings(
-        sysctl_root=sysctl_root, network_root=network_root, route_table=routes
+        kernel_settings_root=kernel_settings_root,
+        network_root=network_root,
+        route_table=routes,
     )
 
 
@@ -90,37 +88,42 @@ The stock values that were measured to lose 99.99% of a large message.
 # %% requirements
 
 
-def is_met(requirement: SettingRequirement, value: int) -> bool:
+def requirement_for(setting: KernelSetting) -> SettingValue:
     """
-    :param requirement: The requirement to check.
-    :param value: The value a machine reports for the requirement's setting.
-    :return: Whether the requirement's condition holds for that reading.
+    :param setting: The setting to look up.
+    :return: The value the receiver requires of that setting.
     """
-    reading = variable_from([SettingReading(requirement.setting, value)])
-    return evaluate_condition(requirement.is_met_by(reading))
+    return next(
+        requirement
+        for requirement in LargeMessageReceiver().requirements
+        if requirement.setting == setting
+    )
 
 
-def test_a_floor_is_met_by_the_value_it_names_and_by_more():
-    requirement = SettingRequirement(KernelSetting.DEVICE_BACKLOG, 1000, operator.ge)
+def test_values_past_each_requirement_on_its_safe_side_leave_nothing_unmet(tmp_path):
+    past = {name: value + 1 for name, value in TUNED.items()}
+    past["FRAGMENT_LIFETIME"] = TUNED["FRAGMENT_LIFETIME"] - 1
+    machine = build_machine(tmp_path, WIRELESS_ROUTE, wireless=True, **past)
 
-    assert is_met(requirement, 1000)
-    assert is_met(requirement, 1001)
-    assert not is_met(requirement, 999)
-
-
-def test_a_ceiling_is_met_by_the_value_it_names_and_by_less():
-    requirement = SettingRequirement(KernelSetting.FRAGMENT_LIFETIME, 3, operator.le)
-
-    assert is_met(requirement, 3)
-    assert is_met(requirement, 2)
-    assert not is_met(requirement, 4)
+    assert LargeMessageReceiver(machine).unmet_requirements() == []
 
 
-def test_a_requirement_is_not_met_by_another_settings_reading():
-    requirement = SettingRequirement(KernelSetting.DEVICE_BACKLOG, 1000, operator.ge)
-    reading = variable_from([SettingReading(KernelSetting.FRAGMENT_LIFETIME, 1000)])
+def test_a_setting_one_below_its_required_value_is_unmet(tmp_path):
+    lowered = {**TUNED, "DEVICE_BACKLOG": TUNED["DEVICE_BACKLOG"] - 1}
+    machine = build_machine(tmp_path, WIRELESS_ROUTE, wireless=True, **lowered)
 
-    assert not evaluate_condition(requirement.is_met_by(reading))
+    assert LargeMessageReceiver(machine).unmet_requirements() == [
+        requirement_for(KernelSetting.DEVICE_BACKLOG)
+    ]
+
+
+def test_a_fragment_lifetime_one_above_its_required_value_is_unmet(tmp_path):
+    raised = {**TUNED, "FRAGMENT_LIFETIME": TUNED["FRAGMENT_LIFETIME"] + 1}
+    machine = build_machine(tmp_path, WIRELESS_ROUTE, wireless=True, **raised)
+
+    assert LargeMessageReceiver(machine).unmet_requirements() == [
+        requirement_for(KernelSetting.FRAGMENT_LIFETIME)
+    ]
 
 
 # %% reading the machine

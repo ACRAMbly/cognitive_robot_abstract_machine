@@ -20,18 +20,12 @@ the command that fixes it.
 
 from __future__ import annotations
 
-import operator
 from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
 
-from typing_extensions import Any, Callable, List, Optional, TYPE_CHECKING
-
 from krrood.entity_query_language.factories import and_, an, entity, or_, variable
 from krrood.exceptions import DataclassException
-
-if TYPE_CHECKING:
-    from krrood.entity_query_language.core.base_expressions import SymbolicExpression
 
 # %% the settings that decide whether a large message arrives
 
@@ -51,53 +45,20 @@ class KernelSetting(StrEnum):
 
 
 @dataclass(frozen=True)
-class SettingReading:
+class SettingValue:
     """
-    One kernel setting's value as a machine reports it.
-    """
-
-    setting: KernelSetting
-    """
-    The setting read.
-    """
-
-    value: int
-    """
-    The value the machine reports for it.
-    """
-
-
-@dataclass(frozen=True)
-class SettingRequirement:
-    """
-    What one kernel setting has to be for a large message to arrive.
+    A kernel setting at one value.
     """
 
     setting: KernelSetting
     """
-    The setting this speaks for.
+    The setting.
     """
 
     value: int
     """
-    The value it is measured against, and the value the fix sets it to.
+    The value it is at.
     """
-
-    comparison: Callable[[Any, Any], Any]
-    """
-    The comparison a reading must pass against :attr:`value`, as ``operator.ge`` or
-    ``operator.le``; applied to a query variable it builds the EQL comparator.
-    """
-
-    def is_met_by(self, reading: SettingReading) -> SymbolicExpression:
-        """
-        :param reading: A query variable over a machine's readings.
-        :return: The EQL condition a reading of this setting holds for when this
-            requirement is met.
-        """
-        return and_(
-            reading.setting == self.setting, self.comparison(reading.value, self.value)
-        )
 
 
 # %% reading a machine
@@ -109,7 +70,7 @@ class MachineSettings:
     Where a machine reports its own settings, so a test can stand somewhere else in.
     """
 
-    sysctl_root: Path = Path("/proc/sys")
+    kernel_settings_root: Path = Path("/proc/sys")
     """
     Directory the kernel exposes its settings under.
     """
@@ -130,17 +91,17 @@ class MachineSettings:
 
         :param setting: The setting to read.
         """
-        return int((self.sysctl_root / str(setting).replace(".", "/")).read_text())
+        return int(
+            (self.kernel_settings_root / str(setting).replace(".", "/")).read_text()
+        )
 
-    def readings(self) -> List[SettingReading]:
+    def setting_values(self) -> list[SettingValue]:
         """
         :return: The current value of every setting a large message depends on.
         """
-        return [
-            SettingReading(setting, self.read(setting)) for setting in KernelSetting
-        ]
+        return [SettingValue(setting, self.read(setting)) for setting in KernelSetting]
 
-    def default_route_interface(self) -> Optional[str]:
+    def default_route_interface(self) -> str | None:
         """
         :return: The interface traffic with no more specific route leaves over, or None
             if this machine has no default route.
@@ -175,9 +136,9 @@ class LargeMessagesCannotArrive(DataclassException):
     The wireless interface the traffic would arrive over.
     """
 
-    unmet: List[SettingRequirement]
+    unmet: list[SettingValue]
     """
-    The requirements this machine does not meet.
+    The required values this machine does not meet.
     """
 
     raise_limits_command: str
@@ -208,27 +169,18 @@ class LargeMessageReceiver:
     The machine the messages arrive at.
     """
 
-    requirements: List[SettingRequirement] = field(
-        default_factory=lambda: [
-            SettingRequirement(
-                KernelSetting.FRAGMENT_CACHE_CEILING, 268435456, operator.ge
-            ),
-            SettingRequirement(
-                KernelSetting.FRAGMENT_CACHE_FLOOR, 201326592, operator.ge
-            ),
-            SettingRequirement(KernelSetting.FRAGMENT_LIFETIME, 3, operator.le),
-            SettingRequirement(
-                KernelSetting.RECEIVE_BUFFER_CEILING, 67108864, operator.ge
-            ),
-            SettingRequirement(
-                KernelSetting.RECEIVE_BUFFER_DEFAULT, 67108864, operator.ge
-            ),
-            SettingRequirement(KernelSetting.DEVICE_BACKLOG, 30000, operator.ge),
-        ]
+    requirements: tuple[SettingValue, ...] = (
+        SettingValue(KernelSetting.FRAGMENT_CACHE_CEILING, 268435456),
+        SettingValue(KernelSetting.FRAGMENT_CACHE_FLOOR, 201326592),
+        SettingValue(KernelSetting.FRAGMENT_LIFETIME, 3),
+        SettingValue(KernelSetting.RECEIVE_BUFFER_CEILING, 67108864),
+        SettingValue(KernelSetting.RECEIVE_BUFFER_DEFAULT, 67108864),
+        SettingValue(KernelSetting.DEVICE_BACKLOG, 30000),
     )
     """
     The configuration measured to carry the world snapshot over this setup's wireless
-    link.
+    link. The fragment lifetime has to be at most its value, every other setting at
+    least its value.
 
     These were raised and tested together, so this is the set known to work rather than
     the smallest set that would.
@@ -245,27 +197,28 @@ class LargeMessageReceiver:
         )
         return f"sudo sysctl -w {settings}"
 
-    def unmet_requirements(self) -> List[SettingRequirement]:
+    def unmet_requirements(self) -> list[SettingValue]:
         """
         :return: The requirements the machine does not currently meet.
         """
-        reading = variable(SettingReading, domain=self.machine.readings())
-        met_readings = an(
-            entity(reading).where(
+        actual = variable(SettingValue, domain=self.machine.setting_values())
+        required = variable(SettingValue, domain=self.requirements)
+        unmet = an(
+            entity(required).where(
+                actual.setting == required.setting,
                 or_(
-                    *(
-                        requirement.is_met_by(reading)
-                        for requirement in self.requirements
-                    )
-                )
+                    and_(
+                        required.setting != KernelSetting.FRAGMENT_LIFETIME,
+                        actual.value < required.value,
+                    ),
+                    and_(
+                        required.setting == KernelSetting.FRAGMENT_LIFETIME,
+                        actual.value > required.value,
+                    ),
+                ),
             )
         )
-        met_settings = {met_reading.setting for met_reading in met_readings.tolist()}
-        return [
-            requirement
-            for requirement in self.requirements
-            if requirement.setting not in met_settings
-        ]
+        return unmet.tolist()
 
     def check_messages_can_arrive(self) -> None:
         """
