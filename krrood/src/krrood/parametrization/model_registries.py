@@ -18,10 +18,10 @@ from probabilistic_model.probabilistic_circuit.relational.relational_probabilist
     GroundingMode,
     RelationalProbabilisticCircuit,
 )
-from probabilistic_model.probabilistic_circuit.rx.helper import fully_factorized
-from probabilistic_model.probabilistic_circuit.rx.probabilistic_circuit import (
-    ProbabilisticCircuit,
+from probabilistic_model.probabilistic_circuit.probabilistic_circuit_representation import (
+    RepresentationType,
 )
+from probabilistic_model.probabilistic_circuit.rx.helper import fully_factorized
 from probabilistic_model.probabilistic_model import ProbabilisticModel
 
 
@@ -70,7 +70,8 @@ class RelationalCircuitRegistry(ModelRegistry):
     """
     A registry that grounds a RelationalProbabilisticCircuit for the queried statement
     and aligns its variable names to the UnderspecifiedParameters convention before
-    returning.
+    returning. The grounding comes back in the circuit type the relational circuit was
+    fitted in, and a causal query is wrapped in that same type.
 
     Only supports :class:`~krrood.parametrization.parameterizer.UnderspecifiedParameters`
     (i.e. a ``Match``, directly or wrapped by ``distribution_of(...)``): grounding needs
@@ -114,7 +115,7 @@ class RelationalCircuitRegistry(ModelRegistry):
 
     def _ground_and_rename(
         self, parameters: UnderspecifiedParameters
-    ) -> ProbabilisticCircuit:
+    ) -> RepresentationType:
         """
         Ground the relational circuit for ``parameters.statement`` and align its
         variable names to the ``UnderspecifiedParameters`` convention.
@@ -138,8 +139,8 @@ class RelationalCircuitRegistry(ModelRegistry):
 
     @staticmethod
     def _as_causal_circuit(
-        grounded: ProbabilisticCircuit, parameters: UnderspecifiedParameters
-    ) -> CausalCircuit:
+        grounded: RepresentationType, parameters: UnderspecifiedParameters
+    ) -> CausalCircuit[RepresentationType]:
         """
         Wrap an already-grounded, already-renamed circuit as a verified
         ``CausalCircuit`` registering the query's declared cause, effect and confounder
