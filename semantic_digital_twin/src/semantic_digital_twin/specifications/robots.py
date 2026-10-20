@@ -94,8 +94,9 @@ class RobotSpecification:
         is_active = issubclass(connection_type, ActiveConnection)
         drive_velocity_limits = self._drive_velocity_limits(connection_type)
 
-        robot_world = self.semantic_annotation_type.parse_description()
-        robot_id = self.semantic_annotation_type.from_world(robot_world).id
+        described_robot = self.semantic_annotation_type.from_description()
+        robot_world = described_robot._world
+        robot_id = described_robot.id
 
         with world.modify_world():
             odom_body = self._create_odom_body()

@@ -7,6 +7,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+from typing_extensions import Self
 
 from krrood.utils import recursive_subclasses
 from semantic_digital_twin.specifications.base import SpawnSpecification
@@ -639,13 +640,13 @@ class RobotDescribedInCode(MinimalRobot):
     """
 
     @classmethod
-    def parse_description(cls) -> World:
+    def from_description(cls) -> Self:
         world = World()
         with world.modify_world():
             world.add_kinematic_structure_entity(
                 Body(name=PrefixedName("chassis", "described_in_code"))
             )
-        return world
+        return cls.from_world(world)
 
     @classmethod
     def _get_root_body_name(cls) -> str:

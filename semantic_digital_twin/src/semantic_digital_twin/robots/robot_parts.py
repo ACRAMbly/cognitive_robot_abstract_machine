@@ -1091,16 +1091,18 @@ class AbstractRobot(Agent, HasRobotParts, ABC):
         return False
 
     @classmethod
-    def parse_description(cls) -> World:
+    def from_description(cls) -> Self:
         """
-        :return: A world holding nothing but this robot, read from its own
+        :return: This robot, in a world holding nothing but it, read from its own
             description: the URDF :meth:`get_ros_file_path` points to, unless the robot
             is described in another format.
         """
-        return URDFParser.from_file(
-            cls.get_ros_file_path(),
-            use_visual_as_collision_backup=cls.uses_visual_as_collision_backup,
-        ).parse()
+        return cls.from_world(
+            URDFParser.from_file(
+                cls.get_ros_file_path(),
+                use_visual_as_collision_backup=cls.uses_visual_as_collision_backup,
+            ).parse()
+        )
 
     @classmethod
     @abstractmethod

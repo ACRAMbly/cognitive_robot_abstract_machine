@@ -32,6 +32,7 @@ from typing_extensions import (
 
 import numpy
 import mujoco
+from numpy.typing import NDArray
 from physics_simulators.mujoco_simulator import MujocoSimulator
 from physics_simulators.base_simulator import (
     BaseSimulator,
@@ -1848,7 +1849,7 @@ class DriveAxis:
     The kind of joint.
     """
 
-    direction: numpy.ndarray
+    direction: NDArray[numpy.float64]
     """
     The joint's axis in the drive's ``odom`` frame.
     """
@@ -1880,16 +1881,16 @@ class MujocoWheeledDriveJoints(MujocoConnectionJoints[DriveType], ABC):
     @abstractmethod
     def kind(cls) -> str:
         """
-        What the drive's joints are named as, after the robot the drive moves and
-        before the axis each joint moves along.
+        :return: What the drive's joints are named as, after the robot the drive moves
+            and before the axis each joint moves along.
         """
 
     @property
     @abstractmethod
     def axes_when_servoed(self) -> List[DriveAxis]:
         """
-        The joints the base moves with, in the order they are built in, once servos
-        drive it.
+        :return: The joints the base moves with, in the order they are built in, once
+            servos drive it.
         """
 
     @property
@@ -1970,7 +1971,7 @@ class MujocoWheeledDriveJoints(MujocoConnectionJoints[DriveType], ABC):
             )
         return measured_positions
 
-    def _in_odom(self, base_velocity: numpy.ndarray) -> numpy.ndarray:
+    def _in_odom(self, base_velocity: NDArray[numpy.float64]) -> NDArray[numpy.float64]:
         """
         :param base_velocity: A velocity along the base's x and y.
         :return: The same velocity along the x and the y of the drive's ``odom``, turned
@@ -2084,15 +2085,15 @@ class MujocoDifferentialDriveJoints(MujocoWheeledDriveJoints[DifferentialDrive])
     @property
     def sideways_servo_name(self) -> str:
         """
-        The name of the servo of the slide along y.
+        :return: The name of the servo of the slide along y.
         """
         return f"{self.joint_name_of(self.connection.y)}_servo"
 
     @property
-    def _forward_velocity_in_odom(self) -> numpy.ndarray:
+    def _forward_velocity_in_odom(self) -> NDArray[numpy.float64]:
         """
-        The velocity the drive is commanded to along its base's x, along the x and the
-        y of its ``odom``.
+        :return: The velocity the drive is commanded to along its base's x, along the
+            x and the y of its ``odom``.
         """
         forward_velocity = self.world.state[self.connection.x_velocity.id].velocity
         return self._in_odom(numpy.array([forward_velocity, 0.0]))
