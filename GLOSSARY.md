@@ -10,6 +10,10 @@ A Robokudo perception pipeline composed of annotators.
 **Annotator**:
 A perception stage that contributes observations or estimates to a scene.
 
+**Scripted observation**:
+A synthetic perception observation with specified visible objects and poses,
+independent of camera capture or inference.
+
 **6D pose**:
 The position and orientation of a rigid object relative to a reference coordinate frame.
 _Avoid_: Position, when orientation is also part of the result
