@@ -6,6 +6,10 @@
 # distribution of this software and related documentation without an express
 # license agreement from NVIDIA CORPORATION is strictly prohibited.
 
+from __future__ import annotations
+
+from dataclasses import dataclass
+
 import os
 import gc
 
@@ -32,24 +36,40 @@ from .Utils import (
 import nvdiffrast.torch as dr
 
 from robokudo_foundation_pose.learning.training.predict_score import ScorePredictor
-from robokudo_foundation_pose.learning.training.predict_pose_refine import PoseRefinePredictor
+from robokudo_foundation_pose.learning.training.predict_pose_refine import (
+    PoseRefinePredictor,
+)
 
-from typing_extensions import Optional, Dict, Any
+from typing_extensions import ClassVar, Optional, Dict, Any
 
 # get robokudo logger
 import logging
 import robokudo.defs
-rk_logger = logging.getLogger(robokudo.defs.PACKAGE_NAME) if False else logging.getLogger("dummy")
+
+rk_logger = (
+    logging.getLogger(robokudo.defs.PACKAGE_NAME)
+    if False
+    else logging.getLogger("dummy")
+)
 
 
-def cluster_poses_numpy(angle_diff: float, dist_diff: float, poses_in: np.ndarray, symmetry_tfs: Optional[np.ndarray],
-                        degree: bool = True) -> np.ndarray:
-    """Creates a sub set containing all unique poses from the given ones.
+def cluster_poses_numpy(
+    angle_diff: float,
+    dist_diff: float,
+    poses_in: np.ndarray,
+    symmetry_tfs: Optional[np.ndarray],
+    degree: bool = True,
+) -> np.ndarray:
+    """
+    Creates a sub set containing all unique poses from the given ones.
 
-    :param float angle_diff: Minimum geodesic angle difference between orientation of poses to be different
-    :param float dist_diff: Minimum euclidian distance between translation of poses to be different
-    :param np.ndarray poses_in: Poses [B, 4, 4] (upper 3x4 matrix part is [R|t])
-    :param Optional[np.ndarray] symmetry_tfs: Symmetric Poses [S, 4, 4] (upper 3x4 matrix part is [R|t])
+    :param float angle_diff: Minimum geodesic angle difference between orientation of
+        poses to be different
+    :param float dist_diff: Minimum euclidian distance between translation of poses to
+        be different
+    :param np.ndarray poses_in: Poses [B, 4, 4] (upper 3x4 matrix part is [R|t]) :param
+        Optional[np.ndarray] symmetry_tfs: Symmetric Poses [S, 4, 4] (upper 3x4 matrix
+        part is [R|t])
     :param bool degree: If 'True' then 'angle_diff' is in degree, otherwise in radian.
     :return: Poses [P, 4, 4] (upper 3x4 matrix part is)
     :rtype: np.ndarray
@@ -58,22 +78,25 @@ def cluster_poses_numpy(angle_diff: float, dist_diff: float, poses_in: np.ndarra
         angle_diff = (angle_diff * np.pi) / 180
 
     if symmetry_tfs is None:
-        symmetry_tfs = np.eye(4, dtype=poses_in.dtype)[None]    # 1 x 4 x 4
+        symmetry_tfs = np.eye(4, dtype=poses_in.dtype)[None]  # 1 x 4 x 4
 
-    unique_poses = poses_in[None, 0]    # 1 x 4 x 4
+    unique_poses = poses_in[None, 0]  # 1 x 4 x 4
 
     for i, pose in enumerate(poses_in[1:]):
         # test translation via euclidian distance
-        norm_diff = np.linalg.norm(unique_poses[:, :3, 3] - pose[None, :3, 3], axis=-1) # P'
-    
+        norm_diff = np.linalg.norm(
+            unique_poses[:, :3, 3] - pose[None, :3, 3], axis=-1
+        )  # P'
+
         if np.any(norm_diff < dist_diff):
             # rather similar translation, so test orientation via geodesic distance
             # under consideration of symmetries next
-            sym_poses = np.matmul(pose[None], symmetry_tfs)     # S x 4 x 4
+            sym_poses = np.matmul(pose[None], symmetry_tfs)  # S x 4 x 4
 
-            rot_diffs = np.einsum("sij, bkj -> sbik",
-                                    sym_poses[:, :3, :3], unique_poses[:, :3, :3])  # S x P' x 3 x 3
-            traces = np.trace(rot_diffs, axis1=-2, axis2=-1)    # S x P'
+            rot_diffs = np.einsum(
+                "sij, bkj -> sbik", sym_poses[:, :3, :3], unique_poses[:, :3, :3]
+            )  # S x P' x 3 x 3
+            traces = np.trace(rot_diffs, axis1=-2, axis2=-1)  # S x P'
             thetas = np.arccos(np.clip((traces - 1.0) / 2, -1.0, 1.0))  # S x P'
 
             if np.any(thetas < angle_diff):
@@ -81,21 +104,44 @@ def cluster_poses_numpy(angle_diff: float, dist_diff: float, poses_in: np.ndarra
                 continue
 
         # new pose
-        unique_poses = np.concatenate([unique_poses, pose[None]])   # (P'+1) x 4 x 4
+        unique_poses = np.concatenate([unique_poses, pose[None]])  # (P'+1) x 4 x 4
 
-    return unique_poses     # P x 4 x 4
+    return unique_poses  # P x 4 x 4
+
+
+# %% registration outcomes
+
+
+@dataclass(frozen=True)
+class InsufficientDepth:
+    """
+    Registration has too few valid masked pixels after depth preprocessing.
+    """
+
+    valid_pixel_count: int
+    """
+    Number of masked pixels that retain usable filtered depth.
+    """
+
+
+# %% pose estimation
 
 
 class FoundationPose:
+    MINIMUM_VALID_DEPTH_PIXELS: ClassVar[int] = 500
+    """
+    Minimum valid masked pixel count required after depth preprocessing.
+    """
+
     def __init__(
         self,
         mesh,
         symmetry_tfs=None,
-        scorer: ScorePredictor=None,
-        refiner: PoseRefinePredictor=None,
+        scorer: ScorePredictor = None,
+        refiner: PoseRefinePredictor = None,
         glctx=None,
         debug: bool = False,
-        debug_dir: str = "/home/bowen/debug/novel_pose_debug/"
+        debug_dir: str = "/home/bowen/debug/novel_pose_debug/",
     ):
         self.gt_pose = None
         self.ignore_normal_flip = True
@@ -120,7 +166,7 @@ class FoundationPose:
         self.scorer = scorer or ScorePredictor()
         self.refiner = refiner or PoseRefinePredictor()
 
-        self.pose_last = None   # Used for tracking; per the centered mesh
+        self.pose_last = None  # Used for tracking; per the centered mesh
 
     @torch.no_grad()
     def reset_object(self, mesh, symmetry_tfs=None):
@@ -132,7 +178,9 @@ class FoundationPose:
         mesh.vertices = mesh.vertices - self.model_center.reshape(1, 3)
 
         self.diameter = compute_mesh_diameter(model_pts=mesh.vertices, n_sample=10000)
-        rk_logger.info(f"self.diameter: {self.diameter}, vox_size: {max(self.diameter / 20.0, 0.003)}")
+        rk_logger.info(
+            f"self.diameter: {self.diameter}, vox_size: {max(self.diameter / 20.0, 0.003)}"
+        )
 
         self.mesh = mesh
         self.mesh_tensors = make_mesh_tensors(self.mesh)
@@ -140,7 +188,9 @@ class FoundationPose:
         if symmetry_tfs is None:
             self.symmetry_tfs = torch.eye(4).float().cuda()[None]
         else:
-            self.symmetry_tfs = torch.as_tensor(symmetry_tfs, device="cuda", dtype=torch.float)
+            self.symmetry_tfs = torch.as_tensor(
+                symmetry_tfs, device="cuda", dtype=torch.float
+            )
 
         rk_logger.info("reset done")
 
@@ -155,7 +205,9 @@ class FoundationPose:
         mesh = mesh.copy()
         mesh.vertices = mesh.vertices - settings["model_center"].reshape(1, 3)
 
-        settings["diameter"] = compute_mesh_diameter(model_pts=mesh.vertices, n_sample=10000)
+        settings["diameter"] = compute_mesh_diameter(
+            model_pts=mesh.vertices, n_sample=10000
+        )
 
         settings["mesh"] = mesh
         settings["mesh_tensors"] = make_mesh_tensors(mesh)
@@ -163,7 +215,9 @@ class FoundationPose:
         if symmetry_tfs is None:
             settings["symmetry_tfs"] = torch.eye(4).float().cuda()[None]
         else:
-            settings["symmetry_tfs"] = torch.as_tensor(symmetry_tfs, device="cuda", dtype=torch.float)
+            settings["symmetry_tfs"] = torch.as_tensor(
+                symmetry_tfs, device="cuda", dtype=torch.float
+            )
 
         return settings
 
@@ -172,7 +226,9 @@ class FoundationPose:
 
         self.diameter = settings["diameter"]
 
-        rk_logger.info(f"self.diameter: {self.diameter}, vox_size: {max(self.diameter / 20.0, 0.003)}")
+        rk_logger.info(
+            f"self.diameter: {self.diameter}, vox_size: {max(self.diameter / 20.0, 0.003)}"
+        )
 
         self.mesh = settings["mesh"]
         self.mesh_tensors = settings["mesh_tensors"]
@@ -184,7 +240,9 @@ class FoundationPose:
     @torch.no_grad()
     def get_tf_to_centered_mesh(self):
         tf_to_center = torch.eye(4, dtype=torch.float, device="cuda")
-        tf_to_center[:3, 3] = -torch.as_tensor(self.model_center, device="cuda", dtype=torch.float)
+        tf_to_center[:3, 3] = -torch.as_tensor(
+            self.model_center, device="cuda", dtype=torch.float
+        )
         return tf_to_center
 
     def to_device(self, s="cuda:0"):
@@ -212,7 +270,9 @@ class FoundationPose:
                 rot_cam_in_ob = cam_in_ob @ R_inplane
                 rot_grid.append(np.linalg.inv(rot_cam_in_ob))
         rot_grid = np.asarray(rot_grid)
-        rot_grid = cluster_poses_numpy(30, 99999, rot_grid, self.symmetry_tfs.cpu().numpy())
+        rot_grid = cluster_poses_numpy(
+            30, 99999, rot_grid, self.symmetry_tfs.cpu().numpy()
+        )
         self.rot_grid = torch.as_tensor(rot_grid, device="cuda", dtype=torch.float)
         rk_logger.info(f"self.rot_grid: {self.rot_grid.shape}")
 
@@ -241,9 +301,19 @@ class FoundationPose:
         return center.reshape(3)
 
     @torch.no_grad()
-    def register(self, rgb: np.ndarray, depth: np.ndarray, cam_intrinsics: np.ndarray, obj_mask: np.ndarray,
-                 iteration: int = 5, num_pose_hypothesis: int = 1, batch_size: Optional[int] = 64) -> torch.Tensor:
-        """Compute pose from RGB-D and mask."""
+    def register(
+        self,
+        rgb: np.ndarray,
+        depth: np.ndarray,
+        cam_intrinsics: np.ndarray,
+        obj_mask: np.ndarray,
+        iteration: int = 5,
+        num_pose_hypothesis: int = 1,
+        batch_size: Optional[int] = 64,
+    ) -> torch.Tensor | InsufficientDepth:
+        """
+        Compute poses or report insufficient masked depth after preprocessing.
+        """
         # set seeds for determinism
         set_seed(0)
 
@@ -256,16 +326,18 @@ class FoundationPose:
 
         # early exit if too few valid pixels
         valid = (depth_np >= 0.001) & obj_mask
-        if valid.sum() < 500:
-            rk_logger.info("valid too small, returning initial guess")
-            pose = np.eye(4)
-            pose[:3, 3] = self.guess_translation(depth_np, obj_mask, cam_intrinsics)
-            return torch.from_numpy(pose)[None].to("cuda")  # 1 x 4 x 4
+        valid_pixel_count = int(valid.sum())
+        if valid_pixel_count < self.MINIMUM_VALID_DEPTH_PIXELS:
+            return InsufficientDepth(valid_pixel_count=valid_pixel_count)
 
         # full pipeline
-        #xyz_map = depth2xyzmap(depth, K)
-        xyz_map = depth2xyzmap_batch(depth[None], torch.from_numpy(cam_intrinsics)[None].to("cuda"), zfar=np.inf)[0]
-        poses = self.generate_random_pose_hypo(K=cam_intrinsics, depth=depth_np, mask=obj_mask)
+        # xyz_map = depth2xyzmap(depth, K)
+        xyz_map = depth2xyzmap_batch(
+            depth[None], torch.from_numpy(cam_intrinsics)[None].to("cuda"), zfar=np.inf
+        )[0]
+        poses = self.generate_random_pose_hypo(
+            K=cam_intrinsics, depth=depth_np, mask=obj_mask
+        )
 
         if batch_size is None:
             batch_size = poses.shape[0]
@@ -274,7 +346,7 @@ class FoundationPose:
         refined_poses = [None] * num_batches
         scores = [None] * num_batches
         for i in range(num_batches):
-            pose_batch = poses[(i*batch_size):((i+1)*batch_size)]
+            pose_batch = poses[(i * batch_size) : ((i + 1) * batch_size)]
 
             batched_refined_poses, vis_ref = self.refiner.predict(
                 rgb=rgb,
@@ -288,7 +360,7 @@ class FoundationPose:
                 mesh_tensors=self.mesh_tensors,
                 glctx=self.glctx,
                 mesh_diameter=self.diameter,
-                iteration=iteration
+                iteration=iteration,
             )
             refined_poses[i] = batched_refined_poses
 
@@ -310,7 +382,7 @@ class FoundationPose:
                 mesh=self.mesh,
                 mesh_tensors=self.mesh_tensors,
                 glctx=self.glctx,
-                mesh_diameter=self.diameter
+                mesh_diameter=self.diameter,
             )
             scores[i] = batched_scores
 
@@ -321,18 +393,30 @@ class FoundationPose:
             torch.cuda.empty_cache()
             gc.collect()
 
-        refined_poses = torch.cat(refined_poses, dim=0)     # B x 4 x 4
-        scores = torch.cat(scores, dim=0)                   # B
+        refined_poses = torch.cat(refined_poses, dim=0)  # B x 4 x 4
+        scores = torch.cat(scores, dim=0)  # B
 
         # select top-k poses based on score
-        _, best_indices = torch.topk(scores, k=num_pose_hypothesis, dim=0, largest=True, sorted=False)  # B'
-        best_poses = torch.matmul(refined_poses[best_indices], self.get_tf_to_centered_mesh())          # B' x 4 x 4
+        _, best_indices = torch.topk(
+            scores, k=num_pose_hypothesis, dim=0, largest=True, sorted=False
+        )  # B'
+        best_poses = torch.matmul(
+            refined_poses[best_indices], self.get_tf_to_centered_mesh()
+        )  # B' x 4 x 4
 
-        return best_poses    # B' x 4 x 4
+        return best_poses  # B' x 4 x 4
 
     @torch.no_grad()
-    def track_one(self, rgb: np.ndarray, depth: np.ndarray, cam_intrinsics: np.ndarray, poses: torch.tensor,
-                  iteration: int, extra={}, sort_by_score: bool = False) -> torch.Tensor:
+    def track_one(
+        self,
+        rgb: np.ndarray,
+        depth: np.ndarray,
+        cam_intrinsics: np.ndarray,
+        poses: torch.tensor,
+        iteration: int,
+        extra={},
+        sort_by_score: bool = False,
+    ) -> torch.Tensor:
         if poses is None:
             raise RuntimeError("Now poses to refine were given.")
 
@@ -347,15 +431,19 @@ class FoundationPose:
         no_batch = poses.dim() < 3
         if no_batch:
             # add batch dimension
-            poses = poses[None, ...]    # 1 x 4 x 4
+            poses = poses[None, ...]  # 1 x 4 x 4
 
-        poses = torch.matmul(poses, ttfcm)      # B x 4 x 4
+        poses = torch.matmul(poses, ttfcm)  # B x 4 x 4
 
         # preprocess depth
         depth = erode_depth(depth, radius=2, device="cuda")
         depth = bilateral_filter_depth(depth, radius=2, device="cuda")
 
-        xyz_map = depth2xyzmap_batch(depth[None], torch.as_tensor(cam_intrinsics, device="cuda")[None], zfar=np.inf)[0]
+        xyz_map = depth2xyzmap_batch(
+            depth[None],
+            torch.as_tensor(cam_intrinsics, device="cuda")[None],
+            zfar=np.inf,
+        )[0]
 
         refined_poses, vis_ref = self.refiner.predict(
             rgb=rgb,
@@ -369,7 +457,7 @@ class FoundationPose:
             mesh_tensors=self.mesh_tensors,
             glctx=self.glctx,
             mesh_diameter=self.diameter,
-            iteration=iteration
+            iteration=iteration,
         )
 
         if self.debug:
@@ -391,7 +479,7 @@ class FoundationPose:
                 mesh=self.mesh,
                 mesh_tensors=self.mesh_tensors,
                 glctx=self.glctx,
-                mesh_diameter=self.diameter
+                mesh_diameter=self.diameter,
             )
 
             if vis_score is not None:
@@ -404,10 +492,10 @@ class FoundationPose:
             sort_indices = torch.argsort(scores, stable=False, dim=0, descending=True)
             refined_poses = refined_poses[sort_indices]
 
-        refined_poses = torch.matmul(refined_poses, tcmtf)      # B x 4 x 4
+        refined_poses = torch.matmul(refined_poses, tcmtf)  # B x 4 x 4
 
         if no_batch:
             # remove batch dimension
-            refined_poses = refined_poses[0]    # 4 x 4
+            refined_poses = refined_poses[0]  # 4 x 4
 
-        return refined_poses    # (B x) 4 x 4
+        return refined_poses  # (B x) 4 x 4
