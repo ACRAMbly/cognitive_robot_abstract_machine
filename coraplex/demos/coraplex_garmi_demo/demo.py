@@ -238,10 +238,10 @@ class GarmiApartmentDemonstration(RobotDemonstration):
 
     def scene_specification(self) -> WorldSpecification:
         """
-        The apartment's MuJoCo scene.
-
         The scene keeps its collision geometry in a file that is not loaded, so every
         geom has to stand in for it.
+
+        :return: The apartment's MuJoCo scene.
         """
         return WorldSpecification.from_mjcf(
             SceneFile.APARTMENT.path, use_visual_as_collision_backup=True
@@ -249,7 +249,7 @@ class GarmiApartmentDemonstration(RobotDemonstration):
 
     def robot_specification(self) -> RobotSpecification:
         """
-        GARMI at its start, driving at the demonstration's speed.
+        :return: GARMI at its start, driving at the demonstration's speed.
         """
         return RobotSpecification(
             semantic_annotation_type=self.used_robot,

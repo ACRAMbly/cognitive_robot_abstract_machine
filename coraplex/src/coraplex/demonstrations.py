@@ -203,15 +203,18 @@ class RobotDemonstration(ABC):
     @abstractmethod
     def scene_specification(self) -> WorldSpecification:
         """
-        The map this demonstration acts in, without any robot, see :meth:`build_scene`.
+        :return: The map this demonstration acts in, without any robot, see
+            :meth:`build_scene`.
         """
 
     @abstractmethod
     def robot_specification(self) -> RobotSpecification:
         """
-        How a simulated run puts :attr:`used_robot` into the scene, such as where it
-        starts and how fast its drive is. A real run takes the robot from the controller
-        instead.
+        How a simulated run puts :attr:`used_robot` into the scene. A real run takes the
+        robot from the controller instead.
+
+        :return: The robot to put into the scene, with where it starts and how fast its
+            drive is.
         """
 
     @abstractmethod
@@ -222,6 +225,7 @@ class RobotDemonstration(ABC):
         not merge it in a second time.
 
         :param world: The world the controller serves.
+        :return: Whether ``world`` holds the scene already.
         """
 
     def populate_scene(self, world: World) -> None:
@@ -293,6 +297,8 @@ class RobotDemonstration(ABC):
         """
         Build the world for a simulated run, without contacting a controller: the scene,
         with the robot of :meth:`robot_specification` put into it.
+
+        :return: A world holding the scene and the robot.
         """
         world = self.build_scene()
         self.robot_specification().spawn(world)
@@ -305,6 +311,8 @@ class RobotDemonstration(ABC):
 
         The scene's root is fixed to the root of the fetched world, which is the map frame
         the robot localizes in.
+
+        :return: The world the controller serves, holding the scene.
         """
         world = self.ros_session.fetch_world()
         WorldSynchronizer(_world=world, node=self.ros_session.node)
@@ -320,6 +328,8 @@ class RobotDemonstration(ABC):
         """
         Obtain the world to act on: built by :meth:`build_simulated_world` for a
         simulated run, and by :meth:`fetch_real_world` otherwise.
+
+        :return: The world the plan is performed in.
         """
         self.ros_session = RobotDemonstrationRosSession.start(self.ros_node_name)
         VisualizationSession.register(self.stop_visualization)
