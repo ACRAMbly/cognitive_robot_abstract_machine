@@ -24,8 +24,13 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
 
+from typing_extensions import TYPE_CHECKING
+
 from krrood.entity_query_language.factories import and_, an, entity, or_, variable
 from krrood.exceptions import DataclassException
+
+if TYPE_CHECKING:
+    from krrood.entity_query_language.query.query import Entity
 
 # %% the settings that decide whether a large message arrives
 
@@ -197,13 +202,13 @@ class LargeMessageReceiver:
         )
         return f"sudo sysctl -w {settings}"
 
-    def unmet_requirements(self) -> list[SettingValue]:
+    def unmet_requirements(self) -> Entity[SettingValue]:
         """
-        :return: The requirements the machine does not currently meet.
+        :return: The query for the requirements the machine does not currently meet.
         """
         actual = variable(SettingValue, domain=self.machine.setting_values())
         required = variable(SettingValue, domain=self.requirements)
-        unmet = an(
+        return an(
             entity(required).where(
                 actual.setting == required.setting,
                 or_(
@@ -218,7 +223,6 @@ class LargeMessageReceiver:
                 ),
             )
         )
-        return unmet.tolist()
 
     def check_messages_can_arrive(self) -> None:
         """
@@ -233,7 +237,7 @@ class LargeMessageReceiver:
         interface = self.machine.default_route_interface()
         if interface is None or not self.machine.is_wireless(interface):
             return
-        unmet = self.unmet_requirements()
+        unmet = self.unmet_requirements().tolist()
         if not unmet:
             return
         raise LargeMessagesCannotArrive(interface, unmet, self.raise_limits_command())

@@ -105,14 +105,14 @@ def test_values_past_each_requirement_on_its_safe_side_leave_nothing_unmet(tmp_p
     past["FRAGMENT_LIFETIME"] = TUNED["FRAGMENT_LIFETIME"] - 1
     machine = build_machine(tmp_path, WIRELESS_ROUTE, wireless=True, **past)
 
-    assert LargeMessageReceiver(machine).unmet_requirements() == []
+    assert LargeMessageReceiver(machine).unmet_requirements().tolist() == []
 
 
 def test_a_setting_one_below_its_required_value_is_unmet(tmp_path):
     lowered = {**TUNED, "DEVICE_BACKLOG": TUNED["DEVICE_BACKLOG"] - 1}
     machine = build_machine(tmp_path, WIRELESS_ROUTE, wireless=True, **lowered)
 
-    assert LargeMessageReceiver(machine).unmet_requirements() == [
+    assert LargeMessageReceiver(machine).unmet_requirements().tolist() == [
         requirement_for(KernelSetting.DEVICE_BACKLOG)
     ]
 
@@ -121,7 +121,7 @@ def test_a_fragment_lifetime_one_above_its_required_value_is_unmet(tmp_path):
     raised = {**TUNED, "FRAGMENT_LIFETIME": TUNED["FRAGMENT_LIFETIME"] + 1}
     machine = build_machine(tmp_path, WIRELESS_ROUTE, wireless=True, **raised)
 
-    assert LargeMessageReceiver(machine).unmet_requirements() == [
+    assert LargeMessageReceiver(machine).unmet_requirements().tolist() == [
         requirement_for(KernelSetting.FRAGMENT_LIFETIME)
     ]
 
@@ -155,7 +155,7 @@ def test_stock_limits_are_reported_as_unmet(tmp_path):
 
     unmet = {
         requirement.setting
-        for requirement in LargeMessageReceiver(machine).unmet_requirements()
+        for requirement in LargeMessageReceiver(machine).unmet_requirements().tolist()
     }
 
     assert unmet == {
@@ -167,7 +167,7 @@ def test_stock_limits_are_reported_as_unmet(tmp_path):
 def test_tuned_limits_leave_nothing_unmet(tmp_path):
     machine = build_machine(tmp_path, WIRELESS_ROUTE, wireless=True, **TUNED)
 
-    assert LargeMessageReceiver(machine).unmet_requirements() == []
+    assert LargeMessageReceiver(machine).unmet_requirements().tolist() == []
 
 
 def test_a_wireless_machine_with_stock_limits_is_refused(tmp_path):
