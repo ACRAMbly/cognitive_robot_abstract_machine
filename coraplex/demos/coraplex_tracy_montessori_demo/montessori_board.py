@@ -16,9 +16,17 @@ from pathlib import Path
 import numpy as np
 import trimesh
 
+from random_events.interval import Bound, SimpleInterval
+
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
-from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix
-from semantic_digital_twin.world_description.geometry import Box, Color, Mesh, Scale
+from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix, Point2
+from semantic_digital_twin.world_description.geometry import (
+    Box,
+    Color,
+    Mesh,
+    PlanarBoundingBox,
+    Scale,
+)
 from semantic_digital_twin.world_description.shape_collection import ShapeCollection
 from semantic_digital_twin.world_description.world_entity import Body
 
@@ -35,104 +43,6 @@ class BoardResource(Enum):
     The board's mesh: a lid with six holes cut through it over three open compartments,
     the drawers' places, which open towards the robot along the board's -x.
     """
-
-
-# %% points and areas on the lid
-
-
-@dataclass(frozen=True)
-class LidPoint:
-    """
-    A point on the lid, in the board's own frame.
-    """
-
-    x: float
-    """
-    How far along the board's x, towards the side facing away from the robot.
-    """
-
-    y: float
-    """
-    How far along the board's y.
-    """
-
-
-@dataclass(frozen=True)
-class LidArea:
-    """
-    An axis-aligned rectangle on the lid, in the board's own frame.
-    """
-
-    minimum_x: float
-    """
-    Where the rectangle starts along x.
-    """
-
-    maximum_x: float
-    """
-    Where the rectangle ends along x.
-    """
-
-    minimum_y: float
-    """
-    Where the rectangle starts along y.
-    """
-
-    maximum_y: float
-    """
-    Where the rectangle ends along y.
-    """
-
-    @property
-    def center(self) -> LidPoint:
-        """
-        The middle of the rectangle.
-        """
-        return LidPoint(
-            (self.minimum_x + self.maximum_x) / 2,
-            (self.minimum_y + self.maximum_y) / 2,
-        )
-
-    def contains(self, point: LidPoint) -> bool:
-        """
-        :param point: A point on the lid.
-        :return: Whether ``point`` lies strictly inside the rectangle.
-        """
-        return (
-            self.minimum_x < point.x < self.maximum_x
-            and self.minimum_y < point.y < self.maximum_y
-        )
-
-
-@dataclass(frozen=True)
-class Compartment:
-    """
-    One compartment under the lid: the stretch along y between two walls or dividers.
-    """
-
-    left: float
-    """
-    Where the compartment starts, on its -y side.
-    """
-
-    right: float
-    """
-    Where the compartment ends, on its +y side.
-    """
-
-    @property
-    def middle(self) -> float:
-        """
-        The middle of the compartment along y.
-        """
-        return (self.left + self.right) / 2
-
-    @property
-    def width(self) -> float:
-        """
-        How wide the compartment is along y.
-        """
-        return self.right - self.left
 
 
 # %% what a hole is shaped like
@@ -166,7 +76,7 @@ class HoleOutline:
     """
 
     @property
-    def bounds(self) -> LidArea:
+    def bounds(self) -> PlanarBoundingBox:
         """
         The outline's bounding box.
         """
@@ -174,8 +84,12 @@ class HoleOutline:
             self.points.min(axis=0),
             self.points.max(axis=0),
         )
-        return LidArea(
-            float(minimum_x), float(maximum_x), float(minimum_y), float(maximum_y)
+        return PlanarBoundingBox(
+            float(minimum_x),
+            float(minimum_y),
+            float(maximum_x),
+            float(maximum_y),
+            HomogeneousTransformationMatrix(),
         )
 
     @property
@@ -188,7 +102,7 @@ class HoleOutline:
         return float((x * np.roll(y, -1) - np.roll(x, -1) * y).sum() / 2)
 
     @property
-    def centroid(self) -> LidPoint:
+    def centroid(self) -> Point2:
         """
         The point the enclosed area balances about, which for a triangle is not the
         middle of its bounding box.
@@ -196,7 +110,7 @@ class HoleOutline:
         x, y = self.points[:, 0], self.points[:, 1]
         x_next, y_next = np.roll(x, -1), np.roll(y, -1)
         cross = x * y_next - x_next * y
-        return LidPoint(
+        return Point2(
             float(((x + x_next) * cross).sum() / (6 * self.signed_area)),
             float(((y + y_next) * cross).sum() / (6 * self.signed_area)),
         )
@@ -206,23 +120,14 @@ class HoleOutline:
         """
         How much of its bounding box the outline fills.
         """
-        bounds = self.bounds
-        return abs(self.signed_area) / (
-            (bounds.maximum_x - bounds.minimum_x)
-            * (bounds.maximum_y - bounds.minimum_y)
-        )
+        return abs(self.signed_area) / self.bounds.area
 
     @property
     def aspect_ratio(self) -> float:
         """
         How many times longer the outline's bounding box is than wide.
         """
-        bounds = self.bounds
-        sides = (
-            bounds.maximum_x - bounds.minimum_x,
-            bounds.maximum_y - bounds.minimum_y,
-        )
-        return max(sides) / min(sides)
+        return max(self.bounds.dimensions) / min(self.bounds.dimensions)
 
 
 @dataclass(frozen=True)
@@ -282,13 +187,13 @@ class BoardHole:
     What the hole is shaped like.
     """
 
-    center: LidPoint
+    center: Point2
     """
     Where the hole's area balances, which for the triangle is not the middle of its
     bounding box.
     """
 
-    bounds: LidArea
+    bounds: PlanarBoundingBox
     """
     The hole's bounding box.
     """
@@ -370,8 +275,7 @@ class BoardGeometry:
         outlines = [HoleOutline(np.asarray(loop)[:, :2]) for loop in section.discrete]
         rim = max(
             outlines,
-            key=lambda outline: (outline.bounds.maximum_x - outline.bounds.minimum_x)
-            * (outline.bounds.maximum_y - outline.bounds.minimum_y),
+            key=lambda outline: outline.bounds.area,
         )
         holes = [
             BoardHole(
@@ -382,7 +286,7 @@ class BoardGeometry:
             for outline in outlines
             if outline is not rim
         ]
-        return sorted(holes, key=lambda hole: hole.center.y)
+        return sorted(holes, key=lambda hole: float(hole.center.y))
 
     @property
     def height(self) -> float:
@@ -420,9 +324,10 @@ class BoardGeometry:
         """
         return next(hole for hole in self.holes if hole.shape is shape)
 
-    def compartments(self) -> list[Compartment]:
+    def compartments(self) -> list[SimpleInterval]:
         """
-        :return: The compartments under the lid, from -y to +y.
+        :return: The stretch along y each compartment under the lid spans, between two
+            walls or dividers, from -y to +y.
         """
         dividers = sorted(
             (float(part.bounds[0][1]), float(part.bounds[1][1]))
@@ -430,7 +335,9 @@ class BoardGeometry:
             if part.extents[0] > part.extents[1] and part.extents[2] > 0.01
         )
         return [
-            Compartment(left=upper_of_left, right=lower_of_right)
+            SimpleInterval.from_data(
+                upper_of_left, lower_of_right, Bound.CLOSED, Bound.CLOSED
+            )
             for (_, upper_of_left), (lower_of_right, _) in zip(dividers, dividers[1:])
         ]
 
@@ -534,16 +441,16 @@ class ShapeSortingBoard:
         (minimum_x, minimum_y, bottom), (maximum_x, maximum_y, top) = lid.bounds
         x_edges = sorted(
             {minimum_x, maximum_x}
-            | {hole.bounds.minimum_x for hole in holes}
-            | {hole.bounds.maximum_x for hole in holes}
+            | {hole.bounds.min_x for hole in holes}
+            | {hole.bounds.max_x for hole in holes}
         )
         y_edges = sorted(
             {minimum_y, maximum_y}
-            | {hole.bounds.minimum_y for hole in holes}
-            | {hole.bounds.maximum_y for hole in holes}
+            | {hole.bounds.min_y for hole in holes}
+            | {hole.bounds.max_y for hole in holes}
         )
         cells = [
-            LidArea(x0, x1, y0, y1)
+            PlanarBoundingBox(x0, y0, x1, y1, HomogeneousTransformationMatrix())
             for x0, x1 in zip(x_edges, x_edges[1:])
             if x1 - x0 >= self.minimum_cell_size
             for y0, y1 in zip(y_edges, y_edges[1:])
@@ -551,18 +458,19 @@ class ShapeSortingBoard:
         ]
         return [
             Box(
-                scale=Scale(
-                    cell.maximum_x - cell.minimum_x,
-                    cell.maximum_y - cell.minimum_y,
-                    top - bottom,
-                ),
+                scale=Scale(cell.depth, cell.width, top - bottom),
                 origin=HomogeneousTransformationMatrix.from_xyz_rpy(
                     cell.center.x, cell.center.y, (top + bottom) / 2
                 ),
                 color=self.color,
             )
             for cell in cells
-            if not any(hole.bounds.contains(cell.center) for hole in holes)
+            if not any(
+                hole.bounds.simple_event.contains(
+                    (float(cell.center.x), float(cell.center.y))
+                )
+                for hole in holes
+            )
         ]
 
     def drawer_fronts(self) -> list[Box]:
@@ -574,12 +482,12 @@ class ShapeSortingBoard:
             Box(
                 scale=Scale(
                     self.drawer_front_thickness,
-                    compartment.width,
+                    compartment.size,
                     self.geometry.lid_bottom - base_top,
                 ),
                 origin=HomogeneousTransformationMatrix.from_xyz_rpy(
                     self.geometry.front + self.drawer_front_thickness / 2,
-                    compartment.middle,
+                    compartment.center(),
                     (self.geometry.lid_bottom + base_top) / 2,
                 ),
                 color=self.drawer_color,
@@ -601,7 +509,7 @@ class ShapeSortingBoard:
                 scale=self.handle_scale,
                 origin=HomogeneousTransformationMatrix.from_xyz_rpy(
                     self.geometry.front - self.handle_scale.x / 2,
-                    compartment.middle,
+                    compartment.center(),
                     (self.geometry.lid_bottom + self.geometry.bottom) / 2,
                 ),
                 color=self.handle_color,
