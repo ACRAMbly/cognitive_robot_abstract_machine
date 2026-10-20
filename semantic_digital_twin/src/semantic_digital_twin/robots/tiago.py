@@ -624,14 +624,14 @@ class TiagoMujocoBody(StrEnum):
 
     BASE = "base_link"
     TORSO_LIFT = "torso_lift_link"
-    HEAD_2 = "head_2_link"
+    HEAD = "head_2_link"
 
-    LEFT_ARM_7 = "arm_left_7_link"
+    LEFT_WRIST = "arm_left_7_link"
     LEFT_GRIPPER_GRASPING_FRAME = "gripper_left_grasping_frame"
     LEFT_GRIPPER_LEFT_FINGER_PAD = "gripper_left_left_finger_pad"
     LEFT_GRIPPER_RIGHT_FINGER_PAD = "gripper_left_right_finger_pad"
 
-    RIGHT_ARM_7 = "arm_right_7_link"
+    RIGHT_WRIST = "arm_right_7_link"
     RIGHT_GRIPPER_GRASPING_FRAME = "gripper_right_grasping_frame"
     RIGHT_GRIPPER_LEFT_FINGER_PAD = "gripper_right_left_finger_pad"
     RIGHT_GRIPPER_RIGHT_FINGER_PAD = "gripper_right_right_finger_pad"
@@ -746,7 +746,7 @@ class TiagoMujocoLeftThumb(Finger):
     ) -> Self:
         return cls(
             root=robot_root._world.get_body_in_branch_by_name(
-                robot_root, TiagoMujocoBody.LEFT_ARM_7
+                robot_root, TiagoMujocoBody.LEFT_WRIST
             ),
             tip=robot_root._world.get_body_in_branch_by_name(
                 robot_root, TiagoMujocoBody.LEFT_GRIPPER_LEFT_FINGER_PAD
@@ -769,7 +769,7 @@ class TiagoMujocoLeftIndexFinger(Finger):
     ) -> Self:
         return cls(
             root=robot_root._world.get_body_in_branch_by_name(
-                robot_root, TiagoMujocoBody.LEFT_ARM_7
+                robot_root, TiagoMujocoBody.LEFT_WRIST
             ),
             tip=robot_root._world.get_body_in_branch_by_name(
                 robot_root, TiagoMujocoBody.LEFT_GRIPPER_RIGHT_FINGER_PAD
@@ -792,7 +792,7 @@ class TiagoMujocoRightThumb(Finger):
     ) -> Self:
         return cls(
             root=robot_root._world.get_body_in_branch_by_name(
-                robot_root, TiagoMujocoBody.RIGHT_ARM_7
+                robot_root, TiagoMujocoBody.RIGHT_WRIST
             ),
             tip=robot_root._world.get_body_in_branch_by_name(
                 robot_root, TiagoMujocoBody.RIGHT_GRIPPER_LEFT_FINGER_PAD
@@ -815,7 +815,7 @@ class TiagoMujocoRightIndexFinger(Finger):
     ) -> Self:
         return cls(
             root=robot_root._world.get_body_in_branch_by_name(
-                robot_root, TiagoMujocoBody.RIGHT_ARM_7
+                robot_root, TiagoMujocoBody.RIGHT_WRIST
             ),
             tip=robot_root._world.get_body_in_branch_by_name(
                 robot_root, TiagoMujocoBody.RIGHT_GRIPPER_RIGHT_FINGER_PAD
@@ -870,7 +870,7 @@ class TiagoMujocoLeftGripper(
     ) -> Self:
         return cls(
             root=robot_root._world.get_body_in_branch_by_name(
-                robot_root, TiagoMujocoBody.LEFT_ARM_7
+                robot_root, TiagoMujocoBody.LEFT_WRIST
             ),
             tool_frame=robot_root._world.get_body_in_branch_by_name(
                 robot_root, TiagoMujocoBody.LEFT_GRIPPER_GRASPING_FRAME
@@ -925,7 +925,7 @@ class TiagoMujocoRightGripper(
     ) -> Self:
         return cls(
             root=robot_root._world.get_body_in_branch_by_name(
-                robot_root, TiagoMujocoBody.RIGHT_ARM_7
+                robot_root, TiagoMujocoBody.RIGHT_WRIST
             ),
             tool_frame=robot_root._world.get_body_in_branch_by_name(
                 robot_root, TiagoMujocoBody.RIGHT_GRIPPER_GRASPING_FRAME
@@ -961,7 +961,7 @@ class TiagoMujocoLeftArm(Arm[TiagoMujocoLeftGripper], ServoedByItsMujocoModel):
                 robot_root, TiagoMujocoBody.TORSO_LIFT
             ),
             tip=robot_root._world.get_body_in_branch_by_name(
-                robot_root, TiagoMujocoBody.LEFT_ARM_7
+                robot_root, TiagoMujocoBody.LEFT_WRIST
             ),
         )
 
@@ -994,7 +994,7 @@ class TiagoMujocoRightArm(Arm[TiagoMujocoRightGripper], ServoedByItsMujocoModel)
                 robot_root, TiagoMujocoBody.TORSO_LIFT
             ),
             tip=robot_root._world.get_body_in_branch_by_name(
-                robot_root, TiagoMujocoBody.RIGHT_ARM_7
+                robot_root, TiagoMujocoBody.RIGHT_WRIST
             ),
         )
 
@@ -1017,7 +1017,7 @@ class TiagoMujocoCamera(Camera):
     ) -> Self:
         return cls(
             root=robot_root._world.get_body_in_branch_by_name(
-                robot_root, TiagoMujocoBody.HEAD_2
+                robot_root, TiagoMujocoBody.HEAD
             ),
             field_of_view=FieldOfView(horizontal_angle=0.99483, vertical_angle=0.75049),
             minimal_height=1.0665,
@@ -1050,7 +1050,7 @@ class TiagoMujocoNeck(Neck[TiagoMujocoCamera], ServoedByItsMujocoModel):
                 robot_root, TiagoMujocoBody.TORSO_LIFT
             ),
             tip=robot_root._world.get_body_in_branch_by_name(
-                robot_root, TiagoMujocoBody.HEAD_2
+                robot_root, TiagoMujocoBody.HEAD
             ),
         )
 
