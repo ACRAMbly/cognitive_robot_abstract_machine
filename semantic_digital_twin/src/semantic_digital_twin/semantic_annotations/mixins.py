@@ -505,22 +505,33 @@ class HasGraspCandidates(HasRootBody):
         return trimesh.util.concatenate(surfaces)
 
     def surface_grasp_statement(
-        self, require_lifting: bool = False
+        self,
+        require_lifting: bool = False,
+        lowest_height: float = 0.05,
+        highest_height: float = 0.95,
+        shallowest_depth: float = 0.0,
+        deepest_depth: float = 0.5,
     ) -> Match[SurfaceGrasp]:
         """
         :param require_lifting: Whether to ask only for grasps that lift the object.
+        :param lowest_height: The lowest height to grasp at, as a fraction of the grasp
+            surface's bounding box from its bottom to its top.
+        :param highest_height: The height to grasp below, as such a fraction.
+        :param shallowest_depth: The least depth to close the fingers at, as a fraction
+            of the object's narrower horizontal extent.
+        :param deepest_depth: The depth to close the fingers short of, as such a
+            fraction.
         :return: The statement of where the object may be grasped. The default allows
-            the whole object, closing on it at most halfway through its narrower
-            horizontal extent.
+            the object between the two heights, closing on it between the two depths.
         """
         lowest, highest = self.grasp_surface().bounds
         narrower_extent = float(min(highest[:2] - lowest[:2]))
         grasp = any_surface_grasp(require_lifting)
         return grasp.where(
-            grasp.height >= 0.05,
-            grasp.height < 0.95,
-            grasp.depth >= 0.0,
-            grasp.depth < narrower_extent / 2,
+            grasp.height >= lowest_height,
+            grasp.height < highest_height,
+            grasp.depth >= shallowest_depth * narrower_extent,
+            grasp.depth < deepest_depth * narrower_extent,
             *from_any_side(grasp),
         )
 
@@ -851,6 +862,8 @@ class HasPinchableWall(HasGraspCandidates):
         require_lifting: bool,
         shallowest_depth: float = 0.25,
         deepest_depth: float = 0.75,
+        largest_pitch: float = 0.5,
+        largest_roll: float = math.pi / 8,
     ) -> Match[SurfaceGrasp]:
         """
         :param lowest_height: The lowest height to pinch the wall at, as a fraction of
@@ -861,8 +874,12 @@ class HasPinchableWall(HasGraspCandidates):
             of the wall's thickness.
         :param deepest_depth: The depth to close the fingers short of, as such a
             fraction.
+        :param largest_pitch: How far the approach may tilt off vertical towards the
+            wall, in radians.
+        :param largest_roll: How far the fingers may turn off closing across the wall,
+            either way, in radians.
         :return: The wall between the two heights, all around, closing between the two
-            depths, from above or tilted a little towards it.
+            depths, tilted and turned at most as far as given.
         :raises NoGraspGeometry: If there is no wall to measure.
         """
         thickness = self.wall_thickness((lowest_height + highest_height) / 2)
@@ -875,9 +892,9 @@ class HasPinchableWall(HasGraspCandidates):
             grasp.azimuth >= 0.0,
             grasp.azimuth < 2 * math.pi,
             grasp.pitch >= 0.0,
-            grasp.pitch < 0.5,
-            grasp.roll >= -math.pi / 8,
-            grasp.roll < math.pi / 8,
+            grasp.pitch < largest_pitch,
+            grasp.roll >= -largest_roll,
+            grasp.roll < largest_roll,
         )
 
     def wall_thickness(

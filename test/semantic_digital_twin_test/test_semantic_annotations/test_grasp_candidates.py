@@ -332,6 +332,23 @@ def test_a_wall_is_pinched_as_deep_as_asked(bowl):
     )
 
 
+def test_a_wall_is_pinched_as_tilted_and_turned_as_asked(bowl):
+    largest_pitch, largest_roll = 0.3, 0.2
+    allowed = allowed_intervals(
+        bowl.rim.wall_grasp_statement(
+            0.25,
+            0.75,
+            False,
+            largest_pitch=largest_pitch,
+            largest_roll=largest_roll,
+        )
+    )
+
+    assert allowed["pitch"].simple_sets[-1].upper == pytest.approx(largest_pitch)
+    assert allowed["roll"].simple_sets[0].lower == pytest.approx(-largest_roll)
+    assert allowed["roll"].simple_sets[-1].upper == pytest.approx(largest_roll)
+
+
 def test_a_rim_is_pinched_between_the_heights_asked(bowl):
     lowest_height, highest_height = 0.1, 0.9
     allowed = allowed_intervals(
@@ -436,6 +453,46 @@ def test_drawn_cutlery_grasps_come_from_above_across_its_length(length_axis):
         )
 
 
+def test_cutlery_is_grasped_within_the_bounds_asked():
+    spoon = _spoon_lying_along(0)
+    lowest_height, highest_height = 0.3, 0.7
+    shallowest_depth, deepest_depth = 0.1, 0.4
+    azimuth_tolerance, largest_pitch, largest_roll = 0.05, 0.3, 0.2
+    allowed = allowed_intervals(
+        spoon.surface_grasp_statement(
+            lowest_height=lowest_height,
+            highest_height=highest_height,
+            shallowest_depth=shallowest_depth,
+            deepest_depth=deepest_depth,
+            azimuth_tolerance=azimuth_tolerance,
+            largest_pitch=largest_pitch,
+            largest_roll=largest_roll,
+        )
+    )
+    lowest, highest = spoon.grasp_surface().bounds
+    length = float(highest[0] - lowest[0])
+    first_end = allowed["azimuth"].simple_sets[0]
+
+    assert allowed["height"].simple_sets[0].lower == pytest.approx(lowest_height)
+    assert allowed["height"].simple_sets[-1].upper == pytest.approx(highest_height)
+    assert allowed["depth"].simple_sets[0].lower == pytest.approx(
+        shallowest_depth * length
+    )
+    assert allowed["depth"].simple_sets[-1].upper == pytest.approx(
+        deepest_depth * length
+    )
+    assert first_end.upper - first_end.lower == pytest.approx(
+        2 * azimuth_tolerance, rel=1e-5
+    )
+    assert allowed["pitch"].simple_sets[-1].upper == pytest.approx(largest_pitch)
+    assert allowed["roll"].simple_sets[0].lower == pytest.approx(
+        np.pi / 2 - largest_roll
+    )
+    assert allowed["roll"].simple_sets[-1].upper == pytest.approx(
+        np.pi / 2 + largest_roll
+    )
+
+
 def test_cutlery_without_a_shape_offers_no_grasp():
     body = Body(name=PrefixedName("shapeless_spoon", prefix="grasp_candidates"))
     spoon = Spoon(root=body)
@@ -515,6 +572,30 @@ def test_an_object_without_its_handle_is_grasped_as_it_offers_otherwise():
     for grasp in grasps:
         assert grasp.graspable is mug
     assert mug.grasped_part() is mug
+
+
+def test_a_handle_is_grasped_between_the_heights_and_depths_asked():
+    handle = _mug(with_handle=True).handle
+    lowest_height, highest_height = 0.3, 0.7
+    shallowest_depth, deepest_depth = 0.1, 0.4
+    allowed = allowed_intervals(
+        handle.surface_grasp_statement(
+            lowest_height=lowest_height,
+            highest_height=highest_height,
+            shallowest_depth=shallowest_depth,
+            deepest_depth=deepest_depth,
+        )
+    )
+    thinnest_extent = float(min(handle.grasp_surface().extents))
+
+    assert allowed["height"].simple_sets[0].lower == pytest.approx(lowest_height)
+    assert allowed["height"].simple_sets[-1].upper == pytest.approx(highest_height)
+    assert allowed["depth"].simple_sets[0].lower == pytest.approx(
+        shallowest_depth * thinnest_extent
+    )
+    assert allowed["depth"].simple_sets[-1].upper == pytest.approx(
+        deepest_depth * thinnest_extent
+    )
 
 
 def test_a_handle_split_off_a_shape_is_fixed_to_its_whole():

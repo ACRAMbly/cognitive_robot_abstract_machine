@@ -111,20 +111,33 @@ class Handle(HasGraspCandidates):
         return self.drawn_grasp_candidates()
 
     def surface_grasp_statement(
-        self, require_lifting: bool = False
+        self,
+        require_lifting: bool = False,
+        lowest_height: float = 0.1,
+        highest_height: float = 0.9,
+        shallowest_depth: float = 0.0,
+        deepest_depth: float = 0.5,
     ) -> Match[SurfaceGrasp]:
         """
         :param require_lifting: Whether to ask only for grasps that lift the object.
-        :return: The whole handle away from its ends, closing on it at most halfway
-            through its thinnest extent.
+        :param lowest_height: The lowest height to grasp the handle at, as a fraction
+            of its bounding box from its bottom to its top.
+        :param highest_height: The height to grasp the handle below, as such a
+            fraction.
+        :param shallowest_depth: The least depth to close the fingers at, as a fraction
+            of the handle's thinnest extent.
+        :param deepest_depth: The depth to close the fingers short of, as such a
+            fraction.
+        :return: The handle between the two heights, closing on it between the two
+            depths.
         """
         thinnest_extent = float(min(self.grasp_surface().extents))
         grasp = any_surface_grasp(require_lifting)
         return grasp.where(
-            grasp.height >= 0.1,
-            grasp.height < 0.9,
-            grasp.depth >= 0.0,
-            grasp.depth < thinnest_extent / 2,
+            grasp.height >= lowest_height,
+            grasp.height < highest_height,
+            grasp.depth >= shallowest_depth * thinnest_extent,
+            grasp.depth < deepest_depth * thinnest_extent,
             *from_any_side(grasp),
         )
 
@@ -1412,12 +1425,32 @@ class Cutlery(HasHandle, Tableware):
         ]
 
     def surface_grasp_statement(
-        self, require_lifting: bool = False
+        self,
+        require_lifting: bool = False,
+        lowest_height: float = 0.2,
+        highest_height: float = 0.8,
+        shallowest_depth: float = 0.2,
+        deepest_depth: float = 0.6,
+        azimuth_tolerance: float = np.pi / 16,
+        largest_pitch: float = 0.6,
+        largest_roll: float = np.pi / 8,
     ) -> Match[SurfaceGrasp]:
         """
         :param require_lifting: Whether to ask only for grasps that lift the object.
-        :return: Seen along its length from either end, the stretch between a fifth and
-            three fifths of its length, closing across it.
+        :param lowest_height: The lowest height to grasp at, as a fraction of the grasp
+            surface's bounding box from its bottom to its top.
+        :param highest_height: The height to grasp below, as such a fraction.
+        :param shallowest_depth: The least depth to close the fingers at, as a fraction
+            of the piece's length.
+        :param deepest_depth: The depth to close the fingers short of, as such a
+            fraction.
+        :param azimuth_tolerance: How far off its length axis the piece may be seen
+            from, either way, in radians.
+        :param largest_pitch: How far the approach may tilt off vertical, in radians.
+        :param largest_roll: How far the fingers may turn off closing across the
+            length, either way, in radians.
+        :return: Seen along its length from either end, the stretch between the two
+            depths, closing across it.
         :raises NoGraspGeometry: If the root body has no shape to measure.
         """
         lowest, highest = self.grasp_surface().bounds
@@ -1429,26 +1462,25 @@ class Cutlery(HasHandle, Tableware):
         length = float(np.dot(extents, length_axis))
         azimuth_of_length_axis = math.atan2(length_axis[1], length_axis[0])
         end_azimuths = (azimuth_of_length_axis, azimuth_of_length_axis + np.pi)
-        tolerance = np.pi / 16
         grasp = any_surface_grasp(require_lifting)
         return grasp.where(
-            grasp.height >= 0.2,
-            grasp.height < 0.8,
-            grasp.depth >= 0.2 * length,
-            grasp.depth < 0.6 * length,
+            grasp.height >= lowest_height,
+            grasp.height < highest_height,
+            grasp.depth >= shallowest_depth * length,
+            grasp.depth < deepest_depth * length,
             or_(
                 *(
                     and_(
-                        grasp.azimuth >= end_azimuth - tolerance,
-                        grasp.azimuth < end_azimuth + tolerance,
+                        grasp.azimuth >= end_azimuth - azimuth_tolerance,
+                        grasp.azimuth < end_azimuth + azimuth_tolerance,
                     )
                     for end_azimuth in end_azimuths
                 )
             ),
             grasp.pitch >= 0.0,
-            grasp.pitch < 0.6,
-            grasp.roll >= np.pi / 2 - np.pi / 8,
-            grasp.roll < np.pi / 2 + np.pi / 8,
+            grasp.pitch < largest_pitch,
+            grasp.roll >= np.pi / 2 - largest_roll,
+            grasp.roll < np.pi / 2 + largest_roll,
         )
 
 

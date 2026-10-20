@@ -271,21 +271,26 @@ def axis_angle_of(rotation: NDArray[np.float64]) -> AxisAngle:
     )
 
 
-def from_any_side(grasp: Match[SurfaceGrasp]) -> List[ConditionType]:
+def from_any_side(
+    grasp: Match[SurfaceGrasp],
+    largest_pitch: float = 1.2,
+    largest_roll: float = math.pi / 4,
+) -> List[ConditionType]:
     """
     :param grasp: A statement's grasp.
+    :param largest_pitch: How far the approach may tilt off vertical, in radians.
+    :param largest_roll: How far the fingers may turn off closing along the line of
+        sight, either way, in radians.
     :return: The conditions that the grasp comes from any direction around the object,
-        approaches it up to about seventy degrees off vertical, staying below a quarter
-        turn where the approach would be horizontal, and closes up to an eighth of a
-        turn off the line of sight.
+        tilted and turned at most as far as given.
     """
     return [
         grasp.azimuth >= 0.0,
         grasp.azimuth < 2 * math.pi,
         grasp.pitch >= 0.0,
-        grasp.pitch < 1.2,
-        grasp.roll >= -math.pi / 4,
-        grasp.roll < math.pi / 4,
+        grasp.pitch < largest_pitch,
+        grasp.roll >= -largest_roll,
+        grasp.roll < largest_roll,
     ]
 
 
