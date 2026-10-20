@@ -20,14 +20,18 @@ the command that fixes it.
 
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
-from dataclasses import dataclass
+import operator
+from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
 
-from typing_extensions import List, Optional
+from typing_extensions import Any, Callable, List, Optional, TYPE_CHECKING
 
+from krrood.entity_query_language.factories import and_, an, entity, or_, variable
 from krrood.exceptions import DataclassException
+
+if TYPE_CHECKING:
+    from krrood.entity_query_language.core.base_expressions import SymbolicExpression
 
 # %% the settings that decide whether a large message arrives
 
@@ -47,7 +51,24 @@ class KernelSetting(StrEnum):
 
 
 @dataclass(frozen=True)
-class SettingRequirement(ABC):
+class SettingReading:
+    """
+    One kernel setting's value as a machine reports it.
+    """
+
+    setting: KernelSetting
+    """
+    The setting read.
+    """
+
+    value: int
+    """
+    The value the machine reports for it.
+    """
+
+
+@dataclass(frozen=True)
+class SettingRequirement:
     """
     What one kernel setting has to be for a large message to arrive.
     """
@@ -59,64 +80,24 @@ class SettingRequirement(ABC):
 
     value: int
     """
-    The value it is measured against.
+    The value it is measured against, and the value the fix sets it to.
     """
 
-    @abstractmethod
-    def is_met(self, actual: int) -> bool:
+    comparison: Callable[[Any, Any], Any]
+    """
+    The comparison a reading must pass against :attr:`value`, as ``operator.ge`` or
+    ``operator.le``; applied to a query variable it builds the EQL comparator.
+    """
+
+    def is_met_by(self, reading: SettingReading) -> SymbolicExpression:
         """
-        Whether a machine's own value satisfies this.
-
-        :param actual: The value the machine reports.
+        :param reading: A query variable over a machine's readings.
+        :return: The EQL condition a reading of this setting holds for when this
+            requirement is met.
         """
-
-
-@dataclass(frozen=True)
-class AtLeast(SettingRequirement):
-    """
-    A setting that must not be smaller than the value named.
-    """
-
-    def is_met(self, actual: int) -> bool:
-        return actual >= self.value
-
-
-@dataclass(frozen=True)
-class AtMost(SettingRequirement):
-    """
-    A setting that must not be larger than the value named.
-    """
-
-    def is_met(self, actual: int) -> bool:
-        return actual <= self.value
-
-
-LARGE_MESSAGE_REQUIREMENTS: List[SettingRequirement] = [
-    AtLeast(KernelSetting.FRAGMENT_CACHE_CEILING, 268435456),
-    AtLeast(KernelSetting.FRAGMENT_CACHE_FLOOR, 201326592),
-    AtMost(KernelSetting.FRAGMENT_LIFETIME, 3),
-    AtLeast(KernelSetting.RECEIVE_BUFFER_CEILING, 67108864),
-    AtLeast(KernelSetting.RECEIVE_BUFFER_DEFAULT, 67108864),
-    AtLeast(KernelSetting.DEVICE_BACKLOG, 30000),
-]
-"""
-The configuration measured to carry the world snapshot over this setup's wireless link.
-
-These were raised and tested together, so this is the set known to work rather than the
-smallest set that would.
-"""
-
-
-def raise_limits_command() -> str:
-    """
-    :return: The command that puts this machine's limits where they need to be, until it
-        is next rebooted.
-    """
-    settings = " ".join(
-        f"{requirement.setting}={requirement.value}"
-        for requirement in LARGE_MESSAGE_REQUIREMENTS
-    )
-    return f"sudo sysctl -w {settings}"
+        return and_(
+            reading.setting == self.setting, self.comparison(reading.value, self.value)
+        )
 
 
 # %% reading a machine
@@ -151,6 +132,14 @@ class MachineSettings:
         """
         return int((self.sysctl_root / str(setting).replace(".", "/")).read_text())
 
+    def readings(self) -> List[SettingReading]:
+        """
+        :return: The current value of every setting a large message depends on.
+        """
+        return [
+            SettingReading(setting, self.read(setting)) for setting in KernelSetting
+        ]
+
     def default_route_interface(self) -> Optional[str]:
         """
         :return: The interface traffic with no more specific route leaves over, or None
@@ -169,12 +158,6 @@ class MachineSettings:
         :param interface: The interface's name.
         """
         return (self.network_root / interface / "wireless").exists()
-
-
-THIS_MACHINE = MachineSettings()
-"""
-The machine this is running on.
-"""
 
 
 # %% the check
@@ -197,6 +180,11 @@ class LargeMessagesCannotArrive(DataclassException):
     The requirements this machine does not meet.
     """
 
+    raise_limits_command: str
+    """
+    The command that puts the machine's limits where they need to be.
+    """
+
     def error_message(self) -> str:
         settings = ", ".join(str(requirement.setting) for requirement in self.unmet)
         return (
@@ -205,39 +193,94 @@ class LargeMessagesCannotArrive(DataclassException):
         )
 
     def suggest_correction(self) -> str:
-        return f"Raise them with: {raise_limits_command()}"
+        return f"Raise them with: {self.raise_limits_command}"
 
 
-def unmet_requirements(
-    machine: MachineSettings = THIS_MACHINE,
-) -> List[SettingRequirement]:
+@dataclass
+class LargeMessageReceiver:
     """
-    The requirements a machine does not currently meet.
-
-    :param machine: The machine to read.
+    A machine that has to receive the large messages the robot sends it, with the kernel
+    settings that takes.
     """
-    return [
-        requirement
-        for requirement in LARGE_MESSAGE_REQUIREMENTS
-        if not requirement.is_met(machine.read(requirement.setting))
-    ]
 
-
-def check_large_messages_can_arrive(machine: MachineSettings = THIS_MACHINE) -> None:
+    machine: MachineSettings = field(default_factory=MachineSettings)
     """
-    Stop a run that would lose the messages it depends on.
-
-    A machine whose traffic leaves over a wire is left alone: its datagrams arrive whole,
-    so the limits never bind.
-
-    :param machine: The machine to read.
-    :raises LargeMessagesCannotArrive: If the traffic is wireless and the limits are too
-        low.
+    The machine the messages arrive at.
     """
-    interface = machine.default_route_interface()
-    if interface is None or not machine.is_wireless(interface):
-        return
-    unmet = unmet_requirements(machine)
-    if not unmet:
-        return
-    raise LargeMessagesCannotArrive(interface, unmet)
+
+    requirements: List[SettingRequirement] = field(
+        default_factory=lambda: [
+            SettingRequirement(
+                KernelSetting.FRAGMENT_CACHE_CEILING, 268435456, operator.ge
+            ),
+            SettingRequirement(
+                KernelSetting.FRAGMENT_CACHE_FLOOR, 201326592, operator.ge
+            ),
+            SettingRequirement(KernelSetting.FRAGMENT_LIFETIME, 3, operator.le),
+            SettingRequirement(
+                KernelSetting.RECEIVE_BUFFER_CEILING, 67108864, operator.ge
+            ),
+            SettingRequirement(
+                KernelSetting.RECEIVE_BUFFER_DEFAULT, 67108864, operator.ge
+            ),
+            SettingRequirement(KernelSetting.DEVICE_BACKLOG, 30000, operator.ge),
+        ]
+    )
+    """
+    The configuration measured to carry the world snapshot over this setup's wireless
+    link.
+
+    These were raised and tested together, so this is the set known to work rather than
+    the smallest set that would.
+    """
+
+    def raise_limits_command(self) -> str:
+        """
+        :return: The command that puts the machine's limits where they need to be, until
+            it is next rebooted.
+        """
+        settings = " ".join(
+            f"{requirement.setting}={requirement.value}"
+            for requirement in self.requirements
+        )
+        return f"sudo sysctl -w {settings}"
+
+    def unmet_requirements(self) -> List[SettingRequirement]:
+        """
+        :return: The requirements the machine does not currently meet.
+        """
+        reading = variable(SettingReading, domain=self.machine.readings())
+        met_readings = an(
+            entity(reading).where(
+                or_(
+                    *(
+                        requirement.is_met_by(reading)
+                        for requirement in self.requirements
+                    )
+                )
+            )
+        )
+        met_settings = {met_reading.setting for met_reading in met_readings.tolist()}
+        return [
+            requirement
+            for requirement in self.requirements
+            if requirement.setting not in met_settings
+        ]
+
+    def check_messages_can_arrive(self) -> None:
+        """
+        Stop a run that would lose the messages it depends on.
+
+        A machine whose traffic leaves over a wire is left alone: its datagrams arrive
+        whole, so the limits never bind.
+
+        :raises LargeMessagesCannotArrive: If the traffic is wireless and the limits are
+            too low.
+        """
+        interface = self.machine.default_route_interface()
+        if interface is None or not self.machine.is_wireless(interface):
+            return
+        unmet = self.unmet_requirements()
+        if not unmet:
+            return
+        raise LargeMessagesCannotArrive(interface, unmet, self.raise_limits_command())

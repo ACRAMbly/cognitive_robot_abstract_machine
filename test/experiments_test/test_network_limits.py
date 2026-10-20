@@ -4,18 +4,19 @@ Tests for the check that this machine can receive the large messages the robot s
 
 from __future__ import annotations
 
+import operator
+
 import pytest
 
 from experiments.network_limits import (
-    AtLeast,
-    AtMost,
     KernelSetting,
+    LargeMessageReceiver,
     LargeMessagesCannotArrive,
     MachineSettings,
-    check_large_messages_can_arrive,
-    raise_limits_command,
-    unmet_requirements,
+    SettingReading,
+    SettingRequirement,
 )
+from krrood.entity_query_language.factories import evaluate_condition, variable_from
 
 # %% fixtures
 
@@ -89,20 +90,37 @@ The stock values that were measured to lose 99.99% of a large message.
 # %% requirements
 
 
-def test_a_floor_is_met_by_the_value_it_names_and_by_more():
-    requirement = AtLeast(KernelSetting.DEVICE_BACKLOG, 1000)
+def is_met(requirement: SettingRequirement, value: int) -> bool:
+    """
+    :param requirement: The requirement to check.
+    :param value: The value a machine reports for the requirement's setting.
+    :return: Whether the requirement's condition holds for that reading.
+    """
+    reading = variable_from([SettingReading(requirement.setting, value)])
+    return evaluate_condition(requirement.is_met_by(reading))
 
-    assert requirement.is_met(1000)
-    assert requirement.is_met(1001)
-    assert not requirement.is_met(999)
+
+def test_a_floor_is_met_by_the_value_it_names_and_by_more():
+    requirement = SettingRequirement(KernelSetting.DEVICE_BACKLOG, 1000, operator.ge)
+
+    assert is_met(requirement, 1000)
+    assert is_met(requirement, 1001)
+    assert not is_met(requirement, 999)
 
 
 def test_a_ceiling_is_met_by_the_value_it_names_and_by_less():
-    requirement = AtMost(KernelSetting.FRAGMENT_LIFETIME, 3)
+    requirement = SettingRequirement(KernelSetting.FRAGMENT_LIFETIME, 3, operator.le)
 
-    assert requirement.is_met(3)
-    assert requirement.is_met(2)
-    assert not requirement.is_met(4)
+    assert is_met(requirement, 3)
+    assert is_met(requirement, 2)
+    assert not is_met(requirement, 4)
+
+
+def test_a_requirement_is_not_met_by_another_settings_reading():
+    requirement = SettingRequirement(KernelSetting.DEVICE_BACKLOG, 1000, operator.ge)
+    reading = variable_from([SettingReading(KernelSetting.FRAGMENT_LIFETIME, 1000)])
+
+    assert not evaluate_condition(requirement.is_met_by(reading))
 
 
 # %% reading the machine
@@ -132,7 +150,10 @@ def test_a_setting_is_read_as_the_number_the_kernel_reports(tmp_path):
 def test_stock_limits_are_reported_as_unmet(tmp_path):
     machine = build_machine(tmp_path, WIRELESS_ROUTE, wireless=True, **UNTUNED)
 
-    unmet = {requirement.setting for requirement in unmet_requirements(machine)}
+    unmet = {
+        requirement.setting
+        for requirement in LargeMessageReceiver(machine).unmet_requirements()
+    }
 
     assert unmet == {
         KernelSetting.FRAGMENT_CACHE_CEILING,
@@ -143,39 +164,41 @@ def test_stock_limits_are_reported_as_unmet(tmp_path):
 def test_tuned_limits_leave_nothing_unmet(tmp_path):
     machine = build_machine(tmp_path, WIRELESS_ROUTE, wireless=True, **TUNED)
 
-    assert unmet_requirements(machine) == []
+    assert LargeMessageReceiver(machine).unmet_requirements() == []
 
 
 def test_a_wireless_machine_with_stock_limits_is_refused(tmp_path):
     machine = build_machine(tmp_path, WIRELESS_ROUTE, wireless=True, **UNTUNED)
 
     with pytest.raises(LargeMessagesCannotArrive):
-        check_large_messages_can_arrive(machine)
+        LargeMessageReceiver(machine).check_messages_can_arrive()
 
 
 def test_a_wired_machine_is_left_alone_whatever_its_limits(tmp_path):
     machine = build_machine(tmp_path, WIRED_ROUTE, wireless=False, **UNTUNED)
 
-    check_large_messages_can_arrive(machine)
+    LargeMessageReceiver(machine).check_messages_can_arrive()
 
 
 def test_a_tuned_wireless_machine_is_allowed_through(tmp_path):
     machine = build_machine(tmp_path, WIRELESS_ROUTE, wireless=True, **TUNED)
 
-    check_large_messages_can_arrive(machine)
+    LargeMessageReceiver(machine).check_messages_can_arrive()
 
 
 def test_the_refusal_names_the_command_that_raises_the_limits(tmp_path):
     machine = build_machine(tmp_path, WIRELESS_ROUTE, wireless=True, **UNTUNED)
 
-    with pytest.raises(LargeMessagesCannotArrive) as refusal:
-        check_large_messages_can_arrive(machine)
+    receiver = LargeMessageReceiver(machine)
 
-    assert raise_limits_command() in str(refusal.value)
+    with pytest.raises(LargeMessagesCannotArrive) as refusal:
+        receiver.check_messages_can_arrive()
+
+    assert receiver.raise_limits_command() in str(refusal.value)
 
 
 def test_the_command_sets_every_requirement_it_checks():
-    command = raise_limits_command()
+    command = LargeMessageReceiver().raise_limits_command()
 
     for setting in KernelSetting:
         assert str(setting) in command
