@@ -127,16 +127,8 @@ e.g. `pytest test/coraplex_test`
 ## Developer / Agent Tooling
 
 `.claude/` holds configuration for AI coding agents (Claude Code) working in
-this repository. Personal notes, per-PR progress tracking, multi-PR plan
-dashboards and the stacked-PR workflow come from the
-[basstler](https://github.com/AbdelrhmanBassiouny/basstler) plugin, which
-`.claude/settings.json` enables for local sessions; cloud sessions add it
-from their claude.ai plugins. Its
-[setup guide](https://github.com/AbdelrhmanBassiouny/basstler/blob/main/docs/SETUP.md)
-covers the one-time setup.
+this repository.
 
-- **[`.claude/basstler/stack.toml`](.claude/basstler/stack.toml)** - names
-  the upstream repository this fork's pull requests are reviewed on.
 - **[`.claude/skills/local-code-review/`](.claude/skills/local-code-review/SKILL.md)** -
   reviews the current branch against upstream `main` for bugs and
   `AGENTS.md` adherence, then hands back an approval-gated plan to fix every
