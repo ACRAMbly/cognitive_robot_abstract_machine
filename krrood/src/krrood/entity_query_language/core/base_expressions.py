@@ -342,15 +342,16 @@ class SymbolicExpression(
 
     def _true_results_(self) -> Iterator[OperationResult]:
         """
-        :return: The raw ``OperationResult`` instances from ``_evaluate_()`` whose truth
-            value is true, before :meth:`_process_result_` maps them to output values.
+        :return: The raw ``OperationResult`` instances of a new evaluation of this
+            expression (see :meth:`_start_evaluation_`) whose truth value is true,
+            before :meth:`_process_result_` maps them to output values.
             An expression that is not a :class:`TruthValuedExpression` records a
             selectable value rather than a truth, so its results pass through
             unfiltered regardless of that value's truthiness.
         """
         return (
             result
-            for result in self._evaluate_()
+            for result in self._start_evaluation_()
             if not isinstance(self, TruthValuedExpression) or result.is_true
         )
 
@@ -554,6 +555,22 @@ class SymbolicExpression(
             yield from self._evaluate_within_(evaluation_context, sources)
             return
 
+        yield from self._start_evaluation_(sources)
+
+    def _start_evaluation_(
+        self,
+        sources: Optional[OperationResult] = None,
+    ) -> Iterator[OperationResult]:
+        """
+        Start a new evaluation of this expression, independent of any evaluation already
+        running, such as one that reaches this call through a lazily iterated domain.
+
+        The evaluation already running is current again whenever control returns to it.
+
+        :param sources: The current OperationResult carrying bindings of variables, or
+            None.
+        :return: An iterator of OperationResult instances.
+        """
         from krrood.entity_query_language.evaluation import (
             create_default_evaluation_context,
         )
