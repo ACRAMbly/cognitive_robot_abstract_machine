@@ -22,27 +22,31 @@ def seeded_random_state() -> None:
     np.random.seed(69)
 
 
-# %% L1 metric
+# %% total variation distance
 
 
-def test_l1_metric_of_nearly_identical_models_is_accurate(variable: Continuous):
+def test_total_variation_distance_of_nearly_identical_models_is_accurate(
+    variable: Continuous,
+):
     model = GaussianDistribution(variable=variable, location=0.0, scale=1.0)
     other = GaussianDistribution(variable=variable, location=0.01, scale=1.0)
 
     # The densities intersect at the midpoint of the locations, so the event where the
     # model is more likely than the other is everything below it.
     midpoint = np.array([[(model.location + other.location) / 2]])
-    exact_l1_metric = 2 * (
+    exact_total_variation_distance = (
         model.cumulative_distribution_function(midpoint)[0]
         - other.cumulative_distribution_function(midpoint)[0]
     )
 
-    estimate = MonteCarloEstimator(model, sample_size=1000).l1_metric(other)
+    estimate = MonteCarloEstimator(model, sample_size=1000).total_variation_distance(
+        other
+    )
 
-    assert estimate == pytest.approx(exact_l1_metric, abs=1e-3)
+    assert estimate == pytest.approx(exact_total_variation_distance, abs=1e-3)
 
 
-def test_l1_metric_of_disjoint_models_is_two(variable: Continuous):
+def test_total_variation_distance_of_disjoint_models_is_one(variable: Continuous):
     model = UniformDistribution(
         variable=variable,
         interval=SimpleInterval.from_data(0, 1, Bound.CLOSED, Bound.OPEN),
@@ -52,10 +56,10 @@ def test_l1_metric_of_disjoint_models_is_two(variable: Continuous):
         interval=SimpleInterval.from_data(2, 3, Bound.CLOSED, Bound.OPEN),
     )
 
-    assert MonteCarloEstimator(model).l1_metric(other) == 2
+    assert MonteCarloEstimator(model).total_variation_distance(other) == 1
 
 
-def test_l1_metric_of_identical_models_is_zero(variable: Continuous):
+def test_total_variation_distance_of_identical_models_is_zero(variable: Continuous):
     model = GaussianDistribution(variable=variable, location=0.0, scale=1.0)
 
-    assert MonteCarloEstimator(model).l1_metric(model) == 0
+    assert MonteCarloEstimator(model).total_variation_distance(model) == 0
