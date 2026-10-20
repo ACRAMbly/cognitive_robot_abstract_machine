@@ -1,0 +1,10 @@
+<mujoco>
+  <asset>
+    <mesh name="cube" file="package://mesh_package/meshes/cube.stl"/>
+  </asset>
+  <worldbody>
+    <body name="crate">
+      <geom type="mesh" mesh="cube"/>
+    </body>
+  </worldbody>
+</mujoco>

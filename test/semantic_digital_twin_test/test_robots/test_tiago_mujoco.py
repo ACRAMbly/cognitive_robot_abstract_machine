@@ -13,6 +13,7 @@ from scipy.spatial.transform import Rotation
 
 from ...pytest_environment import runs_in_continuous_integration
 
+from semantic_digital_twin.adapters.mjcf import MJCFParser
 from semantic_digital_twin.adapters.multi_sim import MujocoSim
 from semantic_digital_twin.datastructures.definitions import (
     GripperState,
@@ -22,6 +23,7 @@ from semantic_digital_twin.datastructures.definitions import (
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 from semantic_digital_twin.robots.tiago import TiagoMujoco
 from semantic_digital_twin.specifications.robots import RobotSpecification
+from semantic_digital_twin.utils import tiago_mujoco_meshes_installed
 from semantic_digital_twin.world import World
 from semantic_digital_twin.world_description.connections import (
     ActiveConnection1DOF,
@@ -31,6 +33,11 @@ from semantic_digital_twin.world_description.world_entity import (
     Body,
     GravityCompensation,
     PositionServo,
+)
+
+pytestmark = pytest.mark.skipif(
+    not tiago_mujoco_meshes_installed(),
+    reason="the PAL packages the MuJoCo Tiago reads its meshes from are not installed",
 )
 
 
@@ -50,9 +57,9 @@ def test_the_robot_hangs_straight_off_the_drive_that_moves_it():
     MJCF describes every body inside a world body, and a frame left above the robot's
     own root would sit between the robot and its drive, leaving it undriven.
     """
-    robot_world = TiagoMujoco.parse_description()
+    robot = TiagoMujoco.from_description()
 
-    assert robot_world.root.name.name == TiagoMujoco._get_root_body_name()
+    assert robot.root is robot._world.root
 
 
 def test_a_mounted_robot_is_moved_across_the_floor_by_its_own_drive(mounted_tiago):
@@ -99,7 +106,7 @@ def test_a_servo_keeps_the_joint_dynamics_its_description_states(mounted_tiago):
     An MJCF states each joint's own damping and friction, so declaring a servo on that
     joint leaves them alone rather than replacing them with the servo's own.
     """
-    as_described = TiagoMujoco.parse_description()
+    as_described = MJCFParser(TiagoMujoco.get_ros_file_path()).parse()
 
     for connection in mounted_tiago.connections:
         if not isinstance(connection, ActiveConnection1DOF):

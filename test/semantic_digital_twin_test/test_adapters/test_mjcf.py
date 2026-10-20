@@ -2,6 +2,7 @@ import os.path
 
 import numpy
 import pytest
+import trimesh
 
 from semantic_digital_twin.adapters.mjcf import MJCFParser
 from semantic_digital_twin.adapters.multi_sim import MujocoLight
@@ -372,3 +373,22 @@ def test_primitive_box_geom_resolves_its_material_texture(tmp_path):
     assert box_shape.texture.file_path == str(texture_file_path)
     assert box_shape.texture.repeat == pytest.approx([3.0, 3.0])
     assert box_shape.texture.uniform is True
+
+
+# %% meshes from ROS packages
+
+
+def test_a_mesh_named_by_a_package_uri_is_read_from_that_package(tmp_path, monkeypatch):
+    package_directory = tmp_path / "mesh_package"
+    mesh_file_path = package_directory / "meshes" / "cube.stl"
+    mesh_file_path.parent.mkdir(parents=True)
+    trimesh.creation.box(extents=(0.1, 0.1, 0.1)).export(mesh_file_path)
+    monkeypatch.setenv("ROS_PACKAGE_PATH", str(package_directory))
+
+    world = MJCFParser(os.path.join(DATASET_DIR, "package_mesh_scene.xml")).parse()
+
+    [crate] = [
+        body for body in world.kinematic_structure_entities if body.name.name == "crate"
+    ]
+    [mesh] = crate.collision.shapes
+    assert mesh.filename == str(mesh_file_path)

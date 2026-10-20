@@ -50,7 +50,6 @@ from semantic_digital_twin.robots.robot_parts import (
 )
 from semantic_digital_twin.datastructures.field_of_view import FieldOfView
 from semantic_digital_twin.spatial_types import Vector3
-from semantic_digital_twin.world import World
 from semantic_digital_twin.world_description.connection_properties import (
     DriveServos,
     JointServo,
@@ -1122,15 +1121,15 @@ class TiagoMujoco(AbstractRobot, HasMobileBase[TiagoMujocoMobileBase]):
         )
 
     @classmethod
-    def parse_description(cls) -> World:
+    def from_description(cls) -> Self:
         """
-        :return: A world holding nothing but this robot, read from its MJCF without the
-            world body MJCF puts above every robot's root.
+        :return: This robot, read from its MJCF without the world body MJCF puts above
+            every robot's root.
         """
         world = MJCFParser(cls.get_ros_file_path()).parse()
         with world.modify_world():
             world.remove_kinematic_structure_entity(world.root)
-        return world
+        return cls.from_world(world)
 
     @classmethod
     def _get_root_body_name(cls) -> str:

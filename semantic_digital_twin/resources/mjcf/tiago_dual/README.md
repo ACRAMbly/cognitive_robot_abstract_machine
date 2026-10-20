@@ -51,3 +51,11 @@ as a 4 cm opening between the fingers instead of the real 8.6 cm.
 Every joint was given an armature of 0.1 kg m², the inertia of the rotor behind it, which
 the shipped model does not state. Without it, a wrist held by its position servo
 oscillates apart within a second of simulated time.
+
+The meshes are not shipped here: each one names the ROS package of PAL Robotics it comes
+from (``tiago_description``, ``tiago_dual_description``, ``omni_base_description``,
+``pmb2_description``, ``pal_gripper_description`` and ``pal_urdf_utils``). All but the
+base and the wheels are the files this model shipped; ``arm_2`` and ``gripper_link`` are
+the same meshes moved along z, so their geoms are moved back by as much. The base and the
+wheels are the current versions of PAL's meshes, with the same footprint as the ones
+this model shipped.
