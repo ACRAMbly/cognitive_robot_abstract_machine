@@ -5,7 +5,6 @@ import os
 import weakref
 from copy import deepcopy
 from dataclasses import dataclass
-from enum import StrEnum
 from functools import lru_cache, wraps
 from pathlib import Path
 from typing import List
@@ -155,29 +154,18 @@ def hsrb_installed() -> bool:
         return False
 
 
-class TiagoMujocoMeshPackage(StrEnum):
+def iai_tiago_description_installed() -> bool:
     """
-    The ROS packages of PAL Robotics the MuJoCo Tiago reads its meshes from.
-    """
-
-    TIAGO = "tiago_description"
-    TIAGO_DUAL = "tiago_dual_description"
-    OMNI_BASE = "omni_base_description"
-    PMB2 = "pmb2_description"
-    GRIPPER = "pal_gripper_description"
-    SENSORS = "pal_urdf_utils"
-
-
-def tiago_mujoco_meshes_installed() -> bool:
-    """
-    :return: Whether every package of :class:`TiagoMujocoMeshPackage` is installed.
+    :return: Whether the ROS package the Tiago is described by is installed.
     """
     try:
         from ament_index_python.packages import get_package_share_directory
 
-        return all(
-            get_package_share_directory(package) for package in TiagoMujocoMeshPackage
-        )
+        pkg_name = "iai_tiago_description"
+
+        if get_package_share_directory(pkg_name):
+            return True
+        return False
     except (ImportError, PackageNotFoundError, ValueError):
         return False
 

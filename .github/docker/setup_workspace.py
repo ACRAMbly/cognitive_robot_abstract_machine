@@ -317,37 +317,6 @@ def main():
             ["pmb2_bringup", "pmb2_controller_configuration"],
         ),
         Repository(
-            "https://github.com/pal-robotics/tiago_robot.git",
-            "humble-devel",
-            "tiago_robot",
-            ["tiago_bringup", "tiago_controller_configuration", "tiago_robot"],
-        ),
-        Repository(
-            "https://github.com/pal-robotics/tiago_dual_robot.git",
-            "humble-devel",
-            "tiago_dual_robot",
-            [
-                "tiago_dual_bringup",
-                "tiago_dual_controller_configuration",
-                "tiago_dual_robot",
-            ],
-        ),
-        Repository(
-            "https://github.com/pal-robotics/omni_base_robot.git",
-            "humble-devel",
-            "omni_base_robot",
-            [
-                "omni_base_bringup",
-                "omni_base_controller_configuration",
-                "omni_base_robot",
-            ],
-        ),
-        Repository(
-            "https://github.com/pal-robotics/pal_urdf_utils.git",
-            "humble-devel",
-            "pal_urdf_utils",
-        ),
-        Repository(
             "https://github.com/pal-robotics/pal_gripper.git",
             "humble-devel",
             "pal_gripper",

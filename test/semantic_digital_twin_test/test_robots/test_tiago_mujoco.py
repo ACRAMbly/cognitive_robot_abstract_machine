@@ -23,7 +23,7 @@ from semantic_digital_twin.datastructures.definitions import (
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 from semantic_digital_twin.robots.tiago import TiagoMujoco
 from semantic_digital_twin.specifications.robots import RobotSpecification
-from semantic_digital_twin.utils import tiago_mujoco_meshes_installed
+from semantic_digital_twin.utils import iai_tiago_description_installed
 from semantic_digital_twin.world import World
 from semantic_digital_twin.world_description.connections import (
     ActiveConnection1DOF,
@@ -36,8 +36,8 @@ from semantic_digital_twin.world_description.world_entity import (
 )
 
 pytestmark = pytest.mark.skipif(
-    not tiago_mujoco_meshes_installed(),
-    reason="the PAL packages the MuJoCo Tiago reads its meshes from are not installed",
+    not iai_tiago_description_installed(),
+    reason="iai_tiago_description is not installed",
 )
 
 
