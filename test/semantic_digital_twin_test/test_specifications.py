@@ -1,4 +1,5 @@
 import copy
+from dataclasses import dataclass
 import inspect
 import os
 from uuid import uuid4
@@ -629,6 +630,35 @@ def test_robot_specification_rejects_drive_velocity_limits_for_an_undriven_robot
             semantic_annotation_type=MinimalRobot,
             drive_translation_velocity_limits=0.1,
         ).spawn(empty_world)
+
+
+@dataclass(eq=False)
+class RobotDescribedInCode(MinimalRobot):
+    """
+    A robot whose description is not a URDF, read by a parser of its own.
+    """
+
+    @classmethod
+    def parse_description(cls) -> World:
+        world = World()
+        with world.modify_world():
+            world.add_kinematic_structure_entity(
+                Body(name=PrefixedName("chassis", "described_in_code"))
+            )
+        return world
+
+    @classmethod
+    def _get_root_body_name(cls) -> str:
+        return "chassis"
+
+
+def test_a_robot_is_spawned_from_the_description_it_reads_itself(empty_world):
+    robot = RobotSpecification(semantic_annotation_type=RobotDescribedInCode).spawn(
+        empty_world
+    )
+
+    assert robot.root.name.name == RobotDescribedInCode._get_root_body_name()
+    assert robot.root._world is empty_world
 
 
 def test_world_specification_from_urdf_with_robot():

@@ -32,6 +32,7 @@ from krrood.class_diagrams.attribute_introspector import (
 from krrood.entity_query_language.factories import variable, contains, a, entity
 from krrood.ormatic.utils import classproperty
 from krrood.utils import get_generic_type_parameters
+from semantic_digital_twin.adapters.urdf import URDFParser
 from semantic_digital_twin.datastructures.definitions import JointStateType
 from semantic_digital_twin.datastructures.field_of_view import FieldOfView
 from semantic_digital_twin.datastructures.joint_state import JointState
@@ -415,7 +416,8 @@ class AbstractRobotPart(HasRootBody, HasRobotParts, ABC):
         Drive one of this part's joints with a position servo in a physical simulation:
         the servo's gains become a
         :class:`~semantic_digital_twin.world_description.world_entity.PositionServo`
-        actuator on the joint's degree of freedom, its dynamics the joint's own.
+        actuator on the joint's degree of freedom, its dynamics, if it states any, the
+        joint's own.
 
         A joint that follows another joint's degree of freedom, such as a gripper's
         mimic joints, gets the dynamics but no actuator of its own: the servo already
@@ -424,7 +426,8 @@ class AbstractRobotPart(HasRootBody, HasRobotParts, ABC):
         :param connection: The joint to drive.
         :param servo: What drives it.
         """
-        connection.dynamics = servo.dynamics
+        if servo.dynamics is not None:
+            connection.dynamics = servo.dynamics
         self._add_servo(
             PositionServo(
                 name=PrefixedName(
@@ -1086,6 +1089,18 @@ class AbstractRobot(Agent, HasRobotParts, ABC):
         checking even though they bound the robot's real shape.
         """
         return False
+
+    @classmethod
+    def parse_description(cls) -> World:
+        """
+        :return: A world holding nothing but this robot, read from its own
+            description: the URDF :meth:`get_ros_file_path` points to, unless the robot
+            is described in another format.
+        """
+        return URDFParser.from_file(
+            cls.get_ros_file_path(),
+            use_visual_as_collision_backup=cls.uses_visual_as_collision_backup,
+        ).parse()
 
     @classmethod
     @abstractmethod
