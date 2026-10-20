@@ -16,6 +16,7 @@ import numpy as np
 import pytest
 import torch
 from omegaconf import OmegaConf
+from noctis_acrambly.src.model.inference_contract import InferenceField, ReferenceFile
 
 # %% reference observations
 
@@ -45,8 +46,8 @@ class ReferenceTemplates:
         Return one tiny template and its segmentation mask.
         """
         return {
-            "templates": torch.full((1, 3, 4, 4), float(index)),
-            "template_masks": torch.ones((1, 4, 4)),
+            InferenceField.TEMPLATES: torch.full((1, 3, 4, 4), float(index)),
+            InferenceField.TEMPLATE_MASKS: torch.ones((1, 4, 4)),
         }
 
 
@@ -64,15 +65,16 @@ def detector_module(monkeypatch: pytest.MonkeyPatch) -> Iterator[Any]:
         if name == "src" or name.startswith("src."):
             monkeypatch.delitem(sys.modules, name)
     lightning = ModuleType("pytorch_lightning")
-    lightning.__dict__["LightningModule"] = torch.nn.Module
+    lightning.LightningModule = torch.nn.Module  # type: ignore[attr-defined]
     monkeypatch.setitem(sys.modules, lightning.__name__, lightning)
-    for name, class_name in (
-        ("src.model.sam", "CustomSamAutomaticMaskGenerator"),
-        ("src.model.grounded_sam", "GroundedSAM"),
-    ):
-        module = ModuleType(name)
-        module.__dict__[class_name] = type(class_name, (), {})
-        monkeypatch.setitem(sys.modules, name, module)
+    automatic_masks = ModuleType("src.model.sam")
+    automatic_masks.CustomSamAutomaticMaskGenerator = type(  # type: ignore[attr-defined]
+        "CustomSamAutomaticMaskGenerator", (), {}
+    )
+    grounded_masks = ModuleType("src.model.grounded_sam")
+    grounded_masks.GroundedSAM = type("GroundedSAM", (), {})  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, automatic_masks.__name__, automatic_masks)
+    monkeypatch.setitem(sys.modules, grounded_masks.__name__, grounded_masks)
     module = importlib.import_module("src.model.detector")
     yield module
     for name in tuple(sys.modules):
@@ -93,10 +95,10 @@ def detector(detector_module: Any, tmp_path: Path) -> Any:
     segmentor.move_to_device = Mock()
     segmentor.generate_masks = Mock(
         return_value={
-            "boxes": torch.tensor([[0, 0, 4, 4]]),
-            "masks": torch.ones((1, 4, 4)),
-            "boxes_scores": torch.ones(1),
-            "masks_scores": torch.ones(1),
+            InferenceField.BOXES: torch.tensor([[0, 0, 4, 4]]),
+            InferenceField.MASKS: torch.ones((1, 4, 4)),
+            InferenceField.BOX_CONFIDENCE: torch.ones(1),
+            InferenceField.MASK_CONFIDENCE: torch.ones(1),
         }
     )
     descriptor = Mock()
@@ -128,9 +130,9 @@ def observation() -> dict[str, torch.Tensor]:
     Provide an observation independent of its source frame number.
     """
     return {
-        "image": torch.zeros((1, 3, 4, 4)),
-        "scene_id": torch.tensor([1]),
-        "frame_id": torch.tensor([37]),
+        InferenceField.IMAGE: torch.zeros((1, 3, 4, 4)),
+        InferenceField.SCENE_IDENTITY: torch.tensor([1]),
+        InferenceField.FRAME_IDENTITY: torch.tensor([37]),
     }
 
 
@@ -145,7 +147,7 @@ def test_nonzero_first_observation_initializes_once(
     """
     for identity in (37, 38, 0):
         result = detector.test_step(observation, identity)
-        assert result["detections"].object_ids.tolist() == [
+        assert result[InferenceField.DETECTIONS].object_ids.tolist() == [
             detector.ref_dataset.obj_ids[0]
         ]
     detector.segmentor_model.move_to_device.assert_called_once_with(detector.device)
@@ -175,6 +177,21 @@ def test_explicit_initialization_recomputes_references_once(
 # %% empty scenes
 
 
+def test_absent_proposals_return_empty_detections(
+    detector: Any, observation: dict[str, torch.Tensor]
+) -> None:
+    """
+    The segmentor's absent-proposal result represents an ordinary empty scene.
+    """
+    detector.segmentor_model.generate_masks.return_value = None
+    detections = detector.test_step(observation, 0)[InferenceField.DETECTIONS]
+    assert detections.object_ids.tolist() == []
+    assert detections.boxes.shape == (0, 4)
+    assert detections.masks.shape == (0, *observation[InferenceField.IMAGE].shape[-2:])
+    assert detections.scores.shape == (0,)
+    detector.descriptor_model.assert_not_called()
+
+
 def test_zero_proposals_return_empty_detections(
     detector: Any, observation: dict[str, torch.Tensor]
 ) -> None:
@@ -182,13 +199,13 @@ def test_zero_proposals_return_empty_detections(
     An empty proposal batch never reaches descriptor computation.
     """
     detector.segmentor_model.generate_masks.return_value = {
-        "boxes": torch.empty((0, 4)),
-        "masks": torch.empty((0, 4, 4)),
+        InferenceField.BOXES: torch.empty((0, 4)),
+        InferenceField.MASKS: torch.empty((0, 4, 4)),
     }
-    detections = detector.test_step(observation, 0)["detections"]
+    detections = detector.test_step(observation, 0)[InferenceField.DETECTIONS]
     assert detections.object_ids.tolist() == []
     assert detections.boxes.shape == (0, 4)
-    assert detections.masks.shape == (0, *observation["image"].shape[-2:])
+    assert detections.masks.shape == (0, *observation[InferenceField.IMAGE].shape[-2:])
     assert detections.scores.shape == (0,)
     assert detections.score_distribution.shape == (0, len(detector.ref_dataset))
     assert detections.object_ids.dtype == np.int64
@@ -201,11 +218,11 @@ def test_filtered_masks_return_empty_detections(
     """
     Proposals with no usable mask stop before query descriptors.
     """
-    detector.segmentor_model.generate_masks.return_value["masks"].zero_()
-    detections = detector.test_step(observation, 0)["detections"]
+    detector.segmentor_model.generate_masks.return_value[InferenceField.MASKS].zero_()
+    detections = detector.test_step(observation, 0)[InferenceField.DETECTIONS]
     assert detections.object_ids.tolist() == []
     assert detections.boxes.shape == (0, 4)
-    assert detections.masks.shape == (0, *observation["image"].shape[-2:])
+    assert detections.masks.shape == (0, *observation[InferenceField.IMAGE].shape[-2:])
     assert detections.scores.shape == (0,)
     detector.descriptor_model.assert_not_called()
 
@@ -220,10 +237,10 @@ def test_rejected_matches_return_empty_detections(
         torch.tensor([[-1.0, -1.0]]),
         torch.ones((1, 2, 2)),
     )
-    detections = detector.test_step(observation, 0)["detections"]
+    detections = detector.test_step(observation, 0)[InferenceField.DETECTIONS]
     assert detections.object_ids.tolist() == []
     assert detections.boxes.shape == (0, 4)
-    assert detections.masks.shape == (0, *observation["image"].shape[-2:])
+    assert detections.masks.shape == (0, *observation[InferenceField.IMAGE].shape[-2:])
     assert detections.scores.shape == (0,)
     assert detections.score_distribution.shape == (0, len(detector.ref_dataset))
 
@@ -240,31 +257,35 @@ def test_threshold_and_best_per_model_preserve_detection_data(
     """
     threshold = detector.matching_config.final_confidence_threshold
     proposals = {
-        "boxes": torch.tensor(
+        InferenceField.BOXES: torch.tensor(
             [[0, 0, 2, 4], [2, 0, 4, 4], [0, 0, 4, 4], [0, 0, 4, 4], [0, 0, 4, 4]]
         ),
-        "masks": torch.stack(
+        InferenceField.MASKS: torch.stack(
             [torch.full((4, 4), value) for value in (0.5, 0.6, 0.7, 0.8, 0.9)]
         ),
-        "boxes_scores": torch.tensor([0.6, 0.9, 0.8, threshold, threshold / 2]),
-        "masks_scores": torch.tensor([0.6, 0.9, 0.8, threshold, threshold / 2]),
+        InferenceField.BOX_CONFIDENCE: torch.tensor(
+            [0.6, 0.9, 0.8, threshold, threshold / 2]
+        ),
+        InferenceField.MASK_CONFIDENCE: torch.tensor(
+            [0.6, 0.9, 0.8, threshold, threshold / 2]
+        ),
     }
     detector.segmentor_model.generate_masks.return_value = proposals
     detector.descriptor_model.return_value = (
         torch.tensor([[1.0, 0.0], [1.0, 0.0], [0.0, 1.0], [1.0, 0.0], [1.0, 0.0]]),
         torch.ones((5, 2, 2)),
     )
-    detections = detector.test_step(observation, 0)["detections"]
+    detections = detector.test_step(observation, 0)[InferenceField.DETECTIONS]
     selected = [1, 2]
     assert detections.object_ids.tolist() == detector.ref_dataset.obj_ids
     np.testing.assert_array_equal(
-        detections.scores, proposals["boxes_scores"][selected].numpy()
+        detections.scores, proposals[InferenceField.BOX_CONFIDENCE][selected].numpy()
     )
     np.testing.assert_array_equal(
-        detections.boxes, proposals["boxes"][selected].numpy()
+        detections.boxes, proposals[InferenceField.BOXES][selected].numpy()
     )
     np.testing.assert_array_equal(
-        detections.masks, proposals["masks"][selected].numpy()
+        detections.masks, proposals[InferenceField.MASKS][selected].numpy()
     )
 
 
@@ -274,12 +295,13 @@ def test_reset_references_replaces_existing_cache_once(
     """
     A requested recomputation replaces stale cached descriptors before inference.
     """
-    cache = tmp_path / "descriptors.pth"
+    cache = tmp_path / ReferenceFile.DESCRIPTORS.value
     torch.save({}, cache)
     detector.initialize()
     cached = torch.load(cache, weights_only=True)
     torch.testing.assert_close(
-        cached["cls_descriptors"], torch.eye(len(detector.ref_dataset)).unsqueeze(1)
+        cached[InferenceField.CLASS_DESCRIPTORS],
+        torch.eye(len(detector.ref_dataset)).unsqueeze(1),
     )
     for identity in (19, 20):
         detector.test_step(observation, identity)
@@ -297,17 +319,47 @@ def test_empty_detections_can_be_saved(
     detector.return_detections = False
     detector.dataset_name = "recording"
     detector.segmentor_model.generate_masks.return_value = {
-        "boxes": torch.empty((0, 4)),
-        "masks": torch.empty((0, 4, 4)),
+        InferenceField.BOXES: torch.empty((0, 4)),
+        InferenceField.MASKS: torch.empty((0, 4, 4)),
     }
     assert detector.test_step(observation, 0) == 0
     predictions = list((tmp_path / "predictions").rglob("*.npz"))
     saved = next(path for path in predictions if not path.stem.endswith("_runtime"))
     with np.load(saved) as detections:
-        assert detections["category_id"].tolist() == []
-        assert detections["bbox"].shape == (0, 4)
-        assert detections["segmentation"].shape == (0, *observation["image"].shape[-2:])
-        assert detections["image_id"] == observation["frame_id"][0].item()
+        assert detections[InferenceField.CATEGORY_IDENTITY].tolist() == []
+        assert detections[InferenceField.BOUNDING_RECTANGLE].shape == (0, 4)
+        assert detections[InferenceField.SEGMENTATION].shape == (
+            0,
+            *observation[InferenceField.IMAGE].shape[-2:],
+        )
+        assert (
+            detections[InferenceField.IMAGE_IDENTITY]
+            == observation[InferenceField.FRAME_IDENTITY][0].item()
+        )
+
+
+def test_cached_references_remain_compatible(
+    detector: Any, observation: dict[str, torch.Tensor], tmp_path: Path
+) -> None:
+    """
+    Existing tensor-only descriptor caches remain usable for initialization.
+    """
+    detector.onboarding_config.reset_descriptors = False
+    cached = {
+        InferenceField.CLASS_DESCRIPTORS.value: torch.eye(
+            len(detector.ref_dataset)
+        ).unsqueeze(1),
+        InferenceField.PATCH_DESCRIPTORS.value: torch.ones(
+            (len(detector.ref_dataset), 1, 2, 2)
+        ),
+    }
+    torch.save(cached, tmp_path / ReferenceFile.DESCRIPTORS.value)
+    result = detector.test_step(observation, 37)
+    assert (
+        result[InferenceField.DETECTIONS].object_ids.tolist()
+        == detector.ref_dataset.obj_ids[:1]
+    )
+    detector.descriptor_model.compute_cls_and_patch_features.assert_not_called()
 
 
 @pytest.mark.parametrize("confidence_factor", [0.5, 1.0, 1.5])
@@ -319,8 +371,8 @@ def test_final_threshold_is_strict(
     """
     confidence = detector.matching_config.final_confidence_threshold * confidence_factor
     proposals = detector.segmentor_model.generate_masks.return_value
-    proposals["boxes_scores"].fill_(confidence)
-    proposals["masks_scores"].fill_(confidence)
-    detections = detector.test_step(observation, 0)["detections"]
+    proposals[InferenceField.BOX_CONFIDENCE].fill_(confidence)
+    proposals[InferenceField.MASK_CONFIDENCE].fill_(confidence)
+    detections = detector.test_step(observation, 0)[InferenceField.DETECTIONS]
     expected = detector.ref_dataset.obj_ids[:1] if confidence_factor > 1 else []
     assert detections.object_ids.tolist() == expected
