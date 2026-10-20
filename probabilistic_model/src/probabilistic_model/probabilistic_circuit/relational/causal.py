@@ -29,6 +29,9 @@ from probabilistic_model.probabilistic_circuit.relational.relational_probabilist
     GroundingMode,
     RelationalProbabilisticCircuit,
 )
+from probabilistic_model.probabilistic_circuit.groundable_circuit import (
+    GroundableCircuit,
+)
 from probabilistic_model.probabilistic_circuit.probabilistic_circuit_representation import (
     RepresentationType,
     ProbabilisticCircuitRepresentation,
@@ -102,7 +105,7 @@ class RelationalCausalCircuit:
         adjustment_variables: list[Variable] | None = None,
         grounding_mode: GroundingMode = GroundingMode.SAMPLED,
         trim_to_registered_variables: bool = False,
-    ) -> CausalCircuit[RepresentationType]:
+    ) -> CausalCircuit[GroundableCircuit]:
         """
         Ground a relational circuit for a query and wrap it as a ``CausalCircuit``.
 

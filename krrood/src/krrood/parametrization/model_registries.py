@@ -18,6 +18,9 @@ from probabilistic_model.probabilistic_circuit.relational.relational_probabilist
     GroundingMode,
     RelationalProbabilisticCircuit,
 )
+from probabilistic_model.probabilistic_circuit.groundable_circuit import (
+    GroundableCircuit,
+)
 from probabilistic_model.probabilistic_circuit.probabilistic_circuit_representation import (
     RepresentationType,
 )
@@ -115,7 +118,7 @@ class RelationalCircuitRegistry(ModelRegistry):
 
     def _ground_and_rename(
         self, parameters: UnderspecifiedParameters
-    ) -> RepresentationType:
+    ) -> GroundableCircuit:
         """
         Ground the relational circuit for ``parameters.statement`` and align its
         variable names to the ``UnderspecifiedParameters`` convention.
