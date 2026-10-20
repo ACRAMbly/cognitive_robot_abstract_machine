@@ -284,6 +284,31 @@ class DomainElementsIndistinguishableInSamples(DataclassException):
 
 
 @dataclass
+class UnboundedParameterError(DataclassException):
+    """
+    Raised when a uniform prior is asked for a parameter that the statement's ``where``
+    conditions do not bound from below and above.
+    """
+
+    parameter_name: str
+    """
+    The parameter without bounds.
+    """
+
+    def error_message(self) -> str:
+        return (
+            f"'{self.parameter_name}' is not bounded from below and above by the "
+            f"statement's where conditions, so no uniform distribution over it exists."
+        )
+
+    def suggest_correction(self) -> str:
+        return (
+            f"Bound '{self.parameter_name}' from below and above in the statement's "
+            f"where conditions."
+        )
+
+
+@dataclass
 class AttributeNotParameterized(InputError):
     """
     Raised when the random events variable of an attribute is requested from a query
