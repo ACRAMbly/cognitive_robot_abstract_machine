@@ -11,21 +11,13 @@ from krrood.patterns.exceptions import InterfaceInstantiationError
 
 class Interface(ABC):
     """
-    A class that only declares what its subclasses provide.
-
-    An interface cannot be instantiated, but its subclasses can. Its annotations declare
-    that every subclass has these attributes with these types, whether the subclass
-    stores them as fields or computes them as properties.
+    A class that only declares the typed attributes and methods its subclasses provide,
+    as fields or properties. It cannot be instantiated.
 
     .. note::
-        Subclass :class:`Interface` when the class only declares the attributes and
-        methods its subclasses provide, without fields or behaviour of its own. Subclass
-        :class:`abc.ABC` instead when the base class also holds fields or behaviour that
-        its subclasses inherit.
-        Never make an interface a dataclass: that turns its declared attributes into
-        fields. A base class that needs to be a dataclass subclasses :class:`abc.ABC`.
-        Only a class that names :class:`Interface` among its own bases is an interface,
-        so an interface extending another one names :class:`Interface` again.
+        Never make an interface a dataclass, which turns its declarations into fields.
+        A base class with fields or behaviour of its own subclasses :class:`abc.ABC`.
+        Only a class naming :class:`Interface` among its own bases is an interface.
     """
 
     def __new__(cls, *args: Any, **kwargs: Any) -> Self:
