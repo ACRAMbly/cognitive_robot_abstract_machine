@@ -3,6 +3,7 @@ import copy
 import pytest
 
 from krrood.patterns.dataclass_deep_copy import DataclassDeepcopyMixin
+from krrood.patterns.exceptions import InterfaceInstantiationError
 from krrood.patterns.mixin import Mixin
 
 from ..dataset.deep_copied_classes import (
@@ -91,3 +92,8 @@ def test_the_mixin_keeps_identity_equality_hashable():
 
 def test_the_dataclass_deep_copy_is_a_mixin():
     assert issubclass(DataclassDeepcopyMixin, Mixin)
+
+
+def test_the_dataclass_deep_copy_mixin_cannot_be_instantiated():
+    with pytest.raises(InterfaceInstantiationError):
+        DataclassDeepcopyMixin()

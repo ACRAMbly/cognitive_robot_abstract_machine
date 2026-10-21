@@ -5,12 +5,13 @@ from dataclasses import fields
 
 from typing_extensions import Any, Self
 
+from krrood.patterns.interface import Interface
 from krrood.patterns.mixin import Mixin
 
 # %% deep copies of dataclasses
 
 
-class DataclassDeepcopyMixin(Mixin):
+class DataclassDeepcopyMixin(Mixin, Interface):
     """
     Mixin for dataclasses whose deep copy is constructed from deep copies of their
     constructor fields.
