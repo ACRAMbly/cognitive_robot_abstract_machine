@@ -79,6 +79,9 @@ pip install "robokudo[dev]"
 
 https://robokudo.ai.uni-bremen.de/
 
+For finite synthetic observations without a camera or display, follow the
+[scripted Tetris setup and headless run guide](doc/scripted_tetris.md).
+
 ### How to cite
 
 ```

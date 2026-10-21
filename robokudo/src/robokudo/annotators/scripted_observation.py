@@ -10,6 +10,7 @@ from typing_extensions import TYPE_CHECKING
 
 from robokudo.annotators.core import BaseAnnotator
 from robokudo.scripted_observations.camera import ObservationCamera
+from robokudo.scripted_observations.exceptions import InvalidPlaybackTiming
 from robokudo.scripted_observations.geometry import ModelGeometry
 from robokudo.types.annotation import Classification
 from robokudo.types.scene import ObjectHypothesis
@@ -61,27 +62,61 @@ class ScriptedObservationAnnotator(BaseAnnotator):
     Loaded metric geometry for the scenario models.
     """
 
+    sequence_start_timestamp: int | None = field(default=None, init=False)
+    """
+    Unix capture time at the beginning of this observation sequence.
+    """
+
+    observation_index: int = field(default=0, init=False)
+    """
+    Position of the next scheduled observation in the sequence.
+    """
+
     def __post_init__(self) -> None:
         """
-        Initialize the annotator's behavior-tree identity.
+        Prepare observations from a valid schedule and available CAD resources.
         """
         BaseAnnotator.__init__(self, name=ObservationLabel.SOURCE)
+        timing = self.scenario.timing
+        if (
+            timing.sample_period_nanoseconds <= 0
+            or timing.duration_nanoseconds < 0
+            or timing.duration_nanoseconds % timing.sample_period_nanoseconds != 0
+        ):
+            raise InvalidPlaybackTiming(
+                duration_nanoseconds=timing.duration_nanoseconds,
+                sample_period_nanoseconds=timing.sample_period_nanoseconds,
+            )
         self.models = {
             block.model: ModelGeometry.from_directory(block.model, self.mesh_directory)
             for block in self.scenario.blocks
         }
 
     def update(self) -> Status:
+        capture_offset = (
+            self.observation_index * self.scenario.timing.sample_period_nanoseconds
+        )
+        if capture_offset > self.scenario.timing.duration_nanoseconds:
+            return Status.FAILURE
+        current_timestamp = self.clock.now_nanoseconds()
+        if self.sequence_start_timestamp is None:
+            self.sequence_start_timestamp = current_timestamp
+        capture_timestamp = self.sequence_start_timestamp + capture_offset
+        if current_timestamp < capture_timestamp:
+            return Status.RUNNING
         pipeline = self.get_parent_pipeline()
         pipeline.create_new_cas()
         ObservationCamera(self.scenario.camera).write_metadata(
-            pipeline.cas, self.clock.now_nanoseconds()
+            pipeline.cas, capture_timestamp
         )
         for block in self.scenario.blocks:
             pipeline.cas.annotations.append(
                 ObjectHypothesis(
                     source=self.name,
-                    id=f"{self.name}:0:{block.model.value.identifier}",
+                    id=(
+                        f"{self.name}:{self.observation_index}:"
+                        f"{block.model.value.identifier}"
+                    ),
                     annotations=[
                         Classification(
                             source=self.name,
@@ -95,4 +130,5 @@ class ScriptedObservationAnnotator(BaseAnnotator):
                     ),
                 )
             )
+        self.observation_index += 1
         return Status.SUCCESS

@@ -7,7 +7,10 @@ observation. Tests control time without real-time waiting.
 
 **Blocked by:** 01: Emit a static observation with metric geometry.
 
-**Status:** ready-for-agent
+**Status:** in-progress
+
+**Claimed by:** playback implementer on `ticket/synthetic-tetris-03` in
+`/tmp/cram-tetris-playback`, based on integration commit `33083169d`.
 
 Implementation requires separate explicit user permission. Follow the approved
 synthetic Tetris observation specification, domain glossary, and recorded decision
