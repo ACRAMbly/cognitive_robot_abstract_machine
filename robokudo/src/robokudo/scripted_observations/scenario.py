@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import StrEnum
 
+from robokudo.scripted_observations.clock import TimeUnit
 from robokudo.scripted_observations.models import TetrisModel
 from robokudo.types.tf import Pose
 
@@ -39,6 +40,17 @@ class CameraSettings:
 
 
 @dataclass
+class PlaybackTiming:
+    """Capture cadence of the finite observation sequence."""
+
+    duration_nanoseconds: int = 30 * TimeUnit.NANOSECONDS_PER_SECOND
+    """Elapsed capture time from the first observation through the final one."""
+
+    sample_period_nanoseconds: int = TimeUnit.NANOSECONDS_PER_SECOND // 10
+    """Scheduled interval between consecutive observations."""
+
+
+@dataclass
 class BlockState:
     """One visible block located by its original CAD origin."""
 
@@ -55,6 +67,9 @@ class TetrisScenario:
 
     camera: CameraSettings = field(default_factory=CameraSettings)
     """Calibration and reference frame of the synthetic camera."""
+
+    timing: PlaybackTiming = field(default_factory=PlaybackTiming)
+    """Duration and capture cadence of the observation sequence."""
 
     blocks: list[BlockState] = field(
         default_factory=lambda: [

@@ -6,8 +6,9 @@
 - Published spec: [spec.md](spec.md), marked `ready-for-agent`.
 - Reviewed defaults: [playback-proposal.md](playback-proposal.md), now incorporated
   into the plan.
-- The design interview and `to-spec` synthesis are complete. Static observations
-  and image evidence are implemented; timed playback remains open.
+- The design interview and `to-spec` synthesis are complete. Static observations,
+  image evidence, and finite playback are implemented; motion, visibility, and
+  native visualization remain open.
 - Preserve the existing local changes and untracked assets.
 - RoboKudo's standard runner imports its shared world before loading the engine:
   [main.py](../../robokudo/src/robokudo/scripts/main.py#L5),
@@ -71,6 +72,11 @@
   masks from projected CAD triangle surfaces preserve gaps, with exact static
   public-engine image assertions and fixture/supplied-model separation checks.
   Static engine, masks, and existing pipeline validation: 20 passed.
+- Resolved [ticket 03](issues/03-finite-headless-playback.md): exact-nanosecond
+  finite scheduling preserves every capture, waits without replacing the CAS,
+  distinguishes detections across samples, and exposes stable exhaustion to the
+  headless runner. Public engine, masks, playback, and pipeline checks: 29 passed.
+  The default headless CLI also completed successfully with local mesh fixtures.
 
 ## Design tree
 
