@@ -1,5 +1,6 @@
 from copy import deepcopy
 import operator
+import tracemalloc
 from itertools import islice
 from typing_extensions import Optional
 
@@ -796,3 +797,33 @@ def test_a_map_asked_for_no_candidates_says_so(pr2_apartment_context, asked_for)
 
     with pytest.raises(NonPositiveLimitValue):
         costmap.sample(asked_for, None)
+
+
+# %% inflating obstacles
+
+
+def test_inflating_obstacles_holds_no_more_than_two_maps_in_memory(
+    pr2_apartment_context,
+):
+    """
+    Inflating looks at a window around every cell, which must not be copied out for each
+    cell.
+    """
+    world, robot_view, _ = pr2_apartment_context
+    occupancy_map = OccupancyCostmap(
+        resolution=0.02,
+        height=200,
+        width=200,
+        world=world,
+        robot_view=robot_view,
+        origin=Pose.from_xyz_quaternion(1.5, 2, 0, 0, 0, 0, 1, world.root),
+        distance_to_obstacle=0.35,
+    )
+    free_space = occupancy_map.create_ray_mask_around_origin()
+
+    tracemalloc.start()
+    occupancy_map.inflate_obstacles(free_space)
+    _, peak = tracemalloc.get_traced_memory()
+    tracemalloc.stop()
+
+    assert peak < 2 * free_space.nbytes
