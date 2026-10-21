@@ -143,7 +143,7 @@ class Covariance:
 
 
 @dataclass
-class MultivariateGaussianDistribution(DataclassDeepCopy, ProbabilisticModel):
+class MultivariateGaussianDistribution(ProbabilisticModel, DataclassDeepCopy):
     """
     A multivariate Gaussian distribution over continuous random variables.
 

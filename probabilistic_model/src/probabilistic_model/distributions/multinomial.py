@@ -21,7 +21,7 @@ from random_events.variable import Symbolic, Variable
 
 
 @dataclass
-class MultinomialDistribution(DataclassDeepCopy, ProbabilisticModel):
+class MultinomialDistribution(ProbabilisticModel, DataclassDeepCopy):
     """
     A multinomial distribution over symbolic random variables.
     """

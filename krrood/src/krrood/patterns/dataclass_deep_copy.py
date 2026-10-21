@@ -1,21 +1,24 @@
 from __future__ import annotations
 
 import copy
-from dataclasses import dataclass, fields
+from dataclasses import fields
 
 from typing_extensions import Any, Self
 
 # %% deep copies of dataclasses
 
 
-@dataclass(eq=False)
 class DataclassDeepCopy:
     """
-    A dataclass whose deep copy is constructed from deep copies of its constructor
-    fields.
+    Mixin for dataclasses whose deep copy is constructed from deep copies of their
+    constructor fields.
 
     Fields the constructor does not take are derived by the constructor of the copy, and
     an object the copied fields reach more than once is copied once.
+
+    .. warning::
+        A dataclass whose constructor fields reach back to itself cannot be copied, as
+        the copy only exists once its constructor has run.
     """
 
     def __deepcopy__(self, memo: dict[int, Any] | None = None) -> Self:

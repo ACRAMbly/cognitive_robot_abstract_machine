@@ -35,11 +35,7 @@ from probabilistic_model.constants import (
 from random_events.interval import closed, SimpleInterval, Interval
 from abc import abstractmethod, ABC
 
-from probabilistic_model.exceptions import (
-    IntractableError,
-    ShallowCopyError,
-    UndefinedOperationError,
-)
+from probabilistic_model.exceptions import IntractableError, UndefinedOperationError
 from probabilistic_model.utils import neighbouring_points
 from random_events.plotting import EventPlotter, SimpleEventPlotter
 from random_events.product_algebra import VariableMap, Event, SimpleEvent
@@ -369,14 +365,6 @@ class ProbabilisticModel(ABC):
         :param scaling: The variable value pairs to scale the model by.
         """
         raise NotImplementedError
-
-    def __copy__(self) -> Self:
-        """
-        Models support only deep copies, made with :func:`copy.deepcopy`.
-
-        :raises ShallowCopyError: Always.
-        """
-        raise ShallowCopyError(self)
 
     def plotly_layout(self) -> Dict[str, Any]:
         """

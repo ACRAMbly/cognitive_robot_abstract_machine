@@ -23,7 +23,6 @@ from probabilistic_model.distributions.multivariate_gaussian import (
     MultivariateGaussianDistribution,
 )
 from probabilistic_model.distributions.uniform import UniformDistribution
-from probabilistic_model.exceptions import ShallowCopyError
 from probabilistic_model.probabilistic_circuit.rx.probabilistic_circuit import (
     ProbabilisticCircuit,
     ProductUnit,
@@ -129,14 +128,6 @@ def model(
     if request.param == ModelKind.RX_CIRCUIT:
         return circuit
     return RustworkxCircuitToLayeredCircuitConverter.convert(circuit)
-
-
-# %% shallow copies
-
-
-def test_a_shallow_copy_of_a_model_is_refused(model: ProbabilisticModel):
-    with pytest.raises(ShallowCopyError):
-        copy.copy(model)
 
 
 # %% deep copies

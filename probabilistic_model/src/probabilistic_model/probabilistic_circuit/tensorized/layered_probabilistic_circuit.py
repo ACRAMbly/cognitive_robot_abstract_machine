@@ -123,7 +123,7 @@ class LayerNode:
 
 
 @dataclass(eq=False)
-class LayeredProbabilisticCircuit(DataclassDeepCopy, GroundableCircuit[LayerNode]):
+class LayeredProbabilisticCircuit(GroundableCircuit[LayerNode], DataclassDeepCopy):
     """
     A probabilistic circuit whose units are grouped into layers of numpy arrays.
 

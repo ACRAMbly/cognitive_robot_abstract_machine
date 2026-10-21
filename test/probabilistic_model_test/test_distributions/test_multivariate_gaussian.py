@@ -1327,6 +1327,7 @@ class TestMomentsOfATruncatedDistribution:
         for descendant in (
             further,
             conditioned,
+            copy.copy(configured),
             copy.deepcopy(configured),
         ):
             assert descendant.moment_integration == moment_integration

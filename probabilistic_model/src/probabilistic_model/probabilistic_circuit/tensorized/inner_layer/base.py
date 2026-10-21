@@ -61,7 +61,7 @@ from probabilistic_model.probabilistic_circuit.tensorized.structural_query impor
 )
 
 
-class Layer(DataclassDeepCopy, SubclassJSONSerializer, ABC):
+class Layer(SubclassJSONSerializer, DataclassDeepCopy, ABC):
     """
     Abstract base class for the layers of a layered probabilistic circuit.
 

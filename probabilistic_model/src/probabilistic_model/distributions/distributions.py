@@ -32,7 +32,7 @@ from random_events.variable import Variable, Continuous, Symbolic, Integer
 
 
 @dataclass
-class UnivariateDistribution(DataclassDeepCopy, ProbabilisticModel):
+class UnivariateDistribution(ProbabilisticModel, DataclassDeepCopy):
     """
     Abstract Base class for Univariate distributions.
     """

@@ -104,7 +104,7 @@ class MomentIntegration:
 
 
 @dataclasses.dataclass
-class TruncatedMultivariateGaussianDistribution(DataclassDeepCopy, ProbabilisticModel):
+class TruncatedMultivariateGaussianDistribution(ProbabilisticModel, DataclassDeepCopy):
     """
     A Gaussian confined to a box, which is what is left of one once part of the space is
     ruled out.
