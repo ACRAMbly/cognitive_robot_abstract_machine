@@ -347,3 +347,21 @@ class NumberOfWeightsMismatchError(DataclassException, ValueError):
 
     def suggest_correction(self) -> str:
         return "Pass exactly one weight per component."
+
+
+@dataclass
+class ShallowCopyError(DataclassException, TypeError):
+    """
+    Exception raised when a model is copied shallowly.
+    """
+
+    model: ProbabilisticModel
+    """
+    The model that was copied.
+    """
+
+    def error_message(self) -> str:
+        return f"{type(self.model).__name__} supports no shallow copy."
+
+    def suggest_correction(self) -> str:
+        return "Copy the model with copy.deepcopy."

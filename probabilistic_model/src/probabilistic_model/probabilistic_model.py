@@ -35,7 +35,11 @@ from probabilistic_model.constants import (
 from random_events.interval import closed, SimpleInterval, Interval
 from abc import abstractmethod, ABC
 
-from probabilistic_model.exceptions import IntractableError, UndefinedOperationError
+from probabilistic_model.exceptions import (
+    IntractableError,
+    ShallowCopyError,
+    UndefinedOperationError,
+)
 from probabilistic_model.utils import neighbouring_points
 from random_events.plotting import EventPlotter, SimpleEventPlotter
 from random_events.product_algebra import VariableMap, Event, SimpleEvent
@@ -262,9 +266,7 @@ class ProbabilisticModel(ABC):
         return conditional, np.exp(log_probability)
 
     @abstractmethod
-    def log_conditional(
-        self, point: PartialPointType
-    ) -> Tuple[Optional[Self], float]:
+    def log_conditional(self, point: PartialPointType) -> Tuple[Optional[Self], float]:
         """
         Calculate the conditioned distribution P(*| point) and the probability of the
         event. Check the documentation of `conditional` for more information.
@@ -368,8 +370,13 @@ class ProbabilisticModel(ABC):
         """
         raise NotImplementedError
 
-    def __copy__(self):
-        raise NotImplementedError
+    def __copy__(self) -> Self:
+        """
+        Models support only deep copies, made with :func:`copy.deepcopy`.
+
+        :raises ShallowCopyError: Always.
+        """
+        raise ShallowCopyError(self)
 
     def plotly_layout(self) -> Dict[str, Any]:
         """
