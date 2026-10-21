@@ -6,8 +6,8 @@
 - Published spec: [spec.md](spec.md), marked `ready-for-agent`.
 - Reviewed defaults: [playback-proposal.md](playback-proposal.md), now incorporated
   into the plan.
-- The design interview and `to-spec` synthesis are complete. Implementation has
-  not started.
+- The design interview and `to-spec` synthesis are complete. The static
+  observation engine is implemented; dependent masks and playback remain open.
 - Preserve the existing local changes and untracked assets.
 - RoboKudo's standard runner imports its shared world before loading the engine:
   [main.py](../../robokudo/src/robokudo/scripts/main.py#L5),
@@ -62,6 +62,11 @@
   observations. Connector world-update behavior remains in the separate change.
 - Published the formal specification as `ready-for-agent` in the local Markdown
   issue tracker: [spec.md](spec.md).
+
+- Resolved [ticket 01](issues/01-static-observation.md): public static engine,
+  structured scene/model/camera definitions, configurable mesh resources, metric
+  CAD geometry and offset boxes, exact camera/capture metadata, and world
+  isolation. Focused engine and existing pipeline validation: 15 passed.
 
 ## Design tree
 
