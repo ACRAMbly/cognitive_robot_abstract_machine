@@ -11,6 +11,7 @@ from typing_extensions import TYPE_CHECKING
 from robokudo.annotators.core import BaseAnnotator
 from robokudo.scripted_observations.camera import ObservationCamera
 from robokudo.scripted_observations.geometry import ModelGeometry
+from robokudo.scripted_observations.projection import ForegroundProjection
 from robokudo.types.annotation import Classification
 from robokudo.types.scene import ObjectHypothesis
 
@@ -82,6 +83,9 @@ class ScriptedObservationAnnotator(BaseAnnotator):
                 ObjectHypothesis(
                     source=self.name,
                     id=f"{self.name}:0:{block.model.value.identifier}",
+                    roi=ForegroundProjection(
+                        self.models[block.model].mesh, block.pose
+                    ).create_region(pipeline.cas),
                     annotations=[
                         Classification(
                             source=self.name,
