@@ -11,6 +11,8 @@ from typing_extensions import TYPE_CHECKING
 if TYPE_CHECKING:
     from pathlib import Path
 
+    from robokudo.types.tf import Pose
+
 
 # %% Resource errors
 
@@ -59,3 +61,22 @@ class InvalidPlaybackTiming(DataclassException):
             "Use a positive sample period and a nonnegative duration that is "
             "an exact multiple of the sample period."
         )
+
+
+# %% Projection errors
+
+
+@dataclass
+class InvalidCameraProjection(DataclassException):
+    """
+    A configured block cannot be observed fully within the camera image.
+    """
+
+    object_pose: Pose
+    """Camera-relative CAD-origin pose of the unsupported observation."""
+
+    def error_message(self) -> str:
+        return f"The block at {self.object_pose} does not project fully into the image."
+
+    def suggest_correction(self) -> str:
+        return "Place the complete mesh in front of the camera and inside the image."

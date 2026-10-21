@@ -54,6 +54,10 @@ poses locate the original CAD origin in the optical frame: X right, Y down,
 Z forward. CAD geometry remains model-local; bounding-box dimensions and center
 offsets come from the loaded mesh.
 
+Each block also carries an image region and a cropped binary foreground mask
+following its projected CAD outline. See the
+[mask conventions and limitations](scripted_tetris_masks.md) for details.
+
 ## Consuming observations
 
 The command supplies CAS observations in memory. Add later annotators to the

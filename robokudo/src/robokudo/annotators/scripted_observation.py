@@ -12,6 +12,7 @@ from robokudo.annotators.core import BaseAnnotator
 from robokudo.scripted_observations.camera import ObservationCamera
 from robokudo.scripted_observations.exceptions import InvalidPlaybackTiming
 from robokudo.scripted_observations.geometry import ModelGeometry
+from robokudo.scripted_observations.projection import ForegroundProjection
 from robokudo.types.annotation import Classification
 from robokudo.types.scene import ObjectHypothesis
 
@@ -117,6 +118,9 @@ class ScriptedObservationAnnotator(BaseAnnotator):
                         f"{self.name}:{self.observation_index}:"
                         f"{block.model.value.identifier}"
                     ),
+                    roi=ForegroundProjection(
+                        self.models[block.model].mesh, block.pose
+                    ).create_region(pipeline.cas),
                     annotations=[
                         Classification(
                             source=self.name,

@@ -96,3 +96,5 @@ class ObservationCamera:
             parameters.center_x,
             parameters.center_y,
         )
+        observation.pointcloud_camera_intrinsic = observation.camera_intrinsic
+        observation.color2depth_ratio = (1, 1)
