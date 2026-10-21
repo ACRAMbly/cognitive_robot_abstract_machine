@@ -143,3 +143,11 @@ def test_probability_given_evidence_on_other_class_rejected():
         probability_of(x.a < 0.5, evidence=y.d < 0.5).first(
             backend=ProbabilisticBackend(model_registry=DictRegistry({}))
         )
+
+
+def test_probability_takes_evidence_as_second_positional_argument():
+    x = variable(Coin, domain=_COIN_DOMAIN)
+
+    result = probability_of(x.b < 1, x.a < 0.5).first()
+
+    assert result == probability_of(x.b < 1, evidence=x.a < 0.5).first()

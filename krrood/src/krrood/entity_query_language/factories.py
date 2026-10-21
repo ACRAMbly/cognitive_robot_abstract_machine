@@ -159,13 +159,14 @@ def distribution_of(
 
 
 def probability_of(
-    condition: ConditionType, *, evidence: ConditionType | None = None
+    condition: ConditionType, evidence: ConditionType | None = None
 ) -> Probability:
     """
     Request the probability of a condition, optionally given evidence, e.g.
-    ``probability_of(x.A > 5)`` or ``probability_of(x.A > 5, evidence=x.B < 2)`` for
+    ``probability_of(x.A > 5)`` or ``probability_of(x.A > 5, x.B < 2)`` for
     ``x = variable(MyClass)``. Condition and evidence may be any expression a
-    ``.where(...)`` condition already accepts.
+    ``.where(...)`` condition already accepts; several conditions are joined
+    explicitly with :py:func:`and_`.
 
     Like :py:func:`distribution_of`, this never resolves to rows: it must be evaluated
     with a
