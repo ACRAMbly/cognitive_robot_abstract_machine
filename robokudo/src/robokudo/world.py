@@ -33,6 +33,7 @@ from semantic_digital_twin.world import World, Body
 from semantic_digital_twin.world_description.connections import Connection6DoF
 
 # Module-level singleton-like variables
+# %% perception world ownership
 this = sys.modules[__name__]
 
 this.world = World()
@@ -175,6 +176,9 @@ def world_has_body_by_name(world: World, body_name: str) -> bool:
 #                 semantic_digital_twin.world.Body(name=PrefixedName(name=frame_name)))
 
 
+# %% camera frames
+
+
 def setup_world_for_camera_frame(
     world_frame: str,
     camera_frame: str,
@@ -248,6 +252,9 @@ def update_connection_transform(
         connection.origin = transform
 
 
+# %% accepted object beliefs
+
+
 def get_object_belief_states() -> Dict[UUID, ObjectBeliefState]:
     """
     Get all object belief states as a map of UUID to belief state.
@@ -304,7 +311,7 @@ def _create_world_origin_and_scale_from_latest_bbox(
     return origin, scale
 
 
-def _update_belief_body_from_latest_bbox(
+def _update_belief_body(
     object_belief: ObjectBeliefState,
     cas: CAS,
     rk_world: World,
@@ -313,8 +320,20 @@ def _update_belief_body_from_latest_bbox(
     replace_existing_visuals: bool,
 ) -> None:
     """
-    Update the SemDT body origin and box geometry from the latest bbox.
+    Update the accepted pose, preserving CAD geometry when present.
     """
+    pose = object_belief.latest_pose
+    if pose is not None and any(
+        isinstance(shape, Mesh) for shape in object_belief.body.visual
+    ):
+        camera_T_model = get_transform_matrix_from_q(pose.rotation, pose.translation)
+        world_T_camera = get_camera_to_world_transform_matrix(cas)
+        world_T_object_belief.origin = HomogeneousTransformationMatrix(
+            world_T_camera @ camera_T_model,
+            reference_frame=world_body,
+            child_frame=object_belief.body,
+        )
+        return
     origin_and_scale = _create_world_origin_and_scale_from_latest_bbox(
         object_belief=object_belief,
         cas=cas,
@@ -348,9 +367,7 @@ def add_object_hypothesis_as_belief_state(
     """
     rk_world = world_instance()
 
-    object_belief = ObjectBeliefState.create_with_new_body().add_hypothesis(
-        object_hypothesis
-    )
+    object_belief = ObjectBeliefState.from_hypothesis(object_hypothesis)
     object_belief_body = object_belief.body
     _tracked_objects[object_belief.uuid] = object_belief
 
@@ -366,7 +383,7 @@ def add_object_hypothesis_as_belief_state(
         )
         rk_world.add_connection(world_T_object_belief)
 
-    _update_belief_body_from_latest_bbox(
+    _update_belief_body(
         object_belief=object_belief,
         cas=cas,
         rk_world=rk_world,
@@ -399,7 +416,7 @@ def update_belief_state_with_object_hypothesis(
     if world_body is None:
         return
 
-    _update_belief_body_from_latest_bbox(
+    _update_belief_body(
         object_belief=object_belief,
         cas=cas,
         rk_world=rk_world,

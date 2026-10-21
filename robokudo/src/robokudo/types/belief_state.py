@@ -1,5 +1,6 @@
 from __future__ import annotations
-from robokudo.types.annotation import BoundingBox3DAnnotation
+from copy import deepcopy
+from robokudo.types.annotation import BoundingBox3DAnnotation, Shape
 from robokudo.types.annotation import PoseAnnotation
 from uuid import UUID
 from collections import deque
@@ -10,28 +11,38 @@ from typing_extensions import TYPE_CHECKING, Deque, Optional, Self
 
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 from semantic_digital_twin.world_description.world_entity import Body
+from semantic_digital_twin.world_description.geometry import Mesh
+from semantic_digital_twin.world_description.shape_collection import ShapeCollection
 
-if TYPE_CHECKING:
-    pass
+# %% persistent object beliefs
 
 
 @dataclass
 class ObjectBeliefState:
+    """
+    Retain an accepted object's body and recent perception hypotheses.
+    """
+
     body: Body
     """The semdt body associated with the belief state."""
 
     max_num_hypotheses: int = 1
-    """The maximum number of object hypotheses to keep in the belief state."""
+    """
+    The maximum number of object hypotheses to keep in the belief state.
+    """
 
     hypotheses: Deque[ObjectHypothesis] = field(init=False)
-    """The hypotheses associated with the belief state."""
+    """
+    The hypotheses associated with the belief state.
+    """
 
     def __post_init__(self):
         self.hypotheses = deque(maxlen=self.max_num_hypotheses)
 
     @classmethod
     def create_with_new_body(cls, name: Optional[PrefixedName] = None) -> Self:
-        """Create a new ObjectBeliefState with a new Body.
+        """
+        Create a new ObjectBeliefState with a new Body.
 
         :param name: Name of the body.
         :return: The new object belief state.
@@ -40,21 +51,46 @@ class ObjectBeliefState:
             body=Body(name=name) if name is not None else Body(),
         )
 
+    @classmethod
+    def from_hypothesis(cls, hypothesis: ObjectHypothesis) -> Self:
+        """
+        Create a belief with CAD visual and enclosing collision geometry when supplied.
+        """
+        meshes = [
+            annotation.geometry
+            for annotation in hypothesis.annotations
+            if isinstance(annotation, Shape) and isinstance(annotation.geometry, Mesh)
+        ]
+        if not meshes:
+            return cls.create_with_new_body().add_hypothesis(hypothesis)
+        mesh = deepcopy(meshes[-1])
+        body = Body(
+            visual=ShapeCollection([mesh]),
+            collision=ShapeCollection([mesh.local_frame_bounding_box.as_shape()]),
+        )
+        return cls(body=body).add_hypothesis(hypothesis)
+
     @property
     def uuid(self) -> UUID:
-        """The UUID of the belief state."""
+        """
+        The UUID of the belief state.
+        """
         return self.body.id
 
     @property
     def latest_hypothesis(self) -> Optional[ObjectHypothesis]:
-        """The latest hypothesis added to the belief state."""
+        """
+        The latest hypothesis added to the belief state.
+        """
         if len(self.hypotheses) == 0:
             return None
         return self.hypotheses[len(self.hypotheses) - 1]
 
     @property
     def latest_pose(self) -> Optional[PoseAnnotation]:
-        """The newest pose annotation of the latest hypothesis."""
+        """
+        The newest pose annotation of the latest hypothesis.
+        """
         hypothesis = self.latest_hypothesis
         if hypothesis is not None:
             for annotation in reversed(hypothesis.annotations):
@@ -64,7 +100,9 @@ class ObjectBeliefState:
 
     @property
     def latest_bbox_3d(self) -> Optional[BoundingBox3DAnnotation]:
-        """The newest 3D bounding box annotation of the latest hypothesis."""
+        """
+        The newest 3D bounding box annotation of the latest hypothesis.
+        """
         hypothesis = self.latest_hypothesis
         if hypothesis is not None:
             for annotation in reversed(hypothesis.annotations):
@@ -73,7 +111,8 @@ class ObjectBeliefState:
         return None
 
     def add_hypothesis(self, hypothesis: ObjectHypothesis) -> Self:
-        """Add a new hypothesis to the belief state.
+        """
+        Add a new hypothesis to the belief state.
 
         :param hypothesis: The hypothesis to add.
         """

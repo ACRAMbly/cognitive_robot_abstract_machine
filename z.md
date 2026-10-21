@@ -24,3 +24,9 @@ a synthetic annotator, with the same scenarios exercised through pytest. The pro
    world_descriptor.py:121)
 
    sythetic data for our specific two tettris blocks.
+
+
+   SemanticDigitalTwinConnector accepts observation hypotheses and creates or updates beliefs in Robokudo’s
+    local world.
+
+  • WorldSynchronizer transfers those accepted world changes to another process’s world.

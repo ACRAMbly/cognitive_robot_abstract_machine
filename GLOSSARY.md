@@ -24,3 +24,11 @@ The geometry of a rigid target object, shared by physical copies of that object.
 **CAD frame**:
 The coordinate frame in which an object's CAD geometry is defined. Its origin need
 not coincide with the object's geometric center.
+
+
+**Object belief**:
+A persistent representation of an observed physical object, retaining its identity
+and last accepted pose when the object is temporarily unobserved.
+
+**Receiving world**:
+A separate world model that receives accepted changes from the perception world.

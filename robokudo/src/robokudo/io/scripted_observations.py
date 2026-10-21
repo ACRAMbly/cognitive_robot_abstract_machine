@@ -11,7 +11,7 @@ from pathlib import Path
 import numpy as np
 import open3d
 from numpy.typing import NDArray
-from scipy.spatial.transform import Rotation
+from scipy.spatial.transform import Rotation, Slerp
 from sensor_msgs.msg import CameraInfo
 from typing_extensions import ClassVar
 
@@ -19,10 +19,12 @@ from robokudo.types.annotation import (
     BoundingBox3DAnnotation,
     Classification,
     PoseAnnotation,
+    Shape,
 )
 from robokudo.types.cv import ImageROI, Point2D, Rect
 from robokudo.types.scene import ObjectHypothesis
 from robokudo.types.tf import Pose
+from semantic_digital_twin.world_description.geometry import Mesh, Scale
 
 # %% object models
 
@@ -230,6 +232,9 @@ class ModelGeometry:
     vertices: NDArray[np.float64]
     """Mesh vertices in metres, without centering."""
 
+    mesh: Mesh
+    """Visual geometry retaining the CAD frame and metric scale."""
+
     @classmethod
     def load(cls, block: TetrisBlock, mesh_directory: Path) -> ModelGeometry:
         """Read a supplied model and convert its vertices to metres."""
@@ -237,7 +242,11 @@ class ModelGeometry:
         if not mesh_path.is_file():
             raise FileNotFoundError(mesh_path)
         mesh = open3d.io.read_triangle_mesh(str(mesh_path))
-        return cls(np.asarray(mesh.vertices) * block.value.metres_per_mesh_unit)
+        scale = block.value.metres_per_mesh_unit
+        return cls(
+            np.asarray(mesh.vertices) * scale,
+            Mesh(filename=str(mesh_path), scale=Scale(scale, scale, scale)),
+        )
 
     def create_bounding_box(self, pose: Pose, source: str) -> BoundingBox3DAnnotation:
         """Place the model-aligned enclosing box relative to the camera."""
@@ -294,6 +303,21 @@ class ScriptedDetection:
     confidence: float = 1.0
     """Declared classification confidence of the synthetic detection."""
 
+    def interpolate(
+        self, target: ScriptedDetection, fraction: float
+    ) -> ScriptedDetection:
+        """Sample the straight translation and shortest rotation toward a CAD pose."""
+        translation = (1 - fraction) * np.asarray(self.pose.translation)
+        translation += fraction * np.asarray(target.pose.translation)
+        rotation = Slerp(
+            [0.0, 1.0], Rotation.from_quat([self.pose.rotation, target.pose.rotation])
+        )(fraction).as_quat()
+        return ScriptedDetection(
+            self.block,
+            Pose(translation=translation.tolist(), rotation=rotation.tolist()),
+            self.confidence,
+        )
+
     def create_hypothesis(
         self, geometry: ModelGeometry, camera: ScriptedCamera, source: str
     ) -> ObjectHypothesis:
@@ -315,6 +339,7 @@ class ScriptedDetection:
                     rotation=list(self.pose.rotation),
                 ),
                 geometry.create_bounding_box(self.pose, source),
+                Shape(source=source, geometry=geometry.mesh),
             ],
         )
 
@@ -343,3 +368,38 @@ class ScriptedScenario:
             raise InvalidScriptedObservationError(
                 "A scripted scenario must contain at least one observation."
             )
+
+    def with_intermediate_poses(
+        self, motion_samples: int, pause_samples: int
+    ) -> ScriptedScenario:
+        """Add smooth visible motion, endpoint pauses, and a return to the first pose."""
+        if motion_samples < 1 or pause_samples < 1:
+            raise InvalidScriptedObservationError(
+                "Motion and pause samples must be positive."
+            )
+        observations = [self.observations[0]] * pause_samples
+        for previous, target in zip(
+            self.observations, (*self.observations[1:], self.observations[0])
+        ):
+            previous_blocks = tuple(
+                detection.block for detection in previous.detections
+            )
+            target_blocks = tuple(detection.block for detection in target.detections)
+            if previous_blocks and previous_blocks == target_blocks:
+                for sample in range(1, motion_samples + 1):
+                    observations.append(
+                        ScriptedObservation(
+                            target.step,
+                            tuple(
+                                detection.interpolate(
+                                    destination, sample / motion_samples
+                                )
+                                for detection, destination in zip(
+                                    previous.detections, target.detections
+                                )
+                            ),
+                        )
+                    )
+            if target is not self.observations[0]:
+                observations.extend([target] * pause_samples)
+        return ScriptedScenario(tuple(observations))
