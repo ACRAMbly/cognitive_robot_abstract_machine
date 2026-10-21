@@ -9,7 +9,7 @@ from random_events.variable import Symbolic, Variable
 from sortedcontainers import SortedSet
 from typing_extensions import Any, Dict, Iterable, List, Optional, Self, Tuple, Type
 
-from krrood.patterns.dataclass_deep_copy import DataclassDeepCopy
+from krrood.patterns.dataclass_deep_copy import DataclassDeepcopyMixin
 from probabilistic_model.distributions.distributions import (
     IntegerDistribution,
     SymbolicDistribution,
@@ -123,7 +123,7 @@ class LayerNode:
 
 
 @dataclass(eq=False)
-class LayeredProbabilisticCircuit(GroundableCircuit[LayerNode], DataclassDeepCopy):
+class LayeredProbabilisticCircuit(GroundableCircuit[LayerNode], DataclassDeepcopyMixin):
     """
     A probabilistic circuit whose units are grouped into layers of numpy arrays.
 

@@ -8,7 +8,7 @@ from typing import Optional, Set as PythonSet
 import numpy as np
 import numpy.typing as npt
 import plotly.graph_objects as go
-from krrood.patterns.dataclass_deep_copy import DataclassDeepCopy
+from krrood.patterns.dataclass_deep_copy import DataclassDeepcopyMixin
 from probabilistic_model.exceptions import UndefinedOperationError
 from random_events.interval import Interval, SimpleInterval, Bound, singleton, closed
 from random_events.product_algebra import Event, SimpleEvent, VariableMap
@@ -32,7 +32,7 @@ from random_events.variable import Variable, Continuous, Symbolic, Integer
 
 
 @dataclass
-class UnivariateDistribution(ProbabilisticModel, DataclassDeepCopy):
+class UnivariateDistribution(ProbabilisticModel, DataclassDeepcopyMixin):
     """
     Abstract Base class for Univariate distributions.
     """

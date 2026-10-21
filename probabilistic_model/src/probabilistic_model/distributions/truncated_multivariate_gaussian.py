@@ -23,7 +23,7 @@ from typing_extensions import (
     TYPE_CHECKING,
 )
 
-from krrood.patterns.dataclass_deep_copy import DataclassDeepCopy
+from krrood.patterns.dataclass_deep_copy import DataclassDeepcopyMixin
 from probabilistic_model.exceptions import (
     EventIsNotABoxError,
     InvalidMomentOrderError,
@@ -104,7 +104,9 @@ class MomentIntegration:
 
 
 @dataclasses.dataclass
-class TruncatedMultivariateGaussianDistribution(ProbabilisticModel, DataclassDeepCopy):
+class TruncatedMultivariateGaussianDistribution(
+    ProbabilisticModel, DataclassDeepcopyMixin
+):
     """
     A Gaussian confined to a box, which is what is left of one once part of the space is
     ruled out.

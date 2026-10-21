@@ -22,7 +22,7 @@ from typing_extensions import (
     Tuple,
 )
 
-from krrood.patterns.dataclass_deep_copy import DataclassDeepCopy
+from krrood.patterns.dataclass_deep_copy import DataclassDeepcopyMixin
 from probabilistic_model.distributions.truncated_multivariate_gaussian import (
     TruncatedMultivariateGaussianDistribution,
 )
@@ -143,7 +143,7 @@ class Covariance:
 
 
 @dataclass
-class MultivariateGaussianDistribution(ProbabilisticModel, DataclassDeepCopy):
+class MultivariateGaussianDistribution(ProbabilisticModel, DataclassDeepcopyMixin):
     """
     A multivariate Gaussian distribution over continuous random variables.
 

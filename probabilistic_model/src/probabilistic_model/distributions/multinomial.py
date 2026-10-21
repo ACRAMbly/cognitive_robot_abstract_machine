@@ -5,7 +5,7 @@ import numpy as np
 import numpy.typing as npt
 from typing_extensions import Self, Any, Iterable, List, Optional, Tuple, Dict
 
-from krrood.patterns.dataclass_deep_copy import DataclassDeepCopy
+from krrood.patterns.dataclass_deep_copy import DataclassDeepcopyMixin
 from probabilistic_model.exceptions import ShapeMismatchError
 from probabilistic_model.probabilistic_circuit.rx.probabilistic_circuit import (
     SymbolicDistribution,
@@ -21,7 +21,7 @@ from random_events.variable import Symbolic, Variable
 
 
 @dataclass
-class MultinomialDistribution(ProbabilisticModel, DataclassDeepCopy):
+class MultinomialDistribution(ProbabilisticModel, DataclassDeepcopyMixin):
     """
     A multinomial distribution over symbolic random variables.
     """

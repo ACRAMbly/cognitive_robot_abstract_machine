@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 
 from typing_extensions import Any, Self
 
-from krrood.patterns.dataclass_deep_copy import DataclassDeepCopy
+from krrood.patterns.dataclass_deep_copy import DataclassDeepcopyMixin
 
 # %% immutable values a deep copy shares
 
@@ -28,7 +28,7 @@ class UnitOfMeasurement:
 
 
 @dataclass
-class Measurements(DataclassDeepCopy):
+class Measurements(DataclassDeepcopyMixin):
     """
     Measured values whose total the constructor derives.
     """
@@ -70,7 +70,7 @@ class AnnotatedMeasurements(Measurements):
 
 
 @dataclass
-class PairOfMeasurements(DataclassDeepCopy):
+class PairOfMeasurements(DataclassDeepcopyMixin):
     """
     Two measurements that may be the same object.
     """
@@ -90,7 +90,7 @@ class PairOfMeasurements(DataclassDeepCopy):
 
 
 @dataclass(eq=False)
-class SensorReading(DataclassDeepCopy):
+class SensorReading(DataclassDeepcopyMixin):
     """
     A reading that is equal only to itself.
     """

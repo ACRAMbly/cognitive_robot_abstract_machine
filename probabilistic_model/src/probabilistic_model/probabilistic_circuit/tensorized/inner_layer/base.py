@@ -5,7 +5,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 
 import numpy as np
-from krrood.patterns.dataclass_deep_copy import DataclassDeepCopy
+from krrood.patterns.dataclass_deep_copy import DataclassDeepcopyMixin
 from krrood.adapters import json_serializer
 from krrood.adapters.json_serializer import SubclassJSONSerializer
 from random_events.product_algebra import Event, SimpleEvent
@@ -61,7 +61,7 @@ from probabilistic_model.probabilistic_circuit.tensorized.structural_query impor
 )
 
 
-class Layer(SubclassJSONSerializer, DataclassDeepCopy, ABC):
+class Layer(SubclassJSONSerializer, DataclassDeepcopyMixin, ABC):
     """
     Abstract base class for the layers of a layered probabilistic circuit.
 

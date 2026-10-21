@@ -2,6 +2,9 @@ import copy
 
 import pytest
 
+from krrood.patterns.dataclass_deep_copy import DataclassDeepcopyMixin
+from krrood.patterns.mixin import Mixin
+
 from ..dataset.deep_copied_classes import (
     AnnotatedMeasurements,
     Measurements,
@@ -81,3 +84,10 @@ def test_a_deep_copy_copies_an_object_reached_twice_once(metre: UnitOfMeasuremen
 def test_the_mixin_keeps_identity_equality_hashable():
     reading = SensorReading(1.0)
     assert {reading: "first"}[reading] == "first"
+
+
+# %% marking
+
+
+def test_the_dataclass_deep_copy_is_a_mixin():
+    assert issubclass(DataclassDeepcopyMixin, Mixin)
