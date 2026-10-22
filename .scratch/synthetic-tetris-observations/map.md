@@ -7,8 +7,8 @@
 - Reviewed defaults: [playback-proposal.md](playback-proposal.md), now incorporated
   into the plan.
 - The design interview and `to-spec` synthesis are complete. Static observations,
-  image evidence, and finite playback are implemented; motion, visibility, and
-  native visualization remain open.
+  image evidence, finite playback, and native visualization are implemented;
+  motion and visibility remain open.
 - Preserve the existing local changes and untracked assets.
 - RoboKudo's standard runner imports its shared world before loading the engine:
   [main.py](../../robokudo/src/robokudo/scripts/main.py#L5),
@@ -77,6 +77,11 @@
   distinguishes detections across samples, and exposes stable exhaustion to the
   headless runner. Public engine, masks, playback, and pipeline checks: 29 passed.
   The default headless CLI also completed successfully with local mesh fixtures.
+- Resolved [ticket 06](issues/06-native-annotator-visualization.md): completed
+  captures publish native image overlays and copied camera-relative CAD, box,
+  and frame geometry. Existing GUI lifecycle supports final-scene inspection,
+  annotator navigation, and native exit. Engine/mask/playback/visualization checks
+  passed 33 tests; existing pipeline/garden/GUI checks passed 14 with Open3D 0.20.0.
 
 ## Design tree
 
