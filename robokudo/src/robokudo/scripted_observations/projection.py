@@ -6,13 +6,14 @@ from dataclasses import dataclass
 from enum import IntEnum
 
 import cv2
-import numpy as np
+import numpy
 from scipy.spatial.transform import Rotation
 from typing_extensions import TYPE_CHECKING
 
 from robokudo.scripted_observations.exceptions import InvalidCameraProjection
 from robokudo.types.cv import ImageROI, Point2D, Rect
 from robokudo.utils.o3d_helper import project_points_to_image
+from robokudo.utils.transform import get_transform_matrix
 
 
 if TYPE_CHECKING:
@@ -31,7 +32,7 @@ class MaskPixel(IntEnum):
     """
 
     BACKGROUND = 0
-    FOREGROUND = np.iinfo(np.uint8).max
+    FOREGROUND = numpy.iinfo(numpy.uint8).max
 
 
 @dataclass
@@ -57,20 +58,26 @@ class ForegroundProjection:
         :raises InvalidCameraProjection: The mesh extends outside the camera image.
         """
         mesh = self.mesh.mesh
-        vertices = Rotation.from_quat(self.object_pose.rotation).apply(mesh.vertices)
-        vertices += self.object_pose.translation
-        pixels, valid = project_points_to_image(observation, vertices)
+        model_P_vertices = numpy.column_stack(
+            (mesh.vertices, numpy.ones(len(mesh.vertices)))
+        )
+        camera_T_model = get_transform_matrix(
+            Rotation.from_quat(self.object_pose.rotation).as_matrix(),
+            self.object_pose.translation,
+        )
+        camera_P_vertices = (camera_T_model @ model_P_vertices.T).T
+        pixels, valid = project_points_to_image(observation, camera_P_vertices[:, :3])
         camera = observation.camera_info
         if (
-            not np.all(valid)
+            not numpy.all(valid)
             or len(pixels) == 0
-            or np.any(pixels < 0)
-            or np.any(pixels[:, 0] >= camera.width)
-            or np.any(pixels[:, 1] >= camera.height)
+            or numpy.any(pixels < 0)
+            or numpy.any(pixels[:, 0] >= camera.width)
+            or numpy.any(pixels[:, 1] >= camera.height)
         ):
             raise InvalidCameraProjection(self.object_pose)
         left, top, width, height = cv2.boundingRect(pixels)
-        mask = np.full((height, width), MaskPixel.BACKGROUND, dtype=np.uint8)
+        mask = numpy.full((height, width), MaskPixel.BACKGROUND, dtype=numpy.uint8)
         local_pixels = pixels - [left, top]
         for triangle in mesh.faces:
             cv2.fillConvexPoly(mask, local_pixels[triangle], MaskPixel.FOREGROUND)

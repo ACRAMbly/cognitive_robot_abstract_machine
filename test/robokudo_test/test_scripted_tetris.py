@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from enum import IntEnum
 from pathlib import Path
 
-import numpy as np
+import numpy
 import pytest
 import trimesh
 from py_trees.common import Status
@@ -21,6 +22,7 @@ from robokudo.descriptors.analysis_engines.scripted_tetris import (
 from robokudo.scripted_observations.clock import Clock, TimeUnit
 from robokudo.scripted_observations.exceptions import MissingMeshResource
 from robokudo.scripted_observations.models import TetrisModel
+from robokudo.scripted_observations.scenario import CameraSettings, ScenarioPoses
 from robokudo.types.annotation import (
     BoundingBox3DAnnotation,
     Classification,
@@ -38,9 +40,41 @@ if TYPE_CHECKING:
     from semantic_digital_twin.world import World
 
     from robokudo.annotators.outputs import AnnotatorOutputPerPipelineMap
+    from robokudo.cas import CAS
 
 
 # %% Local CAD resources
+
+
+@dataclass
+class MeshDimensions:
+    """Unscaled dimensions and CAD-origin offsets of the local block fixtures."""
+
+    horizontal_arm_extent: list[float] = field(
+        default_factory=lambda: [100.0, 30.0, 30.0]
+    )
+    """Edge lengths of the horizontal arm."""
+
+    horizontal_arm_translation: list[float] = field(
+        default_factory=lambda: [50.0, 15.0, 15.0]
+    )
+    """CAD-relative center of the horizontal arm."""
+
+    vertical_arm_extent: list[float] = field(default_factory=lambda: [30.0, 70.0, 30.0])
+    """Edge lengths of the vertical arm."""
+
+    vertical_arm_translation: list[float] = field(
+        default_factory=lambda: [15.0, 65.0, 15.0]
+    )
+    """CAD-relative center of the vertical arm."""
+
+    reference_extent: list[float] = field(default_factory=lambda: [60.0, 40.0, 20.0])
+    """Edge lengths of the stationary reference."""
+
+    reference_translation: list[float] = field(
+        default_factory=lambda: [80.0, 60.0, 20.0]
+    )
+    """CAD-relative center of the stationary reference."""
 
 
 @dataclass
@@ -63,16 +97,17 @@ def tetris_meshes(tmp_path: Path) -> LocalMeshes:
     """
     Create deterministic meshes with an offset CAD origin.
     """
-    horizontal_arm = trimesh.creation.box(extents=[100.0, 30.0, 30.0])
-    horizontal_arm.apply_translation([50.0, 15.0, 15.0])
-    vertical_arm = trimesh.creation.box(extents=[30.0, 70.0, 30.0])
-    vertical_arm.apply_translation([15.0, 65.0, 15.0])
+    dimensions = MeshDimensions()
+    horizontal_arm = trimesh.creation.box(extents=dimensions.horizontal_arm_extent)
+    horizontal_arm.apply_translation(dimensions.horizontal_arm_translation)
+    vertical_arm = trimesh.creation.box(extents=dimensions.vertical_arm_extent)
+    vertical_arm.apply_translation(dimensions.vertical_arm_translation)
     first_mesh = trimesh.util.concatenate([horizontal_arm, vertical_arm])
-    second_mesh = trimesh.creation.box(extents=[60.0, 40.0, 20.0])
-    second_mesh.apply_translation([80.0, 60.0, 20.0])
+    second_mesh = trimesh.creation.box(extents=dimensions.reference_extent)
+    second_mesh.apply_translation(dimensions.reference_translation)
     geometries = {
-        TetrisModel.FIRST: first_mesh,
-        TetrisModel.SECOND: second_mesh,
+        TetrisModel.FIRST_BLOCK: first_mesh,
+        TetrisModel.SECOND_BLOCK: second_mesh,
     }
     for model, mesh in geometries.items():
         mesh.export(tmp_path / model.value.mesh_filename)
@@ -117,7 +152,7 @@ def test_metric_geometry_preserves_the_cad_origin(
     CAD geometry and its offset enclosing box describe one metric shape.
     """
     engine = AnalysisEngine(mesh_directory=tetris_meshes.directory)
-    rotation_angle = quarter_turns * np.pi / 2.0
+    rotation_angle = quarter_turns * ScenarioPoses().rotation_angle_radians
     engine.scenario.blocks[0].pose.rotation = (
         Rotation.from_euler("z", rotation_angle).as_quat().tolist()
     )
@@ -141,12 +176,12 @@ def test_metric_geometry_preserves_the_cad_origin(
         assert object_pose.translation == block.pose.translation
         assert object_pose.rotation == block.pose.rotation
         assert shape.geometry.mesh.bounds == pytest.approx(reference_mesh.bounds)
-        assert shape.geometry.origin.to_np() == pytest.approx(np.eye(4))
+        assert shape.geometry.origin.to_np() == pytest.approx(numpy.eye(4))
         assert [box.x_length, box.y_length, box.z_length] == pytest.approx(
             reference_mesh.extents
         )
 
-        if block.model == TetrisModel.FIRST:
+        if block.model == TetrisModel.FIRST_BLOCK:
             reference_mesh.apply_transform(
                 trimesh.transformations.rotation_matrix(rotation_angle, [0.0, 0.0, 1.0])
             )
@@ -188,6 +223,62 @@ class ControlledClock(Clock):
         return self.timestamp_nanoseconds
 
 
+class CaptureExample(IntEnum):
+    """Compact sample cadence for finite runner checks."""
+
+    SAMPLE_PERIOD_NANOSECONDS = 17
+    FINAL_SAMPLE_INDEX = 3
+
+
+@dataclass
+class CameraMetadata:
+    """Expected calibration and scheduled capture time of a public observation."""
+
+    camera: CameraSettings
+    """Camera descriptor consumed by the public engine."""
+
+    capture_timestamp: int
+    """Expected Unix timestamp of the completed capture."""
+
+    def assert_matches(self, observation: CAS) -> None:
+        """Check the complete CAS calibration and capture metadata contract."""
+        expected_intrinsics = pinhole_camera_parameters_from_horizontal_field_of_view(
+            self.camera.image_width,
+            self.camera.image_height,
+            self.camera.horizontal_field_of_view_degrees,
+        )
+        assert observation.camera_frame == self.camera.camera_frame
+        assert observation.data_timestamp == self.capture_timestamp
+        assert observation.timestamp != observation.data_timestamp
+        assert observation.camera_info.width == self.camera.image_width
+        assert observation.camera_info.height == self.camera.image_height
+        assert observation.camera_info.header.frame_id == self.camera.camera_frame
+        assert (
+            observation.camera_info.header.stamp.sec
+            == self.capture_timestamp // TimeUnit.NANOSECONDS_PER_SECOND
+        )
+        assert (
+            observation.camera_info.header.stamp.nanosec
+            == self.capture_timestamp % TimeUnit.NANOSECONDS_PER_SECOND
+        )
+        assert list(observation.camera_info.k) == [
+            expected_intrinsics.focal_length_x,
+            0.0,
+            expected_intrinsics.center_x,
+            0.0,
+            expected_intrinsics.focal_length_y,
+            expected_intrinsics.center_y,
+            0.0,
+            0.0,
+            1.0,
+        ]
+        assert observation.camera_intrinsic.width == self.camera.image_width
+        assert observation.camera_intrinsic.height == self.camera.image_height
+        assert observation.camera_intrinsic.intrinsic_matrix == pytest.approx(
+            numpy.asarray(observation.camera_info.k).reshape(3, 3)
+        )
+
+
 @pytest.mark.parametrize("empty_scene", [False, True])
 def test_observation_preserves_camera_and_capture_metadata(
     tetris_meshes: LocalMeshes,
@@ -206,40 +297,8 @@ def test_observation_preserves_camera_and_capture_metadata(
     pipeline.setup()
     pipeline.tick_once()
 
-    camera = engine.scenario.camera
-    expected_intrinsics = pinhole_camera_parameters_from_horizontal_field_of_view(
-        camera.image_width, camera.image_height, camera.horizontal_field_of_view_degrees
-    )
-    observation = pipeline.get_cas()
-    assert observation.camera_frame == camera.frame
-    assert observation.data_timestamp == clock.timestamp_nanoseconds
-    assert observation.timestamp != observation.data_timestamp
-    assert observation.camera_info.width == camera.image_width
-    assert observation.camera_info.height == camera.image_height
-    assert observation.camera_info.header.frame_id == camera.frame
-    assert (
-        observation.camera_info.header.stamp.sec
-        == clock.timestamp_nanoseconds // TimeUnit.NANOSECONDS_PER_SECOND
-    )
-    assert (
-        observation.camera_info.header.stamp.nanosec
-        == clock.timestamp_nanoseconds % TimeUnit.NANOSECONDS_PER_SECOND
-    )
-    assert list(observation.camera_info.k) == [
-        expected_intrinsics.focal_length_x,
-        0.0,
-        expected_intrinsics.center_x,
-        0.0,
-        expected_intrinsics.focal_length_y,
-        expected_intrinsics.center_y,
-        0.0,
-        0.0,
-        1.0,
-    ]
-    assert observation.camera_intrinsic.width == camera.image_width
-    assert observation.camera_intrinsic.height == camera.image_height
-    assert observation.camera_intrinsic.intrinsic_matrix == pytest.approx(
-        np.asarray(observation.camera_info.k).reshape(3, 3)
+    CameraMetadata(engine.scenario.camera, clock.timestamp_nanoseconds).assert_matches(
+        pipeline.get_cas()
     )
 
 

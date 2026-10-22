@@ -5,12 +5,13 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import IntEnum, StrEnum
 
-import numpy as np
+import numpy
 from scipy.spatial.transform import Rotation, Slerp
 
 from robokudo.scripted_observations.clock import TimeUnit
 from robokudo.scripted_observations.exceptions import (
     InvalidAbsenceInterval,
+    InvalidPlaybackTiming,
     InvalidPoseKeyframes,
 )
 from robokudo.scripted_observations.models import TetrisModel
@@ -39,7 +40,7 @@ class CameraSettings:
     horizontal_field_of_view_degrees: float = 60.0
     """Horizontal angular extent of the camera image."""
 
-    frame: str = CameraFrame.OPTICAL
+    camera_frame: str = CameraFrame.OPTICAL
     """Reference frame locating every object pose in an observation."""
 
 
@@ -55,6 +56,26 @@ class PlaybackTiming:
 
     sample_period_nanoseconds: int = TimeUnit.NANOSECONDS_PER_SECOND // 10
     """Scheduled interval between consecutive observations."""
+
+    def validate(self) -> None:
+        """Reject a cadence that cannot include both sequence endpoints."""
+        if (
+            self.sample_period_nanoseconds <= 0
+            or self.duration_nanoseconds < 0
+            or self.duration_nanoseconds % self.sample_period_nanoseconds != 0
+        ):
+            raise InvalidPlaybackTiming(
+                duration_nanoseconds=self.duration_nanoseconds,
+                sample_period_nanoseconds=self.sample_period_nanoseconds,
+            )
+
+    def contains_unsampled_offsets(self, offsets: list[int]) -> bool:
+        """Return whether an in-sequence boundary falls between captures."""
+        return any(
+            offset <= self.duration_nanoseconds
+            and offset % self.sample_period_nanoseconds != 0
+            for offset in offsets
+        )
 
 
 class MotionBoundary(IntEnum):
@@ -122,10 +143,8 @@ class BlockState:
     def validate_absence_intervals(self, timing: PlaybackTiming) -> None:
         """Reject negative, reversed, or unsampled visibility boundaries."""
         for interval in self.absence_intervals:
-            unsampled = any(
-                offset <= timing.duration_nanoseconds
-                and offset % timing.sample_period_nanoseconds != 0
-                for offset in [interval.start_nanoseconds, interval.end_nanoseconds]
+            unsampled = timing.contains_unsampled_offsets(
+                [interval.start_nanoseconds, interval.end_nanoseconds]
             )
             if (
                 interval.start_nanoseconds < 0
@@ -142,11 +161,7 @@ class BlockState:
         """Reject unordered endpoints or endpoints absent from the capture schedule."""
         offsets = [0] + [keyframe.elapsed_nanoseconds for keyframe in self.keyframes]
         unordered = any(end <= start for start, end in zip(offsets, offsets[1:]))
-        unsampled = any(
-            offset <= timing.duration_nanoseconds
-            and offset % timing.sample_period_nanoseconds != 0
-            for offset in offsets
-        )
+        unsampled = timing.contains_unsampled_offsets(offsets)
         if unordered or unsampled:
             raise InvalidPoseKeyframes(
                 self.model.value.identifier,
@@ -166,8 +181,8 @@ class BlockState:
             fraction = (elapsed_nanoseconds - previous.elapsed_nanoseconds) / (
                 keyframe.elapsed_nanoseconds - previous.elapsed_nanoseconds
             )
-            translation = np.asarray(previous.pose.translation) + fraction * (
-                np.asarray(keyframe.pose.translation) - previous.pose.translation
+            translation = numpy.asarray(previous.pose.translation) + fraction * (
+                numpy.asarray(keyframe.pose.translation) - previous.pose.translation
             )
             orientation = Slerp(
                 [previous.elapsed_nanoseconds, keyframe.elapsed_nanoseconds],
@@ -178,6 +193,44 @@ class BlockState:
                 rotation=orientation.as_quat().tolist(),
             )
         return previous.pose
+
+
+# %% Default CAD-origin poses
+
+
+@dataclass
+class ScenarioPoses:
+    """Editable endpoints for the default moving and stationary blocks."""
+
+    initial_pose: Pose = field(
+        default_factory=lambda: Pose(
+            translation=[-0.30, -0.15, 1.00],
+            rotation=Rotation.identity().as_quat().tolist(),
+        )
+    )
+    """Initial camera-relative CAD origin of the moving block."""
+
+    translated_pose: Pose = field(
+        default_factory=lambda: Pose(
+            translation=[-0.20, -0.15, 1.00],
+            rotation=Rotation.identity().as_quat().tolist(),
+        )
+    )
+    """Camera-relative CAD origin reached by translation."""
+
+    rotation_angle_radians: float = numpy.pi / 2.0
+    """Positive rotation about camera Z after translation."""
+
+    stationary_pose: Pose = field(
+        default_factory=lambda: Pose(
+            translation=[0.05, -0.15, 1.00],
+            rotation=Rotation.identity().as_quat().tolist(),
+        )
+    )
+    """Camera-relative CAD origin of the stationary reference."""
+
+
+# %% Complete scenario
 
 
 @dataclass
@@ -196,21 +249,21 @@ class TetrisScenario:
     """Blocks with editable camera-relative keyframes and absence intervals."""
 
     @staticmethod
-    def create_blocks() -> list[BlockState]:
+    def create_blocks(poses: ScenarioPoses | None = None) -> list[BlockState]:
         """Create the initial moving block and its stationary reference."""
-        initial_pose = Pose(
-            translation=[-0.30, -0.15, 1.00], rotation=[0.0, 0.0, 0.0, 1.0]
-        )
-        translated_pose = Pose(
-            translation=[-0.20, -0.15, 1.00], rotation=list(initial_pose.rotation)
-        )
+        if poses is None:
+            poses = ScenarioPoses()
+        initial_pose = poses.initial_pose
+        translated_pose = poses.translated_pose
         rotated_pose = Pose(
             translation=list(translated_pose.translation),
-            rotation=Rotation.from_rotvec([0.0, 0.0, np.pi / 2.0]).as_quat().tolist(),
+            rotation=Rotation.from_rotvec([0.0, 0.0, poses.rotation_angle_radians])
+            .as_quat()
+            .tolist(),
         )
         return [
             BlockState(
-                TetrisModel.FIRST,
+                TetrisModel.FIRST_BLOCK,
                 initial_pose,
                 keyframes=[
                     PoseKeyframe(MotionBoundary.INITIAL_HOLD_FINISHED, initial_pose),
@@ -228,8 +281,8 @@ class TetrisScenario:
                 ],
             ),
             BlockState(
-                TetrisModel.SECOND,
-                Pose(translation=[0.05, -0.15, 1.00], rotation=[0.0, 0.0, 0.0, 1.0]),
+                TetrisModel.SECOND_BLOCK,
+                poses.stationary_pose,
                 absence_intervals=[
                     AbsenceInterval(
                         AppearanceBoundary.SECOND_DISAPPEARS,

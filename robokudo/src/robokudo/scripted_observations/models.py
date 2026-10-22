@@ -12,15 +12,15 @@ from enum import Enum, StrEnum
 class ModelIdentifier(StrEnum):
     """Object kinds recognized in scripted Tetris observations."""
 
-    FIRST = "child_cube_0"
-    SECOND = "child_cube_2"
+    FIRST_BLOCK = "child_cube_0"
+    SECOND_BLOCK = "child_cube_2"
 
 
 class MeshFilename(StrEnum):
     """PLY resources containing the supplied CAD models."""
 
-    FIRST = "child_cube_0_colored.ply"
-    SECOND = "child_cube_2_colored.ply"
+    FIRST_BLOCK = "child_cube_0_colored.ply"
+    SECOND_BLOCK = "child_cube_2_colored.ply"
 
 
 @dataclass(frozen=True)
@@ -40,5 +40,5 @@ class BlockModel:
 class TetrisModel(Enum):
     """Model definitions independent of detection identity."""
 
-    FIRST = BlockModel(ModelIdentifier.FIRST, MeshFilename.FIRST)
-    SECOND = BlockModel(ModelIdentifier.SECOND, MeshFilename.SECOND)
+    FIRST_BLOCK = BlockModel(ModelIdentifier.FIRST_BLOCK, MeshFilename.FIRST_BLOCK)
+    SECOND_BLOCK = BlockModel(ModelIdentifier.SECOND_BLOCK, MeshFilename.SECOND_BLOCK)

@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import StrEnum
 
-import open3d as o3d
+import open3d
 from sensor_msgs.msg import CameraInfo
 from typing_extensions import TYPE_CHECKING
 
@@ -36,7 +36,7 @@ class ObservationCamera:
     Supply matching optical calibration and capture metadata to a CAS.
     """
 
-    settings: CameraSettings
+    camera_settings: CameraSettings
     """
     Image dimensions, field of view, and optical reference frame.
     """
@@ -46,12 +46,12 @@ class ObservationCamera:
         Attach calibration and scheduled capture time to an observation.
         """
         parameters = pinhole_camera_parameters_from_horizontal_field_of_view(
-            self.settings.image_width,
-            self.settings.image_height,
-            self.settings.horizontal_field_of_view_degrees,
+            self.camera_settings.image_width,
+            self.camera_settings.image_height,
+            self.camera_settings.horizontal_field_of_view_degrees,
         )
         camera_info = CameraInfo()
-        camera_info.header.frame_id = self.settings.frame
+        camera_info.header.frame_id = self.camera_settings.camera_frame
         camera_info.header.stamp.sec, camera_info.header.stamp.nanosec = divmod(
             capture_timestamp, TimeUnit.NANOSECONDS_PER_SECOND
         )
@@ -85,10 +85,10 @@ class ObservationCamera:
             1.0,
             0.0,
         ]
-        observation.camera_frame = self.settings.frame
+        observation.camera_frame = self.camera_settings.camera_frame
         observation.data_timestamp = capture_timestamp
         observation.camera_info = camera_info
-        observation.camera_intrinsic = o3d.camera.PinholeCameraIntrinsic(
+        observation.camera_intrinsic = open3d.camera.PinholeCameraIntrinsic(
             parameters.width,
             parameters.height,
             parameters.focal_length_x,

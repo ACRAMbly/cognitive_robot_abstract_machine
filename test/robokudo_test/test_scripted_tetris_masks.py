@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum, auto
 from pathlib import Path
 
-import numpy as np
+import numpy
 import pytest
 from scipy.spatial.transform import Rotation
 from typing_extensions import TYPE_CHECKING
@@ -18,18 +18,20 @@ from robokudo.descriptors.analysis_engines.scripted_tetris import (
 )
 from robokudo.scripted_observations.models import TetrisModel
 from robokudo.scripted_observations.projection import MaskPixel
-from robokudo.scripted_observations.scenario import CameraSettings
+from robokudo.scripted_observations.scenario import CameraSettings, ScenarioPoses
 from robokudo.types.cv import Point2D, Rect
 from robokudo.types.scene import ObjectHypothesis
 from robokudo.types.tf import Pose
 
-from .test_scripted_tetris import LocalMeshes, tetris_meshes
+from .test_scripted_tetris import tetris_meshes
 
 
 if TYPE_CHECKING:
+    from .test_scripted_tetris import LocalMeshes
     from rclpy.node import Node
 
     from robokudo.annotators.outputs import AnnotatorOutputPerPipelineMap
+    from robokudo.cas import CAS
 
 
 # %% Worked image projections
@@ -57,36 +59,46 @@ class OutlineExample:
     Pixel in the L-shaped gap inside its convex enclosing outline.
     """
 
+    camera: CameraSettings = field(
+        default_factory=lambda: CameraSettings(
+            image_width=200, image_height=200, horizontal_field_of_view_degrees=90.0
+        )
+    )
+    """Calibration for the independently worked projection coordinates."""
+
 
 # %% Cropped foreground evidence
 
 
-@pytest.mark.parametrize(
-    "example",
-    [
-        OutlineExample(
-            Pose(translation=[-0.30, -0.15, 1.0], rotation=[0.0, 0.0, 0.0, 1.0]),
-            Rect(pos=Point2D(x=69, y=84), width=12, height=11),
-            [Point2D(x=76, y=86), Point2D(x=71, y=91)],
-            Point2D(x=74, y=89),
+class OutlineCase(Enum):
+    """Independently worked pixel support of the fixture at each example pose."""
+
+    INITIAL = OutlineExample(
+        ScenarioPoses().initial_pose,
+        Rect(pos=Point2D(x=69, y=84), width=12, height=11),
+        [Point2D(x=76, y=86), Point2D(x=71, y=91)],
+        Point2D(x=74, y=89),
+    )
+    TRANSLATED = OutlineExample(
+        ScenarioPoses().translated_pose,
+        Rect(pos=Point2D(x=79, y=84), width=11, height=11),
+        [Point2D(x=86, y=86), Point2D(x=81, y=91)],
+        Point2D(x=84, y=89),
+    )
+    ROTATED = OutlineExample(
+        Pose(
+            translation=ScenarioPoses().translated_pose.translation,
+            rotation=Rotation.from_euler("z", ScenarioPoses().rotation_angle_radians)
+            .as_quat()
+            .tolist(),
         ),
-        OutlineExample(
-            Pose(translation=[-0.20, -0.15, 1.0], rotation=[0.0, 0.0, 0.0, 1.0]),
-            Rect(pos=Point2D(x=79, y=84), width=11, height=11),
-            [Point2D(x=86, y=86), Point2D(x=81, y=91)],
-            Point2D(x=84, y=89),
-        ),
-        OutlineExample(
-            Pose(
-                translation=[-0.20, -0.15, 1.0],
-                rotation=Rotation.from_euler("z", np.pi / 2.0).as_quat().tolist(),
-            ),
-            Rect(pos=Point2D(x=69, y=84), width=12, height=11),
-            [Point2D(x=78, y=91), Point2D(x=72, y=86)],
-            Point2D(x=74, y=89),
-        ),
-    ],
-)
+        Rect(pos=Point2D(x=69, y=84), width=12, height=11),
+        [Point2D(x=78, y=91), Point2D(x=72, y=86)],
+        Point2D(x=74, y=89),
+    )
+
+
+@pytest.mark.parametrize("example", [case.value for case in OutlineCase])
 def test_foreground_masks_follow_translated_and_rotated_cad_outlines(
     example: OutlineExample,
     tetris_meshes: LocalMeshes,
@@ -97,9 +109,7 @@ def test_foreground_masks_follow_translated_and_rotated_cad_outlines(
     L-shaped gaps remain background at their configured image coordinates.
     """
     engine = AnalysisEngine(mesh_directory=tetris_meshes.directory)
-    engine.scenario.camera = CameraSettings(
-        image_width=200, image_height=200, horizontal_field_of_view_degrees=90.0
-    )
+    engine.scenario.camera = example.camera
     engine.scenario.blocks[0].pose = example.object_pose
     pipeline = engine.implementation()
     pipeline.setup()
@@ -110,7 +120,7 @@ def test_foreground_masks_follow_translated_and_rotated_cad_outlines(
     mask = hypothesis.roi.mask
     assert region.as_tuple() == example.image_region.as_tuple()
     assert mask.shape == (region.height, region.width)
-    assert mask.dtype == np.uint8
+    assert mask.dtype == numpy.uint8
     for pixel in example.foreground_pixels:
         assert (
             mask[pixel.y - region.pos.y, pixel.x - region.pos.x] == MaskPixel.FOREGROUND
@@ -134,6 +144,59 @@ class ProjectionResources(Enum):
 
     FIXTURE = auto()
     SUPPLIED = auto()
+
+
+@dataclass
+class ImageOccupancy:
+    """Full-frame image support expected of separate visible CAD models."""
+
+    camera: CameraSettings
+    """Camera dimensions defining the valid pixel support."""
+
+    def assert_separate(self, observation: CAS) -> None:
+        """Check bounds, binary masks, cropped dimensions, and disjoint support."""
+        occupancy = numpy.zeros(
+            (self.camera.image_height, self.camera.image_width), dtype=numpy.uint8
+        )
+        for hypothesis in observation.filter_annotations_by_type(ObjectHypothesis):
+            region = hypothesis.roi.roi
+            left, top, right, bottom = region.get_corner_points()
+            assert 0 <= left < right <= self.camera.image_width
+            assert 0 <= top < bottom <= self.camera.image_height
+            assert hypothesis.roi.mask.shape == (region.height, region.width)
+            assert numpy.isin(hypothesis.roi.mask, list(MaskPixel)).all()
+            occupancy[top:bottom, left:right] += (
+                hypothesis.roi.mask == MaskPixel.FOREGROUND
+            )
+        assert numpy.count_nonzero(occupancy > 1) == 0
+
+
+@dataclass
+class ProjectedMotion:
+    """Translation and rotation of one block in an image evidence example."""
+
+    translation_offset_metres: float = 0.0
+    """Additional camera-X translation from the initial CAD origin."""
+
+    rotation_angle_radians: float = 0.0
+    """Positive camera-Z turn from the initial orientation."""
+
+
+class MotionExample(Enum):
+    """Selected endpoints and intermediate rotation of the default motion."""
+
+    INITIAL = ProjectedMotion()
+    TRANSLATED = ProjectedMotion(
+        ScenarioPoses().translated_pose.translation[0]
+        - ScenarioPoses().initial_pose.translation[0]
+    )
+    HALF_ROTATED = ProjectedMotion(
+        TRANSLATED.translation_offset_metres,
+        ScenarioPoses().rotation_angle_radians / 2.0,
+    )
+    ROTATED = ProjectedMotion(
+        TRANSLATED.translation_offset_metres, ScenarioPoses().rotation_angle_radians
+    )
 
 
 @pytest.fixture(params=list(ProjectionResources))
@@ -165,34 +228,19 @@ def test_default_example_poses_stay_fully_in_frame_and_separate(
     """
     engine = AnalysisEngine(mesh_directory=projection_mesh_directory)
     initial_translation = list(engine.scenario.blocks[0].pose.translation)
-    for translation_offset, rotation_angle in [
-        (0.0, 0.0),
-        (0.10, 0.0),
-        (0.10, np.pi / 4.0),
-        (0.10, np.pi / 2.0),
-    ]:
+    for example in MotionExample:
         block_pose = engine.scenario.blocks[0].pose
         block_pose.translation = list(initial_translation)
-        block_pose.translation[0] += translation_offset
+        block_pose.translation[0] += example.value.translation_offset_metres
         block_pose.rotation = (
-            Rotation.from_euler("z", rotation_angle).as_quat().tolist()
+            Rotation.from_euler("z", example.value.rotation_angle_radians)
+            .as_quat()
+            .tolist()
         )
         pipeline = engine.implementation()
         pipeline.setup()
         pipeline.tick_once()
 
-        camera = engine.scenario.camera
-        occupancy = np.zeros((camera.image_height, camera.image_width), dtype=np.uint8)
         hypotheses = pipeline.cas.filter_annotations_by_type(ObjectHypothesis)
         assert len(hypotheses) == len(engine.scenario.blocks)
-        for hypothesis in hypotheses:
-            region = hypothesis.roi.roi
-            left, top, right, bottom = region.get_corner_points()
-            assert 0 <= left < right <= camera.image_width
-            assert 0 <= top < bottom <= camera.image_height
-            assert hypothesis.roi.mask.shape == (region.height, region.width)
-            assert np.isin(hypothesis.roi.mask, list(MaskPixel)).all()
-            occupancy[top:bottom, left:right] += (
-                hypothesis.roi.mask == MaskPixel.FOREGROUND
-            )
-        assert np.count_nonzero(occupancy > 1) == 0
+        ImageOccupancy(engine.scenario.camera).assert_separate(pipeline.get_cas())

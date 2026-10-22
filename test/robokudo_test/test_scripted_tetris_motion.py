@@ -4,14 +4,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-import numpy as np
+import numpy
 import pytest
 import trimesh
 from py_trees.common import Status
 from scipy.spatial.transform import Rotation
 from typing_extensions import TYPE_CHECKING
 
-from robokudo.cas import CAS
 from robokudo.descriptors.analysis_engines.scripted_tetris import AnalysisEngine
 from robokudo.types.annotation import (
     BoundingBox3DAnnotation,
@@ -19,16 +18,19 @@ from robokudo.types.annotation import (
     PoseAnnotation,
     Shape,
 )
-from robokudo.scripted_observations.projection import MaskPixel
 from robokudo.types.scene import ObjectHypothesis
 from robokudo.types.tf import Pose
 from robokudo.scripted_observations.scenario import PoseKeyframe
 from robokudo.scripted_observations.exceptions import InvalidPoseKeyframes
 
-from .test_scripted_tetris import ControlledClock, LocalMeshes, tetris_meshes
-from .test_scripted_tetris_masks import projection_mesh_directory
+from .test_scripted_tetris import ControlledClock, tetris_meshes
+from .test_scripted_tetris_masks import ImageOccupancy, projection_mesh_directory
 
 if TYPE_CHECKING:
+    from robokudo.cas import CAS
+    from robokudo.pipeline import Pipeline
+    from typing_extensions import Callable
+    from .test_scripted_tetris import LocalMeshes
     from pathlib import Path
     from rclpy.node import Node
 
@@ -49,6 +51,44 @@ class CapturedSequence:
     observations: dict[int, CAS]
     """Completed observations indexed by elapsed capture nanoseconds."""
 
+    @classmethod
+    def capture(
+        cls,
+        engine: AnalysisEngine,
+        clock: ControlledClock,
+        *,
+        pipeline: Pipeline | None = None,
+        tick: Callable[[], None] | None = None,
+        advance_clock: bool = True,
+        previous_observations: dict[int, CAS] | None = None,
+    ) -> CapturedSequence:
+        """Collect scheduled public CAS captures under regular or delayed delivery."""
+        if pipeline is None:
+            pipeline = engine.implementation()
+            pipeline.setup()
+        if tick is None:
+            tick = pipeline.tick_once
+        observations = (
+            {} if previous_observations is None else dict(previous_observations)
+        )
+        sequence_start = (
+            observations[0].data_timestamp
+            if observations
+            else clock.timestamp_nanoseconds
+        )
+        timing = engine.scenario.timing
+        for offset in range(
+            0, timing.duration_nanoseconds + 1, timing.sample_period_nanoseconds
+        ):
+            if offset in observations:
+                continue
+            if advance_clock:
+                clock.timestamp_nanoseconds = sequence_start + offset
+            tick()
+            assert pipeline.status == Status.SUCCESS
+            observations[offset] = pipeline.get_cas()
+        return cls(engine, observations)
+
     def find_hypothesis(
         self, elapsed_nanoseconds: int, model: TetrisModel
     ) -> ObjectHypothesis:
@@ -64,25 +104,6 @@ class CapturedSequence:
         )
 
 
-def capture_sequence(
-    engine: AnalysisEngine, clock: ControlledClock
-) -> CapturedSequence:
-    """Drive the public engine through every configured scheduled capture."""
-    pipeline = engine.implementation()
-    pipeline.setup()
-    sequence_start = clock.timestamp_nanoseconds
-    timing = engine.scenario.timing
-    observations = {}
-    for offset in range(
-        0, timing.duration_nanoseconds + 1, timing.sample_period_nanoseconds
-    ):
-        clock.timestamp_nanoseconds = sequence_start + offset
-        pipeline.tick_once()
-        assert pipeline.status == Status.SUCCESS
-        observations[offset] = pipeline.get_cas()
-    return CapturedSequence(engine, observations)
-
-
 @pytest.fixture
 def motion_sequence(
     tetris_meshes: LocalMeshes,
@@ -92,7 +113,7 @@ def motion_sequence(
     """Capture the default motion with deterministic local CAD resources."""
     clock = ControlledClock()
     engine = AnalysisEngine(mesh_directory=tetris_meshes.directory, clock=clock)
-    return capture_sequence(engine, clock)
+    return CapturedSequence.capture(engine, clock)
 
 
 # %% Translation
@@ -120,7 +141,7 @@ def test_translation_reaches_the_configured_midpoint(
     )[0]
 
     assert moving_pose.translation == pytest.approx(
-        (np.asarray(movement_start.pose.translation) + movement_end.pose.translation)
+        (numpy.asarray(movement_start.pose.translation) + movement_end.pose.translation)
         / 2.0
     )
     assert moving_pose.rotation == movement_start.pose.rotation
@@ -129,6 +150,20 @@ def test_translation_reaches_the_configured_midpoint(
 
 
 # %% Rotation
+
+
+@dataclass
+class ShortestRotationExample:
+    """Endpoint and midpoint angles of a turn crossing the quaternion sign boundary."""
+
+    initial_angle_degrees: float = 170.0
+    """Initial positive camera-Z angle."""
+
+    final_angle_degrees: float = -170.0
+    """Final negative camera-Z angle reached by the shortest turn."""
+
+    midpoint_angle_degrees: float = 180.0
+    """Independently known halfway orientation of the crossing turn."""
 
 
 def test_rotation_reaches_the_midpoint_between_keyframes(
@@ -177,16 +212,21 @@ def test_rotation_follows_the_short_path_across_quaternion_signs(
 ) -> None:
     """A 170 to minus-170 degree turn passes through 180 for either quaternion sign."""
     clock = ControlledClock()
+    example = ShortestRotationExample()
     engine = AnalysisEngine(mesh_directory=tetris_meshes.directory, clock=clock)
     block = engine.scenario.blocks[0]
     block.pose.rotation = (
-        Rotation.from_rotvec([0.0, 0.0, np.deg2rad(170.0)]).as_quat().tolist()
+        Rotation.from_rotvec([0.0, 0.0, numpy.deg2rad(example.initial_angle_degrees)])
+        .as_quat()
+        .tolist()
     )
     target_pose = Pose(
         translation=list(block.pose.translation),
         rotation=(
             quaternion_sign
-            * Rotation.from_rotvec([0.0, 0.0, np.deg2rad(-170.0)]).as_quat()
+            * Rotation.from_rotvec(
+                [0.0, 0.0, numpy.deg2rad(example.final_angle_degrees)]
+            ).as_quat()
         ).tolist(),
     )
     period = engine.scenario.timing.sample_period_nanoseconds
@@ -194,12 +234,14 @@ def test_rotation_follows_the_short_path_across_quaternion_signs(
     engine.scenario.timing.duration_nanoseconds = block.keyframes[
         -1
     ].elapsed_nanoseconds
-    sequence = capture_sequence(engine, clock)
+    sequence = CapturedSequence.capture(engine, clock)
     hypothesis = sequence.find_hypothesis(period, block.model)
     midpoint_pose = sequence.observations[period].filter_by_type(
         PoseAnnotation, hypothesis.annotations
     )[0]
-    expected_rotation = Rotation.from_rotvec([0.0, 0.0, np.pi])
+    expected_rotation = Rotation.from_rotvec(
+        [0.0, 0.0, numpy.deg2rad(example.midpoint_angle_degrees)]
+    )
 
     assert Rotation.from_quat(midpoint_pose.rotation).as_matrix() == pytest.approx(
         expected_rotation.as_matrix()
@@ -345,21 +387,10 @@ def test_all_motion_samples_stay_fully_in_frame_and_separate(
     """Every default intermediate pose has full and disjoint image evidence."""
     clock = ControlledClock()
     engine = AnalysisEngine(mesh_directory=projection_mesh_directory, clock=clock)
-    sequence = capture_sequence(engine, clock)
-    camera = engine.scenario.camera
+    sequence = CapturedSequence.capture(engine, clock)
 
     for observation in sequence.observations.values():
-        occupancy = np.zeros((camera.image_height, camera.image_width), dtype=np.uint8)
-        for hypothesis in observation.filter_annotations_by_type(ObjectHypothesis):
-            region = hypothesis.roi.roi
-            left, top, right, bottom = region.get_corner_points()
-            assert 0 <= left < right <= camera.image_width
-            assert 0 <= top < bottom <= camera.image_height
-            assert hypothesis.roi.mask.shape == (region.height, region.width)
-            occupancy[top:bottom, left:right] += (
-                hypothesis.roi.mask == MaskPixel.FOREGROUND
-            )
-        assert np.count_nonzero(occupancy > 1) == 0
+        ImageOccupancy(engine.scenario.camera).assert_separate(observation)
 
 
 # %% Delivery delays
@@ -379,11 +410,15 @@ def test_late_delivery_preserves_the_scheduled_motion_poses(
     pipeline.tick_once()
     clock.timestamp_nanoseconds += engine.scenario.timing.duration_nanoseconds
 
-    for elapsed in list(motion_sequence.observations)[1:]:
-        pipeline.tick_once()
-        assert pipeline.status == Status.SUCCESS
+    delayed_sequence = CapturedSequence.capture(
+        engine,
+        clock,
+        pipeline=pipeline,
+        advance_clock=False,
+        previous_observations={0: pipeline.get_cas()},
+    )
+    for elapsed, observed in delayed_sequence.observations.items():
         expected = motion_sequence.observations[elapsed]
-        observed = pipeline.get_cas()
         expected_hypotheses = expected.filter_annotations_by_type(ObjectHypothesis)
         observed_hypotheses = observed.filter_annotations_by_type(ObjectHypothesis)
         assert [

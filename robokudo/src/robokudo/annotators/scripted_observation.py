@@ -10,7 +10,6 @@ from typing_extensions import TYPE_CHECKING
 
 from robokudo.annotators.core import BaseAnnotator
 from robokudo.scripted_observations.camera import ObservationCamera
-from robokudo.scripted_observations.exceptions import InvalidPlaybackTiming
 from robokudo.scripted_observations.geometry import ModelGeometry
 from robokudo.scripted_observations.projection import ForegroundProjection
 from robokudo.scripted_observations.visualization import ObservationVisualization
@@ -21,6 +20,7 @@ from robokudo.types.scene import ObjectHypothesis
 if TYPE_CHECKING:
     from pathlib import Path
 
+    from robokudo.cas import CAS
     from robokudo.scripted_observations.clock import Clock
     from robokudo.scripted_observations.models import TetrisModel
     from robokudo.scripted_observations.scenario import TetrisScenario
@@ -36,6 +36,23 @@ class ObservationLabel(StrEnum):
 
     SOURCE = "scripted_tetris"
     MODEL_CLASS = "CLASS"
+
+
+@dataclass
+class ScheduledCapture:
+    """
+    Capture offset and Unix timestamp for one due observation.
+    """
+
+    elapsed_nanoseconds: int
+    """
+    Scheduled time relative to the sequence's first capture.
+    """
+
+    capture_timestamp: int
+    """
+    Unix timestamp of the scheduled capture.
+    """
 
 
 @dataclass(eq=False)
@@ -59,7 +76,7 @@ class ScriptedObservationAnnotator(BaseAnnotator):
     Clock supplying Unix capture timestamps.
     """
 
-    models: dict[TetrisModel, ModelGeometry] = field(init=False)
+    model_geometries: dict[TetrisModel, ModelGeometry] = field(init=False)
     """
     Loaded metric geometry for the scenario models.
     """
@@ -80,24 +97,36 @@ class ScriptedObservationAnnotator(BaseAnnotator):
         """
         BaseAnnotator.__init__(self, name=ObservationLabel.SOURCE)
         timing = self.scenario.timing
-        if (
-            timing.sample_period_nanoseconds <= 0
-            or timing.duration_nanoseconds < 0
-            or timing.duration_nanoseconds % timing.sample_period_nanoseconds != 0
-        ):
-            raise InvalidPlaybackTiming(
-                duration_nanoseconds=timing.duration_nanoseconds,
-                sample_period_nanoseconds=timing.sample_period_nanoseconds,
-            )
+        timing.validate()
         for block in self.scenario.blocks:
             block.validate_keyframes(timing)
             block.validate_absence_intervals(timing)
-        self.models = {
+        self.model_geometries = {
             block.model: ModelGeometry.from_directory(block.model, self.mesh_directory)
             for block in self.scenario.blocks
         }
 
     def update(self) -> Status:
+        capture = self.schedule_capture()
+        if isinstance(capture, Status):
+            return capture
+        pipeline = self.get_parent_pipeline()
+        pipeline.create_new_cas()
+        ObservationCamera(self.scenario.camera).write_metadata(
+            pipeline.cas, capture.capture_timestamp
+        )
+        self.write_hypotheses(pipeline.cas, capture)
+        visualization = ObservationVisualization(pipeline.cas)
+        output = self.get_annotator_output_struct()
+        output.set_image(visualization.create_image())
+        output.set_geometries(visualization.create_geometries())
+        self.observation_index += 1
+        return Status.SUCCESS
+
+    def schedule_capture(self) -> ScheduledCapture | Status:
+        """
+        Select the next due capture or report waiting and exhaustion.
+        """
         capture_offset = (
             self.observation_index * self.scenario.timing.sample_period_nanoseconds
         )
@@ -109,16 +138,17 @@ class ScriptedObservationAnnotator(BaseAnnotator):
         capture_timestamp = self.sequence_start_timestamp + capture_offset
         if current_timestamp < capture_timestamp:
             return Status.RUNNING
-        pipeline = self.get_parent_pipeline()
-        pipeline.create_new_cas()
-        ObservationCamera(self.scenario.camera).write_metadata(
-            pipeline.cas, capture_timestamp
-        )
+        return ScheduledCapture(capture_offset, capture_timestamp)
+
+    def write_hypotheses(self, observation: CAS, capture: ScheduledCapture) -> None:
+        """
+        Append the visible models and their scheduled geometry to a CAS.
+        """
         for block in self.scenario.blocks:
-            if not block.is_visible(capture_offset):
+            if not block.is_visible(capture.elapsed_nanoseconds):
                 continue
-            object_pose = block.interpolate_pose(capture_offset)
-            pipeline.cas.annotations.append(
+            object_pose = block.interpolate_pose(capture.elapsed_nanoseconds)
+            observation.annotations.append(
                 ObjectHypothesis(
                     source=self.name,
                     id=(
@@ -126,8 +156,8 @@ class ScriptedObservationAnnotator(BaseAnnotator):
                         f"{block.model.value.identifier}"
                     ),
                     roi=ForegroundProjection(
-                        self.models[block.model].mesh, object_pose
-                    ).create_region(pipeline.cas),
+                        self.model_geometries[block.model].mesh, object_pose
+                    ).create_region(observation),
                     annotations=[
                         Classification(
                             source=self.name,
@@ -136,14 +166,8 @@ class ScriptedObservationAnnotator(BaseAnnotator):
                             confidence=1.0,
                         )
                     ]
-                    + self.models[block.model].create_annotations(
+                    + self.model_geometries[block.model].create_annotations(
                         object_pose, self.name
                     ),
                 )
             )
-        visualization = ObservationVisualization(pipeline.cas)
-        output = self.get_annotator_output_struct()
-        output.set_image(visualization.create_image())
-        output.set_geometries(visualization.create_geometries())
-        self.observation_index += 1
-        return Status.SUCCESS

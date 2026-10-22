@@ -3,9 +3,8 @@
 from __future__ import annotations
 
 import time
-from enum import IntEnum
+from dataclasses import dataclass
 
-import numpy as np
 import pytest
 from py_trees.common import Status
 from typing_extensions import TYPE_CHECKING
@@ -14,21 +13,18 @@ from robokudo import world as robokudo_world
 from robokudo.descriptors.analysis_engines.scripted_tetris import AnalysisEngine
 from robokudo.scripted_observations.clock import TimeUnit
 from robokudo.scripted_observations.exceptions import InvalidAbsenceInterval
-from robokudo.scripted_observations.scenario import AbsenceInterval
+from robokudo.scripted_observations.scenario import AbsenceInterval, AppearanceBoundary
 from robokudo.types.annotation import Classification, PoseAnnotation
 from robokudo.types.scene import ObjectHypothesis
-from robokudo.utils.camera_model import (
-    pinhole_camera_parameters_from_horizontal_field_of_view,
-)
 
-from .test_scripted_tetris import ControlledClock, LocalMeshes, tetris_meshes
+from .test_scripted_tetris import CameraMetadata, ControlledClock, tetris_meshes
 from .test_scripted_tetris_motion import (
     CapturedSequence,
-    capture_sequence,
     motion_sequence,
 )
 
 if TYPE_CHECKING:
+    from .test_scripted_tetris import LocalMeshes
     from rclpy.node import Node
     from semantic_digital_twin.world import World
 
@@ -36,16 +32,6 @@ if TYPE_CHECKING:
 
 
 # %% Default appearance boundaries
-
-
-class AppearanceBoundary(IntEnum):
-    """
-    Agreed default offsets for disappearance and reappearance.
-    """
-
-    FIRST_DISAPPEARS = 21 * TimeUnit.NANOSECONDS_PER_SECOND
-    SECOND_DISAPPEARS = 24 * TimeUnit.NANOSECONDS_PER_SECOND
-    BOTH_REAPPEAR = 27 * TimeUnit.NANOSECONDS_PER_SECOND
 
 
 def test_first_disappearance_replaces_the_preceding_two_block_scene(
@@ -103,6 +89,43 @@ def test_empty_interval_and_reappearance_emit_the_new_boundary_states(
 # %% Complete scheduled sequence
 
 
+@dataclass
+class SequenceAgreement:
+    """
+    Agreed default schedule checked once against the public engine descriptor.
+    """
+
+    duration_nanoseconds: int = 30 * TimeUnit.NANOSECONDS_PER_SECOND
+    """
+    Capture duration required by the approved specification.
+    """
+
+    sample_period_nanoseconds: int = TimeUnit.NANOSECONDS_PER_SECOND // 10
+    """
+    Capture cadence required by the approved specification.
+    """
+
+    capture_count: int = 301
+    """
+    Number of observations including both endpoints.
+    """
+
+    first_disappearance_nanoseconds: int = 21 * TimeUnit.NANOSECONDS_PER_SECOND
+    """
+    Agreed boundary at which the moving block disappears.
+    """
+
+    second_disappearance_nanoseconds: int = 24 * TimeUnit.NANOSECONDS_PER_SECOND
+    """
+    Agreed boundary at which the stationary reference disappears.
+    """
+
+    reappearance_nanoseconds: int = 27 * TimeUnit.NANOSECONDS_PER_SECOND
+    """
+    Agreed boundary at which both blocks return.
+    """
+
+
 def test_default_sequence_contains_every_scheduled_visibility_state(
     motion_sequence: CapturedSequence,
 ) -> None:
@@ -110,6 +133,7 @@ def test_default_sequence_contains_every_scheduled_visibility_state(
     All 301 captures reflect the configured half-open absence intervals.
     """
     timing = motion_sequence.engine.scenario.timing
+    agreement = SequenceAgreement()
     blocks = motion_sequence.engine.scenario.blocks
     first_absence = blocks[0].absence_intervals[0]
     second_absence = blocks[1].absence_intervals[0]
@@ -119,12 +143,20 @@ def test_default_sequence_contains_every_scheduled_visibility_state(
     assert second_absence == AbsenceInterval(
         AppearanceBoundary.SECOND_DISAPPEARS, AppearanceBoundary.BOTH_REAPPEAR
     )
-    assert timing.duration_nanoseconds == 30 * TimeUnit.NANOSECONDS_PER_SECOND
-    assert timing.sample_period_nanoseconds == TimeUnit.NANOSECONDS_PER_SECOND // 10
+    assert timing.duration_nanoseconds == agreement.duration_nanoseconds
+    assert timing.sample_period_nanoseconds == agreement.sample_period_nanoseconds
+    assert (
+        AppearanceBoundary.FIRST_DISAPPEARS == agreement.first_disappearance_nanoseconds
+    )
+    assert (
+        AppearanceBoundary.SECOND_DISAPPEARS
+        == agreement.second_disappearance_nanoseconds
+    )
+    assert AppearanceBoundary.BOTH_REAPPEAR == agreement.reappearance_nanoseconds
     expected_offsets = list(
         range(0, timing.duration_nanoseconds + 1, timing.sample_period_nanoseconds)
     )
-    assert len(expected_offsets) == 301
+    assert len(expected_offsets) == agreement.capture_count
     assert list(motion_sequence.observations) == expected_offsets
     observations = list(motion_sequence.observations.values())
     assert len({id(observation) for observation in observations}) == len(
@@ -209,45 +241,13 @@ def test_all_captures_retain_camera_metadata_and_construction_times(
     sequence_start = clock.timestamp_nanoseconds
     engine = AnalysisEngine(mesh_directory=tetris_meshes.directory, clock=clock)
     construction_start = time.time_ns()
-    sequence = capture_sequence(engine, clock)
+    sequence = CapturedSequence.capture(engine, clock)
     construction_end = time.time_ns()
-    camera = engine.scenario.camera
-    intrinsics = pinhole_camera_parameters_from_horizontal_field_of_view(
-        camera.image_width, camera.image_height, camera.horizontal_field_of_view_degrees
-    )
-    expected_intrinsics = [
-        intrinsics.focal_length_x,
-        0.0,
-        intrinsics.center_x,
-        0.0,
-        intrinsics.focal_length_y,
-        intrinsics.center_y,
-        0.0,
-        0.0,
-        1.0,
-    ]
     for offset, observation in sequence.observations.items():
-        capture_timestamp = sequence_start + offset
-        assert observation.data_timestamp == capture_timestamp
+        CameraMetadata(engine.scenario.camera, sequence_start + offset).assert_matches(
+            observation
+        )
         assert construction_start <= observation.timestamp <= construction_end
-        assert observation.camera_frame == camera.frame
-        assert observation.camera_info.header.frame_id == camera.frame
-        assert (
-            observation.camera_info.header.stamp.sec
-            == capture_timestamp // TimeUnit.NANOSECONDS_PER_SECOND
-        )
-        assert (
-            observation.camera_info.header.stamp.nanosec
-            == capture_timestamp % TimeUnit.NANOSECONDS_PER_SECOND
-        )
-        assert observation.camera_info.width == camera.image_width
-        assert observation.camera_info.height == camera.image_height
-        assert list(observation.camera_info.k) == expected_intrinsics
-        assert observation.camera_intrinsic.width == camera.image_width
-        assert observation.camera_intrinsic.height == camera.image_height
-        assert observation.camera_intrinsic.intrinsic_matrix == pytest.approx(
-            np.asarray(expected_intrinsics).reshape(3, 3)
-        )
 
 
 # %% Delayed delivery and completion
@@ -274,10 +274,15 @@ def test_late_complete_sequence_matches_regular_captures_and_stays_exhausted(
         assert pipeline.status == Status.RUNNING
         assert pipeline.get_cas() is observations[0]
     clock.timestamp_nanoseconds += 2 * engine.scenario.timing.duration_nanoseconds
-    for _ in list(motion_sequence.observations)[1:]:
-        pipeline.tick_once()
-        assert pipeline.status == Status.SUCCESS
-        observations.append(pipeline.get_cas())
+    observations = list(
+        CapturedSequence.capture(
+            engine,
+            clock,
+            pipeline=pipeline,
+            advance_clock=False,
+            previous_observations={0: observations[0]},
+        ).observations.values()
+    )
     assert len(observations) == len(motion_sequence.observations)
     for observed, expected in zip(
         observations, motion_sequence.observations.values(), strict=True
@@ -326,7 +331,7 @@ def test_complete_sequence_preserves_the_world_and_belief_baseline(
     initial_bodies = tuple(mini_world.bodies)
     initial_beliefs = dict(robokudo_world.get_object_belief_states())
     clock = ControlledClock()
-    sequence = capture_sequence(
+    sequence = CapturedSequence.capture(
         AnalysisEngine(mesh_directory=tetris_meshes.directory, clock=clock), clock
     )
 
@@ -360,7 +365,7 @@ def test_edited_absence_intervals_control_each_scheduled_capture(
         AbsenceInterval(3 * period, 4 * period),
     ]
     second.absence_intervals = [AbsenceInterval(0, period)]
-    sequence = capture_sequence(engine, clock)
+    sequence = CapturedSequence.capture(engine, clock)
     expected_models = [
         [first.model.value.identifier],
         [second.model.value.identifier],

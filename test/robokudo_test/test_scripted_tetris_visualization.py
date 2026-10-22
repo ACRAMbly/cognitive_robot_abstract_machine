@@ -2,24 +2,28 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import astuple, dataclass, field
 from enum import IntEnum
 from unittest.mock import Mock
 
 import cv2
-import numpy as np
-import open3d as o3d
+import numpy
+import open3d
 import pytest
 from py_trees.common import Status
 from scipy.spatial.transform import Rotation
-from typing_extensions import TYPE_CHECKING, Iterator
+from typing_extensions import TYPE_CHECKING
 
 import robokudo.vis.o3d_visualizer as native_geometry_windows
 from robokudo.annotators.testing import EmptyAnnotator
 from robokudo.descriptors.analysis_engines.scripted_tetris import AnalysisEngine
 from robokudo.garden import grow_tree
 from robokudo.scripted_observations.projection import MaskPixel
-from robokudo.scripted_observations.scenario import CameraSettings, PlaybackTiming
+from robokudo.scripted_observations.scenario import (
+    CameraSettings,
+    PlaybackTiming,
+    ScenarioPoses,
+)
 from robokudo.scripted_observations.visualization import (
     ImageColor,
     ObservationVisualization,
@@ -35,10 +39,12 @@ from robokudo.vis.cv_visualizer import CVVisualizer
 from robokudo.vis.o3d_visualizer import O3DVisualizer
 from robokudo.vis.visualizer import Visualizer
 
-from .test_scripted_tetris import ControlledClock, LocalMeshes, tetris_meshes
+from .test_scripted_tetris import CaptureExample, ControlledClock, tetris_meshes
 
 
 if TYPE_CHECKING:
+    from typing_extensions import Iterator
+    from .test_scripted_tetris import LocalMeshes
     from rclpy.node import Node
 
     from robokudo.annotators.outputs import AnnotatorOutputPerPipelineMap
@@ -47,18 +53,41 @@ if TYPE_CHECKING:
 # %% Illustrative camera output
 
 
+@dataclass
+class ImageExample:
+    """
+    Camera dimensions and native overlay margin for image evidence checks.
+    """
+
+    camera: CameraSettings = field(
+        default_factory=lambda: CameraSettings(image_width=320, image_height=240)
+    )
+    """
+    Calibration consumed by the public observation engine.
+    """
+
+    border_width_pixels: int = 2
+    """
+    Region edge excluded from foreground and background color comparisons.
+    """
+
+
 def test_completed_observation_draws_foreground_masks_and_image_regions(
     tetris_meshes: LocalMeshes,
     node: Node,
     annotator_output_buffer: AnnotatorOutputPerPipelineMap,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """
     Native image output aligns synthetic foreground with the completed CAS.
     """
+    rectangle_drawing = Mock(wraps=cv2.rectangle)
+    monkeypatch.setattr(cv2, "rectangle", rectangle_drawing)
+    example = ImageExample()
     engine = AnalysisEngine(
         mesh_directory=tetris_meshes.directory, clock=ControlledClock()
     )
-    engine.scenario.camera = CameraSettings(image_width=320, image_height=240)
+    engine.scenario.camera = example.camera
     pipeline = engine.implementation()
     pipeline.setup()
     pipeline.tick_once()
@@ -67,27 +96,38 @@ def test_completed_observation_draws_foreground_masks_and_image_regions(
     output = annotator_output_buffer.map[pipeline.name].outputs[source.name]
     camera = engine.scenario.camera
     assert output.image.shape == (camera.image_height, camera.image_width, 3)
-    assert output.image.dtype == np.uint8
+    assert output.image.dtype == numpy.uint8
     hypothesis = pipeline.cas.filter_annotations_by_type(ObjectHypothesis)[0]
     left, top, right, bottom = hypothesis.roi.roi.get_corner_points()
     mask = hypothesis.roi.mask
-    interior = output.image[top:bottom, left:right][2:-2, 2:-2]
-    interior_mask = mask[2:-2, 2:-2]
+    border = example.border_width_pixels
+    interior = output.image[top:bottom, left:right][border:-border, border:-border]
+    interior_mask = mask[border:-border, border:-border]
     assert (
         interior[interior_mask == MaskPixel.FOREGROUND].tolist()
-        == np.broadcast_to(
-            ImageColor.FOREGROUND.value,
+        == numpy.broadcast_to(
+            astuple(ImageColor.FOREGROUND.value),
             interior[interior_mask == MaskPixel.FOREGROUND].shape,
         ).tolist()
     )
     assert (
         interior[interior_mask == MaskPixel.BACKGROUND].tolist()
-        == np.broadcast_to(
-            ImageColor.BACKGROUND.value,
+        == numpy.broadcast_to(
+            astuple(ImageColor.BACKGROUND.value),
             interior[interior_mask == MaskPixel.BACKGROUND].shape,
         ).tolist()
     )
-    assert output.image[top, left].tolist() == [0, 0, 255]
+    hypotheses = pipeline.cas.filter_annotations_by_type(ObjectHypothesis)
+    assert [call.args[1:3] for call in rectangle_drawing.call_args_list] == [
+        (
+            (detected.roi.roi.pos.x, detected.roi.roi.pos.y),
+            (
+                detected.roi.roi.pos.x + detected.roi.roi.width,
+                detected.roi.roi.pos.y + detected.roi.roi.height,
+            ),
+        )
+        for detected in hypotheses
+    ]
 
 
 def test_native_model_labels_use_the_emitted_classifications(
@@ -130,7 +170,9 @@ def test_native_geometry_agrees_with_metric_cad_pose_and_offset_box(
         mesh_directory=tetris_meshes.directory, clock=ControlledClock()
     )
     engine.scenario.blocks[0].pose.rotation = (
-        Rotation.from_euler("z", quarter_turns * np.pi / 2.0).as_quat().tolist()
+        Rotation.from_euler("z", quarter_turns * ScenarioPoses().rotation_angle_radians)
+        .as_quat()
+        .tolist()
     )
     pipeline = engine.implementation()
     pipeline.setup()
@@ -145,9 +187,9 @@ def test_native_geometry_agrees_with_metric_cad_pose_and_offset_box(
         geometry_type
         for _ in hypotheses
         for geometry_type in (
-            o3d.geometry.TriangleMesh,
-            o3d.geometry.OrientedBoundingBox,
-            o3d.geometry.TriangleMesh,
+            open3d.geometry.TriangleMesh,
+            open3d.geometry.OrientedBoundingBox,
+            open3d.geometry.TriangleMesh,
         )
     ]
     geometry_iterator = iter(geometries)
@@ -165,7 +207,7 @@ def test_native_geometry_agrees_with_metric_cad_pose_and_offset_box(
         )
         reference_vertices += pose.translation
 
-        assert np.asarray(visual_mesh.vertices) == pytest.approx(reference_vertices)
+        assert numpy.asarray(visual_mesh.vertices) == pytest.approx(reference_vertices)
         assert visual_box.center == pytest.approx(box.pose.translation)
         assert visual_box.extent == pytest.approx(
             [box.x_length, box.y_length, box.z_length]
@@ -177,14 +219,14 @@ def test_native_geometry_agrees_with_metric_cad_pose_and_offset_box(
             tetris_meshes.geometries[block.model].bounds
             * block.model.value.metres_per_mesh_unit
         )
-        reference_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(
+        reference_frame = open3d.geometry.TriangleMesh.create_coordinate_frame(
             size=ObservationVisualization.coordinate_axis_length
         )
         frame_vertices = Rotation.from_quat(pose.rotation).apply(
-            np.asarray(reference_frame.vertices)
+            numpy.asarray(reference_frame.vertices)
         )
         frame_vertices += pose.translation
-        assert np.asarray(origin_frame.vertices) == pytest.approx(frame_vertices)
+        assert numpy.asarray(origin_frame.vertices) == pytest.approx(frame_vertices)
 
 
 # %% Replacing and preserving output
@@ -231,22 +273,22 @@ def test_empty_observation_clears_previous_image_and_block_geometry(
     output = annotator_output_buffer.map[pipeline.name].outputs[source.name]
     camera = engine.scenario.camera
     output.set_image(
-        np.full(
+        numpy.full(
             (camera.image_height, camera.image_width, 3),
-            ImageColor.FOREGROUND.value,
-            np.uint8,
+            astuple(ImageColor.FOREGROUND.value),
+            numpy.uint8,
         )
     )
-    output.set_geometries([o3d.geometry.TriangleMesh.create_box()])
+    output.set_geometries([open3d.geometry.TriangleMesh.create_box()])
     pipeline.tick_once()
 
     assert output.geometries == []
     assert (
         output.image.tolist()
-        == np.full(
+        == numpy.full(
             (camera.image_height, camera.image_width, 3),
-            ImageColor.BACKGROUND.value,
-            np.uint8,
+            astuple(ImageColor.BACKGROUND.value),
+            numpy.uint8,
         ).tolist()
     )
 
@@ -306,7 +348,7 @@ class InteractiveScene:
     Native window title supplied by the real Open3D backend.
     """
 
-    geometries: list[o3d.geometry.Geometry3D] = field(default_factory=list)
+    geometries: list[open3d.geometry.Geometry3D] = field(default_factory=list)
     """
     Geometry currently displayed by the window.
     """
@@ -321,7 +363,7 @@ class InteractiveScene:
     Whether the window continues accepting native events.
     """
 
-    def update_cloud(self, geometries: list[o3d.geometry.Geometry3D] | None) -> None:
+    def update_cloud(self, geometries: list[open3d.geometry.Geometry3D] | None) -> None:
         """
         Replace a scene when an annotator publishes visual geometry.
         """
@@ -364,7 +406,8 @@ def test_native_windows_remain_interactive_after_observations_are_exhausted(
     clock = ControlledClock()
     engine = AnalysisEngine(mesh_directory=tetris_meshes.directory, clock=clock)
     engine.scenario.timing = PlaybackTiming(
-        duration_nanoseconds=17, sample_period_nanoseconds=17
+        duration_nanoseconds=CaptureExample.SAMPLE_PERIOD_NANOSECONDS,
+        sample_period_nanoseconds=CaptureExample.SAMPLE_PERIOD_NANOSECONDS,
     )
     pipeline = engine.implementation()
     comparison_annotator = EmptyAnnotator()

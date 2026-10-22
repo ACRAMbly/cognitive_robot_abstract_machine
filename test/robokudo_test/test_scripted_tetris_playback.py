@@ -13,9 +13,16 @@ from robokudo.scripted_observations.exceptions import InvalidPlaybackTiming
 from robokudo.scripted_observations.scenario import PlaybackTiming
 from robokudo.types.scene import ObjectHypothesis
 
-from .test_scripted_tetris import ControlledClock, LocalMeshes, tetris_meshes
+from .test_scripted_tetris import (
+    CameraMetadata,
+    CaptureExample,
+    ControlledClock,
+    tetris_meshes,
+)
+from .test_scripted_tetris_motion import CapturedSequence
 
 if TYPE_CHECKING:
+    from .test_scripted_tetris import LocalMeshes
     from rclpy.node import Node
 
     from robokudo.annotators.outputs import AnnotatorOutputPerPipelineMap
@@ -62,20 +69,18 @@ def test_finite_headless_playback_includes_both_endpoints_and_then_stops(
     sequence_start = clock.timestamp_nanoseconds
     engine = AnalysisEngine(mesh_directory=tetris_meshes.directory, clock=clock)
     engine.scenario.timing = PlaybackTiming(
-        duration_nanoseconds=51, sample_period_nanoseconds=17
+        duration_nanoseconds=CaptureExample.FINAL_SAMPLE_INDEX
+        * CaptureExample.SAMPLE_PERIOD_NANOSECONDS,
+        sample_period_nanoseconds=CaptureExample.SAMPLE_PERIOD_NANOSECONDS,
     )
     timing = engine.scenario.timing
     pipeline = engine.implementation()
     tree = grow_tree(pipeline, node=node, include_gui=False)
-    observations = []
-
-    for offset in range(
-        0, timing.duration_nanoseconds + 1, timing.sample_period_nanoseconds
-    ):
-        clock.timestamp_nanoseconds = sequence_start + offset
-        tree.tick()
-        assert pipeline.status == Status.SUCCESS
-        observations.append(pipeline.get_cas())
+    observations = list(
+        CapturedSequence.capture(
+            engine, clock, pipeline=pipeline, tick=tree.tick
+        ).observations.values()
+    )
 
     expected_capture_times = list(
         range(
@@ -167,20 +172,26 @@ def test_late_ticks_preserve_every_scheduled_capture_and_camera_timestamp(
     sequence_start = clock.timestamp_nanoseconds
     engine = AnalysisEngine(mesh_directory=tetris_meshes.directory, clock=clock)
     engine.scenario.timing = PlaybackTiming(
-        duration_nanoseconds=3 * TimeUnit.NANOSECONDS_PER_SECOND,
+        duration_nanoseconds=CaptureExample.FINAL_SAMPLE_INDEX
+        * TimeUnit.NANOSECONDS_PER_SECOND,
         sample_period_nanoseconds=TimeUnit.NANOSECONDS_PER_SECOND,
     )
     timing = engine.scenario.timing
     pipeline = engine.implementation()
     pipeline.setup()
     pipeline.tick_once()
-    observations = [pipeline.get_cas()]
+    initial_observation = pipeline.get_cas()
     clock.timestamp_nanoseconds += 2 * timing.duration_nanoseconds
 
-    for _ in range(timing.duration_nanoseconds // timing.sample_period_nanoseconds):
-        pipeline.tick_once()
-        assert pipeline.status == Status.SUCCESS
-        observations.append(pipeline.get_cas())
+    observations = list(
+        CapturedSequence.capture(
+            engine,
+            clock,
+            pipeline=pipeline,
+            advance_clock=False,
+            previous_observations={0: initial_observation},
+        ).observations.values()
+    )
 
     expected_capture_times = list(
         range(
@@ -192,14 +203,12 @@ def test_late_ticks_preserve_every_scheduled_capture_and_camera_timestamp(
     assert [observation.data_timestamp for observation in observations] == (
         expected_capture_times
     )
-    assert [
-        observation.camera_info.header.stamp.sec * TimeUnit.NANOSECONDS_PER_SECOND
-        + observation.camera_info.header.stamp.nanosec
-        for observation in observations
-    ] == expected_capture_times
-    assert [observation.camera_frame for observation in observations] == [
-        engine.scenario.camera.frame
-    ] * len(expected_capture_times)
+    for observation, capture_timestamp in zip(
+        observations, expected_capture_times, strict=True
+    ):
+        CameraMetadata(engine.scenario.camera, capture_timestamp).assert_matches(
+            observation
+        )
     pipeline.tick_once()
     assert pipeline.status == Status.FAILURE
     assert pipeline.get_cas() is observations[-1]
