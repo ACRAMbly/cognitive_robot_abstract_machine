@@ -21,6 +21,7 @@ dependencies = [
   "random-events",
   "probabilistic_model",
   "robokudo",
+  "robokudo_acrambly",
   "physics_simulators",
   "experiments",
   "segmind",
@@ -91,6 +92,7 @@ members = [
   "probabilistic_model",
   "physics_simulators",
   "robokudo",
+  "robokudo_acrambly",
   "experiments",
   "segmind",
   "cramera"
@@ -104,6 +106,7 @@ krrood                = { workspace = true }
 probabilistic_model   = { workspace = true }
 random_events         = { workspace = true }
 robokudo              = { workspace = true }
+robokudo_acrambly      = { workspace = true }
 physics_simulators    = { workspace = true }
 segmind               = { workspace = true }
 experiments           = { workspace = true }
@@ -120,6 +123,7 @@ krrood = { path = "krrood", develop = true }
 random_events = { path = "random_events", develop = true }
 probabilistic_model = { path = "probabilistic_model", develop = true }
 robokudo = { path = "robokudo", develop = true }
+robokudo_acrambly = { path = "robokudo_acrambly", develop = true }
 physics_simulators = { path = "physics_simulators", develop = true }
 experiments = { path = "experiments", develop = true }
 segmind = { path = "segmind", develop = true }

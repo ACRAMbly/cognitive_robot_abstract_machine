@@ -9,7 +9,7 @@ from scipy.spatial.transform import Rotation
 from semantic_digital_twin.world_description.geometry import Mesh, Scale
 from typing_extensions import TYPE_CHECKING
 
-from robokudo.scripted_observations.exceptions import MissingMeshResource
+from robokudo_acrambly.scripted_observations.exceptions import MissingMeshResource
 from robokudo.types.annotation import BoundingBox3DAnnotation, PoseAnnotation, Shape
 from robokudo.types.tf import Pose
 from robokudo.utils.transform import get_transform_matrix
@@ -18,7 +18,7 @@ from robokudo.utils.transform import get_transform_matrix
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from robokudo.scripted_observations.models import TetrisModel
+    from robokudo_acrambly.scripted_observations.models import TetrisModel
 
 
 # %% Metric CAD geometry

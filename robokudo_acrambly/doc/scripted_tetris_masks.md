@@ -26,8 +26,9 @@ Partially visible meshes and inter-object occlusion are outside this source's
 contract. An unsupported mesh projection raises `InvalidCameraProjection` with
 its configured camera-relative pose.
 
-Core mask checks use deterministic local CAD fixtures in the RoboKudo test suite.
+Core mask checks use deterministic local CAD fixtures in the `robokudo_acrambly`
+test suite.
 Additional checks use supplied PLY files when available in
-`TETRIS_MESH_DIRECTORY`, falling back to the checkout root, and skip when those
-resources are absent. The fixture checks always run without external assets or
-services.
+`TETRIS_MESH_DIRECTORY`, falling back to the installed package's data directory,
+and skip when those resources are absent. The fixture checks always run without
+external assets or services.

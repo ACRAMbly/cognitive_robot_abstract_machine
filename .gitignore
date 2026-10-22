@@ -3,6 +3,7 @@ tmp/
 *.mypy_cache/
 build/
 data/
+!/robokudo_acrambly/src/robokudo_acrambly/data/
 test/tmp_data/
 bin/
 lib/

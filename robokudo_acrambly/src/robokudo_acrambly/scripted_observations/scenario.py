@@ -8,13 +8,13 @@ from enum import IntEnum, StrEnum
 import numpy
 from scipy.spatial.transform import Rotation, Slerp
 
-from robokudo.scripted_observations.clock import TimeUnit
-from robokudo.scripted_observations.exceptions import (
+from robokudo_acrambly.scripted_observations.clock import TimeUnit
+from robokudo_acrambly.scripted_observations.exceptions import (
     InvalidAbsenceInterval,
     InvalidPlaybackTiming,
     InvalidPoseKeyframes,
 )
-from robokudo.scripted_observations.models import TetrisModel
+from robokudo_acrambly.scripted_observations.models import TetrisModel
 from robokudo.types.tf import Pose
 
 

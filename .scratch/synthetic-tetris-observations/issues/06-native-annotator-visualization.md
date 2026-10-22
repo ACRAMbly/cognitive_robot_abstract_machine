@@ -65,7 +65,7 @@ native close termination, and headless independence without launcher or GUI
 lifecycle changes. Image dimensions and missing geometry were demonstrated by
 failing public-engine tests before output publication was implemented.
 
-The [native visualization guide](../../../robokudo/doc/scripted_tetris_visualization.md)
+The [native visualization guide](../../../robokudo_acrambly/doc/scripted_tetris_visualization.md)
 documents exact headless and native-GUI invocations, final-scene inspection, and
 existing exit/navigation controls. It is linked from the main engine guide.
 

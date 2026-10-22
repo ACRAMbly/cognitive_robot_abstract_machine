@@ -9,8 +9,8 @@ observations.
 ## Setup and headless execution
 
 Complete the workspace's [installation](../../README.md#installation), including
-its ROS 2 workspace setup. In a new terminal, replace the two `/path/to` paths
-below with your checkout and mesh directory:
+its ROS 2 workspace setup. In a new terminal, replace the checkout path below
+with your checkout:
 
 ```bash
 cd /path/to/cognitive_robot_abstract_machine
@@ -19,12 +19,14 @@ source "$HOME/ros_ws/install/setup.bash"
 source "$HOME/.virtualenvs/cram-env/bin/activate"
 uv sync --active
 python scripts/regenerate_all_orm.py
-export TETRIS_MESH_DIRECTORY=/path/to/tetris-meshes
-python -m robokudo.scripts.main _ae scripted_tetris _headless _tickrate 20
+export TETRIS_MESH_DIRECTORY="$PWD/robokudo_acrambly/src/robokudo_acrambly/data"
+python -m robokudo.scripts.main _ros_pkg robokudo_acrambly _ae scripted_tetris _headless _tickrate 20
 ```
 
-The configured directory must contain `child_cube_0_colored.ply` and
-`child_cube_2_colored.ply`. A missing resource reports its expected path. Their
+The example meshes ship in the package's `data` directory. You can configure a
+different mesh directory with `TETRIS_MESH_DIRECTORY`. It must contain
+`child_cube_0_colored.ply` and `child_cube_2_colored.ply`. A missing resource
+reports its expected path. Their
 model definitions declare millimetres and convert them to metres once, preserving
 the original CAD origin.
 
@@ -39,9 +41,9 @@ the actual run can take longer than the configured capture duration.
 The engine accepts an explicit mesh directory, scenario, and clock. The launcher
 constructs the default `AnalysisEngine` and reads `TETRIS_MESH_DIRECTORY`. Camera,
 block poses, absence intervals, and timing defaults live in
-[`scenario.py`](../src/robokudo/scripted_observations/scenario.py); the public
+[`scenario.py`](../src/robokudo_acrambly/scripted_observations/scenario.py); the public
 descriptor is
-[`scripted_tetris.py`](../src/robokudo/descriptors/analysis_engines/scripted_tetris.py).
+[`scripted_tetris.py`](../src/robokudo_acrambly/descriptors/analysis_engines/scripted_tetris.py).
 
 `TetrisScenario.timing` is a `PlaybackTiming` descriptor with
 `duration_nanoseconds` and `sample_period_nanoseconds`. Use a nonnegative duration

@@ -9,10 +9,12 @@ from py_trees.common import Status
 from typing_extensions import TYPE_CHECKING
 
 from robokudo.annotators.core import BaseAnnotator
-from robokudo.scripted_observations.camera import ObservationCamera
-from robokudo.scripted_observations.geometry import ModelGeometry
-from robokudo.scripted_observations.projection import ForegroundProjection
-from robokudo.scripted_observations.visualization import ObservationVisualization
+from robokudo_acrambly.scripted_observations.camera import ObservationCamera
+from robokudo_acrambly.scripted_observations.geometry import ModelGeometry
+from robokudo_acrambly.scripted_observations.projection import ForegroundProjection
+from robokudo_acrambly.scripted_observations.visualization import (
+    ObservationVisualization,
+)
 from robokudo.types.annotation import Classification
 from robokudo.types.scene import ObjectHypothesis
 
@@ -21,9 +23,9 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from robokudo.cas import CAS
-    from robokudo.scripted_observations.clock import Clock
-    from robokudo.scripted_observations.models import TetrisModel
-    from robokudo.scripted_observations.scenario import TetrisScenario
+    from robokudo_acrambly.scripted_observations.clock import Clock
+    from robokudo_acrambly.scripted_observations.models import TetrisModel
+    from robokudo_acrambly.scripted_observations.scenario import TetrisScenario
 
 
 # %% Observation annotations

@@ -11,7 +11,9 @@ from py_trees.common import Status
 from scipy.spatial.transform import Rotation
 from typing_extensions import TYPE_CHECKING
 
-from robokudo.descriptors.analysis_engines.scripted_tetris import AnalysisEngine
+from robokudo_acrambly.descriptors.analysis_engines.scripted_tetris import (
+    AnalysisEngine,
+)
 from robokudo.types.annotation import (
     BoundingBox3DAnnotation,
     Classification,
@@ -20,8 +22,8 @@ from robokudo.types.annotation import (
 )
 from robokudo.types.scene import ObjectHypothesis
 from robokudo.types.tf import Pose
-from robokudo.scripted_observations.scenario import PoseKeyframe
-from robokudo.scripted_observations.exceptions import InvalidPoseKeyframes
+from robokudo_acrambly.scripted_observations.scenario import PoseKeyframe
+from robokudo_acrambly.scripted_observations.exceptions import InvalidPoseKeyframes
 
 from .test_scripted_tetris import ControlledClock, tetris_meshes
 from .test_scripted_tetris_masks import ImageOccupancy, projection_mesh_directory
@@ -35,7 +37,7 @@ if TYPE_CHECKING:
     from rclpy.node import Node
 
     from robokudo.annotators.outputs import AnnotatorOutputPerPipelineMap
-    from robokudo.scripted_observations.models import TetrisModel
+    from robokudo_acrambly.scripted_observations.models import TetrisModel
 
 
 # %% Completed observations

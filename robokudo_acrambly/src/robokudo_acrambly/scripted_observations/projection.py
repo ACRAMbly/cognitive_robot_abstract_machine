@@ -10,7 +10,7 @@ import numpy
 from scipy.spatial.transform import Rotation
 from typing_extensions import TYPE_CHECKING
 
-from robokudo.scripted_observations.exceptions import InvalidCameraProjection
+from robokudo_acrambly.scripted_observations.exceptions import InvalidCameraProjection
 from robokudo.types.cv import ImageROI, Point2D, Rect
 from robokudo.utils.o3d_helper import project_points_to_image
 from robokudo.utils.transform import get_transform_matrix

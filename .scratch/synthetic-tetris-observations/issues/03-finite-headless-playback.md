@@ -79,8 +79,8 @@ and an 8 GiB virtual-memory cap. Modified Python files were formatted with
 `scripts/format_docstrings.py`, with a stable second pass.
 
 The actual default command
-`python -m robokudo.scripts.main _ae scripted_tetris _headless _tickrate 20`
+`python -m robokudo.scripts.main _ros_pkg robokudo_acrambly _ae scripted_tetris _headless _tickrate 20`
 completed with exit status zero using deterministic local meshes, under the same
 memory cap and a 45-second timeout. Setup, resource configuration, schedule
 semantics, CAS output access, and late delivery are documented in
-`robokudo/doc/scripted_tetris.md`, linked from the RoboKudo README.
+`robokudo_acrambly/doc/scripted_tetris.md`, linked from the extension package README.

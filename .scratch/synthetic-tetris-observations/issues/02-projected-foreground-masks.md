@@ -54,7 +54,7 @@ foreground/background pixel expectations. Deterministic and supplied-mesh checks
 confirm the example poses remain in frame and disjoint. Supplied checks skip when
 the configured assets are absent; deterministic coverage always runs in CI.
 Output contracts are documented in
-[scripted_tetris_masks.md](../../../robokudo/doc/scripted_tetris_masks.md).
+[scripted_tetris_masks.md](../../../robokudo_acrambly/doc/scripted_tetris_masks.md).
 
 Validation: the memory-bounded, serialized configured-interpreter run of
 `test_scripted_tetris.py`, `test_scripted_tetris_masks.py`, and `test_pipeline.py`

@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass, field
 from enum import Enum, auto
+from importlib.resources import files
 from pathlib import Path
 
 import numpy
@@ -12,13 +13,17 @@ import pytest
 from scipy.spatial.transform import Rotation
 from typing_extensions import TYPE_CHECKING
 
-from robokudo.descriptors.analysis_engines.scripted_tetris import (
+from robokudo_acrambly import data
+from robokudo_acrambly.descriptors.analysis_engines.scripted_tetris import (
     AnalysisEngine,
     MeshEnvironment,
 )
-from robokudo.scripted_observations.models import TetrisModel
-from robokudo.scripted_observations.projection import MaskPixel
-from robokudo.scripted_observations.scenario import CameraSettings, ScenarioPoses
+from robokudo_acrambly.scripted_observations.models import TetrisModel
+from robokudo_acrambly.scripted_observations.projection import MaskPixel
+from robokudo_acrambly.scripted_observations.scenario import (
+    CameraSettings,
+    ScenarioPoses,
+)
 from robokudo.types.cv import Point2D, Rect
 from robokudo.types.scene import ObjectHypothesis
 from robokudo.types.tf import Pose
@@ -208,9 +213,7 @@ def projection_mesh_directory(
     """
     if request.param is ProjectionResources.FIXTURE:
         return tetris_meshes.directory
-    directory = Path(
-        os.environ.get(MeshEnvironment.DIRECTORY, Path(__file__).resolve().parents[2])
-    )
+    directory = Path(os.environ.get(MeshEnvironment.DIRECTORY, str(files(data))))
     if not all(
         (directory / model.value.mesh_filename).is_file() for model in TetrisModel
     ):

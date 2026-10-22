@@ -11,8 +11,8 @@ from typing_extensions import TYPE_CHECKING
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from robokudo.scripted_observations.models import ModelIdentifier
-    from robokudo.scripted_observations.scenario import AbsenceInterval
+    from robokudo_acrambly.scripted_observations.models import ModelIdentifier
+    from robokudo_acrambly.scripted_observations.scenario import AbsenceInterval
     from robokudo.types.tf import Pose
 
 

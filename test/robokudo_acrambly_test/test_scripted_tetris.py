@@ -15,14 +15,17 @@ from typing_extensions import TYPE_CHECKING
 
 from robokudo import world as robokudo_world
 
-from robokudo.descriptors.analysis_engines.scripted_tetris import (
+from robokudo_acrambly.descriptors.analysis_engines.scripted_tetris import (
     AnalysisEngine,
     MeshEnvironment,
 )
-from robokudo.scripted_observations.clock import Clock, TimeUnit
-from robokudo.scripted_observations.exceptions import MissingMeshResource
-from robokudo.scripted_observations.models import TetrisModel
-from robokudo.scripted_observations.scenario import CameraSettings, ScenarioPoses
+from robokudo_acrambly.scripted_observations.clock import Clock, TimeUnit
+from robokudo_acrambly.scripted_observations.exceptions import MissingMeshResource
+from robokudo_acrambly.scripted_observations.models import TetrisModel
+from robokudo_acrambly.scripted_observations.scenario import (
+    CameraSettings,
+    ScenarioPoses,
+)
 from robokudo.types.annotation import (
     BoundingBox3DAnnotation,
     Classification,

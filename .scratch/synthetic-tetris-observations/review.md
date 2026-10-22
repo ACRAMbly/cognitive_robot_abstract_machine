@@ -11,7 +11,7 @@ implementation tickets and the specification are resolved.
 
 ## Standards axis: original report
 
-Hard violations (paths below are relative to `robokudo/src/robokudo/` or `test/robokudo_test/`; rules are from root `AGENTS.md`):
+Hard violations (paths below are relative to `robokudo_acrambly/src/robokudo_acrambly/` or `test/robokudo_acrambly_test/`; rules are from root `AGENTS.md`):
 
 1. `annotators/scripted_observation.py:100–149`: `update` mixes scheduling/orchestration with detailed hypothesis construction. Breaches Methods: “every statement … on the same level of abstraction.”
 2. `scripted_observations/scenario.py:125–148`: repeats the exact cadence-alignment predicate across both validators. `test_scripted_tetris_masks.py:184–198` and `test_scripted_tetris_motion.py:351–362` repeat occupancy checks; static/sequence tests duplicate calibration assertions and playback/motion/sequence tests duplicate capture loops. Breaches Code Style: “Never duplicate code.”
@@ -104,12 +104,12 @@ All 63 pre-existing scripted feature cases pass after the review refactor:
 
 ```sh
 /tmp/tetris-pytest-configured \
-  test/robokudo_test/test_scripted_tetris.py \
-  test/robokudo_test/test_scripted_tetris_masks.py \
-  test/robokudo_test/test_scripted_tetris_motion.py \
-  test/robokudo_test/test_scripted_tetris_playback.py \
-  test/robokudo_test/test_scripted_tetris_sequence.py \
-  test/robokudo_test/test_scripted_tetris_visualization.py \
+  test/robokudo_acrambly_test/test_scripted_tetris.py \
+  test/robokudo_acrambly_test/test_scripted_tetris_masks.py \
+  test/robokudo_acrambly_test/test_scripted_tetris_motion.py \
+  test/robokudo_acrambly_test/test_scripted_tetris_playback.py \
+  test/robokudo_acrambly_test/test_scripted_tetris_sequence.py \
+  test/robokudo_acrambly_test/test_scripted_tetris_visualization.py \
   --disable-warnings -q
 ```
 

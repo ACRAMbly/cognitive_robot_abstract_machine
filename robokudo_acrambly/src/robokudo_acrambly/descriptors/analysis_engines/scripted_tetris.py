@@ -10,17 +10,17 @@ from pathlib import Path
 from typing_extensions import TYPE_CHECKING
 
 from robokudo.analysis_engine import AnalysisEngineInterface
-from robokudo.annotators.scripted_observation import (
+from robokudo_acrambly.annotators.scripted_observation import (
     ObservationLabel,
     ScriptedObservationAnnotator,
 )
 from robokudo.pipeline import Pipeline
-from robokudo.scripted_observations.clock import SystemClock
-from robokudo.scripted_observations.scenario import TetrisScenario
+from robokudo_acrambly.scripted_observations.clock import SystemClock
+from robokudo_acrambly.scripted_observations.scenario import TetrisScenario
 
 
 if TYPE_CHECKING:
-    from robokudo.scripted_observations.clock import Clock
+    from robokudo_acrambly.scripted_observations.clock import Clock
 
 
 # %% Mesh resource configuration

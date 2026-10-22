@@ -103,7 +103,16 @@ jobs:
           if [[ "${{ inputs.lib }}" == "semantic_digital_twin" ]]; then
             export MUJOCO_GL=egl
           fi
-          if [[ "${{ inputs.lib }}" == "cramera" ]]; then
+          if [[ "${{ inputs.lib }}" == "robokudo_acrambly" ]]; then
+            export OPENBLAS_NUM_THREADS=1
+            export OMP_NUM_THREADS=1
+            free -m
+            # Reserve a quarter of available memory for the runner and other processes.
+            test_memory_limit_kib=$(awk '/MemAvailable/ {print int($2 * 3 / 4)}' /proc/meminfo)
+            ulimit -v "$test_memory_limit_kib"
+            python cognitive_robot_abstract_machine/scripts/regenerate_all_orm.py
+            python -m pytest --orm-build never cognitive_robot_abstract_machine/test/robokudo_acrambly_test
+          elif [[ "${{ inputs.lib }}" == "cramera" ]]; then
             python -m pytest -n auto --cov=cramera --cov-fail-under=85 cognitive_robot_abstract_machine/test/cramera_test
           else
             python -m pytest -n auto cognitive_robot_abstract_machine/test/${{ inputs.lib }}_test

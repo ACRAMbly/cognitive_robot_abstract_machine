@@ -9,14 +9,14 @@ import open3d
 from sensor_msgs.msg import CameraInfo
 from typing_extensions import TYPE_CHECKING
 
-from robokudo.scripted_observations.clock import TimeUnit
+from robokudo_acrambly.scripted_observations.clock import TimeUnit
 from robokudo.utils.camera_model import (
     pinhole_camera_parameters_from_horizontal_field_of_view,
 )
 
 if TYPE_CHECKING:
     from robokudo.cas import CAS
-    from robokudo.scripted_observations.scenario import CameraSettings
+    from robokudo_acrambly.scripted_observations.scenario import CameraSettings
 
 
 # %% Camera metadata

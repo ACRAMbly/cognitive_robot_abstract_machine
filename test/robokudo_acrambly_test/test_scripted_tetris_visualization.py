@@ -16,15 +16,17 @@ from typing_extensions import TYPE_CHECKING
 
 import robokudo.vis.o3d_visualizer as native_geometry_windows
 from robokudo.annotators.testing import EmptyAnnotator
-from robokudo.descriptors.analysis_engines.scripted_tetris import AnalysisEngine
+from robokudo_acrambly.descriptors.analysis_engines.scripted_tetris import (
+    AnalysisEngine,
+)
 from robokudo.garden import grow_tree
-from robokudo.scripted_observations.projection import MaskPixel
-from robokudo.scripted_observations.scenario import (
+from robokudo_acrambly.scripted_observations.projection import MaskPixel
+from robokudo_acrambly.scripted_observations.scenario import (
     CameraSettings,
     PlaybackTiming,
     ScenarioPoses,
 )
-from robokudo.scripted_observations.visualization import (
+from robokudo_acrambly.scripted_observations.visualization import (
     ImageColor,
     ObservationVisualization,
 )

@@ -16,6 +16,12 @@ Creating and updating persistent beliefs belongs to the separate connector work.
 
 ## Solution
 
+Keep the custom implementation in the `robokudo_acrambly` workspace package.
+It owns the annotator, analysis engine, observation support, guides, tests, and
+both PLY meshes. Target the unchanged RoboKudo version on the repository's base
+branch. Select the extension with `_ros_pkg robokudo_acrambly` and preserve the
+`TETRIS_MESH_DIRECTORY` configuration interface.
+
 Provide a runnable `scripted_tetris` analysis engine that turns an editable
 scenario into fresh CAS observations. The default sequence emits ten observations
 per second from zero through thirty seconds inclusive, producing 301 observations.
@@ -306,7 +312,7 @@ interpreter with Open3D 0.20.0, serialized execution, a free-memory check, an
 
 ```bash
 python -m pytest \
-  test/robokudo_test/test_scripted_tetris*.py \
+  test/robokudo_acrambly_test/test_scripted_tetris*.py \
   test/robokudo_test/test_pipeline.py \
   test/robokudo_test/test_cas.py \
   test/robokudo_test/test_garden.py \
@@ -319,8 +325,8 @@ Result: **91 passed, 19 existing dependency warnings in 18.05 seconds**.
 The real default headless command also completed with the supplied PLY meshes:
 
 ```bash
-TETRIS_MESH_DIRECTORY="$PWD" \
-  python -m robokudo.scripts.main _ae scripted_tetris _headless _tickrate 20
+TETRIS_MESH_DIRECTORY="$PWD/robokudo_acrambly/src/robokudo_acrambly/data" \
+  python -m robokudo.scripts.main _ros_pkg robokudo_acrambly _ae scripted_tetris _headless _tickrate 20
 ```
 
 It exited with status **0** in **37.63 seconds including startup**, with no
@@ -331,5 +337,5 @@ All 17 changed Python files pass `scripts/format_docstrings.py` unchanged, and
 `git diff --check` passes. The independent review found zero specification
 mismatches; all eight documented standards groups were fixed, and the two
 heuristics were considered separately. See [review.md](review.md), the
-[run guide](../../robokudo/doc/scripted_tetris.md), and the
+[run guide](../../robokudo_acrambly/doc/scripted_tetris.md), and the
 [prepared PR description](pull-request.md).

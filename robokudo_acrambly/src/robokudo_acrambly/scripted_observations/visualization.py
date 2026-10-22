@@ -9,7 +9,7 @@ import numpy
 import open3d
 from typing_extensions import TYPE_CHECKING
 
-from robokudo.scripted_observations.projection import MaskPixel
+from robokudo_acrambly.scripted_observations.projection import MaskPixel
 from robokudo.types.annotation import (
     BoundingBox3DAnnotation,
     Classification,

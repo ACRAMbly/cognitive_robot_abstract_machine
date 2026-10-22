@@ -6,13 +6,13 @@ and configure `TETRIS_MESH_DIRECTORY` before running either command below.
 The default documented run remains headless and exits after its final observation:
 
 ```bash
-python -m robokudo.scripts.main _ae scripted_tetris _headless _tickrate 20
+python -m robokudo.scripts.main _ros_pkg robokudo_acrambly _ae scripted_tetris _headless _tickrate 20
 ```
 
 To opt into RoboKudo's native OpenCV image window and Open3D scene window, run:
 
 ```bash
-python -m robokudo.scripts.main _ae scripted_tetris _tickrate 20
+python -m robokudo.scripts.main _ros_pkg robokudo_acrambly _ae scripted_tetris _tickrate 20
 ```
 
 The existing launcher also enables its normal ROS visualization outputs. Keep
