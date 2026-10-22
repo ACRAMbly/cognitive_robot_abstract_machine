@@ -13,6 +13,7 @@ from robokudo.scripted_observations.camera import ObservationCamera
 from robokudo.scripted_observations.exceptions import InvalidPlaybackTiming
 from robokudo.scripted_observations.geometry import ModelGeometry
 from robokudo.scripted_observations.projection import ForegroundProjection
+from robokudo.scripted_observations.visualization import ObservationVisualization
 from robokudo.types.annotation import Classification
 from robokudo.types.scene import ObjectHypothesis
 
@@ -140,5 +141,9 @@ class ScriptedObservationAnnotator(BaseAnnotator):
                     ),
                 )
             )
+        visualization = ObservationVisualization(pipeline.cas)
+        output = self.get_annotator_output_struct()
+        output.set_image(visualization.create_image())
+        output.set_geometries(visualization.create_geometries())
         self.observation_index += 1
         return Status.SUCCESS

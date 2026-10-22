@@ -57,6 +57,8 @@ offsets come from the loaded mesh.
 Each block also carries an image region and a cropped binary foreground mask
 following its projected CAD outline. See the
 [mask conventions and limitations](scripted_tetris_masks.md) for details.
+Optional [native visualization](scripted_tetris_visualization.md) displays the
+annotator's 2D and 3D outputs and retains the final scene for inspection.
 
 ## Complete default timeline
 
