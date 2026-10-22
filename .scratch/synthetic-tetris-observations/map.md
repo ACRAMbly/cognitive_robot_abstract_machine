@@ -83,6 +83,12 @@
   annotator navigation, and native exit. Engine/mask/playback/visualization checks
   passed 33 tests; existing pipeline/garden/GUI checks passed 14 with Open3D 0.20.0.
 
+- Resolved [ticket 04](issues/04-motion-and-pauses.md): editable visible pose
+  keyframes, linear translation, shortest-path rotation, exact endpoints, motion
+  pauses, stationary reference poses, and consistent projected/metric geometry.
+  Full 301-capture footprints pass with fixture and supplied meshes; combined
+  static/mask/playback/motion/pipeline validation: 46 passed.
+
 ## Design tree
 
 - Observation contract: hypotheses only, as required by the supplied plan.
