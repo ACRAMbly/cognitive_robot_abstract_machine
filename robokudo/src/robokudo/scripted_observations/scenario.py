@@ -9,7 +9,10 @@ import numpy as np
 from scipy.spatial.transform import Rotation, Slerp
 
 from robokudo.scripted_observations.clock import TimeUnit
-from robokudo.scripted_observations.exceptions import InvalidPoseKeyframes
+from robokudo.scripted_observations.exceptions import (
+    InvalidAbsenceInterval,
+    InvalidPoseKeyframes,
+)
 from robokudo.scripted_observations.models import TetrisModel
 from robokudo.types.tf import Pose
 
@@ -75,8 +78,27 @@ class PoseKeyframe:
 
 
 @dataclass
+class AbsenceInterval:
+    """An editable half-open interval in which a block has no detection."""
+
+    start_nanoseconds: int
+    """First elapsed capture time at which the block is absent."""
+
+    end_nanoseconds: int
+    """Elapsed capture time at which the block becomes visible again."""
+
+
+class AppearanceBoundary(IntEnum):
+    """Default offsets separating visible and absent observations."""
+
+    FIRST_DISAPPEARS = 21 * TimeUnit.NANOSECONDS_PER_SECOND
+    SECOND_DISAPPEARS = 24 * TimeUnit.NANOSECONDS_PER_SECOND
+    BOTH_REAPPEAR = 27 * TimeUnit.NANOSECONDS_PER_SECOND
+
+
+@dataclass
 class BlockState:
-    """One visible block located by its original CAD origin."""
+    """One block's camera-relative motion and discrete visibility."""
 
     model: TetrisModel
     """CAD model describing this block's object kind."""
@@ -86,6 +108,35 @@ class BlockState:
 
     keyframes: list[PoseKeyframe] = field(default_factory=list)
     """Scheduled poses after the initial pose, with equal poses defining holds."""
+
+    absence_intervals: list[AbsenceInterval] = field(default_factory=list)
+    """Half-open capture intervals in which this block has no hypothesis."""
+
+    def is_visible(self, elapsed_nanoseconds: int) -> bool:
+        """Return whether this block appears in the scheduled observation."""
+        return not any(
+            interval.start_nanoseconds <= elapsed_nanoseconds < interval.end_nanoseconds
+            for interval in self.absence_intervals
+        )
+
+    def validate_absence_intervals(self, timing: PlaybackTiming) -> None:
+        """Reject negative, reversed, or unsampled visibility boundaries."""
+        for interval in self.absence_intervals:
+            unsampled = any(
+                offset <= timing.duration_nanoseconds
+                and offset % timing.sample_period_nanoseconds != 0
+                for offset in [interval.start_nanoseconds, interval.end_nanoseconds]
+            )
+            if (
+                interval.start_nanoseconds < 0
+                or interval.end_nanoseconds <= interval.start_nanoseconds
+                or unsampled
+            ):
+                raise InvalidAbsenceInterval(
+                    self.model.value.identifier,
+                    interval,
+                    timing.sample_period_nanoseconds,
+                )
 
     def validate_keyframes(self, timing: PlaybackTiming) -> None:
         """Reject unordered endpoints or endpoints absent from the capture schedule."""
@@ -142,7 +193,7 @@ class TetrisScenario:
     blocks: list[BlockState] = field(
         default_factory=lambda: TetrisScenario.create_blocks()
     )
-    """Visible blocks and their editable camera-relative keyframes."""
+    """Blocks with editable camera-relative keyframes and absence intervals."""
 
     @staticmethod
     def create_blocks() -> list[BlockState]:
@@ -169,9 +220,21 @@ class TetrisScenario:
                     ),
                     PoseKeyframe(MotionBoundary.ROTATION_FINISHED, rotated_pose),
                 ],
+                absence_intervals=[
+                    AbsenceInterval(
+                        AppearanceBoundary.FIRST_DISAPPEARS,
+                        AppearanceBoundary.BOTH_REAPPEAR,
+                    )
+                ],
             ),
             BlockState(
                 TetrisModel.SECOND,
                 Pose(translation=[0.05, -0.15, 1.00], rotation=[0.0, 0.0, 0.0, 1.0]),
+                absence_intervals=[
+                    AbsenceInterval(
+                        AppearanceBoundary.SECOND_DISAPPEARS,
+                        AppearanceBoundary.BOTH_REAPPEAR,
+                    )
+                ],
             ),
         ]

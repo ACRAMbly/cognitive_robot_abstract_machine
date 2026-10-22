@@ -38,7 +38,7 @@ the actual run can take longer than the configured capture duration.
 
 The engine accepts an explicit mesh directory, scenario, and clock. The launcher
 constructs the default `AnalysisEngine` and reads `TETRIS_MESH_DIRECTORY`. Camera,
-block poses, and timing defaults live in
+block poses, absence intervals, and timing defaults live in
 [`scenario.py`](../src/robokudo/scripted_observations/scenario.py); the public
 descriptor is
 [`scripted_tetris.py`](../src/robokudo/descriptors/analysis_engines/scripted_tetris.py).
@@ -58,7 +58,7 @@ Each block also carries an image region and a cropped binary foreground mask
 following its projected CAD outline. See the
 [mask conventions and limitations](scripted_tetris_masks.md) for details.
 
-## Motion keyframes and pauses
+## Complete default timeline
 
 Each `BlockState.pose` supplies its initial CAD-origin pose. Its `keyframes` list
 contains editable `PoseKeyframe` descriptors with `elapsed_nanoseconds` and `pose`.
@@ -66,13 +66,23 @@ The default first block starts at `(-0.30, -0.15, 1.00)` metres, translates to
 `(-0.20, -0.15, 1.00)`, and turns positive ninety degrees about optical camera Z.
 The second block remains at `(0.05, -0.15, 1.00)` with identity orientation.
 
-| Elapsed capture time | First block |
-| --- | --- |
-| 0–3 seconds | Hold the initial pose |
-| 3–9 seconds | Translate linearly to the translated pose |
-| 9–12 seconds | Hold the translated pose |
-| 12–18 seconds | Rotate along the shortest quaternion path |
-| 18–30 seconds | Hold the rotated pose |
+| Elapsed capture time | First block | Second block |
+| --- | --- | --- |
+| 0–3 seconds | Hold the initial pose | Hold the initial pose |
+| 3–9 seconds | Translate linearly to the translated pose | Stationary |
+| 9–12 seconds | Hold the translated pose | Stationary |
+| 12–18 seconds | Rotate along the shortest quaternion path | Stationary |
+| 18–21 seconds | Hold the rotated pose | Stationary |
+| 21–24 seconds | Absent | Stationary |
+| 24–27 seconds | Absent | Absent |
+| 27–30 seconds, including the final sample | Hold the last rotated pose | Hold the initial pose |
+
+Each boundary emits its new interval's state once. There are 301 completed
+observations: 241 contain both blocks, 30 contain only the second block, and 30
+are empty. Reappearance keeps the last visible poses and creates fresh detection
+identifiers. It introduces no return motion or repeat playback.
+
+## Editing motion and visibility
 
 Equal consecutive keyframe poses define a pause. The first pose also holds after
 the final keyframe, and an empty keyframe list leaves a block stationary. Edit the
@@ -92,6 +102,20 @@ Pauses keep the configured capture cadence. Each capture has a fresh CAS and new
 detection identifiers even when its poses are unchanged. The same interpolated
 CAD-origin pose locates the image outline and enclosing box, including rotation
 of the box's mesh-derived center offset.
+
+Each block's `absence_intervals` list contains editable `AbsenceInterval`
+descriptors with `start_nanoseconds` and `end_nanoseconds`. Intervals are half-open:
+the block is absent at the start and visible again at the end. The default first
+block is absent during `[21 s, 27 s)` and the second during `[24 s, 27 s)`.
+An empty list leaves the block visible throughout playback; multiple intervals
+hide it whenever any interval includes the scheduled capture offset. Pose
+keyframes continue independently of visibility.
+
+Use a nonnegative start strictly before the end. Endpoints within playback must
+align with `sample_period_nanoseconds`; later endpoints may remain when shortening
+the sequence. The block definitions and meshes remain configured while the scene
+is empty. Empty captures carry a fresh CAS and the same camera metadata as visible
+captures, with no stale detections from the preceding observation.
 
 ## Consuming observations
 

@@ -8,7 +8,7 @@ observations and then exits.
 
 **Blocked by:** 04: Play translation, rotation, and motion pauses.
 
-**Status:** ready-for-agent
+**Status:** claimed
 
 Implementation requires separate explicit user permission. Follow the approved
 synthetic Tetris observation specification and domain glossary. Visibility

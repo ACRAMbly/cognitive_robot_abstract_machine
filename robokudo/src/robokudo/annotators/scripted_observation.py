@@ -90,6 +90,7 @@ class ScriptedObservationAnnotator(BaseAnnotator):
             )
         for block in self.scenario.blocks:
             block.validate_keyframes(timing)
+            block.validate_absence_intervals(timing)
         self.models = {
             block.model: ModelGeometry.from_directory(block.model, self.mesh_directory)
             for block in self.scenario.blocks
@@ -113,6 +114,8 @@ class ScriptedObservationAnnotator(BaseAnnotator):
             pipeline.cas, capture_timestamp
         )
         for block in self.scenario.blocks:
+            if not block.is_visible(capture_offset):
+                continue
             object_pose = block.interpolate_pose(capture_offset)
             pipeline.cas.annotations.append(
                 ObjectHypothesis(

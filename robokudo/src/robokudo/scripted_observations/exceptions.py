@@ -12,6 +12,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from robokudo.scripted_observations.models import ModelIdentifier
+    from robokudo.scripted_observations.scenario import AbsenceInterval
     from robokudo.types.tf import Pose
 
 
@@ -112,5 +113,38 @@ class InvalidPoseKeyframes(DataclassException):
     def suggest_correction(self) -> str:
         return (
             "Use strictly increasing positive offsets; keyframes within the playback "
+            "duration must be exact multiples of the sample period."
+        )
+
+
+# %% Visibility configuration errors
+
+
+@dataclass
+class InvalidAbsenceInterval(DataclassException):
+    """
+    A block's absence interval cannot form a discrete sampled transition.
+    """
+
+    model_identifier: ModelIdentifier
+    """Object kind whose absence interval is invalid."""
+
+    absence_interval: AbsenceInterval
+    """
+    Configured half-open elapsed capture interval.
+    """
+
+    sample_period_nanoseconds: int
+    """Scheduled time between consecutive observations."""
+
+    def error_message(self) -> str:
+        return (
+            f"Invalid absence interval for {self.model_identifier}: "
+            f"{self.absence_interval} with sample period {self.sample_period_nanoseconds} ns."
+        )
+
+    def suggest_correction(self) -> str:
+        return (
+            "Use a nonnegative start before the end; endpoints within the playback "
             "duration must be exact multiples of the sample period."
         )
