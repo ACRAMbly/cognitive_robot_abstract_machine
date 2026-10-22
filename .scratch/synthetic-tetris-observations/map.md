@@ -3,7 +3,7 @@
 ## Notes
 
 - Plan: [synthetic_data_analysis_engine.md](../../synthetic_data_analysis_engine.md).
-- Published spec: [spec.md](spec.md), marked `ready-for-agent`.
+- Published spec: [spec.md](spec.md), marked `resolved`.
 - Reviewed defaults: [playback-proposal.md](playback-proposal.md), now incorporated
   into the plan.
 - The design interview and `to-spec` synthesis are complete. Static observations,
@@ -98,6 +98,14 @@
   visualization: all six scripted suites pass 63 tests; existing pipeline, CAS,
   garden, and type-conversion checks pass 23 tests separately.
 
+- Completed the separate [standards and specification review](review.md): eight
+  standards groups fixed, two heuristics considered, and zero specification
+  mismatches. Final integrated validation passed 91 tests with the configured
+  workspace interpreter and Open3D 0.20.0. All 17 Python files are formatter
+  stable. The real headless command with supplied meshes exited successfully
+  in 37.63 seconds including startup. The [PR description](pull-request.md)
+  records the implementation and validation.
+
 ## Design tree
 
 - Observation contract: hypotheses only, as required by the supplied plan.
@@ -124,4 +132,5 @@
 
 ## Fog
 
-No open design questions remain. The published spec is ready for implementation.
+No open design or implementation work remains. All six tickets and the spec are
+resolved, reviewed, and validated.

@@ -1,12 +1,13 @@
 # Synthetic Tetris observations review
 
-Reviewed integration base: `4607593b890d0c9f40893971247d1e326003ec6c`.
+Reviewed implementation: `f831580c2633461d3ca4ecc672374a766a55ebc3` through
+`4607593b890d0c9f40893971247d1e326003ec6c`.
+Review fixes: `57a48a350b1adb1b8e1cde7ccc7e94fb97b16435`.
 
 The independent review reported **8 documented standards findings**, **2 heuristic
 judgment calls**, and **0 specification findings**. All eight documented groups
-are resolved below. The specification and its six implementation tickets remain
-unchanged; final integration validation and tracker completion belong to the
-integrating agent.
+are resolved below. The specification requirements remain unchanged; all six
+implementation tickets and the specification are resolved.
 
 ## Standards axis: original report
 
@@ -118,5 +119,20 @@ a pre-run memory check, an 8 GiB virtual-memory cap, and `--orm-build never`.
 The log is `/tmp/tetris-review-focused.log`. No existing failing test was edited;
 all 63 cases were passing at the reviewed base and remain passing. All modified
 Python files were processed with `scripts/format_docstrings.py`, and
-`git diff --check` passes. Final integrated selection and real headless launcher
-validation will be recorded by the integrating agent.
+`git diff --check` passes.
+
+### Final integrated validation
+
+The integrating agent ran all six scripted modules plus existing pipeline, CAS,
+garden, GUI, and type-conversion checks using the configured workspace Python
+3.12.3 interpreter, Open3D 0.20.0, serialized execution, a free-memory check,
+an 8 GiB cap, and `--orm-build never`:
+**91 passed, 19 existing dependency warnings in 18.05 seconds**.
+
+The documented headless command ran with the supplied PLY meshes at 20 ticks
+per second and exited with status **0** in **37.63 seconds including startup**.
+Its log contains no Python exception. Native desktop windows were intercepted
+by tests; a manual desktop inspection was not performed.
+
+All 17 changed Python files are unchanged by the repository formatter, and
+`git diff --check` is clean. No review findings remain unresolved.
