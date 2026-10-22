@@ -70,7 +70,8 @@ documents exact headless and native-GUI invocations, final-scene inspection, and
 existing exit/navigation controls. It is linked from the main engine guide.
 
 Validation with the configured interpreter and staged Open3D 0.20.0:
-the static, masks, finite-playback, and visualization batch passed **33 tests**,
-including local supplied meshes. The existing pipeline/garden/GUI batch passed
+the static, masks, finite-playback, motion, and visualization batch passed
+**50 tests** after merging ticket 04, including local supplied meshes. The
+existing pipeline/garden/GUI batch passed
 **14 tests**. Both runs used the serialized memory-bounded launcher and
 `--orm-build never`. The formatter is stable on all three modified Python files.
