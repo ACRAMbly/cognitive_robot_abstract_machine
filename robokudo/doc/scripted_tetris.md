@@ -86,8 +86,8 @@ identifiers. It introduces no return motion or repeat playback.
 
 ## Editing motion and visibility
 
-Equal consecutive keyframe poses define a pause. The first pose also holds after
-the final keyframe, and an empty keyframe list leaves a block stationary. Edit the
+Equal consecutive keyframe poses define a pause. The final keyframe pose holds
+after its endpoint, and an empty keyframe list leaves a block stationary. Edit the
 hold endpoints to change pauses and the movement endpoints to change motion
 durations. Initial, translated, and rotated poses are each defined once in the
 default block factory; repeated hold keyframes reference those same poses.

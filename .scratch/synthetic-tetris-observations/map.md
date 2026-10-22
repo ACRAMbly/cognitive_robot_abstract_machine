@@ -7,8 +7,8 @@
 - Reviewed defaults: [playback-proposal.md](playback-proposal.md), now incorporated
   into the plan.
 - The design interview and `to-spec` synthesis are complete. Static observations,
-  image evidence, finite playback, motion, and native visualization are
-  implemented; visibility remains open.
+  image evidence, finite playback, motion, visibility, and native visualization
+  are implemented.
 - Preserve the existing local changes and untracked assets.
 - RoboKudo's standard runner imports its shared world before loading the engine:
   [main.py](../../robokudo/src/robokudo/scripts/main.py#L5),
@@ -89,6 +89,14 @@
   pauses, stationary reference poses, and consistent projected/metric geometry.
   Full 301-capture footprints pass with fixture and supplied meshes; combined
   static/mask/playback/motion/pipeline validation: 46 passed.
+
+- Resolved [ticket 05](issues/05-default-observation-sequence.md): editable
+  half-open absence intervals complete the default 301-capture sequence, including
+  the single-block and empty stages and reappearance at the last visible poses.
+  Full regular/late public-engine coverage preserves fresh CAS metadata, unique
+  detections, stable exhaustion, and world/belief isolation. After merging native
+  visualization: all six scripted suites pass 63 tests; existing pipeline, CAS,
+  garden, and type-conversion checks pass 23 tests separately.
 
 ## Design tree
 
