@@ -11,6 +11,7 @@ from typing_extensions import TYPE_CHECKING
 if TYPE_CHECKING:
     from pathlib import Path
 
+    from robokudo.scripted_observations.models import ModelIdentifier
     from robokudo.types.tf import Pose
 
 
@@ -80,3 +81,36 @@ class InvalidCameraProjection(DataclassException):
 
     def suggest_correction(self) -> str:
         return "Place the complete mesh in front of the camera and inside the image."
+
+
+# %% Motion configuration errors
+
+
+@dataclass
+class InvalidPoseKeyframes(DataclassException):
+    """
+    A block's keyframes cannot form the configured sampled motion.
+    """
+
+    model_identifier: ModelIdentifier
+    """Object kind whose keyframes are invalid."""
+
+    keyframe_offsets_nanoseconds: list[int]
+    """
+    Configured keyframe offsets relative to the initial capture.
+    """
+
+    sample_period_nanoseconds: int
+    """Scheduled time between consecutive observations."""
+
+    def error_message(self) -> str:
+        return (
+            f"Invalid pose keyframe offsets for {self.model_identifier}: "
+            f"{self.keyframe_offsets_nanoseconds} with sample period {self.sample_period_nanoseconds} ns."
+        )
+
+    def suggest_correction(self) -> str:
+        return (
+            "Use strictly increasing positive offsets; keyframes within the playback "
+            "duration must be exact multiples of the sample period."
+        )

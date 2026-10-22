@@ -88,6 +88,8 @@ class ScriptedObservationAnnotator(BaseAnnotator):
                 duration_nanoseconds=timing.duration_nanoseconds,
                 sample_period_nanoseconds=timing.sample_period_nanoseconds,
             )
+        for block in self.scenario.blocks:
+            block.validate_keyframes(timing)
         self.models = {
             block.model: ModelGeometry.from_directory(block.model, self.mesh_directory)
             for block in self.scenario.blocks
@@ -111,6 +113,7 @@ class ScriptedObservationAnnotator(BaseAnnotator):
             pipeline.cas, capture_timestamp
         )
         for block in self.scenario.blocks:
+            object_pose = block.interpolate_pose(capture_offset)
             pipeline.cas.annotations.append(
                 ObjectHypothesis(
                     source=self.name,
@@ -119,7 +122,7 @@ class ScriptedObservationAnnotator(BaseAnnotator):
                         f"{block.model.value.identifier}"
                     ),
                     roi=ForegroundProjection(
-                        self.models[block.model].mesh, block.pose
+                        self.models[block.model].mesh, object_pose
                     ).create_region(pipeline.cas),
                     annotations=[
                         Classification(
@@ -130,7 +133,7 @@ class ScriptedObservationAnnotator(BaseAnnotator):
                         )
                     ]
                     + self.models[block.model].create_annotations(
-                        block.pose, self.name
+                        object_pose, self.name
                     ),
                 )
             )

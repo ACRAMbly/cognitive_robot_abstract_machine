@@ -78,6 +78,12 @@
   headless runner. Public engine, masks, playback, and pipeline checks: 29 passed.
   The default headless CLI also completed successfully with local mesh fixtures.
 
+- Resolved [ticket 04](issues/04-motion-and-pauses.md): editable visible pose
+  keyframes, linear translation, shortest-path rotation, exact endpoints, motion
+  pauses, stationary reference poses, and consistent projected/metric geometry.
+  Full 301-capture footprints pass with fixture and supplied meshes; combined
+  static/mask/playback/motion/pipeline validation: 46 passed.
+
 ## Design tree
 
 - Observation contract: hypotheses only, as required by the supplied plan.

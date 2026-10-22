@@ -58,6 +58,41 @@ Each block also carries an image region and a cropped binary foreground mask
 following its projected CAD outline. See the
 [mask conventions and limitations](scripted_tetris_masks.md) for details.
 
+## Motion keyframes and pauses
+
+Each `BlockState.pose` supplies its initial CAD-origin pose. Its `keyframes` list
+contains editable `PoseKeyframe` descriptors with `elapsed_nanoseconds` and `pose`.
+The default first block starts at `(-0.30, -0.15, 1.00)` metres, translates to
+`(-0.20, -0.15, 1.00)`, and turns positive ninety degrees about optical camera Z.
+The second block remains at `(0.05, -0.15, 1.00)` with identity orientation.
+
+| Elapsed capture time | First block |
+| --- | --- |
+| 0–3 seconds | Hold the initial pose |
+| 3–9 seconds | Translate linearly to the translated pose |
+| 9–12 seconds | Hold the translated pose |
+| 12–18 seconds | Rotate along the shortest quaternion path |
+| 18–30 seconds | Hold the rotated pose |
+
+Equal consecutive keyframe poses define a pause. The first pose also holds after
+the final keyframe, and an empty keyframe list leaves a block stationary. Edit the
+hold endpoints to change pauses and the movement endpoints to change motion
+durations. Initial, translated, and rotated poses are each defined once in the
+default block factory; repeated hold keyframes reference those same poses.
+
+Keyframe offsets must be strictly increasing and positive. Endpoints reached
+within the configured playback duration must be exact multiples of
+`sample_period_nanoseconds`, so a completed observation carries each configured
+endpoint exactly. Later keyframes can remain in a shorter scenario. Both
+translation and orientation use scheduled capture offsets; late delivery retains
+the intended intermediate pose. Quaternion components use `xyzw`, and equivalent
+quaternion signs produce the same shortest rotation.
+
+Pauses keep the configured capture cadence. Each capture has a fresh CAS and new
+detection identifiers even when its poses are unchanged. The same interpolated
+CAD-origin pose locates the image outline and enclosing box, including rotation
+of the box's mesh-derived center offset.
+
 ## Consuming observations
 
 The command supplies CAS observations in memory. Add later annotators to the
