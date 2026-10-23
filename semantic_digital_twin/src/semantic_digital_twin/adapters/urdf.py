@@ -220,9 +220,6 @@ class URDFParser(WorldModelParser):
         )
 
     def parse(self) -> World:
-        # Axes are checked before the world is built, so a description that declares an
-        # unusable axis is rejected with the error that names it rather than as a broken
-        # world.
         for joint in self.parsed.joints:
             if connection_type_map.get(joint.type) in (
                 RevoluteConnection,
