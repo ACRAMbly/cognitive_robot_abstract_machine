@@ -48,17 +48,19 @@ Use these files to understand the existing interfaces and conventions:
 - `test/robokudo_test/conftest.py` and `test/conftest.py`
 - `test/robokudo_test/test_pipeline.py`
 
-## Package layout
+## Proposed new files to create
 
-The implementation lives in its own `robokudo_acrambly` workspace package,
-extending the existing RoboKudo interfaces:
+The following are suggested destinations for this PR's implementation, not
+existing code to read or import. Create them as needed, following the established
+interfaces on `main`:
 
-- `robokudo_acrambly/src/robokudo_acrambly/annotators/scripted_observation.py`
-- `robokudo_acrambly/src/robokudo_acrambly/descriptors/analysis_engines/scripted_tetris.py`
-- `robokudo_acrambly/src/robokudo_acrambly/scripted_observations/`
-- `robokudo_acrambly/src/robokudo_acrambly/data/`
-- `test/robokudo_acrambly_test/`
-- `robokudo_acrambly/doc/scripted_tetris.md`
+- `robokudo/src/robokudo/io/scripted_observations.py`
+- `robokudo/src/robokudo/annotators/scripted_observations.py`
+- `robokudo/src/robokudo/descriptors/scripted_tetris_observations.py`
+- `robokudo/src/robokudo/descriptors/analysis_engines/scripted_tetris.py`
+- `robokudo/src/robokudo/vis/scripted_observations.py`
+- `test/robokudo_test/test_scripted_observations.py`
+- `robokudo/scripted_tetris.md`
 
 Create any additional test data under the existing test directory conventions.
 Do not assume names such as `ScriptedScenario`, `TetrisBlock`, or
@@ -68,9 +70,8 @@ this implementation.
 ## Required behavior
 
 1. Use the supplied `child_cube_0_colored.ply` and
-   `child_cube_2_colored.ply` meshes in the new package's data directory. Keep their
-   model identifiers and resource paths in structured model definitions introduced
-   by this PR. Accept a configured
+   `child_cube_2_colored.ply` meshes. Keep their model identifiers and resource
+   paths in structured model definitions introduced by this PR. Accept a configured
    mesh directory; do not assume a developer's local asset directory is tracked on
    `main`. Document how to supply the two meshes and report missing resources
    clearly. Require no camera, inference model, worker process, or credentials.
