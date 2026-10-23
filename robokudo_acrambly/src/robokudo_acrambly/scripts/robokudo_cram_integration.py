@@ -1,25 +1,18 @@
-"""Query RoboKudo for safely sized colored-block poses."""
+# %% Imports
+
+"""
+Query RoboKudo for safely sized colored-block poses.
+"""
 
 from __future__ import annotations
 
-from collections.abc import Sequence
 from dataclasses import dataclass, field
 from enum import Enum
-from threading import Event
-
-"""Query RoboKudo repeatedly for stable colored-block positions."""
-
-from __future__ import annotations
-
-from dataclasses import dataclass, field
 from threading import Event
 
 import rclpy
 from rclpy.action import ActionClient
 from typing_extensions import TYPE_CHECKING
-
-from rclpy.node import Node
-from rclpy.task import Future
 
 from robokudo_msgs.action import Query
 
@@ -27,22 +20,35 @@ if TYPE_CHECKING:
     from rclpy.node import Node
     from rclpy.task import Future
     from robokudo_msgs.msg import ShapeSize
+    from typing_extensions import Sequence
+
+
+# %% Pose types and queried colors
 
 
 BlockPose = tuple[float, float, float, float, float, float, float]
-"""Position ``(x, y, z)`` and quaternion ``(x, y, z, w)`` components."""
+"""
+Position ``(x, y, z)`` and quaternion ``(x, y, z, w)`` components.
+"""
 
 
 class BlockColor(str, Enum):
-    """Colors queried by the block-stacking integration."""
+    """
+    Colors queried by the block-stacking integration.
+    """
 
     BLUE = "blue"
     RED = "red"
     YELLOW = "yellow"
 
 
+# %% Action future completion
+
+
 def _wait_for_future(future: Future) -> None:
-    """Wait without attempting to spin the existing ROS executor."""
+    """
+    Wait without attempting to spin the existing ROS executor.
+    """
     completed = Event()
     future.add_done_callback(lambda _: completed.set())
     completed.wait()
@@ -50,21 +56,31 @@ def _wait_for_future(future: Future) -> None:
 
 @dataclass(frozen=True)
 class FutureCompletion:
-    """Complete action futures in standalone and executor-owned contexts."""
+    """
+    Complete action futures in standalone and executor-owned contexts.
+    """
 
     node: Node
-    """ROS node associated with the action futures."""
+    """
+    ROS node associated with the action futures.
+    """
 
     spins_node: bool
-    """Whether this completion strategy owns executor progress."""
+    """
+    Whether this completion strategy owns executor progress.
+    """
 
     @classmethod
     def for_node(cls, node: Node) -> FutureCompletion:
-        """Create a completion strategy from the node's initial ownership."""
+        """
+        Create a completion strategy from the node's initial ownership.
+        """
         return cls(node=node, spins_node=node.executor is None)
 
     def wait(self, future: Future) -> None:
-        """Wait for a future using the executor context that owns the node."""
+        """
+        Wait for a future using the executor context that owns the node.
+        """
         if self.spins_node:
             rclpy.spin_until_future_complete(self.node, future)
             return
@@ -72,25 +88,38 @@ class FutureCompletion:
         _wait_for_future(future)
 
 
+# %% Pose parsing
+
+
 @dataclass(frozen=True)
 class ColoredBlockPoseParser:
-    """Extract a safely sized block pose from a color query result."""
+    """
+    Extract a safely sized block pose from a color query result.
+    """
 
     minimum_side_length: float = 0.03
-    """Inclusive minimum accepted bounding-box side length in metres."""
+    """
+    Inclusive minimum accepted bounding-box side length in metres.
+    """
 
     maximum_side_length: float = 0.07
-    """Inclusive maximum accepted bounding-box side length in metres."""
+    """
+    Inclusive maximum accepted bounding-box side length in metres.
+    """
 
     output_height: float = 0.95
-    """Height used by the existing position transformation."""
+    """
+    Height used by the existing position transformation.
+    """
 
     def parse(
         self,
         result: Query.Result,
         requested_color: BlockColor,
     ) -> dict[str, BlockPose]:
-        """Return a safely sized pose keyed by the requested color."""
+        """
+        Return a safely sized pose keyed by the requested color.
+        """
         for object_designator in result.res:
             if not object_designator.pose or not object_designator.shape_size:
                 continue
@@ -115,7 +144,9 @@ class ColoredBlockPoseParser:
         return {}
 
     def _has_safe_dimensions(self, shape_sizes: Sequence[ShapeSize]) -> bool:
-        """Return whether every reported side is within the safe range."""
+        """
+        Return whether every reported side is within the safe range.
+        """
         for shape_size in shape_sizes:
             dimensions = shape_size.dimensions
             side_lengths = (dimensions.x, dimensions.y, dimensions.z)
@@ -128,34 +159,53 @@ class ColoredBlockPoseParser:
         return True
 
 
+# %% Colored-block queries
+
+
 @dataclass(frozen=True)
 class ColoredBlockPoseQuery:
-    """Collect target-colored block poses across fresh query attempts."""
+    """
+    Collect target-colored block poses across fresh query attempts.
+    """
 
     node: Node
-    """ROS node used to complete action futures."""
+    """
+    ROS node used to complete action futures.
+    """
 
     action_client: ActionClient
-    """Client connected to the RoboKudo query action."""
+    """
+    Client connected to the RoboKudo query action.
+    """
 
     maximum_attempts: int = 10
-    """Maximum fresh-frame queries issued for each missing color."""
+    """
+    Maximum fresh-frame queries issued for each missing color.
+    """
 
     parser: ColoredBlockPoseParser = field(default_factory=ColoredBlockPoseParser)
-    """Parser that validates and transforms target-color poses."""
+    """
+    Parser that validates and transforms target-color poses.
+    """
 
     colors: tuple[BlockColor, ...] = (
         BlockColor.BLUE,
         BlockColor.RED,
         BlockColor.YELLOW,
     )
-    """Deterministic color query order."""
+    """
+    Deterministic color query order.
+    """
 
     future_completion: FutureCompletion | None = None
-    """Optional executor-aware action future completion strategy."""
+    """
+    Optional executor-aware action future completion strategy.
+    """
 
     def execute(self) -> dict[str, BlockPose]:
-        """Query until all target colors are found or attempts run out."""
+        """
+        Query until all target colors are found or attempts run out.
+        """
         if not self.action_client.wait_for_server(timeout_sec=5.0):
             raise RuntimeError("RoboKudo query action server is not available.")
 
@@ -178,7 +228,9 @@ class ColoredBlockPoseQuery:
         return poses_by_color
 
     def _request_fresh_frame(self, color: BlockColor) -> Query.Result:
-        """Send one single-color block query and return its result."""
+        """
+        Send one single-color block query and return its result.
+        """
         goal = Query.Goal()
         goal.obj.type = "block"
         goal.obj.color.append(color.value)
@@ -197,7 +249,9 @@ class ColoredBlockPoseQuery:
         return result_future.result().result
 
     def _wait_for_action_future(self, future: Future) -> None:
-        """Complete an action future in the configured execution context."""
+        """
+        Complete an action future in the configured execution context.
+        """
         if self.future_completion is None:
             _wait_for_future(future)
             return
@@ -208,7 +262,8 @@ class ColoredBlockPoseQuery:
 def query_colored_block_poses_from_robokudo(
     node: Node,
 ) -> dict[str, BlockPose]:
-    """Query RoboKudo for detected block poses grouped by color.
+    """
+    Query RoboKudo for detected block poses grouped by color.
 
     :raises RuntimeError: If the server is unavailable or rejects the query.
     :return: Transformed positions and detected orientations keyed by color.
@@ -222,8 +277,13 @@ def query_colored_block_poses_from_robokudo(
     ).execute()
 
 
+# %% Standalone entry point
+
+
 def main() -> None:
-    """Query RoboKudo and print the detected block poses."""
+    """
+    Query RoboKudo and print the detected block poses.
+    """
     rclpy.init()
     node = rclpy.create_node("robokudo_cram_integration")
 

@@ -1,4 +1,8 @@
-"""Query-driven colored-cube perception for the Tracy robot."""
+# %% Imports
+
+"""
+Query-driven colored-cube perception for the Tracy robot.
+"""
 
 from __future__ import annotations
 
@@ -12,37 +16,50 @@ from robokudo.descriptors import CrDescriptorFactory
 from robokudo.idioms import pipeline_init
 from robokudo.pipeline import Pipeline
 
+# %% Color segmentation configuration
+
 
 def create_color_cluster_descriptor() -> ImageClusterExtractor.Descriptor:
-    """Configure single-contour segmentation for supported block colors."""
+    """
+    Configure single-contour segmentation for supported block colors.
+    """
     descriptor = ImageClusterExtractor.Descriptor()
     descriptor.parameters.color_name_to_hsv_range = {
-        'blue': {
-            'hsv_min': (135, 130, 70),
-            'hsv_max': (165, 255, 255),
+        "blue": {
+            "hsv_min": (135, 130, 70),
+            "hsv_max": (165, 255, 255),
         },
-        'red': {
-            'hsv_min': (0, 130, 70),
-            'hsv_max': (15, 255, 255),
+        "red": {
+            "hsv_min": (0, 130, 70),
+            "hsv_max": (15, 255, 255),
         },
-        'yellow': {
-            'hsv_min': (22, 130, 70),
-            'hsv_max': (65, 255, 255),
+        "yellow": {
+            "hsv_min": (22, 130, 70),
+            "hsv_max": (65, 255, 255),
         },
     }
     descriptor.parameters.num_of_objects = 1
     return descriptor
 
 
+# %% Query-driven analysis engine
+
+
 class AnalysisEngine(AnalysisEngineInterface):
-    """Detect one queried colored cube and estimate its bounding-box pose."""
+    """
+    Detect one queried colored cube and estimate its bounding-box pose.
+    """
 
     def name(self) -> str:
-        """Return the analysis engine identifier."""
+        """
+        Return the analysis engine identifier.
+        """
         return "demo"
 
     def implementation(self) -> Pipeline:
-        """Create the query-driven color segmentation pipeline."""
+        """
+        Create the query-driven color segmentation pipeline.
+        """
         camera_descriptor = CrDescriptorFactory.create_descriptor("orbbec")
         color_cluster_descriptor = create_color_cluster_descriptor()
 
