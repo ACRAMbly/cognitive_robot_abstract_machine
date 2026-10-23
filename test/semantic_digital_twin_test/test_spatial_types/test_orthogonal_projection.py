@@ -14,18 +14,28 @@ from semantic_digital_twin.spatial_types import (
     Vector3,
 )
 from semantic_digital_twin.world import World
+from semantic_digital_twin.world_description.connections import RevoluteConnection
 from semantic_digital_twin.world_description.world_entity import Body
 
 # %% fixtures
 
 
 @pytest.fixture
-def rotated_mini_world(mini_world: World) -> World:
+def tilted_world() -> World:
     """
-    :func:`mini_world` with its tip turned a quarter turn about the root's z axis.
+    A world of two bodies whose tip is turned a quarter turn about the root's x axis, so
+    the tip's z axis lies in the root's x-y plane.
     """
-    mini_world.connections[0].position = math.pi / 2
-    return mini_world
+    world = World()
+    with world.modify_world():
+        root = Body(name=PrefixedName("root"))
+        tip = Body(name=PrefixedName("tip"))
+        connection = RevoluteConnection.create_with_dofs(
+            world=world, parent=root, child=tip, axis=Vector3.X()
+        )
+        world.add_connection(connection)
+    connection.position = math.pi / 2
+    return world
 
 
 # %% project
@@ -43,11 +53,11 @@ class TestProject:
         np.testing.assert_allclose(projected.to_np(), [1.5, -2.5])
 
     def test_transforms_a_point_of_another_frame_into_the_plane_frame(
-        self, rotated_mini_world: World
+        self, tilted_world: World
     ):
-        root, tip = rotated_mini_world.root, rotated_mini_world.bodies[1]
+        root, tip = tilted_world.root, tilted_world.bodies[1]
         tip_P_point = Point3(1, 0, 2, reference_frame=tip)
-        root_P_point = rotated_mini_world.transform(tip_P_point, root)
+        root_P_point = tilted_world.transform(tip_P_point, root)
 
         projected = OrthogonalProjection(root).project(tip_P_point)
 
@@ -67,26 +77,26 @@ class TestProject:
         np.testing.assert_allclose(projected.to_np(), [1.5, -2.5])
 
 
-# %% embed
+# %% unproject
 
 
-class TestEmbed:
+class TestUnproject:
     def test_default_height_is_the_plane(self):
         frame = Body(name=PrefixedName("world"))
         point = Point2(1.0, 2.0, reference_frame=frame)
 
-        embedded = OrthogonalProjection(frame).embed(point)
+        unprojected = OrthogonalProjection(frame).unproject(point)
 
-        assert isinstance(embedded, Point3)
-        assert embedded.reference_frame is frame
-        np.testing.assert_allclose(embedded.to_np()[:3], [1.0, 2.0, 0.0])
+        assert isinstance(unprojected, Point3)
+        assert unprojected.reference_frame is frame
+        np.testing.assert_allclose(unprojected.to_np()[:3], [1.0, 2.0, 0.0])
 
     def test_explicit_height(self):
         point = Point2(1.0, 2.0)
 
-        embedded = OrthogonalProjection(None).embed(point, height=5.0)
+        unprojected = OrthogonalProjection(None).unproject(point, height=5.0)
 
-        np.testing.assert_allclose(embedded.to_np()[:3], [1.0, 2.0, 5.0])
+        np.testing.assert_allclose(unprojected.to_np()[:3], [1.0, 2.0, 5.0])
 
 
 # %% inverse laws
@@ -94,43 +104,43 @@ class TestEmbed:
 
 class TestInverseLaws:
     """
-    ``project(embed(p, h)) == p`` holds for every point on the plane, and
-    ``embed(project(q), h) == q`` holds only for a point at height ``h``.
+    ``project(unproject(p, h)) == p`` holds for every point on the plane, and
+    ``unproject(project(q), h) == q`` holds only for a point at height ``h``.
     """
 
-    def test_project_after_embed_restores_a_point_on_the_plane(self):
+    def test_project_after_unproject_restores_a_point_on_the_plane(self):
         frame = Body(name=PrefixedName("world"))
         point = Point2(1.0, 2.0, reference_frame=frame)
         projection = OrthogonalProjection(frame)
 
-        round_trip = projection.project(projection.embed(point, height=4.0))
+        round_trip = projection.project(projection.unproject(point, height=4.0))
 
         np.testing.assert_allclose(round_trip.to_np(), point.to_np())
 
-    def test_project_after_embed_rejects_a_point_on_another_plane(self):
+    def test_project_after_unproject_rejects_a_point_on_another_plane(self):
         frame = Body(name=PrefixedName("world"))
         other_frame = Body(name=PrefixedName("other"))
         point = Point2(1.0, 2.0, reference_frame=other_frame)
 
         with pytest.raises(ReferenceFrameMismatchError):
-            OrthogonalProjection(frame).embed(point)
+            OrthogonalProjection(frame).unproject(point)
 
-    def test_embed_after_project_restores_a_point_at_the_embedding_height(self):
+    def test_unproject_after_project_restores_a_point_at_the_unprojection_height(self):
         frame = Body(name=PrefixedName("world"))
         projection = OrthogonalProjection(frame)
         point = Point3(1.0, 2.0, 4.0, reference_frame=frame)
 
-        round_trip = projection.embed(projection.project(point), height=4.0)
+        round_trip = projection.unproject(projection.project(point), height=4.0)
 
         np.testing.assert_allclose(round_trip.to_np(), point.to_np())
 
-    def test_embed_after_project_moves_a_point_off_the_embedding_height(self):
+    def test_unproject_after_project_moves_a_point_off_the_unprojection_height(self):
         frame = Body(name=PrefixedName("world"))
         projection = OrthogonalProjection(frame)
         point = Point3(1.0, 2.0, 3.0, reference_frame=frame)
         height = 4.0
 
-        round_trip = projection.embed(projection.project(point), height=height)
+        round_trip = projection.unproject(projection.project(point), height=height)
 
         np.testing.assert_allclose(round_trip.to_np()[:3], [*point.to_np()[:2], height])
 
@@ -158,11 +168,11 @@ class TestPlaneWithoutReferenceFrame:
         with pytest.raises(ReferenceFrameMismatchError):
             OrthogonalProjection(None).project(point)
 
-    def test_rejects_embedding_a_point_with_reference_frame(self):
+    def test_rejects_unprojecting_a_point_with_reference_frame(self):
         point = Point2(1.0, 2.0, reference_frame=Body(name=PrefixedName("world")))
 
         with pytest.raises(ReferenceFrameMismatchError):
-            OrthogonalProjection(None).embed(point)
+            OrthogonalProjection(None).unproject(point)
 
     def test_plane_with_reference_frame_rejects_projecting_a_point_without_one(self):
         frame = Body(name=PrefixedName("world"))
@@ -170,40 +180,40 @@ class TestPlaneWithoutReferenceFrame:
         with pytest.raises(ReferenceFrameMismatchError):
             OrthogonalProjection(frame).project(Point3(1.0, 2.0, 3.0))
 
-    def test_plane_with_reference_frame_rejects_embedding_a_point_without_one(self):
+    def test_plane_with_reference_frame_rejects_unprojecting_a_point_without_one(self):
         frame = Body(name=PrefixedName("world"))
 
         with pytest.raises(ReferenceFrameMismatchError):
-            OrthogonalProjection(frame).embed(Point2(1.0, 2.0))
+            OrthogonalProjection(frame).unproject(Point2(1.0, 2.0))
 
 
-# %% preimage
+# %% projection_line
 
 
-class TestPreimage:
-    def test_is_the_vertical_line_through_the_embedded_point(self):
+class TestProjectionLine:
+    def test_is_the_vertical_line_through_the_unprojected_point(self):
         frame = Body(name=PrefixedName("world"))
         point = Point2(1.0, 2.0, reference_frame=frame)
         projection = OrthogonalProjection(frame)
 
-        preimage = projection.preimage(point)
+        line = projection.projection_line(point)
 
-        assert isinstance(preimage, Line3)
+        assert isinstance(line, Line3)
         np.testing.assert_allclose(
-            preimage.point.to_np(), projection.embed(point).to_np()
+            line.point.to_np(), projection.unproject(point).to_np()
         )
         np.testing.assert_allclose(
-            preimage.direction.to_np(), Vector3.Z(reference_frame=frame).to_np()
+            line.direction.to_np(), Vector3.Z(reference_frame=frame).to_np()
         )
-        assert preimage.direction.reference_frame is frame
+        assert line.direction.reference_frame is frame
 
-    def test_every_point_of_the_preimage_projects_onto_the_point(self):
+    def test_every_point_of_the_line_projects_onto_the_point(self):
         frame = Body(name=PrefixedName("world"))
         point = Point2(1.0, 2.0, reference_frame=frame)
         projection = OrthogonalProjection(frame)
-        preimage = projection.preimage(point)
+        line = projection.projection_line(point)
 
-        point_on_line = preimage.point + preimage.direction * 7.0
+        point_on_line = line.point + line.direction * 7.0
 
         np.testing.assert_allclose(
             projection.project(point_on_line).to_np(), point.to_np()

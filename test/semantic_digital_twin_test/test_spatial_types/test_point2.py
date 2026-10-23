@@ -64,23 +64,24 @@ def rotated_mini_world(mini_world: World) -> World:
 
 
 class TestPoint2ToPoint3:
-    def test_embeds_at_the_given_height_in_its_own_frame(self):
+    def test_unprojects_at_the_given_height_in_its_own_frame(self):
         frame = Body(name=PrefixedName("world"))
         point = Point2(x=1.0, y=2.0, reference_frame=frame)
 
-        embedded = point.to_point3(height=5.0)
+        unprojected = point.to_point3(height=5.0)
 
-        assert embedded.reference_frame is frame
+        assert unprojected.reference_frame is frame
         np.testing.assert_allclose(
-            embedded.to_np(),
-            OrthogonalProjection(frame).embed(point, height=5.0).to_np(),
+            unprojected.to_np(),
+            OrthogonalProjection(frame).unproject(point, height=5.0).to_np(),
         )
 
     def test_default_height_is_the_plane(self):
         point = Point2(x=1.0, y=2.0)
 
         np.testing.assert_allclose(
-            point.to_point3().to_np(), OrthogonalProjection(None).embed(point).to_np()
+            point.to_point3().to_np(),
+            OrthogonalProjection(None).unproject(point).to_np(),
         )
 
 

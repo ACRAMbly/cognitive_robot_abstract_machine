@@ -1432,13 +1432,13 @@ class Point2(Point):
 
     def to_point3(self, height: sm.ScalarData = 0) -> Point3:
         """
-        The :meth:`OrthogonalProjection.embed` of this point into its own reference
+        The :meth:`OrthogonalProjection.unproject` of this point into its own reference
         frame.
 
         :param height: The z-coordinate the point is placed at.
         :return: The 3D point at ``height`` above this point.
         """
-        return OrthogonalProjection(self.reference_frame).embed(self, height)
+        return OrthogonalProjection(self.reference_frame).unproject(self, height)
 
     @classmethod
     def _from_constant_json(cls, data: Dict[str, Any], **kwargs) -> Self:
@@ -1461,7 +1461,7 @@ class Point2(Point):
 
         .. warning::
             Between frames whose x-y planes are not parallel this is not a change of
-            coordinates but a projection: the point is embedded at height 0 through an
+            coordinates but a projection: the point is placed at height 0 through an
             :class:`OrthogonalProjection`, moved, and projected onto the target plane.
             The height the rotation produced is lost.
 
@@ -1500,9 +1500,9 @@ class OrthogonalProjection:
     The orthogonal projection of 3D space onto the x-y plane of one frame, together
     with its right inverse.
 
-    :meth:`embed` at any height is a right inverse of :meth:`project`: for every
-    :class:`Point2` ``p`` on the plane, ``project(embed(p, h)) == p``. The reverse,
-    ``embed(project(q), h) == q``, holds only for a :class:`Point3` ``q`` whose
+    :meth:`unproject` at any height is a right inverse of :meth:`project`: for every
+    :class:`Point2` ``p`` on the plane, ``project(unproject(p, h)) == p``. The reverse,
+    ``unproject(project(q), h) == q``, holds only for a :class:`Point3` ``q`` whose
     z-coordinate in :attr:`plane_frame` is ``h``.
     """
 
@@ -1532,8 +1532,11 @@ class OrthogonalProjection:
             point = self.plane_frame._world.transform(point, self.plane_frame)
         return Point2(point.x, point.y, reference_frame=self.plane_frame)
 
-    def embed(self, point: Point2, height: sm.ScalarData = 0) -> Point3:
+    def unproject(self, point: Point2, height: sm.ScalarData = 0) -> Point3:
         """
+        The inverse of :meth:`project` at ``height``: the 3D point at ``height`` above
+        ``point``.
+
         :param point: A point on the x-y plane of :attr:`plane_frame`.
         :param height: The z-coordinate the point is placed at.
         :return: The 3D point at ``height`` above ``point``, in :attr:`plane_frame`.
@@ -1543,17 +1546,20 @@ class OrthogonalProjection:
             raise ReferenceFrameMismatchError(
                 expected_frame=self.plane_frame,
                 actual_frame=point.reference_frame,
-                context="the embedded Point2",
+                context="the unprojected Point2",
             )
         return Point3(point.x, point.y, height, reference_frame=self.plane_frame)
 
-    def preimage(self, point: Point2) -> Line3:
+    def projection_line(self, point: Point2) -> Line3:
         """
+        The vertical line through ``point`` along which :meth:`project` maps every point
+        onto ``point``.
+
         :param point: A point on the x-y plane of :attr:`plane_frame`.
         :return: The line of every 3D point that projects onto ``point``.
         """
         return Line3(
-            point=self.embed(point),
+            point=self.unproject(point),
             direction=Vector3.Z(reference_frame=self.plane_frame),
         )
 
@@ -2750,17 +2756,18 @@ class Pose2D(sm.SymbolicMathType, SpatialType, SubclassJSONSerializer):
     def from_pose(
         cls,
         pose: Pose,
-        reference_frame: KinematicStructureEntity | None = None,
+        plane_frame: KinematicStructureEntity | None = None,
     ) -> Pose2D:
         """
         Extract a Pose2D from a 3D Pose by dropping z, roll, pitch.
 
         :param pose: The pose to extract from.
-        :param reference_frame: The frame to express the result in. Defaults to
-            ``pose``'s; any other frame must belong to the same world as ``pose``'s.
-        :return: The Pose2D on the x-y plane of ``reference_frame``.
+        :param plane_frame: The frame whose x-y plane to express the result on.
+            Defaults to ``pose``'s reference frame; any other frame must belong to the
+            same world as ``pose``'s.
+        :return: The Pose2D on the x-y plane of ``plane_frame``.
         """
-        frame = reference_frame if reference_frame is not None else pose.reference_frame
+        frame = plane_frame if plane_frame is not None else pose.reference_frame
         if frame is not pose.reference_frame:
             pose = frame._world.transform(pose, frame)
         _, _, yaw = pose.rotation_matrix.rpy

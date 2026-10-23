@@ -185,7 +185,7 @@ class TestPose2DFromPose:
         root, tip = mini_world.root, mini_world.bodies[1]
         tip_pose = Pose.from_xyz_rpy(1, 0, 2, 0, 0, 0.3, reference_frame=tip)
 
-        p2 = Pose2D.from_pose(tip_pose, reference_frame=root)
+        p2 = Pose2D.from_pose(tip_pose, plane_frame=root)
 
         assert p2.reference_frame is root
         np.testing.assert_allclose(
