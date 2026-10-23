@@ -43,6 +43,7 @@ jobs:
           - lib: probabilistic_model
           - lib: physics_simulators
           - lib: robokudo
+          - lib: robokudo_acrambly
           - lib: segmind
           - lib: experiments
           - lib: cramera

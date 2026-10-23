@@ -23,27 +23,13 @@ class AnalysisEngine(AnalysisEngineInterface):
         return "storage"
 
     def implementation(self) -> Pipeline:
-        """Create a pipeline for recording sensor data.
-
-        This method constructs a processing pipeline that captures and stores
-        sensor data from a Kinect camera. The pipeline preprocesses the data
-        before storing it for later use.
-
-        Pipeline configuration options:
-
-        * Standard Kinect config (with transform lookup)
-        * Kinect config without transform lookup (default)
-
-        :return: The configured pipeline for data recording
-        """
-
-        camera_descriptor = CrDescriptorFactory.create_descriptor("orbbec")
+        kinect_config = CollectionReaderDescriptorFactory.create_descriptor("kinect")
 
         seq = Pipeline()
         seq.add_children(
             [
                 pipeline_init(),
-                CollectionReaderAnnotator(descriptor=camera_descriptor),
+                CollectionReaderAnnotator(descriptor=kinect_config),
                 ImagePreprocessorAnnotator("ImagePreprocessor"),
                 StorageWriter(),
             ]

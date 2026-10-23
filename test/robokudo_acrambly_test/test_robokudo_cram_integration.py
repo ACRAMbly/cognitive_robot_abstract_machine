@@ -1,21 +1,25 @@
+# %% Imports
+
 """Tests for reliable colored-block pose queries."""
 
 from __future__ import annotations
 
-from collections.abc import Iterator
 from dataclasses import dataclass, field
 
 import pytest
 from py_trees.blackboard import Blackboard
 from py_trees.common import Status
+from typing_extensions import Iterator
 
 from robokudo.behaviours.action_server_checks import (
     ActionServerPresentAndDone,
 )
-from robokudo.descriptors.analysis_engines import (
+from robokudo_acrambly.scripts import (
     robokudo_cram_integration as integration,
 )
 from robokudo.identifier import BBIdentifier
+
+# %% Perception query mimics
 
 
 @dataclass(frozen=True)
@@ -149,6 +153,9 @@ class QueryLifecycleActionServer:
         return self.active
 
 
+# %% Query fixtures
+
+
 @pytest.fixture
 def query_server_blackboard() -> Iterator[Blackboard]:
     """Provide isolated query-server blackboard state."""
@@ -195,12 +202,15 @@ def install_responder(
     def complete_future(node: object, future: CompletedFuture) -> None:
         """Treat the configured future as already complete."""
 
-    monkeypatch.setattr(integration, 'ActionClient', create_responder)
+    monkeypatch.setattr(integration, "ActionClient", create_responder)
     monkeypatch.setattr(
         integration.rclpy,
-        'spin_until_future_complete',
+        "spin_until_future_complete",
         complete_future,
     )
+
+
+# %% Query behavior
 
 
 def test_new_query_can_reach_query_annotator_during_initialization(
@@ -221,11 +231,11 @@ def test_cyan_block_label_is_normalized_to_blue() -> None:
     """Normalize the live camera's cyan block label to the blue target."""
     positions = integration.ColoredBlockPoseParser().parse(
         perception_result(
-            detected_object('cyan', 0.4, -0.2),
+            detected_object("cyan", 0.4, -0.2),
         )
     )
 
-    assert positions == {'blue': (0.62, -0.2, 0.955)}
+    assert positions == {"blue": (0.62, -0.2, 0.955)}
 
 
 def test_empty_result_is_retried_with_a_fresh_query(
@@ -236,9 +246,9 @@ def test_empty_result_is_retried_with_a_fresh_query(
         [
             perception_result(),
             perception_result(
-                detected_object('red', 0.1, 0.2),
-                detected_object('blue', 0.3, 0.4),
-                detected_object('yellow', 0.5, 0.6),
+                detected_object("red", 0.1, 0.2),
+                detected_object("blue", 0.3, 0.4),
+                detected_object("yellow", 0.5, 0.6),
             ),
         ]
     )
@@ -246,7 +256,7 @@ def test_empty_result_is_retried_with_a_fresh_query(
 
     positions = integration.query_colored_block_poses_from_robokudo(object())
 
-    assert set(positions) == {'red', 'blue', 'yellow'}
+    assert set(positions) == {"red", "blue", "yellow"}
     assert len(responder.submitted_goals) == 2
 
 
@@ -256,9 +266,9 @@ def test_partial_results_are_aggregated_across_attempts(
     """Merge colors found by separate fresh-frame query attempts."""
     responder = SequencedAttemptResponder(
         [
-            perception_result(detected_object('red', 0.1, 0.2)),
-            perception_result(detected_object('yellow', 0.3, 0.4)),
-            perception_result(detected_object('blue', 0.5, 0.6)),
+            perception_result(detected_object("red", 0.1, 0.2)),
+            perception_result(detected_object("yellow", 0.3, 0.4)),
+            perception_result(detected_object("blue", 0.5, 0.6)),
         ]
     )
     install_responder(monkeypatch, responder)
@@ -266,9 +276,9 @@ def test_partial_results_are_aggregated_across_attempts(
     positions = integration.query_colored_block_poses_from_robokudo(object())
 
     assert positions == {
-        'red': (0.32, 0.2, 0.955),
-        'yellow': (0.52, 0.4, 0.955),
-        'blue': (0.72, 0.6, 0.955),
+        "red": (0.32, 0.2, 0.955),
+        "yellow": (0.52, 0.4, 0.955),
+        "blue": (0.72, 0.6, 0.955),
     }
     assert len(responder.submitted_goals) == 3
 
@@ -280,9 +290,9 @@ def test_all_colors_stop_further_attempts(
     responder = SequencedAttemptResponder(
         [
             perception_result(
-                detected_object('red', 0.1, 0.2),
-                detected_object('blue', 0.3, 0.4),
-                detected_object('yellow', 0.5, 0.6),
+                detected_object("red", 0.1, 0.2),
+                detected_object("blue", 0.3, 0.4),
+                detected_object("yellow", 0.5, 0.6),
             ),
             perception_result(),
         ]
@@ -298,31 +308,29 @@ def test_missing_colors_exhaust_five_attempts(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Stop after five attempts when target colors remain missing."""
-    responder = SequencedAttemptResponder(
-        [perception_result() for _ in range(5)]
-    )
+    responder = SequencedAttemptResponder([perception_result() for _ in range(5)])
     install_responder(monkeypatch, responder)
 
     positions = integration.query_colored_block_poses_from_robokudo(object())
 
     assert positions == {}
     assert len(responder.submitted_goals) == 5
-    assert all(goal.obj.type == 'block' for goal in responder.submitted_goals)
+    assert all(goal.obj.type == "block" for goal in responder.submitted_goals)
 
 
 def test_only_target_colors_with_poses_are_transformed(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Transform only target-colored object designators that have poses."""
-    object_without_pose = DetectedObject(['red'], [])
+    object_without_pose = DetectedObject(["red"], [])
     responder = SequencedAttemptResponder(
         [
             perception_result(
                 object_without_pose,
-                detected_object('green', 0.1, 0.2, 0.3),
-                detected_object('blue', 0.4, 0.5, 0.6),
-                detected_object('red', 0.7, 0.8, 0.9),
-                detected_object('yellow', 1.0, 1.1, 1.2),
+                detected_object("green", 0.1, 0.2, 0.3),
+                detected_object("blue", 0.4, 0.5, 0.6),
+                detected_object("red", 0.7, 0.8, 0.9),
+                detected_object("yellow", 1.0, 1.1, 1.2),
             )
         ]
     )
@@ -331,9 +339,9 @@ def test_only_target_colors_with_poses_are_transformed(
     positions = integration.query_colored_block_poses_from_robokudo(object())
 
     assert positions == {
-        'blue': (0.62, 0.5, 0.955),
-        'red': (0.9199999999999999, 0.8, 0.955),
-        'yellow': (1.22, 1.1, 0.955),
+        "blue": (0.62, 0.5, 0.955),
+        "red": (0.9199999999999999, 0.8, 0.955),
+        "yellow": (1.22, 1.1, 0.955),
     }
 
 
@@ -346,7 +354,7 @@ def test_unavailable_server_preserves_error_behavior(
 
     with pytest.raises(
         RuntimeError,
-        match='RoboKudo query action server is not available',
+        match="RoboKudo query action server is not available",
     ):
         integration.query_colored_block_poses_from_robokudo(object())
 
@@ -363,9 +371,7 @@ def test_rejected_query_preserves_error_behavior(
     )
     install_responder(monkeypatch, responder)
 
-    with pytest.raises(
-        RuntimeError, match='RoboKudo rejected the block query'
-    ):
+    with pytest.raises(RuntimeError, match="RoboKudo rejected the block query"):
         integration.query_colored_block_poses_from_robokudo(object())
 
     assert len(responder.submitted_goals) == 1
