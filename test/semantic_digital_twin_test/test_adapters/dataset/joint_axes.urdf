@@ -3,7 +3,6 @@
   <link name="base_link"/>
   <link name="free_link"/>
   <link name="knob_link"/>
-  <link name="slider_link"/>
   <joint name="base_to_free" type="floating">
     <parent link="base_link"/>
     <child link="free_link"/>
@@ -14,10 +13,5 @@
     <child link="knob_link"/>
     <axis xyz="0 3 4"/>
     <limit lower="-3.14" upper="3.14" effort="1" velocity="1"/>
-  </joint>
-  <joint name="base_to_slider" type="prismatic">
-    <parent link="base_link"/>
-    <child link="slider_link"/>
-    <limit lower="0" upper="1" effort="1" velocity="1"/>
   </joint>
 </robot>

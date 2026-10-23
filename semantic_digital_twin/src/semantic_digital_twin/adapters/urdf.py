@@ -13,7 +13,11 @@ from semantic_digital_twin.adapters.package_resolver import (
 )
 from semantic_digital_twin.adapters.world_model_parser import WorldModelParser
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
-from semantic_digital_twin.exceptions import NegativeConnectionVelocity
+from semantic_digital_twin.exceptions import (
+    NegativeConnectionVelocity,
+    MissingURDFJointAxisError,
+    ZeroLengthURDFJointAxisError,
+)
 from semantic_digital_twin.spatial_types.spatial_types import (
     HomogeneousTransformationMatrix,
     Point3,
@@ -66,18 +70,20 @@ def urdf_joint_axis(urdf_joint: urdfpy.Joint) -> List[float]:
     """
     The axis a URDF joint moves along, as the unit vector the connections expect.
 
-    URDF normalizes the axis it is given and defaults it to the x-axis where a joint
-    declares none.
+    URDF normalizes the axis it is given. A joint that declares no axis is rejected
+    rather than given a default, so a description is read as written.
 
     :param urdf_joint: The URDF joint to read the axis of.
     :return: The joint's axis as a unit vector.
     """
     if urdf_joint.axis is None:
-        return [1.0, 0.0, 0.0]
+        raise MissingURDFJointAxisError(
+            joint_name=urdf_joint.name, joint_type=urdf_joint.type
+        )
     axis = np.asarray(urdf_joint.axis, dtype=float)
     norm = np.linalg.norm(axis)
     if norm == 0:
-        raise ValueError(f"Joint {urdf_joint.name} has a zero-length axis.")
+        raise ZeroLengthURDFJointAxisError(joint_name=urdf_joint.name)
     return (axis / norm).tolist()
 
 
@@ -214,6 +220,16 @@ class URDFParser(WorldModelParser):
         )
 
     def parse(self) -> World:
+        # Axes are checked before the world is built, so a description that declares an
+        # unusable axis is rejected with the error that names it rather than as a broken
+        # world.
+        for joint in self.parsed.joints:
+            if connection_type_map.get(joint.type) in (
+                RevoluteConnection,
+                PrismaticConnection,
+            ):
+                urdf_joint_axis(joint)
+
         prefix = self.parsed.name
         links = [
             self.parse_link(link, PrefixedName(link.name, prefix))

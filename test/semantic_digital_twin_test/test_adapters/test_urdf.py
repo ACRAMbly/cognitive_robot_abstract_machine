@@ -9,6 +9,10 @@ from urdf_parser_py import urdf as urdfpy
 
 from semantic_digital_twin.adapters.urdf import URDFParser
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
+from semantic_digital_twin.exceptions import (
+    MissingURDFJointAxisError,
+    ZeroLengthURDFJointAxisError,
+)
 from semantic_digital_twin.robots.pr2 import PR2, PR2Joint
 from semantic_digital_twin.robots.tiago import Tiago, TiagoJoint
 from semantic_digital_twin.world_description.connections import (
@@ -267,8 +271,8 @@ JOINT_AXES_URDF = os.path.join(
     os.path.dirname(os.path.abspath(__file__)), "dataset", "joint_axes.urdf"
 )
 """
-Description with a floating joint, a revolute joint about an axis that is neither a
-coordinate axis nor of unit length, and a prismatic joint that declares no axis.
+Description with a floating joint and a revolute joint about an axis that is neither
+a coordinate axis nor of unit length.
 """
 
 
@@ -304,12 +308,32 @@ def test_joint_rotates_about_its_declared_axis():
     assert np.allclose(pose[:3, :3], expected)
 
 
-def test_joint_without_axis_moves_along_x():
+def _slider_urdf(axis_element):
     """
-    URDF defaults the axis of a joint that declares none to the x-axis.
+    :return: A description of one prismatic joint that carries ``axis_element``.
     """
-    world = URDFParser.from_file(JOINT_AXES_URDF).parse()
+    return f"""<?xml version="1.0"?>
+<robot name="slider">
+  <link name="base_link"/>
+  <link name="slider_link"/>
+  <joint name="base_to_slider" type="prismatic">
+    <parent link="base_link"/>
+    <child link="slider_link"/>
+    {axis_element}
+    <limit lower="0" upper="1" effort="1" velocity="1"/>
+  </joint>
+</robot>
+"""
 
-    pose = _child_pose_after_moving(world, "base_to_slider", 0.3)
 
-    assert np.allclose(pose[:3, 3], [0.3, 0, 0])
+def test_movable_joint_without_axis_is_rejected():
+    """
+    A joint that declares no axis is not given one, so a description is read as written.
+    """
+    with pytest.raises(MissingURDFJointAxisError, match="base_to_slider"):
+        URDFParser(urdf=_slider_urdf("")).parse()
+
+
+def test_joint_with_zero_length_axis_is_rejected():
+    with pytest.raises(ZeroLengthURDFJointAxisError, match="base_to_slider"):
+        URDFParser(urdf=_slider_urdf('<axis xyz="0 0 0"/>')).parse()
