@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
 import numpy as np
@@ -19,14 +20,21 @@ layer of a circuit.
 
 
 @dataclass
-class Mode:
+class AbstractMode(ABC):
     """
-    The most likely events of a model and their likelihood.
+    The most likely events of a model.
     """
 
     event: Event
     """
     The set of most likely points.
+    """
+
+
+@dataclass
+class Mode(AbstractMode):
+    """
+    The most likely events of a model and their likelihood.
     """
 
     likelihood: float
@@ -36,14 +44,9 @@ class Mode:
 
 
 @dataclass
-class LogMode:
+class LogMode(AbstractMode):
     """
     The most likely events of a model and their log-likelihood.
-    """
-
-    event: Event
-    """
-    The set of most likely points.
     """
 
     log_likelihood: float
@@ -75,18 +78,35 @@ class UnivariateLogMode:
     """
 
 
-# %% truncations
+# %% posteriors
 
 
 @dataclass
-class Truncation(Generic[DistributionType], SubClassSafeGeneric):
+class AbstractPosterior(Generic[DistributionType], SubClassSafeGeneric, ABC):
     """
-    A model truncated to an event, P(* | event), and the probability of that event.
+    A model restricted to evidence, P(* | evidence), and how likely that evidence is.
     """
 
     distribution: DistributionType | None
     """
-    The truncated distribution, or *None* if the event is impossible.
+    The distribution given the evidence, or *None* if the evidence is impossible.
+    """
+
+    @classmethod
+    @abstractmethod
+    def impossible(cls) -> Self:
+        """
+        :return: The posterior given evidence that cannot occur.
+        """
+
+
+# %% truncations
+
+
+@dataclass
+class Truncation(AbstractPosterior[DistributionType]):
+    """
+    A model truncated to an event, P(* | event), and the probability of that event.
     """
 
     probability: float
@@ -94,16 +114,15 @@ class Truncation(Generic[DistributionType], SubClassSafeGeneric):
     The probability of the event.
     """
 
+    @classmethod
+    def impossible(cls) -> Self:
+        return cls(None, 0.0)
+
 
 @dataclass
-class LogTruncation(Generic[DistributionType], SubClassSafeGeneric):
+class LogTruncation(AbstractPosterior[DistributionType]):
     """
     A model truncated to an event, P(* | event), and the log-probability of that event.
-    """
-
-    distribution: DistributionType | None
-    """
-    The truncated distribution, or *None* if the event is impossible.
     """
 
     log_probability: float
@@ -113,9 +132,6 @@ class LogTruncation(Generic[DistributionType], SubClassSafeGeneric):
 
     @classmethod
     def impossible(cls) -> Self:
-        """
-        :return: The truncation to an event that has no probability.
-        """
         return cls(None, -np.inf)
 
     def exponentiated(self) -> Truncation[DistributionType]:
@@ -129,15 +145,10 @@ class LogTruncation(Generic[DistributionType], SubClassSafeGeneric):
 
 
 @dataclass
-class Conditioning(Generic[DistributionType], SubClassSafeGeneric):
+class Conditioning(AbstractPosterior[DistributionType]):
     """
     A model conditioned on a partial point, P(* | point), and the likelihood of that
     point.
-    """
-
-    distribution: DistributionType | None
-    """
-    The conditioned distribution, or *None* if the point is impossible.
     """
 
     likelihood: float
@@ -145,17 +156,16 @@ class Conditioning(Generic[DistributionType], SubClassSafeGeneric):
     The likelihood of the point.
     """
 
+    @classmethod
+    def impossible(cls) -> Self:
+        return cls(None, 0.0)
+
 
 @dataclass
-class LogConditioning(Generic[DistributionType], SubClassSafeGeneric):
+class LogConditioning(AbstractPosterior[DistributionType]):
     """
     A model conditioned on a partial point, P(* | point), and the log-likelihood of that
     point.
-    """
-
-    distribution: DistributionType | None
-    """
-    The conditioned distribution, or *None* if the point is impossible.
     """
 
     log_likelihood: float
@@ -165,9 +175,6 @@ class LogConditioning(Generic[DistributionType], SubClassSafeGeneric):
 
     @classmethod
     def impossible(cls) -> Self:
-        """
-        :return: The conditioning on a point that has no likelihood.
-        """
         return cls(None, -np.inf)
 
     def exponentiated(self) -> Conditioning[DistributionType]:
