@@ -12,7 +12,7 @@ from typing_extensions import Self, Tuple, TYPE_CHECKING
 
 from probabilistic_model.distributions.distributions import (
     ContinuousDistribution,
-    ContinuousDistributionWithFiniteSupport,
+    ContinuousDistributionWithConstrainedSupport,
     DiracDeltaDistribution,
 )
 from probabilistic_model.probabilistic_model import OrderType, CenterType, MomentType
@@ -181,7 +181,7 @@ class GaussianDistribution(ContinuousDistribution):
 
 @dataclass
 class TruncatedGaussianDistribution(
-    ContinuousDistributionWithFiniteSupport, GaussianDistribution
+    ContinuousDistributionWithConstrainedSupport, GaussianDistribution
 ):
     """
     Class for Truncated Gaussian distributions.

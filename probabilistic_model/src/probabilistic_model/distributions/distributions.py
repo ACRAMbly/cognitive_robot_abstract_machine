@@ -193,9 +193,9 @@ class ContinuousDistribution(UnivariateDistribution):
 
 
 @dataclass(eq=False)
-class ContinuousDistributionWithFiniteSupport(ContinuousDistribution):
+class ContinuousDistributionWithConstrainedSupport(ContinuousDistribution):
     """
-    Abstract base class for continuous distributions with finite support.
+    Abstract base class for continuous distributions with constrained support.
     """
 
     interval: SimpleInterval

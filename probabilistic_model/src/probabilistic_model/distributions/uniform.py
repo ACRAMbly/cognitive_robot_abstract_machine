@@ -12,7 +12,7 @@ from probabilistic_model.constants import (
 
 
 @dataclass(eq=False)
-class UniformDistribution(ContinuousDistributionWithFiniteSupport):
+class UniformDistribution(ContinuousDistributionWithConstrainedSupport):
     """
     Class for uniform distributions over the half-open interval [lower, upper).
     """

@@ -127,9 +127,10 @@ class ContinuousLayerWithDensity(AbstractContinuousLayer, ABC):
 
 
 @dataclass(eq=False, repr=False)
-class ContinuousLayerWithFiniteSupport(ContinuousLayerWithDensity, ABC):
+class ContinuousLayerWithConstrainedSupport(ContinuousLayerWithDensity, ABC):
     """
-    Abstract base class for continuous input layers whose nodes have a finite support.
+    Abstract base class for continuous input layers whose nodes have a constrained
+    support.
     """
 
     interval: NodeIntervals
@@ -236,8 +237,9 @@ class ContinuousLayerWithFiniteSupport(ContinuousLayerWithDensity, ABC):
         self, interval: SimpleInterval
     ) -> LayerWithLogProbabilities:
         """
-        Truncate every node to a simple interval. A node keeps its shape on the
-        intersection of its support and the interval.
+        Truncate every node to a simple interval.
+
+        A node keeps its shape on the intersection of its support and the interval.
 
         :param interval: The simple interval, which is not a singleton.
         :return: The layer over the intersections and the log-probability of the
