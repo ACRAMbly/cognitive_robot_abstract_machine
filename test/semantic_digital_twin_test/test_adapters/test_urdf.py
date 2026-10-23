@@ -4,13 +4,17 @@ from math import pi
 
 import numpy as np
 import pytest
+from scipy.spatial.transform import Rotation
 from urdf_parser_py import urdf as urdfpy
 
 from semantic_digital_twin.adapters.urdf import URDFParser
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 from semantic_digital_twin.robots.pr2 import PR2, PR2Joint
 from semantic_digital_twin.robots.tiago import Tiago, TiagoJoint
-from semantic_digital_twin.world_description.connections import FixedConnection
+from semantic_digital_twin.world_description.connections import (
+    Connection6DoF,
+    FixedConnection,
+)
 from semantic_digital_twin.world_description.world_entity import Body
 
 
@@ -257,3 +261,55 @@ def test_xacro():
     assert len(world.kinematic_structure_entities) > 0
     assert len(world.connections) > 0
     assert world.root.name.name == "base_footprint"
+
+
+JOINT_AXES_URDF = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "dataset", "joint_axes.urdf"
+)
+"""
+Description with a floating joint, a revolute joint about an axis that is neither a
+coordinate axis nor of unit length, and a prismatic joint that declares no axis.
+"""
+
+
+def _child_pose_after_moving(world, joint_name, position):
+    """
+    :return: The pose of the joint's child relative to its parent once the joint is moved
+        to ``position``.
+    """
+    connection = world.get_connection_by_name(joint_name)
+    world.state[connection.active_dofs[0].id].position = position
+    world.notify_state_change()
+    return world.compute_forward_kinematics_np(connection.parent, connection.child)
+
+
+def test_floating_joint_becomes_a_6dof_connection():
+    world = URDFParser.from_file(JOINT_AXES_URDF).parse()
+
+    connection = world.get_connection_by_name("base_to_free")
+    assert isinstance(connection, Connection6DoF)
+    pose = world.compute_forward_kinematics_np(connection.parent, connection.child)
+    assert np.allclose(pose[:3, 3], [0.2, -0.1, 0.9])
+
+
+def test_joint_rotates_about_its_declared_axis():
+    """
+    An axis is read as the direction it declares, not rounded to a coordinate axis.
+    """
+    world = URDFParser.from_file(JOINT_AXES_URDF).parse()
+
+    pose = _child_pose_after_moving(world, "base_to_knob", pi / 3)
+
+    expected = Rotation.from_rotvec(pi / 3 * np.array([0, 0.6, 0.8])).as_matrix()
+    assert np.allclose(pose[:3, :3], expected)
+
+
+def test_joint_without_axis_moves_along_x():
+    """
+    URDF defaults the axis of a joint that declares none to the x-axis.
+    """
+    world = URDFParser.from_file(JOINT_AXES_URDF).parse()
+
+    pose = _child_pose_after_moving(world, "base_to_slider", 0.3)
+
+    assert np.allclose(pose[:3, 3], [0.3, 0, 0])
