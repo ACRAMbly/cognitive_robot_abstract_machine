@@ -2038,7 +2038,6 @@
       <geometry>
         <mesh filename="package://iai_apartment/meshes/countertop/IAIKitchenPartW102H60.dae"/>
       </geometry>
-      <material name="countertop"/>
     </visual>
     <collision>
       <geometry>
