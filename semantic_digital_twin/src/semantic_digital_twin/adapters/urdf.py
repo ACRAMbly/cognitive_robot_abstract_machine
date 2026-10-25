@@ -48,6 +48,7 @@ from semantic_digital_twin.world_description.geometry import (
     Mesh,
     Scale,
     Color,
+    Shape,
 )
 from semantic_digital_twin.world_description.inertial_properties import (
     Inertial,
@@ -433,66 +434,60 @@ class URDFParser(WorldModelParser):
                 *params, reference_frame=body
             )
             if isinstance(geom.geometry, urdfpy.Box):
-                res.append(
-                    Box(
-                        origin=origin_transform,
-                        scale=Scale(*geom.geometry.size),
-                        color=self.color_of(geom),
-                    )
-                )
+                shape = Box(origin=origin_transform, scale=Scale(*geom.geometry.size))
             elif isinstance(geom.geometry, urdfpy.Sphere):
-                res.append(
-                    Sphere(
-                        origin=origin_transform,
-                        radius=geom.geometry.radius,
-                        color=self.color_of(geom),
-                    )
-                )
+                shape = Sphere(origin=origin_transform, radius=geom.geometry.radius)
             elif isinstance(geom.geometry, urdfpy.Cylinder):
-                res.append(
-                    Cylinder(
-                        origin=origin_transform,
-                        width=geom.geometry.radius * 2,
-                        height=geom.geometry.length,
-                        color=self.color_of(geom),
-                    )
+                shape = Cylinder(
+                    origin=origin_transform,
+                    width=geom.geometry.radius * 2,
+                    height=geom.geometry.length,
                 )
             elif isinstance(geom.geometry, urdfpy.Mesh):
                 if geom.geometry.filename is None:
                     raise ValueError("Mesh geometry must have a filename.")
-                mesh = Mesh(
+                shape = Mesh(
                     origin=origin_transform,
                     filename=self.path_resolver.resolve(geom.geometry.filename),
                     scale=Scale(*(geom.geometry.scale or (1, 1, 1))),
                 )
-                color = self.color_of(geom)
-                # A mesh file that paints itself keeps its own look, as a viewer of the
-                # description shows it; only a bare mesh takes the material's color.
-                # The file is read for that only when there is a color to give.
-                if color != Color() and not mesh.is_textured:
-                    mesh.color = color
-                res.append(mesh)
+            else:
+                continue
+            color = self.color_of(geom, shape)
+            if color is not None:
+                shape.color = color
+            res.append(shape)
         return ShapeCollection(res, reference_frame=body)
 
-    def color_of(self, geometry_element: urdfpy.Visual | urdfpy.Collision) -> Color:
+    def color_of(
+        self, geometry_element: urdfpy.Visual | urdfpy.Collision, shape: Shape
+    ) -> Optional[Color]:
         """
         :param geometry_element: A visual or collision element of the description.
-        :return: The color the element's material gives it: the material's own color,
-            else the color of the description's material of that name; the default
-            color for a collision element and an element without a material.
+        :param shape: The shape parsed from the element.
+        :return: The color the element's material gives the shape: the material's own
+            color, else the color of the description's material of that name. ``None``
+            if the element gives it no color, as a collision element and an element
+            without a colored material do, and for a mesh whose file paints itself,
+            which keeps its own look as a viewer of the description shows it.
         """
         if not isinstance(geometry_element, urdfpy.Visual):
-            return Color()
+            return None
         material = geometry_element.material
         if material is None:
-            return Color()
+            return None
         if material.color is not None:
-            return Color(*material.color.rgba)
-        named_colors = {
-            named.name: named.color
-            for named in self.parsed.materials
-            if named.color is not None
-        }
-        if material.name not in named_colors:
-            return Color()
-        return Color(*named_colors[material.name].rgba)
+            color = Color(*material.color.rgba)
+        else:
+            named_colors = {
+                named.name: named.color
+                for named in self.parsed.materials
+                if named.color is not None
+            }
+            if material.name not in named_colors:
+                return None
+            color = Color(*named_colors[material.name].rgba)
+        # The mesh's file is read only when there is a color to give.
+        if isinstance(shape, Mesh) and shape.is_textured:
+            return None
+        return color
