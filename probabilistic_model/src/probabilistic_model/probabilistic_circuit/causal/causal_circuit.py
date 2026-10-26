@@ -546,10 +546,13 @@ class CausalCircuit(Generic[RepresentationType], SubClassSafeGeneric):
         :param event: The event to truncate to, over some of the circuit's variables.
         :returns: The truncated copy, or None if the event is impossible.
         """
-        truncated, _ = copy.deepcopy(self.probabilistic_circuit).log_truncated_in_place(
-            event.fill_missing_variables_pure(self.probabilistic_circuit.variables)
+        return (
+            copy.deepcopy(self.probabilistic_circuit)
+            .log_truncated_in_place(
+                event.fill_missing_variables_pure(self.probabilistic_circuit.variables)
+            )
+            .distribution
         )
-        return truncated
 
     def _product_for_cause_region(
         self,
@@ -566,11 +569,16 @@ class CausalCircuit(Generic[RepresentationType], SubClassSafeGeneric):
         :param cause_marginal_circuit: Marginal circuit over the cause Variable.
         :returns: The product, or None if the region is empty in the cause marginal.
         """
-        cause_branch, _ = copy.deepcopy(cause_marginal_circuit).log_truncated_in_place(
-            cause_region.event.fill_missing_variables_pure(
-                cause_marginal_circuit.variables
+        cause_branch = (
+            copy.deepcopy(cause_marginal_circuit)
+            .log_truncated_in_place(
+                cause_region.event.fill_missing_variables_pure(
+                    cause_marginal_circuit.variables
+                )
             )
+            .distribution
         )
+
         if cause_branch is None:
             return None
         return type(self.probabilistic_circuit).product_of(
@@ -736,6 +744,16 @@ class CausalCircuit(Generic[RepresentationType], SubClassSafeGeneric):
             if probability > 0.0:
                 regions.append(SupportRegion(region_event, float(probability)))
         return regions
+
+    def number_of_regions_of(self, variable: Variable) -> int:
+        """
+        :param variable: The Variable to count the regions of.
+        :returns: How many disjoint support regions the circuit splits the Variable
+            into, which is how many branches :meth:`backdoor_adjustment` builds for it
+            as a cause, and how many values it enumerates for it as an adjustment
+            variable.
+        """
+        return len(self._extract_disjoint_regions_for_variable(variable))
 
     def _extract_disjoint_regions_for_variable(
         self,
