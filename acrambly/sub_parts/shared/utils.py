@@ -2,9 +2,10 @@ import os
 from pathlib import Path
 from typing import Literal
 
-from coraplex.datastructures.enums import Arms
+# from coraplex.datastructures.enums import Arms
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 from semantic_digital_twin.robots.tracy import Tracy
+from semantic_digital_twin.semantic_annotations.semantic_annotations import GelatinBox
 from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix
 from semantic_digital_twin.world import World
 from semantic_digital_twin.world_description.connections import Connection6DoF
@@ -15,13 +16,13 @@ from semantic_digital_twin.world_description.world_entity import Body
 _ASSETS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../assets")
 
 
-def select_arm(cube: Body, tracy):
-    cube_y = float(cube.global_pose.position.to_np().reshape(-1)[1])
-    end_effectors = Tracy.get_end_effectors(tracy)
-    if cube_y > 0:
-        return Arms.LEFT, end_effectors[0]
-    else:
-        return Arms.RIGHT, end_effectors[1]
+# def select_arm(cube: Body, tracy):
+#     cube_y = float(cube.global_pose.position.to_np().reshape(-1)[1])
+#     end_effectors = Tracy.get_end_effectors(tracy)
+#     if cube_y > 0:
+#         return Arms.LEFT, end_effectors[0]
+#     else:
+#         return Arms.RIGHT, end_effectors[1]
 
 
 def spawn_body(
@@ -84,4 +85,6 @@ def spawn_body(
                 ),
             )
         )
-    return body
+        body_annotation = GelatinBox(root=body)
+        spawn_world.add_semantic_annotations([body_annotation])
+    return body_annotation
