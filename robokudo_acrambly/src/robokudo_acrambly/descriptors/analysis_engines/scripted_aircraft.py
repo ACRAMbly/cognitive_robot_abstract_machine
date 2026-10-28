@@ -16,6 +16,7 @@ from robokudo_acrambly.annotators.aircraft_observation import (
 from robokudo_acrambly.playback.clock import SystemClock
 
 if TYPE_CHECKING:
+    from robokudo_acrambly.aircraft_observations.preview import AircraftPreview
     from robokudo_acrambly.aircraft_observations.scenario import AircraftFrames
     from robokudo_acrambly.playback.clock import Clock
 
@@ -42,6 +43,11 @@ class AnalysisEngine(AnalysisEngineInterface):
     Clock supplying scheduled capture time independently of CAS creation.
     """
 
+    preview: AircraftPreview | None = None
+    """
+    Optional catalog geometry displayed independently of the CAS payload.
+    """
+
     def name(self) -> str:
         return AircraftObservationLabel.SOURCE
 
@@ -49,7 +55,10 @@ class AnalysisEngine(AnalysisEngineInterface):
         pipeline = Pipeline(self.name())
         pipeline.add_child(
             AircraftObservationAnnotator(
-                scenario=self.scenario, frames=self.frames, clock=self.clock
+                scenario=self.scenario,
+                frames=self.frames,
+                clock=self.clock,
+                preview=self.preview,
             )
         )
         return pipeline
