@@ -1,6 +1,6 @@
 # Cognitive Robot Abstract Machine
 
-Domain language for robot perception and its synthetic observations.
+Domain language for robot perception, synthetic observations, and assembly geometry.
 
 ## Language
 
@@ -35,3 +35,23 @@ The shape representing an object's appearance in the world.
 
 **Collision geometry**:
 The shape representing an object's occupied volume for collision checks.
+
+**Assembly path**:
+The sequence of part positions and orientations through which components move
+when joining or separating an assembly.
+
+**Assembly opening**:
+A passage or cavity that admits a mating component along an assembly path.
+
+**Mating clearance**:
+The separation available between mating surfaces at a particular relative pose.
+
+**Rigid assembly part**:
+A component whose shape remains unchanged throughout assembly and disassembly.
+
+**Mating contact**:
+Touching between mating surfaces without penetration of the rigid parts.
+
+**Assembly reference**:
+An agreed set of mating relationships, part poses, and assembly paths against
+which preservation of assembly fit is assessed.
