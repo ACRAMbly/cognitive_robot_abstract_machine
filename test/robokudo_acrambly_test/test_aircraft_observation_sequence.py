@@ -18,6 +18,7 @@ from robokudo_acrambly.aircraft.types import AircraftPart
 from ..robokudo_test.dataset.semantic_observations import BeliefSnapshot
 from .dataset.aircraft_observations import (
     AircraftIdentity,
+    AcceptedAircraftPart,
     AircraftSequence,
     AircraftStage,
 )
@@ -59,10 +60,7 @@ def test_aircraft_pipeline_retains_parts_through_movement_absence_and_reappearan
     """
     pipeline = Pipeline()
     pipeline.add_child(aircraft_connector)
-    original_parts: dict[AircraftModel, AircraftIdentity] = {}
-    previous_snapshots: dict[AircraftModel, BeliefSnapshot] = {}
-    previous_detection_ids: dict[AircraftModel, str] = {}
-    accepted_stages: dict[AircraftModel, AircraftStage] = {}
+    accepted_parts: dict[AircraftModel, AcceptedAircraftPart] = {}
     source_meshes = {
         model: trimesh.load_mesh(aircraft_catalog.mesh_directory / model.value.resource)
         for model in AircraftModel
@@ -101,7 +99,7 @@ def test_aircraft_pipeline_retains_parts_through_movement_absence_and_reappearan
             )
             belief = world.get_object_belief_state(annotation.root.id)
             if stage is AircraftStage.INITIAL:
-                original_parts[model] = AircraftIdentity(
+                identity = AircraftIdentity(
                     belief,
                     belief.body,
                     belief.uuid,
@@ -109,7 +107,14 @@ def test_aircraft_pipeline_retains_parts_through_movement_absence_and_reappearan
                     list(belief.body.visual.shapes),
                     list(belief.body.collision.shapes),
                 )
-            original = original_parts[model]
+                accepted_parts[model] = AcceptedAircraftPart(
+                    identity,
+                    BeliefSnapshot.from_belief(belief),
+                    belief.latest_hypothesis.id,
+                    stage,
+                )
+            accepted = accepted_parts[model]
+            original = accepted.identity
             assert belief is original.belief
             assert belief.body is original.body
             assert belief.uuid == original.identifier
@@ -118,10 +123,10 @@ def test_aircraft_pipeline_retains_parts_through_movement_absence_and_reappearan
 
             if model in observations:
                 assert belief.latest_hypothesis is observations[model]
-                if model in previous_detection_ids:
-                    assert belief.latest_hypothesis.id != previous_detection_ids[model]
-                previous_detection_ids[model] = belief.latest_hypothesis.id
-                accepted_stages[model] = stage
+                if stage is not AircraftStage.INITIAL:
+                    assert belief.latest_hypothesis.id != accepted.detection_identifier
+                accepted.detection_identifier = belief.latest_hypothesis.id
+                accepted.stage = stage
                 (accepted_pose,) = current_cas.filter_by_type(
                     StampedPoseAnnotation, belief.latest_hypothesis.annotations
                 )
@@ -135,10 +140,10 @@ def test_aircraft_pipeline_retains_parts_through_movement_absence_and_reappearan
                     == aircraft_sequence.capture.capture_time.nanosec
                 )
             else:
-                assert BeliefSnapshot.from_belief(belief) == previous_snapshots[model]
+                assert BeliefSnapshot.from_belief(belief) == accepted.snapshot
 
             expected_transform = aircraft_sequence.expected_transform(
-                model, accepted_stages[model]
+                model, accepted.stage
             )
             numpy.testing.assert_allclose(
                 belief.body.global_transform.to_np(), expected_transform, atol=1e-12
@@ -171,4 +176,4 @@ def test_aircraft_pipeline_retains_parts_through_movement_absence_and_reappearan
                         expected_transform @ expected_center,
                         atol=1e-12,
                     )
-            previous_snapshots[model] = BeliefSnapshot.from_belief(belief)
+            accepted.snapshot = BeliefSnapshot.from_belief(belief)

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from enum import Enum
 from timeit import default_timer
 
 import numpy as np
@@ -41,6 +42,15 @@ if TYPE_CHECKING:
     from robokudo.types.belief_state import ObjectBeliefState
     from robokudo.types.belief_creation import ModelGeometry
     from semantic_digital_twin.semantic_annotations.mixins import HasRootBody
+
+# %% Association costs
+
+
+class AssociationCost(float, Enum):
+    """Costs for observation and belief pairs excluded from identity matching."""
+
+    INCOMPATIBLE = 1.0
+
 
 # %% Belief association
 
@@ -251,19 +261,14 @@ class SemanticDigitalTwinConnector(ThreadedAnnotator):
         """
         Create a negative-similarity cost matrix for Hungarian assignment.
         """
-        cost_matrix = np.ones((len(object_hypotheses), len(object_beliefs)))
+        cost_matrix = np.full(
+            (len(object_hypotheses), len(object_beliefs)),
+            AssociationCost.INCOMPATIBLE.value,
+        )
         for hypothesis_index, object_hypothesis in enumerate(object_hypotheses):
-            observed_labels = {
-                annotation.classname
-                for annotation in object_hypothesis.annotations
-                if isinstance(annotation, Classification)
-            }
+            observed_labels = self.get_model_labels(object_hypothesis)
             for belief_index, object_belief in enumerate(object_beliefs):
-                accepted_labels = {
-                    annotation.classname
-                    for annotation in object_belief.latest_hypothesis.annotations
-                    if isinstance(annotation, Classification)
-                }
+                accepted_labels = self.get_model_labels(object_belief.latest_hypothesis)
                 if (
                     self.descriptor.parameters.semantic_types is not None
                     and observed_labels
@@ -276,6 +281,15 @@ class SemanticDigitalTwinConnector(ThreadedAnnotator):
                 )
                 cost_matrix[hypothesis_index, belief_index] = -similarity
         return cost_matrix
+
+    @staticmethod
+    def get_model_labels(hypothesis: ObjectHypothesis) -> frozenset[str]:
+        """Return the model labels declared by an object observation."""
+        return frozenset(
+            annotation.classname
+            for annotation in hypothesis.annotations
+            if isinstance(annotation, Classification)
+        )
 
     def apply_assignment(
         self,
@@ -299,7 +313,11 @@ class SemanticDigitalTwinConnector(ThreadedAnnotator):
             object_belief = object_beliefs[belief_index]
             similarity = -cost_matrix[hypothesis_index, belief_index]
 
-            if similarity >= 0 and similarity > threshold:
+            if (
+                cost_matrix[hypothesis_index, belief_index]
+                != AssociationCost.INCOMPATIBLE
+                and similarity > threshold
+            ):
                 creation = belief_creations.by_hypothesis.get(id(object_hypothesis))
                 world.update_belief_state_with_object_hypothesis(
                     object_belief,

@@ -17,6 +17,8 @@ from robokudo_acrambly.aircraft.models import AircraftModel
 from ...robokudo_test.dataset.semantic_observations import ObservationExample
 
 if TYPE_CHECKING:
+    from ...robokudo_test.dataset.semantic_observations import BeliefSnapshot
+
     from uuid import UUID
 
     from robokudo.cas import CAS
@@ -169,3 +171,23 @@ class AircraftIdentity:
     """
     Original collision shapes in insertion order.
     """
+
+
+# %% Accepted part state
+
+
+@dataclass
+class AcceptedAircraftPart:
+    """Identity and last accepted evidence of one physical aircraft part."""
+
+    identity: AircraftIdentity
+    """Original belief, body, annotation and model shapes."""
+
+    snapshot: BeliefSnapshot
+    """Accepted persistent state before the next capture."""
+
+    detection_identifier: str
+    """Detection identifier of the last accepted observation."""
+
+    stage: AircraftStage
+    """Capture stage defining the last accepted pose and timestamp."""
