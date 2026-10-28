@@ -20,6 +20,7 @@ from robokudo.annotators.semantic_observations import (
 from robokudo.cas import CASViews
 from robokudo.types.annotation import (
     BoundingBox3DAnnotation,
+    Classification,
     PoseAnnotation,
     StampedPoseAnnotation,
 )
@@ -250,13 +251,30 @@ class SemanticDigitalTwinConnector(ThreadedAnnotator):
         """
         Create a negative-similarity cost matrix for Hungarian assignment.
         """
-        cost_matrix = np.full((len(object_hypotheses), len(object_beliefs)), 1e9)
-        for hypothesis_idx, object_hypothesis in enumerate(object_hypotheses):
-            for belief_idx, object_belief in enumerate(object_beliefs):
+        cost_matrix = np.ones((len(object_hypotheses), len(object_beliefs)))
+        for hypothesis_index, object_hypothesis in enumerate(object_hypotheses):
+            observed_labels = {
+                annotation.classname
+                for annotation in object_hypothesis.annotations
+                if isinstance(annotation, Classification)
+            }
+            for belief_index, object_belief in enumerate(object_beliefs):
+                accepted_labels = {
+                    annotation.classname
+                    for annotation in object_belief.latest_hypothesis.annotations
+                    if isinstance(annotation, Classification)
+                }
+                if (
+                    self.descriptor.parameters.semantic_types is not None
+                    and observed_labels
+                    and accepted_labels
+                    and observed_labels.isdisjoint(accepted_labels)
+                ):
+                    continue
                 similarity = self.object_comparator.compute_similarity(
                     object_hypothesis, object_belief.latest_hypothesis
                 )
-                cost_matrix[hypothesis_idx][belief_idx] = -similarity
+                cost_matrix[hypothesis_index, belief_index] = -similarity
         return cost_matrix
 
     def apply_assignment(
@@ -281,9 +299,17 @@ class SemanticDigitalTwinConnector(ThreadedAnnotator):
             object_belief = object_beliefs[belief_index]
             similarity = -cost_matrix[hypothesis_index, belief_index]
 
-            if similarity > threshold:
+            if similarity >= 0 and similarity > threshold:
+                creation = belief_creations.by_hypothesis.get(id(object_hypothesis))
                 world.update_belief_state_with_object_hypothesis(
-                    object_belief, object_hypothesis, cas
+                    object_belief,
+                    object_hypothesis,
+                    cas,
+                    world_pose=(
+                        creation.world_pose
+                        if creation is not None and creation.has_model_geometry
+                        else None
+                    ),
                 )
             else:
                 object_belief = belief_creations.create_belief(object_hypothesis, cas)
