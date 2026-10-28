@@ -15,7 +15,7 @@ already measured in metres and use scale 1.0.
 
 Construct `AircraftModelCatalog(mesh_directory=...)` with the directory containing
 the twelve STL files. The default is the complete inventory; the directory is
-required and has no machine-specific default. Missing files or paths naming a
+required and has no machine-specific default. Missing or unreadable files, or paths naming a
 directory raise `MissingAircraftResource`, whose correction identifies the
 required filename. Every resource is checked before any is loaded.
 

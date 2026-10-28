@@ -5,6 +5,9 @@ from __future__ import annotations
 from copy import deepcopy
 from dataclasses import dataclass, field
 from enum import Enum, StrEnum
+from os import access, R_OK
+
+from typing_extensions import TYPE_CHECKING
 from pathlib import Path
 
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
@@ -14,7 +17,6 @@ from semantic_digital_twin.world_description.world_entity import Body
 
 from robokudo_acrambly.aircraft.exceptions import MissingAircraftResource
 from robokudo_acrambly.aircraft.types import (
-    AircraftPart,
     BottomWing,
     Chassis,
     FrontWheel,
@@ -28,6 +30,10 @@ from robokudo_acrambly.aircraft.types import (
     UpperBody,
     Window,
 )
+
+if TYPE_CHECKING:
+    from robokudo_acrambly.aircraft.types import AircraftPart
+
 
 # %% Classification labels
 
@@ -181,7 +187,7 @@ class AircraftModelCatalog:
         """
         for definition in self.definitions:
             mesh_path = self.mesh_directory / definition.resource
-            if not mesh_path.is_file():
+            if not access(mesh_path, R_OK) or not mesh_path.is_file():
                 raise MissingAircraftResource(mesh_path)
         self.models = {}
         for definition in self.definitions:

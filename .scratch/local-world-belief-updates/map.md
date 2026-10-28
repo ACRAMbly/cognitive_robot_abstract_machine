@@ -22,6 +22,10 @@ explicitly authorizes implementation.
 
 ## Decisions-so-far
 
+- [Ticket 01](issues/01-aircraft-types-and-models.md#answer) is implemented with
+  application-owned aircraft types and replaceable model resources. Its focused
+  suite passes; broader regression limitations are recorded in the ticket.
+
 Requirements retained from the brief:
 
 - Accept CAS object hypotheses into RoboKudo's local belief world; cross-process
@@ -123,12 +127,12 @@ implementation has not started and still requires explicit permission.
 
 ## Implementation tickets
 
-All tickets are specified and unclaimed. Dependency readiness is separate from
+Ticket 01 is implemented; the remaining tickets are specified and unclaimed. Dependency readiness is separate from
 the user-permission requirement above.
 
 | Ticket | Dependencies | Status |
 | --- | --- | --- |
-| [01: Aircraft types and model resources](issues/01-aircraft-types-and-models.md) | None | ready-for-agent |
+| [01: Aircraft types and model resources](issues/01-aircraft-types-and-models.md) | None | resolved |
 | [02: Observation validation and frames](issues/02-observation-validation-and-frames.md) | None | ready-for-agent |
 | [03: Typed belief creation and geometry](issues/03-typed-belief-creation-and-geometry.md) | 01, 02 | ready-for-agent |
 | [04: Association and pose updates](issues/04-association-and-pose-updates.md) | 02, 03 | ready-for-agent |
@@ -146,3 +150,9 @@ checkout and environment when implementation is explicitly authorized.
 - 2026-10-28: User instruction: proceed to specifications; do not start
   implementation without explicit permission. Created the specification and six
   implementation tickets without writing production code, tests, or fixtures.
+
+- 2026-10-28: User authorized ticket 01 implementation and confirmed its public
+  test seams. [Ticket 01](issues/01-aircraft-types-and-models.md#answer) now
+  supplies aircraft types and model resources; focused coverage passes, with
+  broader regression limitations recorded in its answer. Other tickets remain
+  unimplemented.

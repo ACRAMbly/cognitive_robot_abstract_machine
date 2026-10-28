@@ -3,9 +3,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from pathlib import Path
+from typing_extensions import TYPE_CHECKING
 
 from krrood.exceptions import DataclassException
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
 
 # %% Model resource errors
 

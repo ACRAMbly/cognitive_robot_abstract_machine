@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 from pathlib import Path
+from os import access, R_OK
 from dataclasses import replace
+from enum import StrEnum
+from typing_extensions import TYPE_CHECKING
 
-import numpy as np
+import numpy
 import trimesh
 import pytest
 
@@ -13,14 +16,31 @@ from robokudo_acrambly.aircraft.exceptions import MissingAircraftResource
 from robokudo_acrambly.aircraft.models import (
     AircraftModel,
     AircraftModelCatalog,
-    AircraftModelDefinition,
 )
 from robokudo_acrambly.aircraft.types import AircraftPart
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix
-from semantic_digital_twin.world import World
 from semantic_digital_twin.world_description.connections import FixedConnection
 from semantic_digital_twin.world_description.world_entity import Body
+
+if TYPE_CHECKING:
+    from robokudo_acrambly.aircraft.models import AircraftModelDefinition
+    from semantic_digital_twin.world import World
+
+
+# %% Fixture resources
+
+
+class AircraftFixtureResource(StrEnum):
+    """
+    Resource names used by aircraft catalog acceptance fixtures.
+    """
+
+    SOURCE_DIRECTORY = "plane"
+    DATASET_DIRECTORY = "dataset"
+    INVENTORY = "aircraft_models.csv"
+    REPLACEMENT = "replacement.stl"
+
 
 # %% Semantic model inventory
 
@@ -52,22 +72,24 @@ def test_configured_model_geometry(model: AircraftModel) -> None:
     """
     Checked-in models retain their metric coordinates in both shape collections.
     """
-    directory = Path(__file__).resolve().parents[2] / "plane"
+    directory = (
+        Path(__file__).resolve().parents[2] / AircraftFixtureResource.SOURCE_DIRECTORY
+    )
     catalog = AircraftModelCatalog(directory)
     loaded = catalog.models[model.value.label]
     body = loaded.create_body(PrefixedName(model.value.label))
     source = trimesh.load_mesh(directory / model.value.resource)
     assert len(body.visual.shapes) == 1
     assert len(body.collision.shapes) == 1
-    np.testing.assert_allclose(
+    numpy.testing.assert_allclose(
         body.visual.shapes[0].mesh.bounds,
         source.bounds * model.value.metres_per_mesh_unit,
     )
-    np.testing.assert_array_equal(
+    numpy.testing.assert_array_equal(
         body.visual.shapes[0].mesh.vertices, body.collision.shapes[0].mesh.vertices
     )
     assert body.visual.shapes[0].origin.reference_frame is body
-    np.testing.assert_array_equal(body.visual.shapes[0].origin.to_np(), np.eye(4))
+    numpy.testing.assert_array_equal(body.visual.shapes[0].origin.to_np(), numpy.eye(4))
 
 
 @pytest.mark.parametrize("model", list(AircraftModel))
@@ -88,7 +110,11 @@ def test_model_inventory() -> None:
     """
     The configured semantic kinds and resources match the connector inventory.
     """
-    inventory = Path(__file__).parent / "dataset" / "aircraft_models.csv"
+    inventory = (
+        Path(__file__).parent
+        / AircraftFixtureResource.DATASET_DIRECTORY
+        / AircraftFixtureResource.INVENTORY
+    )
     expected = [line.split(",") for line in inventory.read_text().splitlines()]
     assert [
         [model.value.label, model.value.resource.name] for model in AircraftModel
@@ -105,7 +131,7 @@ def replacement_model(tmp_path: Path) -> AircraftModelDefinition:
     """
     definition = replace(
         AircraftModel.BOTTOM_WING.value,
-        resource=Path("replacement.stl"),
+        resource=Path(AircraftFixtureResource.REPLACEMENT),
         metres_per_mesh_unit=0.5,
     )
     source = trimesh.creation.box(extents=[2.0, 4.0, 6.0])
@@ -125,10 +151,10 @@ def test_replacement_preserves_label_and_offsets(
     body = catalog.models[replacement_model.label].create_body(
         PrefixedName(replacement_model.label)
     )
-    np.testing.assert_allclose(
+    numpy.testing.assert_allclose(
         body.visual.shapes[0].mesh.bounds, [[1.0, 1.5, 2.0], [2.0, 3.5, 5.0]]
     )
-    np.testing.assert_array_equal(body.visual.shapes[0].origin.to_np(), np.eye(4))
+    numpy.testing.assert_array_equal(body.visual.shapes[0].origin.to_np(), numpy.eye(4))
 
 
 def test_loaded_model_survives_resource_removal(
@@ -142,10 +168,10 @@ def test_loaded_model_survives_resource_removal(
     loaded = catalog.models[replacement_model.label]
     first = loaded.create_body(PrefixedName(replacement_model.label))
     second = loaded.create_body(PrefixedName(replacement_model.label))
-    np.testing.assert_array_equal(
+    numpy.testing.assert_array_equal(
         first.visual.shapes[0].mesh.vertices, second.visual.shapes[0].mesh.vertices
     )
-    np.testing.assert_array_equal(
+    numpy.testing.assert_array_equal(
         first.collision.shapes[0].mesh.vertices,
         second.collision.shapes[0].mesh.vertices,
     )
@@ -168,17 +194,36 @@ def test_bodies_have_independent_geometry(
         1.0, 2.0, 3.0, reference_frame=first
     )
     first.visual.shapes.clear()
-    np.testing.assert_array_equal(
+    numpy.testing.assert_array_equal(
         second.visual.shapes[0].mesh.vertices, expected_vertices
     )
-    np.testing.assert_array_equal(
+    numpy.testing.assert_array_equal(
         first.collision.shapes[0].mesh.vertices, expected_vertices
     )
-    np.testing.assert_array_equal(
+    numpy.testing.assert_array_equal(
         second.collision.shapes[0].mesh.vertices, expected_vertices
     )
-    np.testing.assert_array_equal(second.visual.shapes[0].origin.to_np(), np.eye(4))
+    numpy.testing.assert_array_equal(
+        second.visual.shapes[0].origin.to_np(), numpy.eye(4)
+    )
     assert second.visual.reference_frame is second
     assert second.collision.reference_frame is second
     assert second.visual.shapes[0].origin.reference_frame is second
     assert second.collision.shapes[0].origin.reference_frame is second
+
+
+def test_unreadable_model_resource(
+    tmp_path: Path, replacement_model: AircraftModelDefinition
+) -> None:
+    """
+    Unreadable resources provide the same corrective guidance as missing files.
+    """
+    mesh_path = tmp_path / replacement_model.resource
+    mesh_path.chmod(0)
+    if access(mesh_path, R_OK):
+        pytest.skip(
+            "The current user can read files regardless of their permission bits."
+        )
+    with pytest.raises(MissingAircraftResource) as caught:
+        AircraftModelCatalog(tmp_path, definitions=(replacement_model,))
+    assert caught.value.mesh_path == mesh_path
