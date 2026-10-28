@@ -1,13 +1,16 @@
 # Accept aircraft-part observations into RoboKudo's local belief world
 
-Status: specification prepared from the agreed design on 2026-10-28.
-Implementation requires separate explicit user permission; it is not authorized.
+Status: implementation authorized for tickets 01–06 on 2026-10-28.
+
+For configuration and current behavior, read
+[aircraft models](aircraft_models.md), the generic
+[observation contract](../../robokudo/docs/semantic_observations.md), and
+[verification evidence](aircraft_belief_verification.md).
 
 The [feature specification](../../.scratch/local-world-belief-updates/spec.md)
 contains the observation contract, acceptance matrix, and verification criteria.
 The [feature map](../../.scratch/local-world-belief-updates/map.md) links the
-dependency-ordered implementation tickets. Their readiness does not grant
-permission to execute them.
+dependency-ordered implementation tickets.
 
 ## Goal and boundary
 
@@ -80,11 +83,13 @@ acceptance.
 Existing association performs one-to-one assignment over image regions, stamped
 world poses, and bounding-box dimensions. Successful assignments update beliefs;
 low-similarity assignments and excess hypotheses create beliefs. Absent beliefs
-remain. Classification labels currently do not constrain association.
+remain. At that starting point, classification labels did not constrain
+association.
 
-Current body updates derive their pose from a bounding box, replace visual
-geometry with a box, and leave collision geometry unset. Plain pose updates and
-classification-to-semantic-type acceptance require implementation.
+At that starting point, body updates derived their pose from a bounding box,
+replaced visual geometry with a box, and left collision geometry unset. The
+implemented configuration adds model compatibility, typed beliefs, and
+geometry-preserving pose updates.
 
 Reference files:
 
