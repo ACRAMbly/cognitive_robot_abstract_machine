@@ -12,13 +12,16 @@ from robokudo.annotators.core import BaseAnnotator
 from robokudo.annotators.semantic_observations import ObservationPose
 from robokudo.types.annotation import Classification, PoseAnnotation
 from robokudo.types.scene import ObjectHypothesis
+from robokudo_acrambly.playback.schedule import CaptureSchedule
 
 if TYPE_CHECKING:
+    from robokudo.cas import CAS
     from robokudo_acrambly.aircraft_observations.scenario import (
         AircraftFrames,
         AircraftScenario,
     )
-    from robokudo_acrambly.scripted_observations.clock import Clock
+    from robokudo_acrambly.playback.clock import Clock
+    from robokudo_acrambly.playback.schedule import ScheduledCapture
 
 
 # %% Observation source
@@ -54,9 +57,9 @@ class AircraftObservationAnnotator(BaseAnnotator):
     Clock supplying integer Unix capture timestamps.
     """
 
-    observation_index: int = field(default=0, init=False)
+    schedule: CaptureSchedule = field(init=False)
     """
-    Capture position used to distinguish independent detections.
+    Finite capture times retained across pipeline ticks.
     """
 
     def __post_init__(self) -> None:
@@ -65,19 +68,34 @@ class AircraftObservationAnnotator(BaseAnnotator):
         """
         BaseAnnotator.__init__(self, name=AircraftObservationLabel.SOURCE)
         self.frames.validate()
+        self.scenario.timing.validate()
+        for part in self.scenario.parts:
+            part.validate_keyframes(self.scenario.timing)
+            part.validate_absence_intervals(self.scenario.timing)
+        self.schedule = CaptureSchedule(self.scenario.timing, self.clock)
 
     def update(self) -> Status:
+        capture = self.schedule.schedule_capture()
+        if isinstance(capture, Status):
+            return capture
         pipeline = self.get_parent_pipeline()
         pipeline.create_new_cas()
-        observation = pipeline.cas
-        observation.data_timestamp = self.clock.now_nanoseconds()
-        observation.world_frame = self.frames.world_frame
-        observation.camera_frame = self.frames.camera_frame
-        observation.camera_to_world_transform = self.frames.camera_to_world_transform
+        self.frames.write_metadata(pipeline.cas, capture.capture_timestamp)
+        self.write_hypotheses(pipeline.cas, capture)
+        self.schedule.observation_index += 1
+        return Status.SUCCESS
+
+    def write_hypotheses(self, observation: CAS, capture: ScheduledCapture) -> None:
+        """
+        Append the visible aircraft kinds at their scheduled mesh-origin poses.
+        """
         for part in self.scenario.parts:
+            if not part.is_visible(capture.elapsed_nanoseconds):
+                continue
+            object_pose = part.interpolate_pose(capture.elapsed_nanoseconds)
             hypothesis = ObjectHypothesis(
                 source=self.name,
-                id=f"{self.name}:{self.observation_index}:{part.model.value.label}",
+                id=f"{self.name}:{self.schedule.observation_index}:{part.model.value.label}",
                 annotations=[
                     Classification(
                         source=self.name,
@@ -87,12 +105,10 @@ class AircraftObservationAnnotator(BaseAnnotator):
                     ),
                     PoseAnnotation(
                         source=self.name,
-                        translation=list(part.pose.translation),
-                        rotation=list(part.pose.rotation),
+                        translation=list(object_pose.translation),
+                        rotation=list(object_pose.rotation),
                     ),
                 ],
             )
             ObservationPose.from_hypothesis(hypothesis)
             observation.annotations.append(hypothesis)
-        self.observation_index += 1
-        return Status.SUCCESS

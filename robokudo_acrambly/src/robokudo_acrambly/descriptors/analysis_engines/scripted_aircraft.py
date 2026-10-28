@@ -13,11 +13,11 @@ from robokudo_acrambly.annotators.aircraft_observation import (
     AircraftObservationAnnotator,
     AircraftObservationLabel,
 )
-from robokudo_acrambly.scripted_observations.clock import SystemClock
+from robokudo_acrambly.playback.clock import SystemClock
 
 if TYPE_CHECKING:
     from robokudo_acrambly.aircraft_observations.scenario import AircraftFrames
-    from robokudo_acrambly.scripted_observations.clock import Clock
+    from robokudo_acrambly.playback.clock import Clock
 
 
 # %% Public analysis engine
