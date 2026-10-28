@@ -2,9 +2,9 @@
 
 Status: ready-for-agent
 
-Implementation permission: not granted. The user authorized specifications only
-on 2026-10-28. Do not claim or execute implementation tickets until the user
-explicitly authorizes implementation.
+Implementation permission: granted for tickets 01 and 02 by explicit user
+requests on 2026-10-28. Other tickets still require explicit implementation
+permission.
 
 ## Notes
 
@@ -25,6 +25,10 @@ explicitly authorizes implementation.
 - [Ticket 01](issues/01-aircraft-types-and-models.md#answer) is implemented with
   application-owned aircraft types and replaceable model resources. Its focused
   suite passes; broader regression limitations are recorded in the ticket.
+- [Ticket 02](issues/02-observation-validation-and-frames.md#answer) adds generic
+  configured semantic acceptance, validation before belief changes, and precise
+  camera/world pose preparation. Its 76 connector cases and 41 aircraft model
+  cases pass; broader regression limitations are recorded in the ticket.
 
 Requirements retained from the brief:
 
@@ -100,8 +104,9 @@ Resolved vocabulary is recorded in [the glossary](../../GLOSSARY.md).
 
 All requirement questions have answers. The updated
 [implementation brief](../../robokudo_acrambly/doc/semantic_digital_twin_connector.md)
-records the agreed scope. The user authorized proceeding to specifications;
-implementation has not started and still requires explicit permission.
+records the agreed scope. The user authorized specifications and subsequently
+implemented tickets 01 and 02. Remaining implementation tickets require separate
+explicit permission.
 
 - Q1, answered: plane meshes are the current target, with future simplified
   meshes used for both visual and collision geometry.
@@ -127,13 +132,13 @@ implementation has not started and still requires explicit permission.
 
 ## Implementation tickets
 
-Ticket 01 is implemented; the remaining tickets are specified and unclaimed. Dependency readiness is separate from
+Tickets 01 and 02 are implemented; the remaining tickets are specified and unclaimed. Dependency readiness is separate from
 the user-permission requirement above.
 
 | Ticket | Dependencies | Status |
 | --- | --- | --- |
 | [01: Aircraft types and model resources](issues/01-aircraft-types-and-models.md) | None | resolved |
-| [02: Observation validation and frames](issues/02-observation-validation-and-frames.md) | None | ready-for-agent |
+| [02: Observation validation and frames](issues/02-observation-validation-and-frames.md) | None | resolved |
 | [03: Typed belief creation and geometry](issues/03-typed-belief-creation-and-geometry.md) | 01, 02 | ready-for-agent |
 | [04: Association and pose updates](issues/04-association-and-pose-updates.md) | 02, 03 | ready-for-agent |
 | [05: Plane pipeline acceptance](issues/05-plane-pipeline-acceptance.md) | 01, 02, 03, 04 | ready-for-agent |
@@ -141,9 +146,9 @@ the user-permission requirement above.
 
 ## Fog
 
-No requirement questions remain open. Implementation signatures and runtime test
-results are not established by this specification. Inspect the then-current
-checkout and environment when implementation is explicitly authorized.
+No requirement questions remain open. Tickets 01 and 02 record their implemented
+interfaces and verification results. Inspect the then-current checkout and
+environment when the remaining implementation tickets are explicitly authorized.
 
 ## Comments
 
@@ -156,3 +161,6 @@ checkout and environment when implementation is explicitly authorized.
   supplies aircraft types and model resources; focused coverage passes, with
   broader regression limitations recorded in its answer. Other tickets remain
   unimplemented.
+- 2026-10-28: User authorized ticket 02 and confirmed its public test boundaries.
+  [Ticket 02](issues/02-observation-validation-and-frames.md#answer) is resolved;
+  tickets 03 through 06 remain outside implementation authorization.
