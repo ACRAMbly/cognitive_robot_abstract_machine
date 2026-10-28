@@ -1,11 +1,11 @@
 # 03: Create typed beliefs with complete mesh geometry
 
-Status: ready-for-agent
+Status: claimed
 Type: task
 Blocked by: 01, 02
 
-Implementation permission: not granted. Do not claim or execute this ticket
-without explicit user permission to start implementation.
+Implementation permission: granted by the user's explicit ticket 03 implementation
+request on 2026-10-28. Other tickets remain outside this authorization.
 
 ## Outcome
 

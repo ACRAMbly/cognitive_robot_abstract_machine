@@ -10,6 +10,7 @@ from os import access, R_OK
 from typing_extensions import TYPE_CHECKING
 from pathlib import Path
 
+from robokudo.types.belief_creation import ModelGeometry
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 from semantic_digital_twin.world_description.geometry import Mesh, Scale
 from semantic_digital_twin.world_description.shape_collection import ShapeCollection
@@ -132,7 +133,7 @@ class AircraftModel(Enum):
 
 
 @dataclass
-class AircraftGeometry:
+class AircraftGeometry(ModelGeometry):
     """
     Loaded geometry for one semantic model, reusable across independent bodies.
     """
@@ -148,9 +149,6 @@ class AircraftGeometry:
     """
 
     def create_body(self, body_name: PrefixedName) -> Body:
-        """
-        Create independent visual and collision shapes at the source mesh origin.
-        """
         return Body(
             name=body_name,
             visual=ShapeCollection([deepcopy(self.geometry)]),

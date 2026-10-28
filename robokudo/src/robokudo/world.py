@@ -4,6 +4,10 @@ General methods to access the current World.
 Reasoning about alternate world states is done in the corresponding Annotators.
 """
 
+# %% Imports
+
+from __future__ import annotations
+
 import numpy as np
 
 from robokudo.cas import CAS
@@ -22,7 +26,7 @@ from semantic_digital_twin.world_description.geometry import Mesh, Scale, Box
 import sys
 from uuid import UUID
 from threading import Lock
-from typing_extensions import Dict
+from typing_extensions import Dict, TYPE_CHECKING
 
 from robokudo.types.belief_state import ObjectBeliefState
 from semantic_digital_twin.adapters.world_entity_kwargs_tracker import (
@@ -31,6 +35,11 @@ from semantic_digital_twin.adapters.world_entity_kwargs_tracker import (
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 from semantic_digital_twin.world import World, Body
 from semantic_digital_twin.world_description.connections import Connection6DoF
+
+if TYPE_CHECKING:
+    from robokudo.types.belief_creation import BeliefCreation
+
+# %% Shared world access
 
 # Module-level singleton-like variables
 this = sys.modules[__name__]
@@ -333,24 +342,24 @@ def _update_belief_body_from_latest_bbox(
         world_T_object_belief.origin = origin
 
 
+# %% Belief creation
+
+
 def add_object_hypothesis_as_belief_state(
-    object_hypothesis: ObjectHypothesis, cas: CAS
+    object_hypothesis: ObjectHypothesis,
+    cas: CAS,
+    creation: BeliefCreation | None = None,
 ) -> ObjectBeliefState:
     """
-    Create a new object belief from the given hypothesis and add it to the world.
-
-    .. note::
-        This currently assumes that all object hypotheses are rooted in the camera space.
-
-    :param object_hypothesis: The object hypothesis to create a belief from.
-    :param cas: The CAS to use for transform lookups.
-    :return: The new object belief.
+    Register a new belief with prepared model geometry or camera-frame box geometry.
     """
     rk_world = world_instance()
 
-    object_belief = ObjectBeliefState.create_with_new_body().add_hypothesis(
-        object_hypothesis
-    )
+    object_belief = (
+        ObjectBeliefState.create_with_new_body()
+        if creation is None
+        else ObjectBeliefState(body=creation.body)
+    ).add_hypothesis(object_hypothesis)
     object_belief_body = object_belief.body
     _tracked_objects[object_belief.uuid] = object_belief
 
@@ -365,6 +374,20 @@ def add_object_hypothesis_as_belief_state(
             child=object_belief_body,
         )
         rk_world.add_connection(world_T_object_belief)
+        if creation is not None:
+            pose = creation.world_pose
+            world_T_object_belief.origin = (
+                HomogeneousTransformationMatrix.from_xyz_quaternion(
+                    *pose.translation,
+                    *pose.rotation,
+                    reference_frame=world_body,
+                    child_frame=object_belief_body,
+                )
+            )
+            rk_world.add_semantic_annotation(creation.semantic_annotation)
+
+    if creation is not None and creation.has_model_geometry:
+        return object_belief
 
     _update_belief_body_from_latest_bbox(
         object_belief=object_belief,

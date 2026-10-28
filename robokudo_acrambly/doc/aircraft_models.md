@@ -33,6 +33,24 @@ as the catalog's `definitions` tuple. Retain `label` and `semantic_type` so
 observations continue to identify the same kind. The replacement supplies both
 visual and collision geometry. Source coordinates are scaled but never recentered.
 
-This catalog prepares geometry without inserting bodies or observations into a
-world. Connector validation, association, pose updates, and absence handling
-belong to the subsequent implementation tickets.
+To create aircraft beliefs through `SemanticDigitalTwinConnector`, configure both
+`descriptor.parameters.semantic_types` from each model's `definition.semantic_type`
+and `descriptor.parameters.model_geometry` from the loaded catalog models:
+
+```python
+descriptor.parameters.semantic_types = {
+    label: model.definition.semantic_type
+    for label, model in catalog.models.items()
+}
+descriptor.parameters.model_geometry = {
+    label: model for label, model in catalog.models.items()
+}
+```
+
+The connector prepares geometry before persistent changes, then registers one
+body, belief, and correctly typed annotation for each new accepted object. Both
+mesh collections are present at insertion. Observations supply their model label
+and supported pose; no mesh or bounding box is required. See the generic
+[observation contract](../../robokudo/docs/semantic_observations.md) for capture
+metadata and frames. Association constraints and geometry-preserving pose updates
+remain in the subsequent implementation tickets.

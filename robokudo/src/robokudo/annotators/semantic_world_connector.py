@@ -25,6 +25,7 @@ from robokudo.types.annotation import (
 )
 from robokudo.types.cv import ImageROI
 from robokudo.types.scene import ObjectHypothesis
+from robokudo.types.belief_creation import BeliefCreations
 from robokudo.utils.annotator_helper import (
     draw_bounding_boxes_from_object_hypotheses,
     transform_pose_from_camera_to_world,
@@ -33,8 +34,11 @@ from robokudo.utils.hypothesis_comparators import ObjectHypothesisComparator
 from robokudo.world import world_instance
 
 if TYPE_CHECKING:
+    from typing_extensions import Mapping
+
     from robokudo.cas import CAS
     from robokudo.types.belief_state import ObjectBeliefState
+    from robokudo.types.belief_creation import ModelGeometry
     from semantic_digital_twin.semantic_annotations.mixins import HasRootBody
 
 # %% Belief association
@@ -66,6 +70,11 @@ class SemanticDigitalTwinConnector(ThreadedAnnotator):
             semantic_types: dict[str, type[HasRootBody]] | None = None
             """
             Accepted model labels and annotation types, or generic acceptance.
+            """
+
+            model_geometry: Mapping[str, ModelGeometry] | None = None
+            """
+            Application model geometry indexed by accepted classification label.
             """
 
         parameters: Parameters = field(default_factory=Parameters)
@@ -132,9 +141,18 @@ class SemanticDigitalTwinConnector(ThreadedAnnotator):
 
         # Association uses the newest pose annotation from each hypothesis.
         self.add_world_pose_annotations(object_hypotheses, cas)
+        belief_creations = BeliefCreations.prepare(
+            object_hypotheses,
+            cas,
+            self.descriptor.parameters.semantic_types,
+            self.descriptor.parameters.model_geometry,
+            self.get_class_name(),
+        )
 
         if len(object_beliefs) == 0:
-            return self.create_new_beliefs_for_hypotheses(object_hypotheses, cas)
+            return self.create_new_beliefs_for_hypotheses(
+                object_hypotheses, cas, belief_creations
+            )
 
         cost_matrix = self.create_association_cost_matrix(
             object_hypotheses, object_beliefs
@@ -148,10 +166,11 @@ class SemanticDigitalTwinConnector(ThreadedAnnotator):
             hypothesis_indices,
             belief_indices,
             cas,
+            belief_creations,
         )
         associated_hypotheses.extend(
             self.create_new_beliefs_for_unmatched_hypotheses(
-                object_hypotheses, set(hypothesis_indices), cas
+                object_hypotheses, set(hypothesis_indices), cas, belief_creations
             )
         )
         return associated_hypotheses
@@ -248,6 +267,7 @@ class SemanticDigitalTwinConnector(ThreadedAnnotator):
         hypothesis_indices: np.ndarray,
         belief_indices: np.ndarray,
         cas: CAS,
+        belief_creations: BeliefCreations | None = None,
     ) -> list[tuple[ObjectHypothesis, ObjectBeliefState]]:
         """
         Update matched beliefs or create new beliefs for low-confidence matches.
@@ -255,10 +275,10 @@ class SemanticDigitalTwinConnector(ThreadedAnnotator):
         associated_hypotheses: list[tuple[ObjectHypothesis, ObjectBeliefState]] = []
         threshold = self.descriptor.parameters.confidence_threshold
 
-        for hypothesis_idx, belief_idx in zip(hypothesis_indices, belief_indices):
-            object_hypothesis = object_hypotheses[hypothesis_idx]
-            object_belief = object_beliefs[belief_idx]
-            similarity = -cost_matrix[hypothesis_idx, belief_idx]
+        for hypothesis_index, belief_index in zip(hypothesis_indices, belief_indices):
+            object_hypothesis = object_hypotheses[hypothesis_index]
+            object_belief = object_beliefs[belief_index]
+            similarity = -cost_matrix[hypothesis_index, belief_index]
 
             if similarity > threshold:
                 world.update_belief_state_with_object_hypothesis(
@@ -266,14 +286,23 @@ class SemanticDigitalTwinConnector(ThreadedAnnotator):
                 )
             else:
                 object_belief = world.add_object_hypothesis_as_belief_state(
-                    object_hypothesis, cas
+                    object_hypothesis,
+                    cas,
+                    (
+                        None
+                        if belief_creations is None
+                        else belief_creations.by_hypothesis.get(id(object_hypothesis))
+                    ),
                 )
             associated_hypotheses.append((object_hypothesis, object_belief))
 
         return associated_hypotheses
 
     def create_new_beliefs_for_hypotheses(
-        self, object_hypotheses: list[ObjectHypothesis], cas: CAS
+        self,
+        object_hypotheses: list[ObjectHypothesis],
+        cas: CAS,
+        belief_creations: BeliefCreations | None = None,
     ) -> list[tuple[ObjectHypothesis, ObjectBeliefState]]:
         """
         Create object beliefs for all given hypotheses.
@@ -281,7 +310,15 @@ class SemanticDigitalTwinConnector(ThreadedAnnotator):
         return [
             (
                 object_hypothesis,
-                world.add_object_hypothesis_as_belief_state(object_hypothesis, cas),
+                world.add_object_hypothesis_as_belief_state(
+                    object_hypothesis,
+                    cas,
+                    (
+                        None
+                        if belief_creations is None
+                        else belief_creations.by_hypothesis.get(id(object_hypothesis))
+                    ),
+                ),
             )
             for object_hypothesis in object_hypotheses
         ]
@@ -291,17 +328,20 @@ class SemanticDigitalTwinConnector(ThreadedAnnotator):
         object_hypotheses: list[ObjectHypothesis],
         matched_hypothesis_indices: set[int],
         cas: CAS,
+        belief_creations: BeliefCreations | None = None,
     ) -> list[tuple[ObjectHypothesis, ObjectBeliefState]]:
         """
         Create object beliefs for hypotheses not returned by Hungarian assignment.
         """
         unmatched_hypotheses = [
             object_hypothesis
-            for hypothesis_idx, object_hypothesis in enumerate(object_hypotheses)
-            if hypothesis_idx not in matched_hypothesis_indices
+            for hypothesis_index, object_hypothesis in enumerate(object_hypotheses)
+            if hypothesis_index not in matched_hypothesis_indices
         ]
         # Hungarian assignment only pairs min(len(hypotheses), len(beliefs)); extras start new beliefs.
-        return self.create_new_beliefs_for_hypotheses(unmatched_hypotheses, cas)
+        return self.create_new_beliefs_for_hypotheses(
+            unmatched_hypotheses, cas, belief_creations
+        )
 
     def log_world_state(self) -> None:
         """

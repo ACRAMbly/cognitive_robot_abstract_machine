@@ -17,6 +17,20 @@ descriptor.parameters.semantic_types = {
 connector = SemanticDigitalTwinConnector(descriptor=descriptor)
 ```
 
+To create mesh-bearing beliefs, also supply loaded model geometry:
+
+```python
+descriptor.parameters.model_geometry = {
+    label: model for label, model in catalog.models.items()
+}
+```
+
+Each value implements `robokudo.types.belief_creation.ModelGeometry.create_body`.
+It returns a detached body with independent, loaded visual and collision shapes,
+with metric scale and model-local offsets retained at the source mesh origin.
+An enabled mapping must contain each observed model label; missing entries raise
+`MissingModelGeometry`. The aircraft catalog implements this interface.
+
 The generic connector does not import application types. The mapping validates
 model acceptance independently of classification confidence or the connector's
 association similarity threshold. Missing, empty, unknown, and conflicting
@@ -48,8 +62,16 @@ reprocessing a derived world pose neither transforms it again nor appends anothe
 derived annotation. Empty observations retain existing object state.
 
 `SemanticObservationAcceptance.prepare` returns a `PreparedObservation` containing
-the original hypothesis, resolved semantic type, and captured world pose. This
-is the extension point for subsequent configured body creation. This validation
-ticket does not install model geometry or semantic annotations, change model-kind
-association, or replace the existing bounding-box body-update path; those are
-separate implementation tickets.
+the original hypothesis, resolved semantic type, and captured world pose.
+Configured creation prepares all required bodies and typed semantic annotations
+before any persistent belief changes. Resource failures therefore leave the
+persistent world unchanged, even after an earlier valid hypothesis. Bodies enter
+the world with complete geometry in both collections. Each new belief retains
+the body's UUID and receives one semantic annotation rooted at that body;
+`IsPerceivable` annotations retain the classification label.
+
+With `model_geometry=None`, creation retains the existing bounding-box behavior;
+with `semantic_types=None`, it retains generic untyped acceptance. Configured
+mesh creation works with a model label and supported pose, without a per-detection
+mesh, bounding box, or image region. Model-kind association and geometry-preserving
+updates of existing bodies remain separate implementation tickets.
