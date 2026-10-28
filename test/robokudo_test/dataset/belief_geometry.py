@@ -55,9 +55,6 @@ class OffsetModelGeometry(ModelGeometry):
     """
 
     def create_body(self, body_name: PrefixedName) -> Body:
-        """
-        Create a detached body with both mesh collections already populated.
-        """
         return Body(
             name=body_name,
             visual=ShapeCollection([deepcopy(self.geometry)]),

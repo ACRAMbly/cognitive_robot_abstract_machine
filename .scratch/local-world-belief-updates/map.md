@@ -2,7 +2,7 @@
 
 Status: ready-for-agent
 
-Implementation permission: granted for tickets 01 and 02 by explicit user
+Implementation permission: granted for tickets 01, 02, and 03 by explicit user
 requests on 2026-10-28. Other tickets still require explicit implementation
 permission.
 
@@ -29,6 +29,11 @@ permission.
   configured semantic acceptance, validation before belief changes, and precise
   camera/world pose preparation. Its 76 connector cases and 41 aircraft model
   cases pass; broader regression limitations are recorded in the ticket.
+- [Ticket 03](issues/03-typed-belief-creation-and-geometry.md#answer) adds configured
+  mesh-bearing belief creation and typed annotation registration. Geometry is
+  complete before insertion, and resource failures preserve persistent state.
+  All 85 focused generic cases and 42 aircraft cases pass; broader regression
+  limitations are recorded in the ticket.
 
 Requirements retained from the brief:
 
@@ -94,7 +99,8 @@ See [the application-semantics decision](../../docs/adr/0003-keep-aircraft-seman
 - World updates use a bounding-box pose, ignore mesh-bearing shape annotations,
   replace visual geometry with a box, and do not initialize collision geometry.
   A plain pose alone cannot move an existing belief body.
-- The acceptance path does not create semantic annotations from classifications.
+- Configured creation now registers semantic annotations from classifications;
+  unconfigured generic creation remains untyped.
 - These are code findings, not decisions to add new tracking, confidence,
   expiry, or durable-storage policies.
 
@@ -105,7 +111,7 @@ Resolved vocabulary is recorded in [the glossary](../../GLOSSARY.md).
 All requirement questions have answers. The updated
 [implementation brief](../../robokudo_acrambly/doc/semantic_digital_twin_connector.md)
 records the agreed scope. The user authorized specifications and subsequently
-implemented tickets 01 and 02. Remaining implementation tickets require separate
+implemented tickets 01, 02, and 03. Remaining implementation tickets require separate
 explicit permission.
 
 - Q1, answered: plane meshes are the current target, with future simplified
@@ -132,21 +138,21 @@ explicit permission.
 
 ## Implementation tickets
 
-Tickets 01 and 02 are implemented; the remaining tickets are specified and unclaimed. Dependency readiness is separate from
+Tickets 01, 02, and 03 are implemented; the remaining tickets are specified and unclaimed. Dependency readiness is separate from
 the user-permission requirement above.
 
 | Ticket | Dependencies | Status |
 | --- | --- | --- |
 | [01: Aircraft types and model resources](issues/01-aircraft-types-and-models.md) | None | resolved |
 | [02: Observation validation and frames](issues/02-observation-validation-and-frames.md) | None | resolved |
-| [03: Typed belief creation and geometry](issues/03-typed-belief-creation-and-geometry.md) | 01, 02 | ready-for-agent |
+| [03: Typed belief creation and geometry](issues/03-typed-belief-creation-and-geometry.md) | 01, 02 | resolved |
 | [04: Association and pose updates](issues/04-association-and-pose-updates.md) | 02, 03 | ready-for-agent |
 | [05: Plane pipeline acceptance](issues/05-plane-pipeline-acceptance.md) | 01, 02, 03, 04 | ready-for-agent |
 | [06: Documentation and regressions](issues/06-documentation-and-regressions.md) | 01, 02, 03, 04, 05 | ready-for-agent |
 
 ## Fog
 
-No requirement questions remain open. Tickets 01 and 02 record their implemented
+No requirement questions remain open. Tickets 01, 02, and 03 record their implemented
 interfaces and verification results. Inspect the then-current checkout and
 environment when the remaining implementation tickets are explicitly authorized.
 
@@ -164,3 +170,5 @@ environment when the remaining implementation tickets are explicitly authorized.
 - 2026-10-28: User authorized ticket 02 and confirmed its public test boundaries.
   [Ticket 02](issues/02-observation-validation-and-frames.md#answer) is resolved;
   tickets 03 through 06 remain outside implementation authorization.
+- 2026-10-28: User authorized ticket 03 implementation. Configured typed creation
+  is implemented and reviewed; tickets 04 through 06 remain outside authorization.

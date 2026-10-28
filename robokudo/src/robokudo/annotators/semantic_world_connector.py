@@ -274,6 +274,7 @@ class SemanticDigitalTwinConnector(ThreadedAnnotator):
         """
         associated_hypotheses: list[tuple[ObjectHypothesis, ObjectBeliefState]] = []
         threshold = self.descriptor.parameters.confidence_threshold
+        belief_creations = belief_creations or BeliefCreations()
 
         for hypothesis_index, belief_index in zip(hypothesis_indices, belief_indices):
             object_hypothesis = object_hypotheses[hypothesis_index]
@@ -285,15 +286,7 @@ class SemanticDigitalTwinConnector(ThreadedAnnotator):
                     object_belief, object_hypothesis, cas
                 )
             else:
-                object_belief = world.add_object_hypothesis_as_belief_state(
-                    object_hypothesis,
-                    cas,
-                    (
-                        None
-                        if belief_creations is None
-                        else belief_creations.by_hypothesis.get(id(object_hypothesis))
-                    ),
-                )
+                object_belief = belief_creations.create_belief(object_hypothesis, cas)
             associated_hypotheses.append((object_hypothesis, object_belief))
 
         return associated_hypotheses
@@ -307,18 +300,11 @@ class SemanticDigitalTwinConnector(ThreadedAnnotator):
         """
         Create object beliefs for all given hypotheses.
         """
+        belief_creations = belief_creations or BeliefCreations()
         return [
             (
                 object_hypothesis,
-                world.add_object_hypothesis_as_belief_state(
-                    object_hypothesis,
-                    cas,
-                    (
-                        None
-                        if belief_creations is None
-                        else belief_creations.by_hypothesis.get(id(object_hypothesis))
-                    ),
-                ),
+                belief_creations.create_belief(object_hypothesis, cas),
             )
             for object_hypothesis in object_hypotheses
         ]

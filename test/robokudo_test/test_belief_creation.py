@@ -8,7 +8,7 @@ import trimesh
 from typing_extensions import TYPE_CHECKING
 
 from robokudo import world
-from robokudo.exceptions import RoboKudoError
+from robokudo.types.exceptions import MissingModelGeometry
 from semantic_digital_twin.exceptions import PathResolutionError
 from robokudo.utils.transform import get_transform_matrix_from_q
 from semantic_digital_twin.world_description.geometry import Mesh, Scale
@@ -264,7 +264,7 @@ def test_missing_model_geometry_mapping_reports_configuration_error_before_creat
     """
     configured_connector.descriptor.parameters.model_geometry = {}
     snapshot = BeliefWorldSnapshot.capture()
-    with pytest.raises(RoboKudoError):
+    with pytest.raises(MissingModelGeometry):
         configured_connector.associate_hypotheses_with_beliefs(
             [observation_example.create_hypothesis()], [], captured_cas
         )

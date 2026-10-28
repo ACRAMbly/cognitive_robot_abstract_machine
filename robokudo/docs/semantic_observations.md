@@ -72,6 +72,9 @@ the body's UUID and receives one semantic annotation rooted at that body;
 
 With `model_geometry=None`, creation retains the existing bounding-box behavior;
 with `semantic_types=None`, it retains generic untyped acceptance. Configured
-mesh creation works with a model label and supported pose, without a per-detection
+initial mesh creation works with a model label and supported pose, without a per-detection
 mesh, bounding box, or image region. Model-kind association and geometry-preserving
-updates of existing bodies remain separate implementation tickets.
+updates of existing bodies remain separate implementation tickets. Association
+in a populated world still uses the existing image comparator, which currently
+requires valid ROI/mask evidence; accepting absent image evidence there remains
+part of the association work.

@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 
 from typing_extensions import TYPE_CHECKING
 
+from robokudo import world
 from robokudo.annotators.semantic_observations import SemanticObservationAcceptance
 from robokudo.types.annotation import Classification
 from robokudo.types.exceptions import MissingModelGeometry
@@ -18,7 +19,9 @@ if TYPE_CHECKING:
     from typing_extensions import Mapping
 
     from robokudo.cas import CAS
+    from robokudo.annotators.semantic_observations import PreparedObservation
     from robokudo.types.annotation import StampedPoseAnnotation
+    from robokudo.types.belief_state import ObjectBeliefState
     from robokudo.types.scene import ObjectHypothesis
     from semantic_digital_twin.semantic_annotations.mixins import HasRootBody
 
@@ -64,6 +67,35 @@ class BeliefCreation:
     Whether model geometry replaces the generic bounding-box creation path.
     """
 
+    @classmethod
+    def from_observation(
+        cls,
+        observation: PreparedObservation,
+        model_geometry: Mapping[str, ModelGeometry] | None,
+    ) -> BeliefCreation:
+        """
+        Prepare one model body and its semantic annotation without registration.
+        """
+        label = next(
+            annotation.classname
+            for annotation in observation.hypothesis.annotations
+            if isinstance(annotation, Classification)
+        )
+        if model_geometry is not None and label not in model_geometry:
+            raise MissingModelGeometry(label)
+        body = (
+            Body()
+            if model_geometry is None
+            else model_geometry[label].create_body(PrefixedName(label))
+        )
+        for collection in (body.visual, body.collision):
+            for shape in collection.shapes:
+                shape.mesh
+        annotation = observation.semantic_type(root=body)
+        if isinstance(annotation, IsPerceivable):
+            annotation.class_label = label
+        return cls(body, observation.world_pose, annotation, model_geometry is not None)
+
 
 @dataclass
 class BeliefCreations:
@@ -88,31 +120,23 @@ class BeliefCreations:
         """
         Load required geometry for every configured hypothesis before insertion.
         """
-        creations = cls()
         if semantic_types is None:
-            return creations
+            return cls()
         acceptance = SemanticObservationAcceptance(semantic_types)
-        for hypothesis in hypotheses:
-            observation = acceptance.prepare(hypothesis, cas, source)
-            label = next(
-                annotation.classname
-                for annotation in hypothesis.annotations
-                if isinstance(annotation, Classification)
-            )
-            if model_geometry is not None and label not in model_geometry:
-                raise MissingModelGeometry(label)
-            body = (
-                Body()
-                if model_geometry is None
-                else model_geometry[label].create_body(PrefixedName(label))
-            )
-            for collection in (body.visual, body.collision):
-                for shape in collection.shapes:
-                    shape.mesh
-            annotation = observation.semantic_type(root=body)
-            if isinstance(annotation, IsPerceivable):
-                annotation.class_label = label
-            creations.by_hypothesis[id(hypothesis)] = BeliefCreation(
-                body, observation.world_pose, annotation, model_geometry is not None
-            )
-        return creations
+        return cls(
+            {
+                id(hypothesis): BeliefCreation.from_observation(
+                    acceptance.prepare(hypothesis, cas, source), model_geometry
+                )
+                for hypothesis in hypotheses
+            }
+        )
+
+    def create_belief(
+        self, hypothesis: ObjectHypothesis, cas: CAS
+    ) -> ObjectBeliefState:
+        """
+        Register a prepared belief or create a generic belief for the hypothesis.
+        """
+        creation = self.by_hypothesis.get(id(hypothesis))
+        return world.add_object_hypothesis_as_belief_state(hypothesis, cas, creation)
