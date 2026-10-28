@@ -37,6 +37,7 @@ from semantic_digital_twin.world import World, Body
 from semantic_digital_twin.world_description.connections import Connection6DoF
 
 if TYPE_CHECKING:
+    from robokudo.types.annotation import StampedPoseAnnotation
     from robokudo.types.belief_creation import BeliefCreation
 
 # %% Shared world access
@@ -401,17 +402,15 @@ def add_object_hypothesis_as_belief_state(
 
 
 def update_belief_state_with_object_hypothesis(
-    object_belief: ObjectBeliefState, object_hypothesis: ObjectHypothesis, cas: CAS
+    object_belief: ObjectBeliefState,
+    object_hypothesis: ObjectHypothesis,
+    cas: CAS,
+    world_pose: StampedPoseAnnotation | None = None,
 ) -> None:
     """
-    Update the given object belief state with the object hypothesis.
+    Accept an observation and update its model pose or generic bounding-box geometry.
 
-    .. note::
-        This currently assumes that all object hypotheses are rooted in the camera space.
-
-    :param object_belief: Object belief state to update.
-    :param object_hypothesis: Object hypothesis state to update the belief state with.
-    :param cas: The CAS to use for transform lookups.
+    A prepared world pose retains existing geometry and locates the mesh origin.
     """
     rk_world = world_instance()
 
@@ -420,6 +419,19 @@ def update_belief_state_with_object_hypothesis(
 
     world_body = _get_world_body_from_cas(cas, rk_world)
     if world_body is None:
+        return
+
+    if world_pose is not None:
+        connection = object_belief_body.get_first_parent_connection_of_type(
+            Connection6DoF
+        )
+        with rk_world.modify_world():
+            connection.origin = HomogeneousTransformationMatrix.from_xyz_quaternion(
+                *world_pose.translation,
+                *world_pose.rotation,
+                reference_frame=world_body,
+                child_frame=object_belief_body,
+            )
         return
 
     _update_belief_body_from_latest_bbox(
