@@ -16,6 +16,7 @@ from robokudo_acrambly.playback.schedule import CaptureSchedule
 
 if TYPE_CHECKING:
     from robokudo.cas import CAS
+    from robokudo_acrambly.aircraft_observations.preview import AircraftPreview
     from robokudo_acrambly.aircraft_observations.scenario import (
         AircraftFrames,
         AircraftScenario,
@@ -57,6 +58,11 @@ class AircraftObservationAnnotator(BaseAnnotator):
     Clock supplying integer Unix capture timestamps.
     """
 
+    preview: AircraftPreview | None = None
+    """
+    Optional display geometry prepared from the completed observation.
+    """
+
     schedule: CaptureSchedule = field(init=False)
     """
     Finite capture times retained across pipeline ticks.
@@ -82,8 +88,19 @@ class AircraftObservationAnnotator(BaseAnnotator):
         pipeline.create_new_cas()
         self.frames.write_metadata(pipeline.cas, capture.capture_timestamp)
         self.write_hypotheses(pipeline.cas, capture)
+        self.write_preview(pipeline.cas)
         self.schedule.observation_index += 1
         return Status.SUCCESS
+
+    def write_preview(self, observation: CAS) -> None:
+        """
+        Replace optional mesh display output for one completed capture.
+        """
+        if self.preview is None:
+            return
+        self.get_annotator_output_struct().set_geometries(
+            self.preview.create_geometries(observation)
+        )
 
     def write_hypotheses(self, observation: CAS, capture: ScheduledCapture) -> None:
         """
