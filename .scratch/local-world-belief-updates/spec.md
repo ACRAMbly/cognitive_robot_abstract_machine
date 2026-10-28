@@ -1,11 +1,10 @@
 # Persistent aircraft-part beliefs from CAS observations
 
-Status: ready-for-agent
+Status: resolved
 
-Implementation permission: not granted. The user authorized specifications only
-on 2026-10-28. Do not start implementation, write tests or fixtures, change
-runtime configuration, or execute implementation tickets without explicit user
-permission. Specification readiness is not authorization to implement.
+Implementation permission: granted. The user explicitly requested implementation
+of tickets 04–06 on 2026-10-28, following the committed implementation of 01–03.
+This supersedes the earlier specification-only restriction.
 
 ## Problem
 
@@ -198,7 +197,7 @@ world-state refactors. Existing Tetris behavior is not the acceptance scenario.
 
 ## Delivery
 
-Implementation remains subject to explicit user permission. When authorized,
+Implementation is authorized by the user. For delivery,
 follow the repository's branch and fork workflow described in the
 [connector brief](../../robokudo_acrambly/doc/semantic_digital_twin_connector.md#implementation-workflow-and-deliverable).
 Deliver focused code, tests, application configuration documentation, and exact
@@ -210,3 +209,7 @@ The [feature map](map.md) lists the dependency-ordered implementation tickets.
 
 - 2026-10-28: The user accepted the design decisions and authorized proceeding to
   specifications, explicitly withholding implementation permission.
+
+- 2026-10-28: Tickets 04–06 implemented, verified and reviewed on the integration
+  branch. All six local tickets are resolved; verification limitations are recorded
+  in the application verification document. No push or PR was published.

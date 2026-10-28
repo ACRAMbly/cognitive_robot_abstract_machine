@@ -1,10 +1,9 @@
 # Local object belief updates
 
-Status: ready-for-agent
+Status: resolved
 
-Implementation permission: granted for tickets 01, 02, and 03 by explicit user
-requests on 2026-10-28. Other tickets still require explicit implementation
-permission.
+Implementation permission: granted for all six tickets by explicit user
+requests on 2026-10-28. Tickets 01–03 were committed before this implementation run.
 
 ## Notes
 
@@ -21,6 +20,15 @@ permission.
   requires separate permission before implementation.
 
 ## Decisions-so-far
+
+- [Ticket 06](issues/06-documentation-and-regressions.md#answer) documents the
+  implemented interface and exact focused verification, including existing
+  dataset and package-collection limitations. Final review has no findings.
+
+- [Ticket 04](issues/04-association-and-pose-updates.md#answer) enforces model-kind
+  compatibility and preserves accepted geometry during pose updates.
+- [Ticket 05](issues/05-plane-pipeline-acceptance.md#answer) proves all twelve
+  aircraft kinds through the six-stage local pipeline sequence.
 
 - [Ticket 01](issues/01-aircraft-types-and-models.md#answer) is implemented with
   application-owned aircraft types and replaceable model resources. Its focused
@@ -89,7 +97,7 @@ User clarification, 2026-10-28:
 
 See [the application-semantics decision](../../docs/adr/0003-keep-aircraft-semantics-in-acrambly.md).
 
-## Verified implementation gaps
+## Historical implementation gaps
 
 - The existing connector associates current hypotheses with persistent beliefs;
   rejected assignments and excess hypotheses create beliefs, while absent
@@ -101,8 +109,8 @@ See [the application-semantics decision](../../docs/adr/0003-keep-aircraft-seman
   A plain pose alone cannot move an existing belief body.
 - Configured creation now registers semantic annotations from classifications;
   unconfigured generic creation remains untyped.
-- These are code findings, not decisions to add new tracking, confidence,
-  expiry, or durable-storage policies.
+- Tickets 04–06 close the association and pose-update gaps described above.
+  Tracking, confidence, expiry, and durable-storage policies remain out of scope.
 
 Resolved vocabulary is recorded in [the glossary](../../GLOSSARY.md).
 
@@ -111,8 +119,7 @@ Resolved vocabulary is recorded in [the glossary](../../GLOSSARY.md).
 All requirement questions have answers. The updated
 [implementation brief](../../robokudo_acrambly/doc/semantic_digital_twin_connector.md)
 records the agreed scope. The user authorized specifications and subsequently
-implemented tickets 01, 02, and 03. Remaining implementation tickets require separate
-explicit permission.
+implemented tickets 01, 02, and 03. The user subsequently authorized implementing tickets 04–06.
 
 - Q1, answered: plane meshes are the current target, with future simplified
   meshes used for both visual and collision geometry.
@@ -138,23 +145,23 @@ explicit permission.
 
 ## Implementation tickets
 
-Tickets 01, 02, and 03 are implemented; the remaining tickets are specified and unclaimed. Dependency readiness is separate from
-the user-permission requirement above.
+All six tickets are implemented and resolved on
+`feature/local-world-belief-updates`.
 
 | Ticket | Dependencies | Status |
 | --- | --- | --- |
 | [01: Aircraft types and model resources](issues/01-aircraft-types-and-models.md) | None | resolved |
 | [02: Observation validation and frames](issues/02-observation-validation-and-frames.md) | None | resolved |
 | [03: Typed belief creation and geometry](issues/03-typed-belief-creation-and-geometry.md) | 01, 02 | resolved |
-| [04: Association and pose updates](issues/04-association-and-pose-updates.md) | 02, 03 | ready-for-agent |
-| [05: Plane pipeline acceptance](issues/05-plane-pipeline-acceptance.md) | 01, 02, 03, 04 | ready-for-agent |
-| [06: Documentation and regressions](issues/06-documentation-and-regressions.md) | 01, 02, 03, 04, 05 | ready-for-agent |
+| [04: Association and pose updates](issues/04-association-and-pose-updates.md) | 02, 03 | resolved |
+| [05: Plane pipeline acceptance](issues/05-plane-pipeline-acceptance.md) | 01, 02, 03, 04 | resolved |
+| [06: Documentation and regressions](issues/06-documentation-and-regressions.md) | 01, 02, 03, 04, 05 | resolved |
 
 ## Fog
 
-No requirement questions remain open. Tickets 01, 02, and 03 record their implemented
-interfaces and verification results. Inspect the then-current checkout and
-environment when the remaining implementation tickets are explicitly authorized.
+No requirement questions remain open. All tickets record their implemented
+interfaces and verification results. Existing dataset DNS and package import
+limitations prevent a clean full-package regression claim.
 
 ## Comments
 
@@ -165,10 +172,9 @@ environment when the remaining implementation tickets are explicitly authorized.
 - 2026-10-28: User authorized ticket 01 implementation and confirmed its public
   test seams. [Ticket 01](issues/01-aircraft-types-and-models.md#answer) now
   supplies aircraft types and model resources; focused coverage passes, with
-  broader regression limitations recorded in its answer. Other tickets remain
-  unimplemented.
+  broader regression limitations recorded in its answer. Tickets 04–06 were subsequently authorized.
 - 2026-10-28: User authorized ticket 02 and confirmed its public test boundaries.
   [Ticket 02](issues/02-observation-validation-and-frames.md#answer) is resolved;
-  tickets 03 through 06 remain outside implementation authorization.
+  tickets 03–06 were subsequently authorized.
 - 2026-10-28: User authorized ticket 03 implementation. Configured typed creation
-  is implemented and reviewed; tickets 04 through 06 remain outside authorization.
+  is implemented and reviewed; tickets 04–06 were subsequently authorized.
