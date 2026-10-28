@@ -1,4 +1,4 @@
-# Configured observation validation
+# Configured local object beliefs
 
 Set `SemanticDigitalTwinConnector.Descriptor().parameters.semantic_types` to a
 mapping from classification labels to concrete `HasRootBody` semantic annotation
@@ -70,11 +70,30 @@ the world with complete geometry in both collections. Each new belief retains
 the body's UUID and receives one semantic annotation rooted at that body;
 `IsPerceivable` annotations retain the classification label.
 
+## Association and accepted updates
+
+The connector uses the existing weighted comparators and one-to-one assignment.
+Known different model labels cannot match, even when their geometric evidence
+is similar. Classification confidence does not replace association similarity.
+The descriptor's existing `confidence_threshold` determines whether a compatible
+assignment updates a belief or creates a new one. Unmatched hypotheses also
+create beliefs. Model labels identify kinds; detection identifiers identify
+observations. Neither is a physical object's persistent UUID.
+
+Configured mesh observations require a model label and supported pose, without
+a per-detection mesh, bounding box, or image region. Optional image evidence
+participates when available. Accepted matches update the existing body's world
+pose and accepted hypothesis while preserving its belief, body, UUID, semantic
+annotation, and visual and collision shapes. Shape-local offsets remain local
+to the body, so translation and rotation move the complete model.
+
+Absent objects retain their last accepted pose, capture time, geometry, and
+identity. An empty observation changes no object state. Reappearance can update
+the retained belief through the same association rules. Persistence lasts for
+the running local world; it adds no expiry policy or durable storage.
+
 With `model_geometry=None`, creation retains the existing bounding-box behavior;
-with `semantic_types=None`, it retains generic untyped acceptance. Configured
-initial mesh creation works with a model label and supported pose, without a per-detection
-mesh, bounding box, or image region. Model-kind association and geometry-preserving
-updates of existing bodies remain separate implementation tickets. Association
-in a populated world still uses the existing image comparator, which currently
-requires valid ROI/mask evidence; accepting absent image evidence there remains
-part of the association work.
+with `semantic_types=None`, it retains generic untyped acceptance. Application
+semantics stay outside the generic connector. See the application's
+[aircraft configuration](../../robokudo_acrambly/doc/aircraft_models.md) and
+[verification evidence](../../robokudo_acrambly/doc/aircraft_belief_verification.md).
