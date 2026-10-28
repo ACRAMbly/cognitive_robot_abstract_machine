@@ -1,6 +1,6 @@
 # 01: Define aircraft semantic types and model resources
 
-Status: ready-for-agent
+Status: claimed
 Type: task
 Blocked by: None
 
@@ -40,3 +40,6 @@ modified Python files and record results when implementation is authorized.
 ## Comments
 
 - 2026-10-28: Specification ticket only; implementation is not authorized.
+- 2026-10-28: User explicitly requested implementation of ticket 01 and confirmed
+  semantic subtype/label queries and model catalog/geometry as the test seams.
+  This supersedes the earlier permission note for ticket 01 only.
