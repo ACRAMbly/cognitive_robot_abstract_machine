@@ -8,7 +8,26 @@ Install it with the repository's normal `uv sync --active` workflow after settin
 up the ROS 2 environment. The workspace's `sensor_msgs` and other ROS dependencies
 must remain available to Python.
 
-Run the supplied synthetic observation engine from the repository root:
+Run the `scripted_aircraft` synthetic observation engine from the repository root
+after the [ROS and configured-interpreter setup](doc/scripted_aircraft.md#setup-and-headless-execution):
+
+```bash
+export AIRCRAFT_FRAME_CONFIGURATION="$PWD/robokudo_acrambly/doc/aircraft_frames.json"
+unset AIRCRAFT_MESH_DIRECTORY
+python -m robokudo.scripts.main _ros_pkg robokudo_acrambly _ae scripted_aircraft _headless _tickrate 20
+```
+
+This emits a finite sequence of minimal aircraft-part CAS observations. The
+example file explicitly configures world/camera frames and a camera-to-world
+pose; replace it with your application's calibration. Headless emission needs no
+meshes. For optional native mesh verification, configure `AIRCRAFT_MESH_DIRECTORY`
+explicitly (for example, `$PWD/plane`) and omit `_headless`.
+
+- [Aircraft configuration, playback, CAS contract, and optional preview](doc/scripted_aircraft.md)
+- [Aircraft model catalog and separate belief-consumer setup](doc/aircraft_models.md)
+
+The independent `scripted_tetris` engine retains its own meshes, scenario,
+image/geometry contract, and preview. Run it separately:
 
 ```bash
 export TETRIS_MESH_DIRECTORY="$PWD/robokudo_acrambly/src/robokudo_acrambly/data"
@@ -25,7 +44,8 @@ to that directory, or to another directory containing the configured meshes.
 
 Custom annotators live in `src/robokudo_acrambly/annotators`, pipeline descriptors
 in `src/robokudo_acrambly/descriptors/analysis_engines`, and observation support
-in `src/robokudo_acrambly/scripted_observations`. The layout follows RoboKudo's
+in `src/robokudo_acrambly/aircraft_observations` and
+`src/robokudo_acrambly/scripted_observations`. The layout follows RoboKudo's
 [extension package](https://robokudo.ai.uni-bremen.de/tutorials/create_your_own_package.html)
 and [custom annotator](https://robokudo.ai.uni-bremen.de/tutorials/create_your_own_annotator.html)
 guides, using this repository's Python workspace packaging.

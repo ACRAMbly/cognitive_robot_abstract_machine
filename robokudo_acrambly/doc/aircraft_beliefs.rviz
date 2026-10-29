@@ -1,0 +1,49 @@
+# %% Belief world displays
+Panels:
+  - Class: rviz_common/Displays
+    Name: Displays
+Visualization Manager:
+  Class: ""
+  Global Options:
+    Background Color: 48; 48; 48
+    Fixed Frame: aircraft_world
+    Frame Rate: 30
+  Displays:
+    - Class: rviz_default_plugins/MarkerArray
+      Name: Local belief geometry
+      Enabled: true
+      Value: true
+      Topic:
+        Value: /semworld/viz_marker
+        Reliability Policy: Reliable
+        Durability Policy: Transient Local
+        History Policy: Keep Last
+        Depth: 10
+    - Class: rviz_default_plugins/TF
+      Name: Belief frames
+      Enabled: true
+      Value: true
+      Show Arrows: true
+      Show Axes: true
+      Show Names: false
+      Marker Scale: 0.15
+      Frame Timeout: 15
+  Tools:
+    - Class: rviz_default_plugins/Interact
+    - Class: rviz_default_plugins/MoveCamera
+  Views:
+    Current:
+      Class: rviz_default_plugins/Orbit
+      Name: Aircraft beliefs
+      Target Frame: <Fixed Frame>
+      Distance: 4
+      Pitch: 0.5
+      Yaw: 0.8
+      Focal Point:
+        X: 10
+        Y: 20
+        Z: 31
+# %% Window dimensions
+Window Geometry:
+  Width: 1280
+  Height: 800
