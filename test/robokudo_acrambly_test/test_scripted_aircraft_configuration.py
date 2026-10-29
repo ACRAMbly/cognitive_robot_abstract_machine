@@ -17,6 +17,8 @@ from robokudo.annotators.exceptions import InvalidObservationPose
 from robokudo.types.tf import Pose
 from robokudo import world as robokudo_world
 from robokudo_acrambly.aircraft.models import AircraftModel
+from robokudo_acrambly.aircraft.exceptions import MissingAircraftResource
+from robokudo_acrambly.aircraft.types import AircraftPart
 from robokudo_acrambly.aircraft_observations.configuration import (
     AircraftConfigurationField,
     AircraftEnvironment,
@@ -24,20 +26,29 @@ from robokudo_acrambly.aircraft_observations.configuration import (
 from robokudo_acrambly.annotators.aircraft_observation import AircraftObservationLabel
 from robokudo_acrambly.aircraft_observations.exceptions import (
     MissingAircraftFrameConfiguration,
+    MissingAircraftMeshConfiguration,
 )
 
-from .test_aircraft_models import replacement_model
+from .test_aircraft_models import AircraftFixtureResource, replacement_model
+from .test_aircraft_belief_creation import semdt_cas
+from .dataset.aircraft_beliefs import AircraftBeliefCapture
 from ..robokudo_test.dataset.semantic_observations import BeliefWorldSnapshot
 
 if TYPE_CHECKING:
     from rclpy.node import Node
 
     from robokudo.annotators.outputs import AnnotatorOutputPerPipelineMap
+    from robokudo.cas import CAS
     from robokudo_acrambly.aircraft.models import AircraftModelDefinition
     from semantic_digital_twin.world import World
 
 
 # %% Documented launcher configuration
+
+
+@pytest.fixture(autouse=True)
+def isolated_aircraft_beliefs(semdt_cas: CAS) -> None:
+    """Reset local beliefs and runtime world around each launcher test."""
 
 
 class AircraftConfigurationExample(StrEnum):
@@ -79,11 +90,17 @@ def aircraft_configuration(
     monkeypatch: pytest.MonkeyPatch, request: pytest.FixtureRequest
 ) -> Path:
     """
-    Select the documented frame configuration without enabling mesh loading.
+    Select explicit camera calibration and the checked-in aircraft meshes.
     """
     configuration = Path(__file__).resolve().parents[2] / request.param.value
     monkeypatch.setenv(AircraftEnvironment.FRAME_CONFIGURATION, str(configuration))
-    monkeypatch.delenv(AircraftEnvironment.MESH_DIRECTORY, raising=False)
+    monkeypatch.setenv(
+        AircraftEnvironment.MESH_DIRECTORY,
+        str(
+            Path(__file__).resolve().parents[2]
+            / AircraftFixtureResource.SOURCE_DIRECTORY
+        ),
+    )
     return configuration
 
 
@@ -101,7 +118,7 @@ def test_launcher_emits_the_documented_camera_calibration(
     )
     pipeline = engine.implementation()
     pipeline.setup()
-    pipeline.tick_once()
+    AircraftBeliefCapture(pipeline).complete()
 
     assert pipeline.status is Status.SUCCESS
     assert (
@@ -124,16 +141,23 @@ def test_launcher_emits_the_documented_camera_calibration(
     )
 
 
-def test_launcher_leaves_mesh_preview_disabled_by_default(
+def test_launcher_shares_catalog_between_preview_and_belief_geometry(
     aircraft_configuration: Path,
 ) -> None:
-    """Frame configuration alone emits observations without loading catalog meshes."""
+    """Display and belief creation reuse the same loaded aircraft geometry."""
     engine = ModuleLoader().load_ae(
         AircraftConfigurationExample.PACKAGE, AircraftObservationLabel.SOURCE
     )
     pipeline = engine.implementation()
 
-    assert pipeline.get_annotators()[0].preview is None
+    source, connector = pipeline.get_annotators()
+    assert (
+        connector.descriptor.parameters.model_geometry is source.preview.catalog.models
+    )
+    assert connector.descriptor.parameters.semantic_types == {
+        label: model.definition.semantic_type
+        for label, model in source.preview.catalog.models.items()
+    }
 
 
 def test_launcher_enables_preview_from_an_explicit_mesh_directory(
@@ -156,7 +180,7 @@ def test_launcher_enables_preview_from_an_explicit_mesh_directory(
     )
     pipeline = engine.implementation()
     pipeline.setup()
-    pipeline.tick_once()
+    AircraftBeliefCapture(pipeline).complete()
     output = pipeline.get_annotators()[0].get_annotator_output_struct()
 
     assert len(output.geometries) == len(pipeline.cas.annotations)
@@ -201,7 +225,7 @@ def test_launcher_rejects_incomplete_camera_calibration(
         engine.implementation()
 
 
-def test_launcher_configuration_preserves_world_and_beliefs(
+def test_launcher_adds_aircraft_beliefs_to_the_existing_world(
     aircraft_configuration: Path,
     mini_world: World,
     monkeypatch: pytest.MonkeyPatch,
@@ -209,15 +233,58 @@ def test_launcher_configuration_preserves_world_and_beliefs(
     annotator_output_buffer: AnnotatorOutputPerPipelineMap,
 ) -> None:
     """
-    Loading frame references and emitting a capture preserves persistent state.
+    Aircraft acceptance preserves existing bodies while adding typed beliefs.
     """
     monkeypatch.setattr(robokudo_world, "world", mini_world)
-    baseline = BeliefWorldSnapshot.capture()
+    initial_bodies = tuple(mini_world.bodies)
     engine = ModuleLoader().load_ae(
         AircraftConfigurationExample.PACKAGE, AircraftObservationLabel.SOURCE
     )
     pipeline = engine.implementation()
+    assert robokudo_world.get_object_belief_states() == {}
     pipeline.setup()
-    pipeline.tick_once()
+    AircraftBeliefCapture(pipeline).complete()
+
+    assert len(robokudo_world.get_object_belief_states()) == len(AircraftModel)
+    assert len(mini_world.get_semantic_annotations_by_type(AircraftPart)) == len(
+        AircraftModel
+    )
+    assert tuple(mini_world.bodies[: len(initial_bodies)]) == initial_bodies
+
+
+# %% Required belief geometry
+
+
+def test_launcher_requires_explicit_mesh_configuration(
+    aircraft_configuration: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A missing mesh directory rejects construction before world changes."""
+    monkeypatch.delenv(AircraftEnvironment.MESH_DIRECTORY, raising=False)
+    baseline = BeliefWorldSnapshot.capture()
+    engine = ModuleLoader().load_ae(
+        AircraftConfigurationExample.PACKAGE, AircraftObservationLabel.SOURCE
+    )
+
+    with pytest.raises(MissingAircraftMeshConfiguration):
+        engine.implementation()
+
+    assert BeliefWorldSnapshot.capture() == baseline
+
+
+def test_launcher_rejects_unavailable_meshes_before_world_changes(
+    aircraft_configuration: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An incomplete catalog cannot leave a partially initialized belief world."""
+    monkeypatch.setenv(AircraftEnvironment.MESH_DIRECTORY, str(tmp_path))
+    baseline = BeliefWorldSnapshot.capture()
+    engine = ModuleLoader().load_ae(
+        AircraftConfigurationExample.PACKAGE, AircraftObservationLabel.SOURCE
+    )
+
+    with pytest.raises(MissingAircraftResource):
+        engine.implementation()
 
     assert BeliefWorldSnapshot.capture() == baseline

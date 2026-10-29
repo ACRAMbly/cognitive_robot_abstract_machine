@@ -13,9 +13,7 @@ from typing_extensions import TYPE_CHECKING
 
 from robokudo_acrambly.aircraft.models import AircraftModel, AircraftModelCatalog
 from robokudo_acrambly.aircraft_observations.preview import AircraftPreview
-from robokudo_acrambly.descriptors.analysis_engines.scripted_aircraft import (
-    AnalysisEngine,
-)
+from .dataset.aircraft_source import AircraftObservationSequence
 from robokudo import world as robokudo_world
 from robokudo.cas import CASViews
 from robokudo.types.annotation import Classification, PoseAnnotation
@@ -43,12 +41,12 @@ def preview_engine(
     tmp_path: Path,
     replacement_model: AircraftModelDefinition,
     aircraft_frames: AircraftFrames,
-) -> AnalysisEngine:
+) -> AircraftObservationSequence:
     """
     Supply an offset metric mesh and one independently posed aircraft part.
     """
     catalog = AircraftModelCatalog(tmp_path, definitions=(replacement_model,))
-    engine = AnalysisEngine(
+    engine = AircraftObservationSequence(
         frames=aircraft_frames,
         clock=ControlledClock(),
         preview=AircraftPreview(catalog),
@@ -68,7 +66,7 @@ def preview_engine(
 
 
 def test_aircraft_preview_places_catalog_mesh_at_the_emitted_origin_pose(
-    preview_engine: AnalysisEngine,
+    preview_engine: AircraftObservationSequence,
     node: Node,
     annotator_output_buffer: AnnotatorOutputPerPipelineMap,
 ) -> None:
@@ -109,7 +107,7 @@ def test_aircraft_preview_places_catalog_mesh_at_the_emitted_origin_pose(
 
 
 def test_aircraft_preview_uses_loaded_templates_after_resources_are_removed(
-    preview_engine: AnalysisEngine,
+    preview_engine: AircraftObservationSequence,
     node: Node,
     annotator_output_buffer: AnnotatorOutputPerPipelineMap,
 ) -> None:
@@ -137,7 +135,7 @@ def test_aircraft_preview_uses_loaded_templates_after_resources_are_removed(
 
 
 def test_aircraft_preview_replaces_moving_and_absent_part_geometry(
-    preview_engine: AnalysisEngine,
+    preview_engine: AircraftObservationSequence,
     node: Node,
     annotator_output_buffer: AnnotatorOutputPerPipelineMap,
 ) -> None:
@@ -179,7 +177,7 @@ def test_aircraft_preview_replaces_moving_and_absent_part_geometry(
 
 @pytest.mark.parametrize("exhausted", [False, True])
 def test_aircraft_preview_retains_geometry_without_a_completed_capture(
-    preview_engine: AnalysisEngine,
+    preview_engine: AircraftObservationSequence,
     node: Node,
     annotator_output_buffer: AnnotatorOutputPerPipelineMap,
     exhausted: bool,
@@ -203,7 +201,7 @@ def test_aircraft_preview_retains_geometry_without_a_completed_capture(
 
 
 def test_aircraft_preview_leaves_the_world_unchanged(
-    preview_engine: AnalysisEngine,
+    preview_engine: AircraftObservationSequence,
     mini_world: World,
     node: Node,
     annotator_output_buffer: AnnotatorOutputPerPipelineMap,
@@ -222,7 +220,7 @@ def test_aircraft_preview_leaves_the_world_unchanged(
 
 
 def test_aircraft_preview_adds_no_sensor_or_geometry_evidence_to_the_cas(
-    preview_engine: AnalysisEngine,
+    preview_engine: AircraftObservationSequence,
     node: Node,
     annotator_output_buffer: AnnotatorOutputPerPipelineMap,
 ) -> None:
@@ -265,7 +263,7 @@ def test_aircraft_preview_places_all_available_checkout_catalog_meshes(
     if not all((directory / model.value.resource).is_file() for model in AircraftModel):
         pytest.skip("The checkout aircraft resources are unavailable.")
     catalog = AircraftModelCatalog(directory)
-    engine = AnalysisEngine(
+    engine = AircraftObservationSequence(
         frames=aircraft_frames,
         clock=ControlledClock(),
         preview=AircraftPreview(catalog),

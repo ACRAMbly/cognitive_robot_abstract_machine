@@ -9,9 +9,7 @@ import numpy
 from py_trees.common import Status
 from typing_extensions import TYPE_CHECKING
 
-from robokudo_acrambly.descriptors.analysis_engines.scripted_aircraft import (
-    AnalysisEngine,
-)
+from .dataset.aircraft_source import AircraftObservationSequence
 from robokudo.types.annotation import Classification, PoseAnnotation
 from robokudo.annotators.exceptions import (
     InvalidObservationFrame,
@@ -73,7 +71,7 @@ def aircraft_frames() -> AircraftFrames:
 # %% Minimal observations
 
 
-def test_aircraft_engine_emits_configured_model_labels_and_origin_poses(
+def test_aircraft_source_emits_configured_model_labels_and_origin_poses(
     aircraft_frames: AircraftFrames,
     node: Node,
     annotator_output_buffer: AnnotatorOutputPerPipelineMap,
@@ -81,7 +79,9 @@ def test_aircraft_engine_emits_configured_model_labels_and_origin_poses(
     """
     Every configured aircraft kind appears with its camera-relative origin.
     """
-    engine = AnalysisEngine(frames=aircraft_frames, clock=ControlledClock())
+    engine = AircraftObservationSequence(
+        frames=aircraft_frames, clock=ControlledClock()
+    )
     pipeline = engine.implementation()
     pipeline.setup()
     pipeline.tick_once()
@@ -112,7 +112,7 @@ def test_aircraft_capture_contains_only_explicit_frame_and_capture_metadata(
     Each fresh CAS retains exact calibration without synthetic sensor evidence.
     """
     clock = ControlledClock()
-    engine = AnalysisEngine(frames=aircraft_frames, clock=clock)
+    engine = AircraftObservationSequence(frames=aircraft_frames, clock=clock)
     if empty_scene:
         engine.scenario.parts.clear()
     pipeline = engine.implementation()
@@ -161,15 +161,17 @@ def test_aircraft_capture_leaves_world_and_beliefs_unchanged(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """
-    Observation source construction and capture leave persistent state intact.
+    Captures preserve existing bodies, connections, annotations, and beliefs.
     """
     monkeypatch.setattr(robokudo_world, "world", mini_world)
+    initial_beliefs = dict(robokudo_world.get_object_belief_states())
+    engine = AircraftObservationSequence(
+        frames=aircraft_frames, clock=ControlledClock()
+    )
+    pipeline = engine.implementation()
     initial_bodies = tuple(mini_world.bodies)
     initial_connections = tuple(mini_world.connections)
     initial_annotations = tuple(mini_world.semantic_annotations)
-    initial_beliefs = dict(robokudo_world.get_object_belief_states())
-    engine = AnalysisEngine(frames=aircraft_frames, clock=ControlledClock())
-    pipeline = engine.implementation()
     pipeline.setup()
     pipeline.tick_once()
 
@@ -187,7 +189,9 @@ def test_aircraft_detection_identifiers_are_reproducible_and_distinct(
     """
     Independent sequences assign deterministic identifiers to their detections.
     """
-    engine = AnalysisEngine(frames=aircraft_frames, clock=ControlledClock())
+    engine = AircraftObservationSequence(
+        frames=aircraft_frames, clock=ControlledClock()
+    )
     identifiers = []
     for _ in range(2):
         pipeline = engine.implementation()
@@ -209,7 +213,9 @@ def test_aircraft_source_rejects_conflicting_transform_frames(
     A transform must explicitly map between the configured frame identifiers.
     """
     aircraft_frames.camera_frame = aircraft_frames.world_frame
-    engine = AnalysisEngine(frames=aircraft_frames, clock=ControlledClock())
+    engine = AircraftObservationSequence(
+        frames=aircraft_frames, clock=ControlledClock()
+    )
 
     with pytest.raises(InvalidObservationFrame):
         engine.implementation()
@@ -227,7 +233,9 @@ def test_aircraft_source_rejects_invalid_pose_quaternions(
     """
     Completed captures require finite nonzero pose quaternions.
     """
-    engine = AnalysisEngine(frames=aircraft_frames, clock=ControlledClock())
+    engine = AircraftObservationSequence(
+        frames=aircraft_frames, clock=ControlledClock()
+    )
     engine.scenario.parts[0].pose.rotation = rotation
     pipeline = engine.implementation()
     pipeline.setup()

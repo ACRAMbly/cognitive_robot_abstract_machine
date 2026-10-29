@@ -11,9 +11,7 @@ from py_trees.common import Status
 from scipy.spatial.transform import Rotation
 from typing_extensions import TYPE_CHECKING
 
-from robokudo_acrambly.descriptors.analysis_engines.scripted_aircraft import (
-    AnalysisEngine,
-)
+from .dataset.aircraft_source import AircraftObservationSequence
 from robokudo.types.tf import Pose
 from robokudo_acrambly.aircraft_observations.scenario import AircraftLayout
 from robokudo_acrambly.playback.exceptions import (
@@ -56,7 +54,7 @@ def test_early_aircraft_tick_retains_the_completed_capture(
     An early tick waits without replacing the preceding completed CAS.
     """
     clock = ControlledClock()
-    engine = AnalysisEngine(frames=aircraft_frames, clock=clock)
+    engine = AircraftObservationSequence(frames=aircraft_frames, clock=clock)
     pipeline = engine.implementation()
     pipeline.setup()
     pipeline.tick_once()
@@ -77,7 +75,7 @@ def test_aircraft_capture_completes_exactly_at_the_next_due_time(
     A waiting capture becomes due on its precise nanosecond boundary.
     """
     clock = ControlledClock()
-    engine = AnalysisEngine(frames=aircraft_frames, clock=clock)
+    engine = AircraftObservationSequence(frames=aircraft_frames, clock=clock)
     pipeline = engine.implementation()
     pipeline.setup()
     pipeline.tick_once()
@@ -112,7 +110,7 @@ class AircraftCaptures:
     Completed aircraft observations indexed by scheduled capture offset.
     """
 
-    engine: AnalysisEngine
+    engine: AircraftObservationSequence
     """
     Public engine supplying the consumed scenario definition.
     """
@@ -141,7 +139,7 @@ def aircraft_captures(
     Collect the default observation sequence without real-time sleeping.
     """
     clock = ControlledClock()
-    engine = AnalysisEngine(frames=aircraft_frames, clock=clock)
+    engine = AircraftObservationSequence(frames=aircraft_frames, clock=clock)
     pipeline = engine.implementation()
     pipeline.setup()
     timing = engine.scenario.timing
@@ -350,7 +348,7 @@ def test_aircraft_rotation_uses_the_short_path_across_quaternion_signs(
     """
     example = ShortestRotationExample()
     clock = ControlledClock()
-    engine = AnalysisEngine(frames=aircraft_frames, clock=clock)
+    engine = AircraftObservationSequence(frames=aircraft_frames, clock=clock)
     part = engine.scenario.parts[0]
     engine.scenario.parts = [part]
     part.pose.rotation = (
@@ -398,7 +396,7 @@ def test_aircraft_motion_continues_while_a_part_is_absent(
     Reappearance uses the scheduled pose reached during an invisible interval.
     """
     clock = ControlledClock()
-    engine = AnalysisEngine(frames=aircraft_frames, clock=clock)
+    engine = AircraftObservationSequence(frames=aircraft_frames, clock=clock)
     part = engine.scenario.parts[0]
     engine.scenario.parts = [part]
     period = engine.scenario.timing.sample_period_nanoseconds
@@ -469,7 +467,7 @@ def test_late_aircraft_delivery_preserves_every_scheduled_pose_and_timestamp(
     Overdue captures retain the chronological observations of regular delivery.
     """
     clock = ControlledClock()
-    engine = AnalysisEngine(
+    engine = AircraftObservationSequence(
         frames=aircraft_captures.engine.frames,
         scenario=aircraft_captures.engine.scenario,
         clock=clock,
@@ -502,7 +500,7 @@ def test_zero_duration_aircraft_sequence_emits_one_capture(
     Coincident initial and final sequence endpoints produce one observation.
     """
     clock = ControlledClock()
-    engine = AnalysisEngine(frames=aircraft_frames, clock=clock)
+    engine = AircraftObservationSequence(frames=aircraft_frames, clock=clock)
     engine.scenario.timing.duration_nanoseconds = 0
     pipeline = engine.implementation()
     pipeline.setup()
@@ -534,7 +532,7 @@ def test_aircraft_engine_rejects_timing_without_both_endpoints(
     """
     Finite playback requires a positive cadence dividing a nonnegative duration.
     """
-    engine = AnalysisEngine(frames=aircraft_frames)
+    engine = AircraftObservationSequence(frames=aircraft_frames)
     engine.scenario.timing = timing
     with pytest.raises(InvalidPlaybackTiming):
         engine.implementation()
@@ -556,7 +554,7 @@ def test_aircraft_engine_rejects_unordered_or_unsampled_keyframes(
     """
     Edited keyframes must increase strictly and align with scheduled captures.
     """
-    engine = AnalysisEngine(frames=aircraft_frames)
+    engine = AircraftObservationSequence(frames=aircraft_frames)
     part = engine.scenario.parts[0]
     period = engine.scenario.timing.sample_period_nanoseconds
     part.keyframes = [
@@ -582,7 +580,7 @@ def test_aircraft_engine_rejects_invalid_absence_intervals(
     """
     Visibility intervals require ordered nonnegative boundaries on the cadence.
     """
-    engine = AnalysisEngine(frames=aircraft_frames)
+    engine = AircraftObservationSequence(frames=aircraft_frames)
     engine.scenario.parts[0].absence_intervals = [interval]
     with pytest.raises(InvalidAbsenceInterval):
         engine.implementation()

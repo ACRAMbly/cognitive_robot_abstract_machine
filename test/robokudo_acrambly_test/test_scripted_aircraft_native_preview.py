@@ -32,9 +32,7 @@ from .test_scripted_tetris_visualization import (
 if TYPE_CHECKING:
     from rclpy.node import Node
 
-    from robokudo_acrambly.descriptors.analysis_engines.scripted_aircraft import (
-        AnalysisEngine,
-    )
+    from .dataset.aircraft_source import AircraftObservationSequence
 
 
 # %% Native preview controls
@@ -52,7 +50,7 @@ class PreviewKey(IntEnum):
 
 
 def test_aircraft_native_preview_retains_an_interactive_final_scene(
-    preview_engine: AnalysisEngine,
+    preview_engine: AircraftObservationSequence,
     node: Node,
     native_key_events: Mock,
 ) -> None:
@@ -119,7 +117,7 @@ def test_aircraft_native_preview_retains_an_interactive_final_scene(
 
 @pytest.mark.parametrize("window_closed", [False, True])
 def test_aircraft_native_preview_preserves_the_final_capture_on_exit(
-    preview_engine: AnalysisEngine,
+    preview_engine: AircraftObservationSequence,
     node: Node,
     native_key_events: Mock,
     monkeypatch: pytest.MonkeyPatch,
@@ -169,7 +167,7 @@ def test_aircraft_native_preview_preserves_the_final_capture_on_exit(
 
 
 def test_aircraft_headless_playback_completes_without_native_windows(
-    preview_engine: AnalysisEngine,
+    preview_engine: AircraftObservationSequence,
     node: Node,
     native_key_events: Mock,
 ) -> None:

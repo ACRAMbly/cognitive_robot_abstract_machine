@@ -6,7 +6,6 @@ from dataclasses import dataclass
 
 from krrood.exceptions import DataclassException
 
-
 # %% Missing launcher configuration
 
 
@@ -24,3 +23,19 @@ class MissingAircraftFrameConfiguration(DataclassException):
 
     def suggest_correction(self) -> str:
         return f"Set {self.environment_variable} to your frame configuration JSON file, or pass explicit frames."
+
+
+@dataclass
+class MissingAircraftMeshConfiguration(DataclassException):
+    """
+    The aircraft belief pipeline has no model resource directory.
+    """
+
+    environment_variable: str
+    """Environment setting identifying the required aircraft mesh directory."""
+
+    def error_message(self) -> str:
+        return f"Aircraft mesh configuration is missing: {self.environment_variable}."
+
+    def suggest_correction(self) -> str:
+        return f"Set {self.environment_variable} to the aircraft mesh directory."

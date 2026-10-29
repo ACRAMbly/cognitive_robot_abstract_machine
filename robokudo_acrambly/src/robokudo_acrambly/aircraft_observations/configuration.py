@@ -38,7 +38,7 @@ class AircraftEnvironment(StrEnum):
     """Path to the application's explicit frame calibration document."""
 
     MESH_DIRECTORY = "AIRCRAFT_MESH_DIRECTORY"
-    """Directory enabling optional catalog mesh preview."""
+    """Required directory supplying aircraft belief and preview geometry."""
 
 
 class AircraftConfigurationField(StrEnum):
