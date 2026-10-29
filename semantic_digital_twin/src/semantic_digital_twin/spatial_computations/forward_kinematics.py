@@ -136,16 +136,7 @@ class ForwardKinematicsManager(ModelChangeCallback):
         Should be called after a state update.
         """
         clear_memoization_cache(self)
-        # Guard against model/state synchronization race condition:
-        # When a model change adds new DOFs and recompiles the FK function,
-        # the compiled function may expect more parameters than the current
-        # state buffer provides if the state update hasn't arrived yet.
-        # In this case CasADi raises a RuntimeError about buffer size.
-        # We silently skip — the next recompute after the state syncs will succeed.
-        try:
-            self.forward_kinematics_for_all_bodies = self.compiled_all_fks.evaluate()
-        except RuntimeError:
-            pass
+        self.forward_kinematics_for_all_bodies = self.compiled_all_fks.evaluate()
 
     @copy_memoize
     def compose_expression(

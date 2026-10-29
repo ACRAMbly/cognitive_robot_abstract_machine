@@ -80,13 +80,7 @@ class TracyRealMoveGripperMotion(MoveGripperMotion, AlternativeMotion[Tracy]):
             else LEFT_GRIPPER_ACTION_TOPIC
         )
 
-        arm = ViewManager().get_end_effector_view(self.gripper, self.robot)
-
-        goal_state = arm.get_joint_state_by_type(self.motion)
-        if self.target_position is not None:
-            position = self.target_position[0]
-        else:
-            position = goal_state.target_values[0]
+        position = [0.35, -0.35]
 
 
         return ParallelGripperCommandActionServerTask(
