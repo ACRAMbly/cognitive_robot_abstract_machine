@@ -26,7 +26,6 @@ from .test_aircraft_belief_creation import (
     semdt_cas,
 )
 from .test_scripted_aircraft_playback import aircraft_captures
-from .test_scripted_tetris import ControlledClock
 
 if TYPE_CHECKING:
     from robokudo.annotators.semantic_world_connector import (
@@ -35,6 +34,7 @@ if TYPE_CHECKING:
     from robokudo.cas import CAS
 
     from ..robokudo_test.dataset.semantic_observations import ObservationExample
+    from .conftest import AircraftPoseComparison
     from .test_scripted_aircraft_playback import AircraftCaptures
 
 
@@ -104,6 +104,7 @@ def test_aircraft_captures_prepare_independently_calculated_world_poses(
     aircraft_captures: AircraftCaptures,
     aircraft_acceptance: SemanticObservationAcceptance,
     observation_example: ObservationExample,
+    aircraft_pose_comparison: AircraftPoseComparison,
 ) -> None:
     """
     All movement and hold captures preserve the configured camera conversion.
@@ -137,12 +138,14 @@ def test_aircraft_captures_prepare_independently_calculated_world_poses(
             )
 
             numpy.testing.assert_allclose(
-                prepared.world_pose.translation, expected_translation, atol=1e-12
+                prepared.world_pose.translation,
+                expected_translation,
+                atol=aircraft_pose_comparison.absolute_tolerance,
             )
             numpy.testing.assert_allclose(
                 Rotation.from_quat(prepared.world_pose.rotation).as_matrix(),
                 expected_orientation.as_matrix(),
-                atol=1e-12,
+                atol=aircraft_pose_comparison.absolute_tolerance,
             )
 
 
@@ -156,7 +159,7 @@ def test_aircraft_capture_metadata_is_accepted_through_total_absence(
     """
     Every capture retains exact accepted time and frames, including empty scenes.
     """
-    initial_timestamp = ControlledClock().timestamp_nanoseconds
+    initial_timestamp = aircraft_captures.initial_capture_timestamp
     frames = aircraft_captures.engine.frames
     for elapsed_nanoseconds, observation in aircraft_captures.observations.items():
         capture = ObservationCapture.from_cas(observation)

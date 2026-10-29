@@ -55,8 +55,13 @@ class AppearanceBoundary(IntEnum):
     """Default offsets separating visible and absent observations."""
 
     FIRST_DISAPPEARS = VisibilityBoundary.PARTIAL_ABSENCE_START
+    """Capture offset at which the first block becomes absent."""
+
     SECOND_DISAPPEARS = VisibilityBoundary.TOTAL_ABSENCE_START
+    """Capture offset at which the second block also becomes absent."""
+
     BOTH_REAPPEAR = VisibilityBoundary.REAPPEARANCE
+    """Capture offset at which both blocks become visible again."""
 
 
 @dataclass

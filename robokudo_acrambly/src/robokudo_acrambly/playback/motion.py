@@ -8,6 +8,7 @@ from enum import IntEnum
 
 import numpy
 from scipy.spatial.transform import Rotation, Slerp
+from typing_extensions import TYPE_CHECKING
 
 from robokudo.types.tf import Pose
 from robokudo_acrambly.playback.clock import TimeUnit
@@ -15,7 +16,9 @@ from robokudo_acrambly.playback.exceptions import (
     InvalidAbsenceInterval,
     InvalidPoseKeyframes,
 )
-from robokudo_acrambly.playback.schedule import PlaybackTiming
+
+if TYPE_CHECKING:
+    from robokudo_acrambly.playback.schedule import PlaybackTiming
 
 
 # %% Motion boundaries
@@ -27,9 +30,16 @@ class MotionBoundary(IntEnum):
     """
 
     INITIAL_HOLD_FINISHED = 3 * TimeUnit.NANOSECONDS_PER_SECOND
+    """Elapsed capture time at which initial translation begins."""
+
     TRANSLATION_FINISHED = 9 * TimeUnit.NANOSECONDS_PER_SECOND
+    """Elapsed capture time at which the translated pose is reached."""
+
     TRANSLATION_HOLD_FINISHED = 12 * TimeUnit.NANOSECONDS_PER_SECOND
+    """Elapsed capture time at which rotation begins."""
+
     ROTATION_FINISHED = 18 * TimeUnit.NANOSECONDS_PER_SECOND
+    """Elapsed capture time at which the rotated pose is reached."""
 
 
 class VisibilityBoundary(IntEnum):
@@ -38,8 +48,13 @@ class VisibilityBoundary(IntEnum):
     """
 
     PARTIAL_ABSENCE_START = 21 * TimeUnit.NANOSECONDS_PER_SECOND
+    """First capture offset omitting the configured subset of objects."""
+
     TOTAL_ABSENCE_START = 24 * TimeUnit.NANOSECONDS_PER_SECOND
+    """First capture offset omitting every object."""
+
     REAPPEARANCE = 27 * TimeUnit.NANOSECONDS_PER_SECOND
+    """Capture offset at which all objects become visible again."""
 
 
 # %% Pose and visibility descriptors

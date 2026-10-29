@@ -41,6 +41,8 @@ if TYPE_CHECKING:
     from robokudo.pipeline import Pipeline
     from robokudo_acrambly.aircraft_observations.scenario import AircraftFrames
 
+    from .conftest import AircraftPoseComparison
+
 
 # %% Waiting captures
 
@@ -101,6 +103,7 @@ class AircraftSequenceExpectation(IntEnum):
     """
 
     CAPTURE_COUNT = 301
+    """Number of default captures including both sequence endpoints."""
 
 
 @dataclass
@@ -123,6 +126,9 @@ class AircraftCaptures:
     """
     Independent CAS captures indexed by elapsed nanoseconds.
     """
+
+    initial_capture_timestamp: int
+    """Unix nanoseconds read from the injected clock before the first capture."""
 
 
 @pytest.fixture
@@ -147,7 +153,12 @@ def aircraft_captures(
         clock.timestamp_nanoseconds = sequence_start + offset
         pipeline.tick_once()
         observations[offset] = pipeline.cas
-    return AircraftCaptures(engine, pipeline, observations)
+    return AircraftCaptures(
+        engine=engine,
+        pipeline=pipeline,
+        observations=observations,
+        initial_capture_timestamp=sequence_start,
+    )
 
 
 def test_aircraft_sequence_emits_both_endpoints_before_stable_exhaustion(
@@ -332,6 +343,7 @@ def test_aircraft_rotation_uses_the_short_path_across_quaternion_signs(
     node: Node,
     annotator_output_buffer: AnnotatorOutputPerPipelineMap,
     quaternion_sign: float,
+    aircraft_pose_comparison: AircraftPoseComparison,
 ) -> None:
     """
     A turn from 170 to minus 170 degrees passes through the known 180-degree pose.
@@ -370,7 +382,7 @@ def test_aircraft_rotation_uses_the_short_path_across_quaternion_signs(
     numpy.testing.assert_allclose(
         Rotation.from_quat(observed_pose.rotation).as_matrix(),
         expected_rotation.as_matrix(),
-        atol=1e-12,
+        atol=aircraft_pose_comparison.absolute_tolerance,
     )
     clock.timestamp_nanoseconds += period
     pipeline.tick_once()

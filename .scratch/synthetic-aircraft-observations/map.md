@@ -115,3 +115,11 @@ Tickets are claimed and resolved here without opening a pull request.
 ## Fog
 
 No unresolved design question.
+
+## Whole-feature review
+
+The [review since `812ded39b`](review.md) found five standards issues, all
+resolved, and no spec issues. The final aircraft batch passes 111 tests with
+96.52% feature-module coverage; 107 selected generic regressions pass. Existing
+Tetris metadata failures and unavailable typechecking remain explicit. The clean
+temporary ticket 05 worktree and its merged task branch were removed.

@@ -17,6 +17,7 @@ class TimeUnit(IntEnum):
     """
 
     NANOSECONDS_PER_SECOND = 1_000_000_000
+    """Nanoseconds represented by one Unix second."""
 
 
 @dataclass

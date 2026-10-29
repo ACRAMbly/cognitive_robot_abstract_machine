@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from enum import StrEnum
+
 import pytest
 import numpy
 from py_trees.common import Status
@@ -37,13 +39,23 @@ if TYPE_CHECKING:
 # %% Explicit observation frames
 
 
+class AircraftFrameLabel(StrEnum):
+    """Frame identifiers for detached aircraft source calibration."""
+
+    WORLD = "aircraft_world"
+    """Declared world frame of the isolated source fixture."""
+
+    CAMERA = "aircraft_camera"
+    """Declared optical camera frame of the isolated source fixture."""
+
+
 @pytest.fixture
 def aircraft_frames() -> AircraftFrames:
     """
     Supply detached frame references without initializing a belief world.
     """
-    world_body = Body(name=PrefixedName("aircraft_world"))
-    camera_body = Body(name=PrefixedName("aircraft_camera"))
+    world_body = Body(name=PrefixedName(AircraftFrameLabel.WORLD))
+    camera_body = Body(name=PrefixedName(AircraftFrameLabel.CAMERA))
     return AircraftFrames(
         world_frame=str(world_body.name),
         camera_frame=str(camera_body.name),

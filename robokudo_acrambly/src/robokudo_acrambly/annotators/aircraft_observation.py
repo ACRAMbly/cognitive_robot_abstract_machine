@@ -34,7 +34,10 @@ class AircraftObservationLabel(StrEnum):
     """
 
     SOURCE = "scripted_aircraft"
+    """Public name of the independent aircraft observation source."""
+
     MODEL_CLASS = "CLASS"
+    """Classification category identifying a configured model kind."""
 
 
 @dataclass(eq=False)

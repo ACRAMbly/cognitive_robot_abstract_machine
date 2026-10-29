@@ -46,6 +46,9 @@ class PreviewKey(IntEnum):
     """
 
     EXIT_REQUESTED = 27
+    """
+    Escape key event requesting native viewer termination.
+    """
 
 
 def test_aircraft_native_preview_retains_an_interactive_final_scene(
