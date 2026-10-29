@@ -1,6 +1,6 @@
 # Synthetic aircraft observations: feature map
 
-Status: specified
+Status: resolved
 
 Implementation permission: not granted. The user authorized specifications only;
 explicit permission is required before implementing any ticket.
@@ -52,7 +52,7 @@ The design interview settled:
 | [02: Finite aircraft playback](issues/02-finite-aircraft-playback.md) | 01 | ready-for-agent |
 | [03: Native 3D mesh verification](issues/03-native-mesh-verification.md) | 01, 02 | ready-for-agent |
 | [04: PR #13 input compatibility](issues/04-pr13-input-compatibility.md) | 01, 02 | ready-for-agent |
-| [05: Usage documentation and regressions](issues/05-documentation-and-regressions.md) | 01, 02, 03, 04 | ready-for-agent |
+| [05: Usage documentation and regressions](issues/05-documentation-and-regressions.md) | 01, 02, 03, 04 | resolved |
 
 Status describes specification readiness, not permission to execute a ticket.
 
@@ -71,3 +71,12 @@ configuration wiring are implementation details constrained by the specification
 All production changes, tests, fixture changes, and implementation verification
 remain pending explicit permission. No application behavior has been changed or
 tested by creating these documents.
+
+## Decisions-so-far
+
+- [Ticket 05](issues/05-documentation-and-regressions.md) documents aircraft-first
+  usage and wires explicit launcher calibration and optional catalog preview.
+  All 111 aircraft and 107 selected generic regressions pass; the documented
+  finite headless run exits successfully. Existing Tetris metadata, package
+  import, and query-teardown failures remain explicit in the completion record.
+  Static typechecking and native desktop inspection were unavailable.
