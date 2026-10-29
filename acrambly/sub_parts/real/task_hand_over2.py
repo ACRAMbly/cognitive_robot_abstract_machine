@@ -7,8 +7,8 @@ Task: Right-to-left Handover with STL Meshes (Real)
 
 Only the two assemblies the perception pipeline knows about are used:
 'child_cube_0' and 'child_cube_2' (see demo_tracy_cubes_live.OBJECTS).  Their
-names line up with the 'cube0' / 'cube2' grasp descriptions in
-available_plans.build_hand_over2_plan, so the tuned offsets apply unchanged.
+names line up with the 'cube0' / 'cube2' entries in
+available_plans.build_hand_over2_plan.
 
 Callable signature
 ------------------
@@ -57,11 +57,10 @@ def setup_and_build_plan(
         position = poses[classname]
         print(f"  {classname:<14} -> {grasp_key}  at "
               f"({position[0]:+.3f}, {position[1]:+.3f}, {position[2]:+.3f})")
-        # Orientation is deliberately left at zero: the grasp offsets in
-        # available_plans were tuned against axis-aligned spawns, and the
-        # assemblies are symmetric enough that FoundationPose's orientation may
-        # be correct only up to a symmetry.  Pass the estimated quaternion here
-        # only once the planners have been re-tuned for it.
+        # Orientation is deliberately left at zero: the assemblies are symmetric
+        # enough that FoundationPose's orientation may be correct only up to a
+        # symmetry.  Pass the estimated quaternion here only once the planners
+        # have been re-tuned for it.
 
         bodies[grasp_key] = spawn_body(
             world, (position[0]+0.02, position[1]+0.02, position[2]+0.03), (0.0, 0.0, 0.0), "mesh", mesh_filename=mesh)

@@ -38,7 +38,7 @@ from coraplex.alternative_motion_mappings.tracy_motion_mapping import (
     TracyRealMoveGripperMotion,
 )
 from coraplex.datastructures.dataclasses import Context  # noqa: E402
-from coraplex.execution_environment import real_robot, simulated_robot
+from coraplex.execution_environment import kinematically_simulated_robot, real_robot
 from coraplex.plans.plan import Plan
 from rclpy.node import Node
 
@@ -110,7 +110,7 @@ def setup_sim(node: Node) -> tuple[World, object, Context]:
     print("Building simulation world from Tracy URDF...")
     world: World = URDFParser.from_file(Tracy.get_ros_file_path()).parse()
 
-    VizMarkerPublisher(_world=world, node=node).with_tf_publisher()
+    VizMarkerPublisher(_world=world, node=node)
 
     print("Building Tracy semantic robot from simulation world...")
     tracy = Tracy.from_world(world)
@@ -160,7 +160,7 @@ def main(
         return
 
     # ---- execution ----
-    execution_env = real_robot if env == "real" else simulated_robot
+    execution_env = real_robot if env == "real" else kinematically_simulated_robot
     env_label = "REAL" if env == "real" else "SIMULATED"
 
     print(f"Executing Plan on {env_label} robot...")

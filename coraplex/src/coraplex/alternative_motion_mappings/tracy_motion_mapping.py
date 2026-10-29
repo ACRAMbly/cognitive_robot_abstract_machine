@@ -5,11 +5,9 @@ from typing import ClassVar
 
 from control_msgs.action import ParallelGripperCommand
 
-from coraplex.view_manager import ViewManager
-from semantic_digital_twin.datastructures.definitions import GripperState
 from semantic_digital_twin.robots.tracy import Tracy
 
-from coraplex.datastructures.enums import Arms, ExecutionType
+from coraplex.datastructures.enums import ExecutionType
 from coraplex.robot_plans.motions.base import AlternativeMotion
 from coraplex.robot_plans.motions.gripper import MoveGripperMotion
 
@@ -72,16 +70,15 @@ class TracyRealMoveGripperMotion(MoveGripperMotion, AlternativeMotion[Tracy]):
     @property
     def _motion_chart(self) -> ParallelGripperCommandActionServerTask:
 
-        side = "right" if self.gripper == Arms.RIGHT else "left"
+        is_right = self.gripper == self.robot.right_arm.end_effector
+        side = "right" if is_right else "left"
 
         topic = (
-            RIGHT_GRIPPER_ACTION_TOPIC
-            if self.gripper == Arms.RIGHT
-            else LEFT_GRIPPER_ACTION_TOPIC
+            RIGHT_GRIPPER_ACTION_TOPIC if is_right else LEFT_GRIPPER_ACTION_TOPIC
         )
 
-        position = [0.35, -0.35]
-
+        goal_state = self.gripper.get_joint_state_by_type(self.motion)
+        position = goal_state.target_values[0]
 
         return ParallelGripperCommandActionServerTask(
             action_topic=topic,

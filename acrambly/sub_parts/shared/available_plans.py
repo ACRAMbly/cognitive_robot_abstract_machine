@@ -3,234 +3,133 @@ Plan factories
 Pure functions that build ``coraplex.plans.plan.Plan`` objects for specific
 robot tasks.  They are task-agnostic building blocks – a task module (e.g.
 ``task_cubes.py``) imports one of these factories and *configures* it with the
-concrete bodies / positions / grasp descriptions.
+concrete graspable annotations / positions.
 
 Contents
 --------
 - ``build_plan_cubes()``  – 3-step pick-and-place stacking plan
 - ``build_park_arms_plan()`` – move both arms to park position
+- ``build_hand_over2_plan()`` – right-to-left handover plan
 """
 
 from math import pi
 
+from semantic_digital_twin.datastructures.definitions import GripperState
+from semantic_digital_twin.robots.robot_parts import Arm
+from semantic_digital_twin.semantic_annotations.mixins import HasGraspCandidates
 from semantic_digital_twin.robots.tracy import Tracy
-from semantic_digital_twin.spatial_types import Point3
 from semantic_digital_twin.spatial_types.spatial_types import Pose
 from semantic_digital_twin.world import World
 from semantic_digital_twin.world_description.world_entity import Body
 
 from coraplex.datastructures.dataclasses import Context
-from coraplex.datastructures.enums import Arms, ApproachDirection, VerticalAlignment
-from coraplex.datastructures.grasp import GraspDescription
+from coraplex.plans.attachment_nodes import ReAttachNode
 from coraplex.plans.factories import sequential
 from coraplex.plans.plan import Plan
-from coraplex.robot_plans.actions.core.robot_body import ParkArmsAction
 from coraplex.robot_plans.actions.core.pick_up import PickUpAction, ReachAction
 from coraplex.robot_plans.actions.core.placing import PlaceAction
+from coraplex.robot_plans.actions.core.robot_body import (
+    MoveManipulatorAction,
+    ParkArmsAction,
+)
 from coraplex.robot_plans.motions.gripper import MoveGripperMotion
-from semantic_digital_twin.datastructures.definitions import GripperState
-from coraplex.plans.attachment_nodes import AttachNode
+from sub_parts.shared.screwing import ScrewThreadAction
 from sub_parts.shared.utils import select_arm
+
 
 def build_plan_cubes(
     world: World,
     tracy: Tracy,
     context: Context,
-    red_box: Body,
-    yellow_box: Body,
-    blue_box: Body,
+    red_box: HasGraspCandidates,
+    yellow_box: HasGraspCandidates,
+    blue_box: HasGraspCandidates,
 ) -> Plan | None:
     stack_pos_x = 1
     stack_pos_y = 0
 
-    red_arm, red_end_effector = select_arm(red_box, tracy)
-    yellow_arm, yellow_end_effector = select_arm(yellow_box, tracy)
-    blue_arm, blue_end_effector = select_arm(blue_box, tracy)
+    red_arm = select_arm(red_box, tracy)
+    yellow_arm = select_arm(yellow_box, tracy)
+    blue_arm = select_arm(blue_box, tracy)
 
     return sequential(
         [
-            ParkArmsAction(Arms.BOTH),
-            PickUpAction(
-                red_box,
-                red_arm,
-                GraspDescription(
-                    ApproachDirection.RIGHT,
-                    VerticalAlignment.TOP,
-                    red_end_effector,
-                ),
-            ),
+            ParkArmsAction(tracy.all_arms),
+            PickUpAction(grasp=red_box.grasp_candidates()[0], arm=red_arm),
             PlaceAction(
-                red_box,
-                Pose.from_xyz_rpy(
+                object_designator=red_box,
+                target_location=Pose.from_xyz_rpy(
                     stack_pos_x,
                     stack_pos_y,
                     0.953,
                     reference_frame=world.root,
                 ),
-                red_arm,
             ),
-            ParkArmsAction(Arms.BOTH),
-            PickUpAction(
-                yellow_box,
-                yellow_arm,
-                GraspDescription(
-                    ApproachDirection.FRONT,
-                    VerticalAlignment.TOP,
-                    yellow_end_effector,
-                ),
-            ),
+            ParkArmsAction(tracy.all_arms),
+            PickUpAction(grasp=yellow_box.grasp_candidates()[0], arm=yellow_arm),
             PlaceAction(
-                yellow_box,
-                Pose.from_xyz_rpy(
+                object_designator=yellow_box,
+                target_location=Pose.from_xyz_rpy(
                     stack_pos_x,
                     stack_pos_y,
                     1.003,
                     reference_frame=world.root,
                 ),
-                yellow_arm,
             ),
-            ParkArmsAction(Arms.BOTH),
-            PickUpAction(
-                blue_box,
-                blue_arm,
-                GraspDescription(
-                    ApproachDirection.FRONT,
-                    VerticalAlignment.TOP,
-                    blue_end_effector,
-                ),
-            ),
+            ParkArmsAction(tracy.all_arms),
+            PickUpAction(grasp=blue_box.grasp_candidates()[0], arm=blue_arm),
             PlaceAction(
-                blue_box,
-                Pose.from_xyz_rpy(
+                object_designator=blue_box,
+                target_location=Pose.from_xyz_rpy(
                     stack_pos_x,
                     stack_pos_y,
                     1.053,
                     reference_frame=world.root,
                 ),
-                blue_arm,
             ),
-            ParkArmsAction(Arms.BOTH),
+            ParkArmsAction(tracy.all_arms),
         ],
         context=context,
     ).plan
 
+
 def build_park_arms_plan(context: Context) -> Plan | None:
     return sequential(
         [
-            ParkArmsAction(Arms.BOTH),
-            MoveGripperMotion(motion=GripperState.OPEN, gripper=Arms.RIGHT),
-            MoveGripperMotion(motion=GripperState.OPEN, gripper=Arms.LEFT),
+            ParkArmsAction(context.robot.all_arms),
+            MoveGripperMotion(
+                motion=GripperState.OPEN, gripper=context.robot.right_arm.end_effector
+            ),
+            MoveGripperMotion(
+                motion=GripperState.OPEN, gripper=context.robot.left_arm.end_effector
+            ),
         ],
         context=context,
     ).plan
+
 
 def build_hand_over2_plan(
     world: World,
     tracy: Tracy,
     context: Context,
-    bodies: dict[str, Body]
+    bodies: dict[str, HasGraspCandidates],
 ) -> Plan | None:
-    """Build a right-to-left handover plan for three cubes.
+    """Build a right-to-left handover plan.
 
-    For each cube the right arm picks it up from the top (``red_pick_grasp``),
-    then reaches the handover pose ending sideways (``red_handover_grasp``,
-    ``VerticalAlignment.NoAlignment``) to present the cube. The left arm takes
-    over from the top (``blue_grasp``) and finally places the cube from the top
-    (``blue_place_grasp``).
+    For each cube the right arm picks it up and presents it at the handover pose, the
+    left arm takes over and then places it.
     """
-    end_effectors = Tracy.get_end_effectors(tracy)
-
-    grasp_descriptions = {
-        "cube0": {
-            "red_pick_grasp": GraspDescription(
-                approach_direction=ApproachDirection.LEFT,
-                vertical_alignment=VerticalAlignment.TOP,
-                end_effector=end_effectors[1],
-                grasp_offset=Point3(0.0, -0.08, 0.0),
-                gripper_position=[0.35, -0.35],
-            ),
-            "red_handover_grasp": GraspDescription(
-                approach_direction=ApproachDirection.RIGHT,
-                vertical_alignment=VerticalAlignment.NoAlignment,
-                rotate_gripper=True,
-                end_effector=end_effectors[1],
-                grasp_offset=Point3(0.0, -0.08, 0.0),
-            ),
-            "blue_grasp": GraspDescription(
-                approach_direction=ApproachDirection.LEFT,
-                vertical_alignment=VerticalAlignment.BOTTOM,
-                end_effector=end_effectors[0],
-                grasp_offset=Point3(0.0, 0.08, -0.03),
-            ),
-            "blue_place_grasp": GraspDescription(
-                approach_direction=ApproachDirection.RIGHT,
-                vertical_alignment=VerticalAlignment.TOP,
-                end_effector=end_effectors[0],
-                grasp_offset=Point3(0.0, 0.08, -0.03),
-            ),
-        },
-        "cube1": {
-            "red_pick_grasp": GraspDescription(
-                approach_direction=ApproachDirection.FRONT,
-                vertical_alignment=VerticalAlignment.TOP,
-                end_effector=end_effectors[1],
-                grasp_offset=Point3(0.06, -0.017, -0.01),
-                gripper_position=[0.35, -0.35],
-            ),
-            "red_handover_grasp": GraspDescription(
-                approach_direction=ApproachDirection.BACK,
-                vertical_alignment=VerticalAlignment.NoAlignment,
-                rotate_gripper=True,
-                end_effector=end_effectors[1],
-                grasp_offset=Point3(0.06, -0.017, -0.01),
-            ),
-            "blue_grasp": GraspDescription(
-                approach_direction=ApproachDirection.FRONT,
-                vertical_alignment=VerticalAlignment.BOTTOM,
-                end_effector=end_effectors[0],
-                grasp_offset=Point3(-0.06, 0.033, -0.04),
-            ),
-            "blue_place_grasp": GraspDescription(
-                approach_direction=ApproachDirection.BACK,
-                vertical_alignment=VerticalAlignment.TOP,
-                end_effector=end_effectors[0],
-                grasp_offset=Point3(-0.06, 0.033, -0.04),
-            ),
-        },
-        "cube2": {
-            "red_pick_grasp": GraspDescription(
-                approach_direction=ApproachDirection.FRONT,
-                vertical_alignment=VerticalAlignment.TOP,
-                end_effector=end_effectors[1],
-                grasp_offset=Point3(0.016, -0.015, 0.04),
-                gripper_position=[0.35, -0.35],
-            ),
-            "red_handover_grasp": GraspDescription(
-                approach_direction=ApproachDirection.BACK,
-                vertical_alignment=VerticalAlignment.NoAlignment,
-                rotate_gripper=True,
-                end_effector=end_effectors[1],
-                grasp_offset=Point3(0.016, -0.015, 0.04),
-            ),
-            "blue_grasp": GraspDescription(
-                approach_direction=ApproachDirection.FRONT,
-                vertical_alignment=VerticalAlignment.BOTTOM,
-                end_effector=end_effectors[0],
-                grasp_offset=Point3(-0.09, -0.015, -0.05),
-            ),
-            "blue_place_grasp": GraspDescription(
-                approach_direction=ApproachDirection.BACK,
-                vertical_alignment=VerticalAlignment.TOP,
-                end_effector=end_effectors[0],
-                grasp_offset=Point3(-0.09, -0.015, -0.05),
-            ),
-        },
-    }
+    right_effector = tracy.right_arm.end_effector
+    left_effector = tracy.left_arm.end_effector
 
     handover_pose = {
         "cube0": Pose.from_xyz_rpy(0.8, -0.08, 1.3, reference_frame=world.root),
-        "cube1": Pose.from_xyz_rpy(0.8, -0.08, 1.3, yaw=-pi / 2, reference_frame=world.root),
-        "cube2": Pose.from_xyz_rpy(0.8, -0.08, 1.3, yaw=-pi / 2, reference_frame=world.root),
+        "cube1": Pose.from_xyz_rpy(
+            0.8, -0.08, 1.3, yaw=-pi / 2, reference_frame=world.root
+        ),
+        "cube2": Pose.from_xyz_rpy(
+            0.8, -0.08, 1.3, yaw=-pi / 2, reference_frame=world.root
+        ),
     }
 
     place_pose = {
@@ -241,50 +140,80 @@ def build_hand_over2_plan(
 
     actions: list = []
     for name, cube in bodies.items():
-        print(name)
+        yaw = 0 if name == "cube0" else -pi / 2
         actions.extend(
             [
-                ParkArmsAction(Arms.BOTH),
-                PickUpAction(
-                    cube,
-                    Arms.RIGHT,
-                    grasp_descriptions[name]["red_pick_grasp"],
-                ),
-                ReachAction(
+                ParkArmsAction(tracy.all_arms),
+                PickUpAction(grasp=cube.grasp_candidates()[0], arm=tracy.right_arm),
+                MoveManipulatorAction(
                     target_pose=handover_pose[name],
-                    object_designator=cube,
-                    arm=Arms.RIGHT,
-                    grasp_description=grasp_descriptions[name]["red_handover_grasp"],
+                    end_effector=right_effector,
+                    allow_gripper_collision=True,
                 ),
-                ReachAction(
-                    target_pose=grasp_descriptions[name]["blue_grasp"].grasp_target_pose(cube),
-                    object_designator=cube,
-                    arm=Arms.LEFT,
-                    grasp_description=grasp_descriptions[name]["blue_grasp"],
+                ReachAction(grasp=cube.grasp_candidates()[0], arm=tracy.left_arm),
+                MoveGripperMotion(motion=GripperState.CLOSE, gripper=left_effector),
+                ReAttachNode(body=cube.root, new_parent=left_effector.tool_frame),
+                MoveGripperMotion(motion=GripperState.OPEN, gripper=right_effector),
+                MoveManipulatorAction(
+                    target_pose=Pose.from_xyz_rpy(
+                        0.8, -0.3, 1.3, yaw=yaw, reference_frame=world.root
+                    ),
+                    end_effector=right_effector,
+                    allow_gripper_collision=True,
                 ),
-                MoveGripperMotion(motion=GripperState.CLOSE, gripper=Arms.LEFT, target_position=[0.35, -0.35]),
-                AttachNode(body=cube, new_parent=end_effectors[0].tool_frame),
-                MoveGripperMotion(motion=GripperState.OPEN, gripper=Arms.RIGHT),
-                ReachAction(
-                    target_pose=Pose.from_xyz_rpy(0.8, -0.3, 1.3, yaw=0 if name=="cube0" else -pi/2,reference_frame=world.root),
-                    object_designator=cube,
-                    arm=Arms.RIGHT,
-                    grasp_description=grasp_descriptions[name]["red_handover_grasp"],
-                ),
-                ReachAction(
-                    target_pose=Pose.from_xyz_rpy(0.8, 0.3, 1.3, yaw=0 if name=="cube0" else -pi/2,reference_frame=world.root),
-                    object_designator=cube,
-                    arm=Arms.LEFT,
-                    grasp_description=grasp_descriptions[name]["blue_place_grasp"],
+                MoveManipulatorAction(
+                    target_pose=Pose.from_xyz_rpy(
+                        0.8, 0.3, 1.3, yaw=yaw, reference_frame=world.root
+                    ),
+                    end_effector=left_effector,
+                    allow_gripper_collision=True,
                 ),
                 PlaceAction(
                     object_designator=cube,
                     target_location=place_pose[name],
-                    arm=Arms.LEFT,
-                    grasp_description=grasp_descriptions[name]["blue_place_grasp"],
                 ),
-                ParkArmsAction(Arms.BOTH),
+                ParkArmsAction(tracy.all_arms),
             ]
         )
 
     return sequential(actions, context=context).plan
+
+
+def build_screw_plan(
+    context: Context,
+    arm: Arm,
+    screw_body: Body,
+    turns: float = 1.0,
+    grasp_offset: float | None = None,
+    release: bool = True,
+    allow_gripper_collision: bool = True,
+) -> Plan | None:
+    """
+    Build a park-then-screw plan around a threaded screw body.
+
+    The screw body must already hang from a 1-DoF ``ScrewConnection`` (spawn it with
+    :func:`~sub_parts.shared.utils.spawn_screw_body`); this factory only wraps the
+    parking and the :class:`~sub_parts.shared.screwing.ScrewThreadAction`.
+
+    :param context: The plan context holding ``world`` and ``robot``.
+    :param arm: The arm that grasps the screw and turns it.
+    :param screw_body: The threaded body to screw in.
+    :param turns: Revolutions to screw inwards.
+    :param grasp_offset: Metres along the screw's local +X (towards the head) to grasp;
+        ``None`` grasps at the body origin.
+    :param release: Whether to open the gripper before retracting.
+    :param allow_gripper_collision: Whether the gripper may touch the plate.
+    :return: The plan, or ``None`` if the factory produced no plan.
+    """
+    screw_action = ScrewThreadAction(
+        arm=arm,
+        screw_body=screw_body,
+        turns=turns,
+        grasp_offset=grasp_offset,
+        release=release,
+        allow_gripper_collision=allow_gripper_collision,
+    )
+    return sequential(
+        [ParkArmsAction(context.robot.all_arms), screw_action],
+        context=context,
+    ).plan
