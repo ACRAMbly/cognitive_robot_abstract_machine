@@ -211,7 +211,7 @@ total absence retains its identity, geometry, last accepted pose, and capture
 time; reappearance uses the existing association rules. Different model kinds
 cannot associate. The source preview continues to show visible detections in
 camera coordinates, so it clears absent parts even while beliefs persist.
-Belief-world visualization remains separate work.
+Use the RViz inspection command below to display the resulting belief world.
 
 The engine derives `semantic_types` and `model_geometry` from one loaded
 `AircraftModelCatalog`, following [aircraft model setup](aircraft_models.md) and
@@ -219,6 +219,61 @@ the generic [observation contract](../../robokudo/docs/semantic_observations.md)
 Source-only tests exercise `AircraftObservationAnnotator` independently; the
 engine integration test runs the real threaded consumer through movement,
 partial absence, total absence, and reappearance for all twelve aircraft kinds.
+
+## Inspecting the local belief world in RViz
+
+With the same ROS overlay, Python environment, and aircraft configuration as
+above, run this command instead of the ordinary headless runner:
+
+```bash
+export AIRCRAFT_FRAME_CONFIGURATION="$PWD/robokudo_acrambly/doc/aircraft_frames.json"
+export AIRCRAFT_MESH_DIRECTORY="$PWD/plane"
+python -m robokudo_acrambly.aircraft_observations.inspection
+```
+
+In another terminal, source the same ROS installation and overlay, then run
+from the checkout root:
+
+```bash
+rviz2 -d "$PWD/robokudo_acrambly/doc/aircraft_beliefs.rviz"
+```
+
+If a terminal opened from Snap-packaged VS Code reports a `GLIBC_PRIVATE`
+symbol lookup error from `/snap/core20/`, remove its inherited GTK plugin path
+for the RViz command:
+
+```bash
+env -u GTK_PATH rviz2 -d "$PWD/robokudo_acrambly/doc/aircraft_beliefs.rviz"
+```
+
+This preserves the sourced ROS library paths and changes only RViz's environment.
+
+The inspection command runs the existing aircraft source and connector at twenty
+ticks per second. `VizMarkerPublisher` publishes the actual
+`robokudo.world.world_instance()` on `/semworld/viz_marker`, with its existing
+visual geometry and collision fallback. TF locates each body's frame in the
+world. Poses are in world coordinates, including the configured camera-to-world
+calibration. This process owns the world; run one aircraft runner at a time.
+
+The preset enables **Local belief geometry** and **Belief frames**, with reliable,
+transient-local delivery for markers. Its fixed frame is `aircraft_world`, and
+its view is centered near the supplied example camera translation `(10, 20, 30)`.
+For different calibration, adjust the view's focal point. For another world frame,
+set **Global Options → Fixed Frame** to the root printed by `VizMarkerPublisher`
+at startup. Enable **Belief frames → Show Names** to inspect frame identifiers.
+Use the same ROS domain in both terminals.
+
+Visually check the schedule above: all parts should appear, translate, rotate,
+then stay visible at their last accepted poses through partial and total absence.
+Reappearance should reuse the beliefs. The native source preview clears missing
+detections, whereas this view shows retained beliefs. Retained and currently
+observed beliefs use the publisher's existing appearance.
+
+After the final observation, playback stops advancing while ROS and TF remain
+active. RViz can also be opened after playback has finished: geometry is latched
+and transforms continue to receive fresh timestamps. Stop the inspection process
+with Ctrl-C. Closing RViz leaves the inspection process running. Restart that
+process to replay the sequence from a fresh local world.
 
 ## Independent Tetris engine
 
