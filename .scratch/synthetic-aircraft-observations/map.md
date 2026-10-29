@@ -2,8 +2,9 @@
 
 Status: resolved
 
-Implementation permission: not granted. The user authorized specifications only;
-explicit permission is required before implementing any ticket.
+Implementation permission: granted by the user's explicit `/implement-spec`
+request and subsequent `proceed` instruction. The specification's earlier
+permission records describe the design phase.
 
 ## Approved design
 
@@ -21,7 +22,7 @@ The design interview settled:
 - No aircraft 3D bounding boxes.
 - The final PR #13 payload replaces the earlier masks/regions/mesh payload;
   catalog meshes are used for optional visual verification.
-- Specifications are authorized; implementation is not.
+- Implementation is authorized by the subsequent `/implement-spec` request.
 
 ## Design tree
 
@@ -48,13 +49,13 @@ The design interview settled:
 
 | Ticket | Dependencies | Status |
 | --- | --- | --- |
-| [01: Minimal aircraft CAS source](issues/01-minimal-aircraft-cas-source.md) | None; requires PR #13 interfaces | ready-for-agent |
-| [02: Finite aircraft playback](issues/02-finite-aircraft-playback.md) | 01 | ready-for-agent |
-| [03: Native 3D mesh verification](issues/03-native-mesh-verification.md) | 01, 02 | ready-for-agent |
-| [04: PR #13 input compatibility](issues/04-pr13-input-compatibility.md) | 01, 02 | ready-for-agent |
+| [01: Minimal aircraft CAS source](issues/01-minimal-aircraft-cas-source.md) | None; requires PR #13 interfaces | resolved |
+| [02: Finite aircraft playback](issues/02-finite-aircraft-playback.md) | 01 | resolved |
+| [03: Native 3D mesh verification](issues/03-native-mesh-verification.md) | 01, 02 | resolved |
+| [04: PR #13 input compatibility](issues/04-pr13-input-compatibility.md) | 01, 02 | resolved |
 | [05: Usage documentation and regressions](issues/05-documentation-and-regressions.md) | 01, 02, 03, 04 | resolved |
 
-Status describes specification readiness, not permission to execute a ticket.
+Status records the local tracker's claim and resolution state.
 
 ## Baseline and remaining work
 
@@ -68,11 +69,41 @@ for changes to the Tetris source or its viewer.
 
 No requirement question remains open. Aircraft pose values, layout, and resource
 configuration wiring are implementation details constrained by the specification.
-All production changes, tests, fixture changes, and implementation verification
-remain pending explicit permission. No application behavior has been changed or
-tested by creating these documents.
+Implementation is now authorized. Verification results are recorded in each
+ticket as work completes.
+
+## Notes
+
+The issue tracker is local Markdown, following `docs/agents/issue-tracker.md`.
+Tickets are claimed and resolved here without opening a pull request.
 
 ## Decisions-so-far
+
+- Use PR #13's existing `feature/local-world-belief-updates` branch as the
+  integration branch, as clarified by the user. The implementation baseline
+  is `812ded39bcdca29edec8c89c2082236432bd9b87`.
+- The user approved installing missing verification prerequisites under `/tmp`.
+  The configured workspace interpreter and existing fixtures remain in use.
+- The user approved extracting generic playback helpers from Tetris modules,
+  preserving Tetris behavior and existing tests, to avoid duplicating scheduling
+  and interpolation in the aircraft source. This supersedes the specification's
+  restriction against changing Tetris files for this extraction only.
+- [Ticket 01](issues/01-minimal-aircraft-cas-source.md) supplies the minimal
+  aircraft engine and explicit frame configuration. Eight new tests pass;
+  seven existing Tetris tests fail in the unchanged color/depth metadata path.
+- [Ticket 02](issues/02-finite-aircraft-playback.md) supplies shared finite
+  scheduling and motion helpers and the complete aircraft timeline. All 39
+  aircraft tests pass; Tetris rendering checks remain blocked by the same
+  existing metadata failure.
+- [Ticket 03](issues/03-native-mesh-verification.md) adds optional catalog mesh
+  preview, including native final-scene controls. All 51 aircraft tests pass,
+  including 12 preview checks; existing Tetris visualization failures retain
+  the same metadata cause. No manual desktop inspection was performed.
+- [Ticket 04](issues/04-pr13-input-compatibility.md) proves semantic acceptance,
+  independently calculated world poses, exact capture metadata, and world
+  isolation across the complete sequence. Four new tests and 76 existing
+  semantic regressions pass; aircraft belief regressions pass after restoring
+  the existing `vhacdx` prerequisite under `/tmp`.
 
 - [Ticket 05](issues/05-documentation-and-regressions.md) documents aircraft-first
   usage and wires explicit launcher calibration and optional catalog preview.
@@ -80,3 +111,7 @@ tested by creating these documents.
   finite headless run exits successfully. Existing Tetris metadata, package
   import, and query-teardown failures remain explicit in the completion record.
   Static typechecking and native desktop inspection were unavailable.
+
+## Fog
+
+No unresolved design question.
