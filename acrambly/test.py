@@ -29,7 +29,7 @@ world = URDFParser.from_file(Tracy.get_ros_file_path()).parse()
 tracy = Tracy.from_world(world)
 context = Context(world=world, robot=tracy, evaluate_conditions=False)
 
-def populate_world():
+def spawn_holders():
     spawn_body(world, (0.7, 0, table_top_z+0.01), (0, 0, 0), "mesh", mesh_filename="fixtures/big_wooden_plate.stl")
     spawn_body(world, (1.01, 0.575, table_top_z+0.02), (pi, 0, 0), "mesh", mesh_filename="battat/BoltHolder.stl")
     spawn_body(world, (0.91, 0.5, table_top_z+0.02), (pi/2, 0, 0), "mesh", mesh_filename="battat/HolderUpperBody.stl")
@@ -38,13 +38,22 @@ def populate_world():
     spawn_body(world, (0.925, -0.05, table_top_z+0.02), (pi/2, 0, pi/2), "mesh", mesh_filename="battat/Plane_horizontal_holder_tall.stl")
     spawn_body(world, (0.925, -0.357, table_top_z+0.02), (0, 0, 0), "mesh", mesh_filename="battat/HolderBottomWing.stl")
 
+def spawn_plane_parts():
+    plane = {}
+    plane["UpperBody"] = spawn_body(world,(0.91, 0.5, table_top_z + 0.05), (0, 0, 0), "mesh", mesh_filename="battat/plane/UpperBody.stl")
+    plane["TopWing"] = spawn_body(world, (0.925, 0.305, table_top_z+0.1), (-pi/2, 0, 0), "mesh", mesh_filename="battat/plane/TopWing.stl")
+    plane["UnderBody"] = spawn_body(world,(0.91, 0.2, table_top_z + 0.05), (-pi/2, pi, 0), "mesh", mesh_filename="battat/plane/UnderBody.stl")
+    plane["BottomWing"] = spawn_body(world, (0.925, -0.325, table_top_z+0.1), (pi, 0, 0), "mesh", mesh_filename="battat/plane/BottomWing.stl")
 
 
-populate_world()
+    return plane
 
+spawn_holders()
+#battatco = spawn_plane_parts()
 
 plan = sequential([
-    ParkArmsAction(tracy.all_arms)
+    ParkArmsAction(tracy.all_arms),
+    # PickUpAction(GraspCandidate(battatco["UpperBody"], Pose.from_xyz_rpy(-0.1, 0, 0.03, 0, pi/2, 0, reference_frame=battatco["UpperBody"].root)), tracy.left_arm)
     ],
     context=context).plan
 #
