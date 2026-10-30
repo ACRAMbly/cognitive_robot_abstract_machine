@@ -5,11 +5,10 @@ from typing import ClassVar
 
 from control_msgs.action import ParallelGripperCommand
 
-from coraplex.view_manager import ViewManager
 from semantic_digital_twin.datastructures.definitions import GripperState
 from semantic_digital_twin.robots.tracy import Tracy
 
-from coraplex.datastructures.enums import Arms, ExecutionType
+from coraplex.datastructures.enums import ExecutionType
 from coraplex.robot_plans.motions.base import AlternativeMotion
 from coraplex.robot_plans.motions.gripper import MoveGripperMotion
 
@@ -20,12 +19,12 @@ from krrood.symbolic_math.symbolic_math import Scalar
 LEFT_GRIPPER_ACTION_TOPIC = "/left_gripper/robotiq_gripper_controller/gripper_cmd"
 RIGHT_GRIPPER_ACTION_TOPIC = "/right_gripper/robotiq_gripper_controller/gripper_cmd"
 
-GRIPPER_EFFORT = 10.0
+GRIPPER_EFFORT = 0.0
 
 @dataclass(eq=False, repr=False)
 class ParallelGripperCommandActionServerTask(ActionServerTask):
     position: float= 0.35
-    effort: float = 10.0
+    effort: float = 0.0
 
 
     def __eq__(self, other: object) -> bool:
@@ -72,15 +71,15 @@ class TracyRealMoveGripperMotion(MoveGripperMotion, AlternativeMotion[Tracy]):
     @property
     def _motion_chart(self) -> ParallelGripperCommandActionServerTask:
 
-        side = "right" if self.gripper == Arms.RIGHT else "left"
+        side = "left" if str(self.gripper.name) == "TracyLeftGripper" else "right"
 
         topic = (
-            RIGHT_GRIPPER_ACTION_TOPIC
-            if self.gripper == Arms.RIGHT
-            else LEFT_GRIPPER_ACTION_TOPIC
+            LEFT_GRIPPER_ACTION_TOPIC
+            if side == "left"
+            else RIGHT_GRIPPER_ACTION_TOPIC
         )
 
-        position = [0.35, -0.35]
+        position = 0.57
 
 
         return ParallelGripperCommandActionServerTask(
