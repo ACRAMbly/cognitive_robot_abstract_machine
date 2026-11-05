@@ -1,6 +1,5 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing_extensions import Dict, Type
 
 from krrood.parametrization.exceptions import (
     RelationalCircuitRegistryRequiresMatch,
@@ -21,10 +20,13 @@ from probabilistic_model.probabilistic_circuit.relational.relational_probabilist
     GroundingMode,
     RelationalProbabilisticCircuit,
 )
-from probabilistic_model.probabilistic_circuit.rx.helper import fully_factorized
-from probabilistic_model.probabilistic_circuit.rx.probabilistic_circuit import (
-    ProbabilisticCircuit,
+from probabilistic_model.probabilistic_circuit.groundable_circuit import (
+    GroundableCircuit,
 )
+from probabilistic_model.probabilistic_circuit.probabilistic_circuit_representation import (
+    RepresentationType,
+)
+from probabilistic_model.probabilistic_circuit.rx.helper import fully_factorized
 from probabilistic_model.probabilistic_circuit.tensorized.factories import (
     uniform_measure_of_event,
 )
@@ -104,7 +106,7 @@ class DictRegistry(ModelRegistry):
     A registry that uses a dictionary to keep all models.
     """
 
-    models: Dict[Type, ProbabilisticModel]
+    models: dict[type, ProbabilisticModel]
     """
     A dictionary that maps classes to probabilistic models.
     """
@@ -118,7 +120,8 @@ class RelationalCircuitRegistry(ModelRegistry):
     """
     A registry that grounds a RelationalProbabilisticCircuit for the queried statement
     and aligns its variable names to the UnderspecifiedParameters convention before
-    returning.
+    returning. The grounding comes back in the circuit type the relational circuit was
+    fitted in, and a causal query is wrapped in that same type.
 
     Only supports :class:`~krrood.parametrization.parameterizer.UnderspecifiedParameters`
     (i.e. a ``Match``, directly or wrapped by ``distribution_of(...)``): grounding needs
@@ -162,7 +165,7 @@ class RelationalCircuitRegistry(ModelRegistry):
 
     def _ground_and_rename(
         self, parameters: UnderspecifiedParameters
-    ) -> ProbabilisticCircuit:
+    ) -> GroundableCircuit:
         """
         Ground the relational circuit for ``parameters.statement`` and align its
         variable names to the ``UnderspecifiedParameters`` convention.
@@ -186,8 +189,8 @@ class RelationalCircuitRegistry(ModelRegistry):
 
     @staticmethod
     def _as_causal_circuit(
-        grounded: ProbabilisticCircuit, parameters: UnderspecifiedParameters
-    ) -> CausalCircuit:
+        grounded: RepresentationType, parameters: UnderspecifiedParameters
+    ) -> CausalCircuit[RepresentationType]:
         """
         Wrap an already-grounded, already-renamed circuit as a verified
         ``CausalCircuit`` registering the query's declared cause, effect and confounder
@@ -197,8 +200,9 @@ class RelationalCircuitRegistry(ModelRegistry):
         ``RelationalCausalCircuit.from_grounded_circuit``): a class circuit fitted
         over many unrelated scalar and exchangeable variables otherwise makes
         ``verify_support_determinism`` compute over all of them, not just the ones
-        this query actually declared. Confounders are trimmed in alongside the cause
-        and effect, not just registered later, so a caller's own
+        this query actually declared. The variables adjusted for, marked ``confounder``
+        or chosen by a learned causal structure, are trimmed in alongside the cause and
+        effect, not just registered later, so a caller's own
         ``backdoor_adjustment(..., adjustment_variables=...)`` call still finds them
         on the returned circuit.
 
@@ -211,7 +215,7 @@ class RelationalCircuitRegistry(ModelRegistry):
             grounded,
             parameters.search_cause_variables,
             list(parameters.effect_variables_from_causes_effect),
-            adjustment_variables=parameters.search_confounder_variables,
+            adjustment_variables=parameters.adjustment_variables,
             trim_to_registered_variables=True,
         )
 
@@ -227,7 +231,7 @@ class CausalCircuitRegistry(ModelRegistry):
     :class:`~probabilistic_model.probabilistic_circuit.causal.causal_circuit.CausalCircuit`.
     """
 
-    circuits: Dict[Type, CausalCircuit]
+    circuits: dict[type, CausalCircuit]
     """
     A dictionary that maps classes to pre-built causal circuits.
     """
