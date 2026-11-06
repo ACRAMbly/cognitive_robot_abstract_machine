@@ -220,7 +220,7 @@ Source-only tests exercise `AircraftObservationAnnotator` independently; the
 engine integration test runs the real threaded consumer through movement,
 partial absence, total absence, and reappearance for all twelve aircraft kinds.
 
-## Inspecting the local belief world in RViz
+## Inspecting annotators and the local belief world
 
 With the same ROS overlay, Python environment, and aircraft configuration as
 above, run this command instead of the ordinary headless runner:
@@ -230,6 +230,12 @@ export AIRCRAFT_FRAME_CONFIGURATION="$PWD/robokudo_acrambly/doc/aircraft_frames.
 export AIRCRAFT_MESH_DIRECTORY="$PWD/plane"
 python -m robokudo_acrambly.aircraft_observations.inspection
 ```
+
+This opens RoboKudo's standard OpenCV annotator controls and Open3D viewer,
+alongside the ROS visualizers. The controls and camera-relative source preview
+work as described under [native mesh verification](#optional-native-mesh-verification).
+The inspection command requires a desktop display. Use RViz to view the retained
+local belief world in world coordinates.
 
 In another terminal, source the same ROS installation and overlay, then run
 from the checkout root:
@@ -269,11 +275,13 @@ Reappearance should reuse the beliefs. The native source preview clears missing
 detections, whereas this view shows retained beliefs. Retained and currently
 observed beliefs use the publisher's existing appearance.
 
-After the final observation, playback stops advancing while ROS and TF remain
-active. RViz can also be opened after playback has finished: geometry is latched
-and transforms continue to receive fresh timestamps. Stop the inspection process
-with Ctrl-C. Closing RViz leaves the inspection process running. Restart that
-process to replay the sequence from a fresh local world.
+After the final observation, playback stops advancing while the annotator windows,
+ROS, and TF remain active. You can still switch annotators and inspect the final
+scene. RViz can also be opened after playback has finished: geometry is latched
+and transforms continue to receive fresh timestamps. As in the standard RoboKudo
+runner, Escape in the OpenCV window or closing Open3D stops the inspection
+process. Ctrl-C also stops it. Closing RViz leaves the inspection process running.
+Restart that process to replay the sequence from a fresh local world.
 
 ## Independent Tetris engine
 

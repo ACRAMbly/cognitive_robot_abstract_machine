@@ -7,13 +7,11 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 
 import rclpy
-from py_trees.blackboard import Blackboard
 from py_trees.common import Status
-from py_trees.trees import BehaviourTree
 from typing_extensions import TYPE_CHECKING, Self
 
 from robokudo.annotators.core import ThreadedAnnotator
-from robokudo.annotators.outputs import AnnotatorOutputPerPipelineMap
+from robokudo.garden import grow_tree
 from robokudo.world import world_instance
 from robokudo_acrambly.descriptors.analysis_engines.scripted_aircraft import (
     AnalysisEngine,
@@ -26,6 +24,7 @@ from semantic_digital_twin.adapters.ros.visualization.viz_marker import (
 if TYPE_CHECKING:
     from types import TracebackType
 
+    from py_trees_ros.trees import BehaviourTree
     from rclpy.node import Node
     from rclpy.timer import Timer
 
@@ -42,16 +41,9 @@ class InspectionNode(StrEnum):
     """Node hosting the aircraft pipeline and world publishers."""
 
 
-class InspectionBlackboard(StrEnum):
-    """Blackboard entries required by the aircraft pipeline."""
-
-    OUTPUT_BUFFER = "annotator_output_pipeline_map_buffer"
-    """Per-annotator output shared with the observation source."""
-
-
 @dataclass
 class AircraftBeliefInspection(AbstractContextManager):
-    """Publish live aircraft beliefs and preserve the final world until closed."""
+    """Display aircraft annotator output and publish the retained belief world."""
 
     node: Node
     """Application-owned ROS node serving the inspection session."""
@@ -65,6 +57,9 @@ class AircraftBeliefInspection(AbstractContextManager):
     pipeline: Pipeline = field(init=False)
     """Pipeline accepting observations into the local belief world."""
 
+    tree: BehaviourTree = field(init=False)
+    """Standard RoboKudo tree driving the annotators and their visualizers."""
+
     markers: VizMarkerPublisher = field(init=False)
     """Geometry publisher attached to the local belief world."""
 
@@ -75,15 +70,11 @@ class AircraftBeliefInspection(AbstractContextManager):
     """Resources released before the application destroys its ROS node."""
 
     def __enter__(self) -> Self:
-        """Initialize playback and world publication on the supplied node."""
+        """Initialize the annotator GUI, playback, and world publication."""
         with ExitStack() as resources:
-            Blackboard().set(
-                InspectionBlackboard.OUTPUT_BUFFER, AnnotatorOutputPerPipelineMap()
-            )
             self.pipeline = self.engine.implementation()
-            tree = BehaviourTree(self.pipeline)
-            resources.callback(tree.shutdown)
-            tree.setup(node=self.node)
+            self.tree = grow_tree(self.pipeline, node=self.node)
+            resources.callback(self.tree.shutdown)
             self.markers = VizMarkerPublisher(_world=world_instance(), node=self.node)
             resources.callback(self.markers.stop)
             self.timer = self.node.create_timer(self.tick_period_seconds, self.tick)
@@ -92,19 +83,26 @@ class AircraftBeliefInspection(AbstractContextManager):
         self.node.get_logger().info(
             f"Aircraft beliefs: {self.markers.topic_name}; "
             f"RViz fixed frame: {world_instance().root.name}. "
-            "Playback runs once; Ctrl-C stops inspection."
+            "Playback runs once; Escape, closing Open3D, or Ctrl-C stops inspection."
         )
         return self
 
+    def run(self) -> None:
+        """Serve inspection until a standard visualizer requests termination."""
+        while self.node.context.ok():
+            rclpy.spin_once(self.node)
+            if self.tree.root.children[0].status is Status.FAILURE:
+                return
+
     def tick(self) -> None:
-        """Advance playback and refresh transforms while its world is stable."""
-        if self.pipeline.status is not Status.FAILURE:
-            self.pipeline.tick_once()
-            if self.pipeline.status is Status.FAILURE:
-                self.node.get_logger().info(
-                    "Playback finished; the final belief world remains available. "
-                    "Ctrl-C stops inspection."
-                )
+        """Keep annotator windows responsive and refresh stable world transforms."""
+        playback_finished = self.pipeline.status is Status.FAILURE
+        self.tree.tick()
+        if self.pipeline.status is Status.FAILURE and not playback_finished:
+            self.node.get_logger().info(
+                "Playback finished; annotator controls and the final belief world "
+                "remain available."
+            )
         if self.pipeline.status is Status.RUNNING:
             return
         self.markers.tf_publisher.on_state_change()
@@ -130,7 +128,7 @@ class AircraftBeliefInspection(AbstractContextManager):
 
 
 def main() -> None:
-    """Serve the configured aircraft belief world until interrupted."""
+    """Inspect aircraft annotator output and beliefs until the GUI exits."""
     with ExitStack() as resources:
         rclpy.init()
         resources.callback(rclpy.try_shutdown)
@@ -139,8 +137,8 @@ def main() -> None:
         registry = ROSNodeRegistry()
         registry.register(node)
         resources.callback(registry.clear, node)
-        with AircraftBeliefInspection(node=node):
-            rclpy.spin(node)
+        with AircraftBeliefInspection(node=node) as inspection:
+            inspection.run()
 
 
 if __name__ == "__main__":
