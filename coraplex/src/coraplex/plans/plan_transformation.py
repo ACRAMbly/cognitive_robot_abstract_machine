@@ -130,6 +130,18 @@ class InsertionTransformation(
             nodes in their order.
         """
 
+@dataclass
+class ReplaceTransformation(
+    PlanTransformation[MatchedType], Generic[MatchedType], SubClassSafeGeneric, ABC
+):
+    def apply(self, plan_node: MatchedType) -> None:
+        statechart = plan_node.statechart
+        for node in self.nodes_to_insert(plan_node):
+            statechart.replace(plan_node, node)
+
+    @abstractmethod
+    def nodes_to_insert(self, plan_node: MatchedType) -> list[StatechartNode]:
+        ...
 
 @dataclass
 class SequentialInsertion(

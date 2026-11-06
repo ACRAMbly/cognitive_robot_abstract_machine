@@ -78,7 +78,7 @@ class SetGripperAction(OperatesGripper, GoalAction):
 
 
 @dataclass(eq=False, repr=False, kw_only=True)
-class MoveFingersToWidthAction(GoalAction):
+class MoveFingersToWidthAction(SequentialAction):
     """
     Closes a two-finger gripper until its fingertips stand a given distance apart,
     rather than driving it to a gripper state of its own.
@@ -117,20 +117,20 @@ class MoveFingersToWidthAction(GoalAction):
     count as done: well under a squeeze, so the squeeze is not lost to the tolerance.
     """
 
-    def create_goal(self) -> StatechartNode:
+    def create_steps(self) -> StatechartNode:
         """
         :raises WidthBeyondGripperOpening: If :attr:`width` is wider than the gripper
             opens.
         """
         if self.width > self.gripper.separation_when_open:
             raise WidthBeyondGripperOpening(gripper=self.gripper, width=self.width)
-        return MoveGripper(
+        return [MoveGripper(
             gripper=self.gripper,
             width=max(0.0, self.width - 2 * self.squeeze),
             threshold=self.threshold,
             tolerate_stall=self.squeeze > 0.0,
             name="MoveFingersToWidth",
-        )
+        )]
 
 
 @dataclass(eq=False, repr=False, kw_only=True)

@@ -36,6 +36,7 @@ from coraplex.robot_plans.robot_specific_plan_transformations import (
     KeepStretchInFrontOfTheContainerItCloses,
     KeepTheTorsoUprightWhileUsingATool,
     MoveStretchToolCenterPointInAStraightLine,
+    MoveTracyRobotiqGripper
 )
 from cramph.composites import ChildChooserAccess, StatementNode
 from cramph.context import ContextExtension
@@ -548,7 +549,7 @@ class RealRobotPlanExecutor(PlanExecutor):
     """
 
     plan_adaptations: list[PlanTransformation] = field(
-        default_factory=lambda: [CloseFingersToObjectWidth(), DetectWithRoboKudo()],
+        default_factory=lambda: [DetectWithRoboKudo(), MoveTracyRobotiqGripper()],
         kw_only=True,
     )
 

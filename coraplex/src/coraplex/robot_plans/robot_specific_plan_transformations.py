@@ -7,11 +7,34 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from cramph import reported_statechart
+from cramph.composites import ControlStructureNode, Parallel
+from cramph.node import StatechartNode
+from giskardpy.motion_statechart.goals.base_pose_goals import DifferentialDriveBaseGoal
+from giskardpy.motion_statechart.goals.cartesian_goals import CartesianPoseStraight
+from giskardpy.motion_statechart.goals.grasped_mechanism import (
+    ArticulateGraspedMechanism,
+)
+from giskardpy.motion_statechart.goals.gripper import MoveGripper
+from giskardpy.motion_statechart.tasks.align_planes import AlignPlanes
+from giskardpy.motion_statechart.tasks.cartesian_tasks import (
+    CartesianPose,
+    CartesianPositionTrajectory,
+    HoldOrientation,
+)
+from giskardpy.motion_statechart.weights import DefaultWeights
+from krrood_spatial_math.spatial_types import Pose, Vector3
+from semantic_digital_twin.robots.justin import Justin
+from semantic_digital_twin.robots.stretch import Stretch
+from semantic_digital_twin.world_description.connections import DifferentialDrive
+from semantic_digital_twin.robots.tracy import Tracy
+
 from coraplex.exceptions import ClosingGoalNotFound, ToolPathNotFound
 from coraplex.plans.plan_transformation import (
     ConfigurationTransformation,
     ParallelInsertion,
     PlanTransformation,
+    ReplaceTransformation
 )
 from coraplex.robot_plans.actions.base import Action
 from coraplex.robot_plans.actions.composite.tool_based import ToolMotionAction
@@ -21,24 +44,8 @@ from coraplex.robot_plans.actions.core.container import (
 )
 from coraplex.robot_plans.actions.core.navigation import DrivesBase
 from coraplex.robot_plans.mixins import MovesToolCenterPoint
-from cramph.composites import ControlStructureNode, Parallel
-from cramph.node import StatechartNode
-from giskardpy.motion_statechart.weights import DefaultWeights
-from giskardpy.motion_statechart.goals.base_pose_goals import DifferentialDriveBaseGoal
-from giskardpy.motion_statechart.goals.cartesian_goals import CartesianPoseStraight
-from giskardpy.motion_statechart.goals.grasped_mechanism import (
-    ArticulateGraspedMechanism,
-)
-from giskardpy.motion_statechart.tasks.align_planes import AlignPlanes
-from giskardpy.motion_statechart.tasks.cartesian_tasks import (
-    CartesianPose,
-    CartesianPositionTrajectory,
-    HoldOrientation,
-)
-from semantic_digital_twin.robots.justin import Justin
-from semantic_digital_twin.robots.stretch import Stretch
-from krrood_spatial_math.spatial_types import Pose, Vector3
-from semantic_digital_twin.world_description.connections import DifferentialDrive
+from coraplex.alternative_motion_mappings.tracy_motion_mapping import ParallelGripperCommandActionServerTask
+from control_msgs.action import ParallelGripperCommand
 
 # %% keeping the torso upright while using a tool
 
@@ -196,6 +203,24 @@ class MoveStretchToolCenterPointInAStraightLine(PlanTransformation[CartesianPose
         # the tasks of a pose goal come before the nodes accompanying it
         for task, straight_task in zip(list(plan_node.nodes), straight.create_tasks()):
             plan_node.statechart.replace(task, straight_task)
+
+class MoveTracyRobotiqGripper(ReplaceTransformation[MoveGripper]):
+    def is_applicable(self, plan_node: MoveGripper) -> bool:
+        return True
+
+    def nodes_to_insert(self, plan_node: MoveGripper):
+        side = "left" if str(plan_node.gripper.name) == "TracyLeftGripper" else "right"
+        topic = (
+            "/left_gripper/robotiq_gripper_controller/gripper_cmd" if side == "left" else "/right_gripper/robotiq_gripper_controller/gripper_cmd"
+        )
+        
+        return [ParallelGripperCommandActionServerTask(
+            action_topic=topic,
+            message_type=ParallelGripperCommand,
+            position=0.35,
+            effort=0.0,
+            name=f"Tracy_{side}_parallel_gripper",
+        ),]
 
 
 # %% closing a container
