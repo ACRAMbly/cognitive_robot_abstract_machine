@@ -154,3 +154,17 @@
 ## Misc
 - Always use the project's configured Python interpreter for tests and commands
 - If a package could be replaced by a more powerful one, tell us
+
+## Agent skills
+
+### Issue tracker
+
+For issue and spec operations, read `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+For triage, read `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Before exploring domain concepts or decisions, read `docs/agents/domain.md`.

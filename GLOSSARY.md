@@ -22,6 +22,14 @@ physical object's identity across observations.
 **Model identifier**:
 The label of an object kind, shared by observations of that kind.
 
+**Object belief**:
+A persistent account of one physical object, retaining its identity and last
+accepted state across observations, including observations in which it is absent.
+_Avoid_: Object hypothesis, detection
+
+**Local belief world**:
+The world of object beliefs maintained by RoboKudo from accepted observations.
+
 **Motion pause**:
 An interval in a scenario during which block poses remain unchanged and
 observations continue.
@@ -35,6 +43,10 @@ The shape representing an object's appearance in the world.
 
 **Collision geometry**:
 The shape representing an object's occupied volume for collision checks.
+
+**Aircraft part**:
+A physical component of the model aircraft, such as a wing, wheel, or body half.
+_Avoid_: Plane (when the component, rather than the whole aircraft, is intended)
 
 **Assembly path**:
 The sequence of part positions and orientations through which components move

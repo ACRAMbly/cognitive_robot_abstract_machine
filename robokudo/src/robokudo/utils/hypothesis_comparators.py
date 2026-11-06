@@ -1,3 +1,8 @@
+# %% Imports
+
+from __future__ import annotations
+
+from dataclasses import dataclass
 from typing_extensions import Dict, Type, Union, Callable, TypeVar, Generic
 
 from robokudo.cas import CAS
@@ -82,23 +87,24 @@ class HypothesisComparator(Generic[THyothesis]):
         return self
 
 
+# %% Object evidence
+
+
+@dataclass(init=False, eq=False)
 class ObjectHypothesisComparator(HypothesisComparator[ObjectHypothesis]):
+    """Compare available image and annotation evidence between object observations."""
+
     def compute_similarity(
         self, hypothesis1: ObjectHypothesis, hypothesis2: ObjectHypothesis
     ) -> float:
-        """
-        Compute the similarity between two hypotheses.
-
-        :param hypothesis1: The first hypothesis to compare.
-        :param hypothesis2: The second hypothesis to compare.
-        :return: The similarity of the two hypotheses between 0.0 (no similarity) and
-            1.0 (identical).
-        """
         total_weight = 0.0
         total_similarity = 0.0
 
-        # Compare ROI?
-        if ImageROI in self.type_comparators:
+        if (
+            ImageROI in self.type_comparators
+            and hypothesis1.roi.mask is not None
+            and hypothesis2.roi.mask is not None
+        ):
             image_roi_comparator = self.type_comparators[ImageROI]
             similarity = image_roi_comparator.compute_similarity(
                 hypothesis1.roi, hypothesis2.roi
@@ -108,24 +114,23 @@ class ObjectHypothesisComparator(HypothesisComparator[ObjectHypothesis]):
 
         cas = self.cas_fn()
 
-        # Compare annotations
         for annotation_type in self.annotation_comparators.keys():
             comparator = self.annotation_comparators[annotation_type]
 
             annotations1 = cas.filter_by_type(annotation_type, hypothesis1.annotations)
             annotations2 = cas.filter_by_type(annotation_type, hypothesis2.annotations)
 
-            total_compared = 0
-            for ann1 in annotations1:
-                for ann2 in annotations2:
+            for first_annotation in annotations1:
+                for second_annotation in annotations2:
                     # Compare only annotations from the same source
-                    if ann1.source == ann2.source:
-                        similarity = comparator.compute_similarity(ann1, ann2)
+                    if first_annotation.source == second_annotation.source:
+                        similarity = comparator.compute_similarity(
+                            first_annotation, second_annotation
+                        )
 
                         total_weight += comparator.weight
                         total_similarity += similarity * comparator.weight
 
-                        total_compared += 1
                         break
 
         if total_weight == 0.0:

@@ -1,0 +1,8 @@
+{
+  "world_frame": "rotated_world",
+  "camera_frame": "rotated_camera",
+  "camera_pose": {
+    "translation": [-1.0, 2.0, 3.0],
+    "rotation": [0.0, 0.0, 0.7071067811865476, 0.7071067811865476]
+  }
+}

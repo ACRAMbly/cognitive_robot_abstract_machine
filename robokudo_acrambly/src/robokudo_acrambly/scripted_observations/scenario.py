@@ -6,13 +6,17 @@ from dataclasses import dataclass, field
 from enum import IntEnum, StrEnum
 
 import numpy
-from scipy.spatial.transform import Rotation, Slerp
+from scipy.spatial.transform import Rotation
 
-from robokudo_acrambly.scripted_observations.clock import TimeUnit
-from robokudo_acrambly.scripted_observations.exceptions import (
-    InvalidAbsenceInterval,
-    InvalidPlaybackTiming,
-    InvalidPoseKeyframes,
+from robokudo_acrambly.playback.clock import TimeUnit
+from robokudo_acrambly.playback.schedule import PlaybackTiming
+from robokudo_acrambly.playback.motion import (
+    AbsenceInterval,
+    MotionBoundary,
+    MotionDefinition,
+    ObjectMotion,
+    PoseKeyframe,
+    VisibilityBoundary,
 )
 from robokudo_acrambly.scripted_observations.models import TetrisModel
 from robokudo.types.tf import Pose
@@ -47,78 +51,21 @@ class CameraSettings:
 # %% Scene descriptor
 
 
-@dataclass
-class PlaybackTiming:
-    """Capture cadence of the finite observation sequence."""
-
-    duration_nanoseconds: int = 30 * TimeUnit.NANOSECONDS_PER_SECOND
-    """Elapsed capture time from the first observation through the final one."""
-
-    sample_period_nanoseconds: int = TimeUnit.NANOSECONDS_PER_SECOND // 10
-    """Scheduled interval between consecutive observations."""
-
-    def validate(self) -> None:
-        """Reject a cadence that cannot include both sequence endpoints."""
-        if (
-            self.sample_period_nanoseconds <= 0
-            or self.duration_nanoseconds < 0
-            or self.duration_nanoseconds % self.sample_period_nanoseconds != 0
-        ):
-            raise InvalidPlaybackTiming(
-                duration_nanoseconds=self.duration_nanoseconds,
-                sample_period_nanoseconds=self.sample_period_nanoseconds,
-            )
-
-    def contains_unsampled_offsets(self, offsets: list[int]) -> bool:
-        """Return whether an in-sequence boundary falls between captures."""
-        return any(
-            offset <= self.duration_nanoseconds
-            and offset % self.sample_period_nanoseconds != 0
-            for offset in offsets
-        )
-
-
-class MotionBoundary(IntEnum):
-    """Default capture offsets separating motion from stationary holds."""
-
-    INITIAL_HOLD_FINISHED = 3 * TimeUnit.NANOSECONDS_PER_SECOND
-    TRANSLATION_FINISHED = 9 * TimeUnit.NANOSECONDS_PER_SECOND
-    TRANSLATION_HOLD_FINISHED = 12 * TimeUnit.NANOSECONDS_PER_SECOND
-    ROTATION_FINISHED = 18 * TimeUnit.NANOSECONDS_PER_SECOND
-
-
-@dataclass
-class PoseKeyframe:
-    """An editable CAD-origin pose at a scheduled capture offset."""
-
-    elapsed_nanoseconds: int
-    """Elapsed capture time at which this pose is reached."""
-
-    pose: Pose
-    """Camera-relative endpoint pose in metres and xyzw quaternion order."""
-
-
-@dataclass
-class AbsenceInterval:
-    """An editable half-open interval in which a block has no detection."""
-
-    start_nanoseconds: int
-    """First elapsed capture time at which the block is absent."""
-
-    end_nanoseconds: int
-    """Elapsed capture time at which the block becomes visible again."""
-
-
 class AppearanceBoundary(IntEnum):
     """Default offsets separating visible and absent observations."""
 
-    FIRST_DISAPPEARS = 21 * TimeUnit.NANOSECONDS_PER_SECOND
-    SECOND_DISAPPEARS = 24 * TimeUnit.NANOSECONDS_PER_SECOND
-    BOTH_REAPPEAR = 27 * TimeUnit.NANOSECONDS_PER_SECOND
+    FIRST_DISAPPEARS = VisibilityBoundary.PARTIAL_ABSENCE_START
+    """Capture offset at which the first block becomes absent."""
+
+    SECOND_DISAPPEARS = VisibilityBoundary.TOTAL_ABSENCE_START
+    """Capture offset at which the second block also becomes absent."""
+
+    BOTH_REAPPEAR = VisibilityBoundary.REAPPEARANCE
+    """Capture offset at which both blocks become visible again."""
 
 
 @dataclass
-class BlockState:
+class BlockState(ObjectMotion):
     """One block's camera-relative motion and discrete visibility."""
 
     model: TetrisModel
@@ -133,66 +80,13 @@ class BlockState:
     absence_intervals: list[AbsenceInterval] = field(default_factory=list)
     """Half-open capture intervals in which this block has no hypothesis."""
 
-    def is_visible(self, elapsed_nanoseconds: int) -> bool:
-        """Return whether this block appears in the scheduled observation."""
-        return not any(
-            interval.start_nanoseconds <= elapsed_nanoseconds < interval.end_nanoseconds
-            for interval in self.absence_intervals
+    def describe_motion(self) -> MotionDefinition:
+        return MotionDefinition(
+            self.model.value.identifier,
+            self.pose,
+            self.keyframes,
+            self.absence_intervals,
         )
-
-    def validate_absence_intervals(self, timing: PlaybackTiming) -> None:
-        """Reject negative, reversed, or unsampled visibility boundaries."""
-        for interval in self.absence_intervals:
-            unsampled = timing.contains_unsampled_offsets(
-                [interval.start_nanoseconds, interval.end_nanoseconds]
-            )
-            if (
-                interval.start_nanoseconds < 0
-                or interval.end_nanoseconds <= interval.start_nanoseconds
-                or unsampled
-            ):
-                raise InvalidAbsenceInterval(
-                    self.model.value.identifier,
-                    interval,
-                    timing.sample_period_nanoseconds,
-                )
-
-    def validate_keyframes(self, timing: PlaybackTiming) -> None:
-        """Reject unordered endpoints or endpoints absent from the capture schedule."""
-        offsets = [0] + [keyframe.elapsed_nanoseconds for keyframe in self.keyframes]
-        unordered = any(end <= start for start, end in zip(offsets, offsets[1:]))
-        unsampled = timing.contains_unsampled_offsets(offsets)
-        if unordered or unsampled:
-            raise InvalidPoseKeyframes(
-                self.model.value.identifier,
-                offsets[1:],
-                timing.sample_period_nanoseconds,
-            )
-
-    def interpolate_pose(self, elapsed_nanoseconds: int) -> Pose:
-        """Return the camera-relative pose at an elapsed capture time."""
-        previous = PoseKeyframe(0, self.pose)
-        for keyframe in self.keyframes:
-            if elapsed_nanoseconds >= keyframe.elapsed_nanoseconds:
-                previous = keyframe
-                continue
-            if elapsed_nanoseconds == previous.elapsed_nanoseconds:
-                return previous.pose
-            fraction = (elapsed_nanoseconds - previous.elapsed_nanoseconds) / (
-                keyframe.elapsed_nanoseconds - previous.elapsed_nanoseconds
-            )
-            translation = numpy.asarray(previous.pose.translation) + fraction * (
-                numpy.asarray(keyframe.pose.translation) - previous.pose.translation
-            )
-            orientation = Slerp(
-                [previous.elapsed_nanoseconds, keyframe.elapsed_nanoseconds],
-                Rotation.from_quat([previous.pose.rotation, keyframe.pose.rotation]),
-            )(elapsed_nanoseconds)
-            return Pose(
-                translation=translation.tolist(),
-                rotation=orientation.as_quat().tolist(),
-            )
-        return previous.pose
 
 
 # %% Default CAD-origin poses
