@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing_extensions import Any, Dict, Optional
 
 from coraplex.locations.pose_validator import AreReachableBy, IsObjectReachableBy
-from coraplex.plans.attachment_nodes import AttachNode
+from coraplex.plans.attachment_nodes import ReAttachNode as AttachNode
 from coraplex.plans.plan_node import PlanNode
 from krrood.entity_query_language.core.variable import Variable
 from krrood.entity_query_language.factories import (
@@ -17,11 +17,12 @@ from krrood.entity_query_language.factories import (
     ConditionType,
 )
 from coraplex.datastructures.dataclasses import Context
+from semantic_digital_twin.robots.robot_parts import Arm as Arms
 from coraplex.datastructures.enums import (
-    Arms,
     MovementType,
 )
-from coraplex.datastructures.grasp import GraspDescription
+class GraspDescription:  # stub — legacy class removed
+    pass
 from coraplex.plans.factories import sequential
 from coraplex.querying.predicates import GripperIsFree
 from coraplex.robot_plans.actions.base import ActionDescription
@@ -62,9 +63,9 @@ class ReachAction(ActionDescription, ReachTuningParameters, HasGraspDetectionThr
     """
 
     grasp_description: GraspDescription
+    grasp_description: GraspDescription
     """
     The grasp description that should be used for picking up the object.
-    """
     The grasp the fingers should close on, which also names the object it is on.
     """
 

@@ -151,8 +151,6 @@ class FollowToolCenterPointPathAction(ActionDescription, HasTcpGoalThresholds):
             target_locations,
             self.arm,
             allow_gripper_collision=True,
-            position_threshold=self.position_threshold,
-            orientation_threshold=self.orientation_threshold,
         )
 
         return execute_single(motion)
@@ -193,8 +191,6 @@ class MoveManipulatorAction(ActionDescription, HasTcpGoalThresholds):
                 self.target_pose,
                 self.end_effector,
                 self.allow_gripper_collision,
-                position_threshold=self.position_threshold,
-                orientation_threshold=self.orientation_threshold,
             )
         )
 

@@ -2,7 +2,7 @@ import os
 from pathlib import Path
 from typing import Literal
 
-from coraplex.datastructures.enums import Arms
+from semantic_digital_twin.robots.robot_parts import Arm as Arms
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 from semantic_digital_twin.robots.tracy import Tracy
 from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix

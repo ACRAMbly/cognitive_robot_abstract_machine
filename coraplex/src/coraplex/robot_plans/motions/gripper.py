@@ -44,7 +44,6 @@ from coraplex.robot_plans.mixins import (
 )
 from coraplex.robot_plans.motions.base import BaseMotion
 from coraplex.datastructures.enums import (
-    Arms,
     MovementType,
     WaypointsMovementType,
 )
@@ -64,7 +63,7 @@ class ReachMotion(BaseMotion, HasTcpGoalThresholds):
     """
     Object designator_description describing the object that should be picked up
     """
-    arm: Arms
+    arm: Arm
     """
     The arm that should be used for pick up
     """
@@ -272,7 +271,7 @@ class MoveToolCenterPointMotion(
     """
     Target pose to which the TCP should be moved
     """
-    arm: Arms
+    arm: Arm
     """
     Arm with the TCP that should be moved to the target
     """
@@ -367,7 +366,7 @@ class MoveTCPWaypointsMotion(BaseMotion):
     """
     Waypoints the TCP should move along 
     """
-    arm: Arms
+    arm: Arm
     """
     Arm with the TCP that should be moved to the target
     """
@@ -421,7 +420,7 @@ class MoveTCPWaypointsAlignedMotion(BaseMotion):
     """
     Waypoints the TCP should move along.
     """
-    arm: Arms
+    arm: Arm
     """
     Arm with the TCP that should be moved along the waypoints.
     """
