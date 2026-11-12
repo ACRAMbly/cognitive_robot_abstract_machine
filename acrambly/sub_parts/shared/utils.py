@@ -1,18 +1,23 @@
 import math
 import os
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
+from krrood_spatial_math.spatial_types import (
+    HomogeneousTransformationMatrix,
+    Point3,
+    Pose,
+    RotationMatrix,
+    Vector3,
+)
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
-from semantic_digital_twin.semantic_annotations.mixins import HasGraspCandidates
+from semantic_digital_twin.grasping.grasp_candidates import GraspCandidate
 from semantic_digital_twin.robots.robot_parts import Arm
 from semantic_digital_twin.robots.tracy import Tracy
+from semantic_digital_twin.semantic_annotations.mixins import HasGraspCandidates
 from semantic_digital_twin.specifications.connections import (
     ScrewConnectionSpecification,
-)
-from semantic_digital_twin.spatial_types import (
-    HomogeneousTransformationMatrix,
-    Vector3,
 )
 from semantic_digital_twin.world import World
 from semantic_digital_twin.world_description.connections import Connection6DoF
@@ -24,6 +29,38 @@ from semantic_digital_twin.world_description.shape_collection import ShapeCollec
 from semantic_digital_twin.world_description.world_entity import Body
 
 _ASSETS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../assets")
+
+# %% Semantic annotations
+
+
+@dataclass(eq=False)
+class Bolt(HasGraspCandidates):
+    """
+    A threaded bolt offering top-down grasps along its axis.
+    """
+
+    head_offset: float = 0.025
+    """
+    Distance along the thread axis to the head where the gripper can take hold.
+    """
+
+    def default_grasp_candidates(self) -> list[GraspCandidate]:
+        rot = RotationMatrix.from_vectors(x=Vector3(-1, 0, 0), y=Vector3(0, 1, 0))
+        return [
+            GraspCandidate(
+                self,
+                Pose(
+                    position=Point3(
+                        self.head_offset, 0.0, 0.0, reference_frame=self.root
+                    ),
+                    orientation=rot.quaternion,
+                    reference_frame=self.root,
+                ),
+            )
+        ]
+
+
+# %% Arm selection
 
 
 def select_arm(graspable: HasGraspCandidates, robot: Tracy) -> Arm:
@@ -44,10 +81,11 @@ def spawn_body(
     rotation: tuple[float, float, float] = (0.0, 0.0, 0.0),
     shape_type: Literal["mesh", "box"] = "box",
     *,
+    parent: Body | None = None,
     mesh_filename: str | None = None,
     name: str = "box",
-    scale: Scale = Scale(0.05, 0.05, 0.05),
-    color: Color = Color(1.0, 1.0, 0.0, 1.0),
+    scale: Scale | None = None,
+    color: Color | None = None,
 ) -> HasGraspCandidates:
     """Spawn a graspable free-floating body via the Semantic Digital Twin API.
 
@@ -65,6 +103,7 @@ def spawn_body(
     Returns:
         The annotation that makes the spawned body graspable.
     """
+    parent_body = spawn_world.root if parent is None else parent
     with spawn_world.modify_world():
         if shape_type == "mesh":
             if mesh_filename is None:
@@ -72,13 +111,19 @@ def spawn_body(
             mesh_path = Path(_ASSETS_DIR, mesh_filename)
             if not mesh_path.exists():
                 raise FileNotFoundError(f"Mesh file not found: {mesh_path}")
-            mesh_shape = Mesh(origin=HomogeneousTransformationMatrix(), filename=str(mesh_path))
+            mesh_shape = Mesh(
+                origin=HomogeneousTransformationMatrix(), filename=str(mesh_path)
+            )
             collision_shapes = ShapeCollection([mesh_shape])
             visual_shapes = collision_shapes
             body_name = PrefixedName(prefix="objects", name=mesh_path.stem)
         else:
-            collision_shapes = ShapeCollection(shapes=[Box(scale=scale)])
-            visual_shapes = ShapeCollection(shapes=[Box(scale=scale, color=color)])
+            box_scale = scale or Scale(0.05, 0.05, 0.05)
+            box_color = color or Color(1.0, 1.0, 0.0, 1.0)
+            collision_shapes = ShapeCollection(shapes=[Box(scale=box_scale)])
+            visual_shapes = ShapeCollection(
+                shapes=[Box(scale=box_scale, color=box_color)]
+            )
             body_name = PrefixedName(name)
 
         body = Body(
@@ -89,12 +134,16 @@ def spawn_body(
         spawn_world.add_kinematic_structure_entity(body)
         spawn_world.add_connection(
             Connection6DoF.create_with_dofs(
-                parent=spawn_world.root,
+                parent=parent_body,
                 child=body,
                 world=spawn_world,
                 parent_T_connection_expression=HomogeneousTransformationMatrix.from_xyz_rpy(
-                    x=position[0], y=position[1], z=position[2],
-                    yaw=rotation[0], pitch=rotation[1], roll=rotation[2],
+                    x=position[0],
+                    y=position[1],
+                    z=position[2],
+                    yaw=rotation[0],
+                    pitch=rotation[1],
+                    roll=rotation[2],
                 ),
             )
         )
@@ -114,7 +163,7 @@ def spawn_screw_body(
     mesh_filename: str | None = None,
     name: str | None = None,
     scale: Scale | None = None,
-    color: Color = Color(1.0, 1.0, 0.0, 1.0),
+    color: Color | None = None,
     screw_pitch: float = 0.002,
     turns: float = 1.0,
     axis: Vector3 | None = None,
@@ -165,10 +214,10 @@ def spawn_screw_body(
         screw. Defaults to ``Vector3(0, 0, 1)``.
     :param maximum_speed: Velocity limit of the joint in rad/s, used to derive
         *dof_limits* when those are not given.
-    :param dof_limits: Explicit limits, overriding the ones derived from *turns*. A
-        :class:`~giskardpy.motion_statechart.goals.open_close.Close` goal clamps against
-        ``dof.limits.lower.position`` and crashes without limits, so this function never
-        leaves them unset.
+    :param dof_limits: Explicit limits, overriding the ones derived from *turns*. An
+        :class:`~giskardpy.motion_statechart.goals.grasped_mechanism.ArticulateGraspedMechanism`
+        goal clamps against ``dof.limits.lower.position`` and crashes without limits, so
+        this function never leaves them unset.
     :return: The annotation that makes the spawned body graspable. The joint is
         ``annotation.root.parent_connection``, i.e. the body's single-DoF connection.
     :raises ValueError: If *screw_pitch* is not positive, or *turns* is negative while
@@ -191,6 +240,7 @@ def spawn_screw_body(
             maximum_speed=maximum_speed,
         )
 
+    parent_body = spawn_world.root if parent is None else parent
     with spawn_world.modify_world():
         if shape_type == "mesh":
             if mesh_filename is None:
@@ -210,8 +260,11 @@ def spawn_screw_body(
             body_name = PrefixedName(prefix="objects", name=name or mesh_path.stem)
         else:
             box_scale = scale or Scale(0.02, 0.02, 0.05)
+            box_color = color or Color(1.0, 1.0, 0.0, 1.0)
             collision_shapes = ShapeCollection(shapes=[Box(scale=box_scale)])
-            visual_shapes = ShapeCollection(shapes=[Box(scale=box_scale, color=color)])
+            visual_shapes = ShapeCollection(
+                shapes=[Box(scale=box_scale, color=box_color)]
+            )
             body_name = PrefixedName(name or "screw")
 
         body = Body(
@@ -244,7 +297,7 @@ def spawn_screw_body(
             ),
         )
 
-        graspable = HasGraspCandidates(root=body)
+        graspable = Bolt(root=body)
         spawn_world.add_semantic_annotations([graspable])
 
     return graspable

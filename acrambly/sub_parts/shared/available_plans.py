@@ -14,16 +14,9 @@ Contents
 
 from math import pi
 
-from semantic_digital_twin.datastructures.definitions import GripperState
-from semantic_digital_twin.robots.robot_parts import Arm
-from semantic_digital_twin.semantic_annotations.mixins import HasGraspCandidates
-from semantic_digital_twin.robots.tracy import Tracy
-from semantic_digital_twin.spatial_types.spatial_types import Pose
-from semantic_digital_twin.world import World
-from semantic_digital_twin.world_description.world_entity import Body
-
 from coraplex.datastructures.dataclasses import Context
 from coraplex.plans.attachment_nodes import ReAttachNode
+from coraplex.plans.context_extensions import RobotAccess
 from coraplex.plans.factories import sequential
 from coraplex.plans.plan import Plan
 from coraplex.robot_plans.actions.core.pick_up import PickUpAction, ReachAction
@@ -33,6 +26,17 @@ from coraplex.robot_plans.actions.core.robot_body import (
     ParkArmsAction,
 )
 from coraplex.robot_plans.motions.gripper import MoveGripperMotion
+from cramph.composites import Sequence
+from cramph.context import StatechartContext
+from cramph.statechart import Statechart
+from semantic_digital_twin.datastructures.definitions import GripperState
+from semantic_digital_twin.robots.robot_parts import Arm
+from semantic_digital_twin.robots.tracy import Tracy
+from semantic_digital_twin.semantic_annotations.mixins import HasGraspCandidates
+from semantic_digital_twin.spatial_types.spatial_types import Pose
+from semantic_digital_twin.world import World
+from semantic_digital_twin.world_description.world_entity import Body
+
 from sub_parts.shared.screwing import ScrewThreadAction
 from sub_parts.shared.utils import select_arm
 
@@ -180,22 +184,22 @@ def build_hand_over2_plan(
 
 
 def build_screw_plan(
-    context: Context,
+    context: StatechartContext,
     arm: Arm,
     screw_body: Body,
     turns: float = 1.0,
     grasp_offset: float | None = None,
     release: bool = True,
     allow_gripper_collision: bool = True,
-) -> Plan | None:
+) -> Statechart:
     """
-    Build a park-then-screw plan around a threaded screw body.
+    Build a park-then-screw statechart around a threaded screw body.
 
     The screw body must already hang from a 1-DoF ``ScrewConnection`` (spawn it with
     :func:`~sub_parts.shared.utils.spawn_screw_body`); this factory only wraps the
     parking and the :class:`~sub_parts.shared.screwing.ScrewThreadAction`.
 
-    :param context: The plan context holding ``world`` and ``robot``.
+    :param context: The statechart context holding ``world`` and ``RobotAccess``.
     :param arm: The arm that grasps the screw and turns it.
     :param screw_body: The threaded body to screw in.
     :param turns: Revolutions to screw inwards.
@@ -203,8 +207,9 @@ def build_screw_plan(
         ``None`` grasps at the body origin.
     :param release: Whether to open the gripper before retracting.
     :param allow_gripper_collision: Whether the gripper may touch the plate.
-    :return: The plan, or ``None`` if the factory produced no plan.
+    :return: The statechart holding the park and screw sequence.
     """
+    robot = context.require_extension(RobotAccess).robot
     screw_action = ScrewThreadAction(
         arm=arm,
         screw_body=screw_body,
@@ -213,7 +218,8 @@ def build_screw_plan(
         release=release,
         allow_gripper_collision=allow_gripper_collision,
     )
-    return sequential(
-        [ParkArmsAction(context.robot.all_arms), screw_action],
-        context=context,
-    ).plan
+    statechart = Statechart(context=context)
+    statechart.add_node(
+        Sequence(nodes=[ParkArmsAction(arms=robot.all_arms), screw_action])
+    )
+    return statechart
