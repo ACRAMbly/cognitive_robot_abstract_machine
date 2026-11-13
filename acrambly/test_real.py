@@ -14,8 +14,6 @@ from cramph.composites import Sequence
 from cramph.context import StatechartContext
 from cramph.statechart import Statechart
 from rclpy.executors import MultiThreadedExecutor
-
-from doc.source.conf import extensions
 from semantic_digital_twin.adapters.ros.world_fetcher import fetch_world_from_service
 from semantic_digital_twin.adapters.ros.world_synchronizer import WorldSynchronizer
 from semantic_digital_twin.robots.robot_parts import AbstractRobot
@@ -27,10 +25,10 @@ node = rclpy.create_node("coraplex_tracy_demo")
 
 executor = MultiThreadedExecutor()
 executor.add_node(node)
+
 threading.Thread(target=executor.spin, daemon=True).start()
 
 world = fetch_world_from_service(node=node, timeout_seconds=300)
-
 WorldSynchronizer(_world=world, node=node)
 
 tracy = world.get_semantic_annotations_by_type(AbstractRobot)[0]

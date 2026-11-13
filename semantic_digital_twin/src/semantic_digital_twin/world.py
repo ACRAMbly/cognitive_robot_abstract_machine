@@ -1,4 +1,3 @@
-from __future__ import absolute_import
 from __future__ import annotations
 
 import difflib
@@ -7,119 +6,119 @@ import logging
 import threading
 import uuid
 from contextlib import contextmanager
-from copy import deepcopy, copy
+from copy import copy, deepcopy
 from dataclasses import dataclass, field
-from functools import wraps, cached_property
+from functools import cached_property, wraps
 from itertools import chain
 from uuid import UUID
 
 import numpy as np
 import rustworkx as rx
 import rustworkx.visualization
+from krrood.class_diagrams.attribute_introspector import DataclassOnlyIntrospector
+from krrood.class_diagrams.collection_kind import CollectionKind
+from krrood.patterns.caching import clear_memoization_cache, memoize
+from krrood_spatial_math.exceptions import MissingReferenceFrameError
+from krrood_spatial_math.spatial_types import HomogeneousTransformationMatrix, Point3
 from PIL.Image import Image
 from rustworkx import NoEdgeBetweenNodes
 from rustworkx.visualization import graphviz_draw
 from typing_extensions import (
-    Dict,
-    Tuple,
-    TypeVar,
-    Callable,
+    TYPE_CHECKING,
     Any,
+    Callable,
+    Dict,
     Iterable,
     Iterator,
-    TYPE_CHECKING,
+    List,
+    Tuple,
+    TypeVar,
 )
-from typing_extensions import List
 
-from krrood.class_diagrams.collection_kind import CollectionKind
-from krrood.class_diagrams.attribute_introspector import DataclassOnlyIntrospector
-from krrood.patterns.caching import memoize, clear_memoization_cache
 from semantic_digital_twin.callbacks.callback import ModelChangeCallback
 from semantic_digital_twin.collision_checking.collision_manager import CollisionManager
 from semantic_digital_twin.collision_checking.pybullet_collision_detector import (
     BulletCollisionDetector,
 )
-from krrood_spatial_math.exceptions import MissingReferenceFrameError
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 from semantic_digital_twin.datastructures.types import NpMatrix4x4
 from semantic_digital_twin.exceptions import (
-    DuplicateWorldEntityError,
-    WorldEntityNotFoundError,
     AlreadyBelongsToAWorldError,
-    MissingWorldModificationContextError,
-    WorldEntityWithIDNotFoundError,
-    MismatchingPublishChangesAttribute,
     AtomicWorldModificationNotAtomic,
-    SemanticAnnotationCircularDependencyError,
-    WorldIsNotATreeError,
-    WorldContainsOrphanedDegreeOfFreedom,
-    PartiallyAppliedWorldModificationError,
-    MismatchingWorld,
+    DuplicateWorldEntityError,
     InsufficientModificationHistoryError,
     InvalidRollbackVersionError,
-    WorldHasNoUniqueRootError,
+    MismatchingPublishChangesAttribute,
+    MismatchingWorld,
+    MissingWorldModificationContextError,
     NoControlledConnectionInChainError,
+    PartiallyAppliedWorldModificationError,
+    SemanticAnnotationCircularDependencyError,
+    WorldContainsOrphanedDegreeOfFreedom,
+    WorldEntityNotFoundError,
+    WorldEntityWithIDNotFoundError,
+    WorldHasNoUniqueRootError,
+    WorldIsNotATreeError,
 )
 from semantic_digital_twin.mixin import HasSimulatorProperties
+from semantic_digital_twin.pipeline.mesh_decomposition.base import MeshDecomposer
+from semantic_digital_twin.pipeline.mesh_decomposition.vhacd import VHACDMeshDecomposer
 from semantic_digital_twin.spatial_computations.forward_kinematics import (
     ForwardKinematicsManager,
 )
 from semantic_digital_twin.spatial_computations.ik_solver import InverseKinematicsSolver
 from semantic_digital_twin.spatial_computations.raytracer import RayTracer
-from krrood_spatial_math.spatial_types import HomogeneousTransformationMatrix, Point3
-from semantic_digital_twin.world_description.derivatives import Derivatives
 from semantic_digital_twin.world_description.connections import (
+    ActiveConnection,
     Connection6DoF,
     FixedConnection,
-    ActiveConnection,
+    HasUpdateState,
 )
-from semantic_digital_twin.world_description.connections import HasUpdateState
 from semantic_digital_twin.world_description.degree_of_freedom import (
     DegreeOfFreedom,
 )
-from semantic_digital_twin.world_description.world_entity_rebinding import (
-    RelocatableType,
-    WorldEntityRebinding,
-)
+from semantic_digital_twin.world_description.derivatives import Derivatives
 from semantic_digital_twin.world_description.visitors import (
     CollisionBodyCollector,
     ConnectionCollector,
 )
 from semantic_digital_twin.world_description.world_entity import (
+    Actuator,
+    Body,
     Connection,
-    SemanticAnnotation,
-    WorldEntityWithID,
+    GenericConnection,
+    GenericKinematicStructureEntity,
+    GenericWorldEntity,
     KinematicStructureEntity,
     Region,
-    GenericKinematicStructureEntity,
-    GenericConnection,
-    Body,
+    SemanticAnnotation,
     WorldEntity,
-    GenericWorldEntity,
-    Actuator,
+    WorldEntityWithID,
+)
+from semantic_digital_twin.world_description.world_entity_rebinding import (
+    RelocatableType,
+    WorldEntityRebinding,
 )
 from semantic_digital_twin.world_description.world_modification import (
-    WorldModification,
-    WorldModelModificationBlock,
-    SetDofHasHardwareInterface,
-    AddDegreeOfFreedomModification,
-    RemoveDegreeOfFreedomModification,
-    AddKinematicStructureEntityModification,
-    RemoveKinematicStructureEntityModification,
-    AddConnectionModification,
-    RemoveConnectionModification,
-    AddSemanticAnnotationModification,
-    RemoveSemanticAnnotationModification,
     AddActuatorModification,
+    AddConnectionModification,
+    AddDegreeOfFreedomModification,
+    AddKinematicStructureEntityModification,
+    AddSemanticAnnotationModification,
     RemoveActuatorModification,
+    RemoveConnectionModification,
+    RemoveDegreeOfFreedomModification,
+    RemoveKinematicStructureEntityModification,
+    RemoveSemanticAnnotationModification,
+    SetDofHasHardwareInterface,
+    WorldModelModificationBlock,
+    WorldModification,
 )
 from semantic_digital_twin.world_description.world_state import WorldState
 
-from semantic_digital_twin.pipeline.mesh_decomposition.base import MeshDecomposer
-from semantic_digital_twin.pipeline.mesh_decomposition.vhacd import VHACDMeshDecomposer
-
 if TYPE_CHECKING:
     from krrood_spatial_math.spatial_types import GenericSpatialType
+
     from semantic_digital_twin.robots.robot_parts import AbstractRobot
 
 

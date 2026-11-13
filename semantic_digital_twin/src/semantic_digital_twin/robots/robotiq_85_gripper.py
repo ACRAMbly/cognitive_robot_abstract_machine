@@ -30,7 +30,6 @@ class HasParallelGripperCommandServer(HasGripperActionServers, ABC):
     """
 
     @classproperty
-    @abstractmethod
     def parallel_gripper_command_topic(cls) -> str:
         """
         The name the driver serves the parallel gripper command action under.
