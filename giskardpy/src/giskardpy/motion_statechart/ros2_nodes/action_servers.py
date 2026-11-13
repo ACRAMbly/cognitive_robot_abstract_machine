@@ -11,6 +11,7 @@ from geometry_msgs.msg import (
     Point as ROSPoint,
     Quaternion as ROSQuaternion,
 )
+from giskardpy.motion_statechart.tasks.gripper import MovesGripperToConfiguration
 
 try:
     from nav2_msgs.action import NavigateToPose
@@ -29,7 +30,16 @@ from cramph.node import NodeArtifacts
 from giskardpy.motion_statechart.ros_context import RosContextExtension
 from krrood_spatial_math.spatial_types import Pose
 from semantic_digital_twin.world_description.world_entity import Body
-
+from semantic_digital_twin.datastructures.robots.gripper_configuration import (
+    GripperConfiguration,
+)
+from semantic_digital_twin.robots.robotiq_85_gripper import (
+    Robotiq85Gripper,
+)
+from giskardpy.motion_statechart.tasks.gripper import (
+    MovesGripperToConfiguration,
+    MoveFingers,
+)
 logger = logging.getLogger(__name__)
 
 
@@ -225,7 +235,8 @@ class RobotiqGripperActionServerTask(
         ParallelGripperCommand.Goal,
         ParallelGripperCommand.Result,
         ParallelGripperCommand.Feedback,
-    ]
+    ],
+    MovesGripperToConfiguration,
 ):
     """
     Node for calling a Robotiq ROS2 action server using the
@@ -259,6 +270,33 @@ class RobotiqGripperActionServerTask(
     _goal_accepted: bool = field(init=False, default=False)
     _done: bool = field(init=False, default=False)
 
+    @classmethod
+    def moving_gripper_to(
+        cls,
+        configuration: GripperConfiguration,
+        stall_minimum_time: float | None = None,
+        tolerate_stall: bool = False,
+    ):
+        """
+        Differs from :meth:`MovesGripperToConfiguration.moving_gripper_to` in driving a
+        two-finger :class:`HasParallelGripperCommandServer` through its server, to the
+        width of `configuration`; a stall always counts as done.
+
+        Any other configuration is reached as :meth:`MoveFingers.moving_gripper_to`
+        reaches it.
+        """
+        end_effector = configuration.end_effector
+        if not isinstance(end_effector, Robotiq85Gripper):
+            return MoveFingers.moving_gripper_to(
+                configuration, stall_minimum_time, tolerate_stall
+            )
+        return cls(
+            action_topic=end_effector.action_topic_serving(
+                configuration.joint_state.state_type
+            ),
+            target_position=end_effector.separation_at(configuration.joint_state),
+        )
+    
     def build_action_goal(self) -> None:
         """
         Build the ParallelGripperCommand goal message to send to the action server.

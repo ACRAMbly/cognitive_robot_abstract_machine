@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from coraplex.robot_plans.actions.core.robot_body import MoveFingersToWidthAction
 from cramph.composites import ControlStructureNode, Parallel
 from cramph.node import StatechartNode
 from giskardpy.motion_statechart.ros2_nodes.action_servers import (
@@ -23,12 +24,12 @@ from giskardpy.motion_statechart.tasks.drive_tasks import DifferentialDriveBaseG
 from giskardpy.motion_statechart.tasks.grasped_mechanism import (
     ArticulateGraspedMechanism,
 )
-from giskardpy.motion_statechart.tasks.gripper import MoveGripper
+from giskardpy.motion_statechart.tasks.gripper import MoveGripper, MoveFingers
 from giskardpy.motion_statechart.weights import DefaultWeights
 from krrood_spatial_math.spatial_types import Pose, Vector3
 from semantic_digital_twin.robots.justin import Justin
 from semantic_digital_twin.robots.robotiq_85_gripper import (
-    HasParallelGripperCommandServer,
+    Robotiq85Gripper,
 )
 from semantic_digital_twin.robots.stretch import Stretch
 from semantic_digital_twin.world_description.connections import DifferentialDrive
@@ -268,7 +269,7 @@ class KeepStretchInFrontOfTheContainerItCloses(PlanTransformation[CloseAction]):
 
 @dataclass
 class DriveRobotiqGrippersThroughTheirActionServers(
-    ConfigurationTransformation[MoveGripper]
+    PlanTransformation[MoveFingers]
 ):
     """
     Brings the grippers of a robot that have a ``control_msgs/ParallelGripperCommand``
@@ -279,11 +280,8 @@ class DriveRobotiqGrippersThroughTheirActionServers(
     DAiSy, are left as they are.
     """
 
-    def is_applicable(self, plan_node: MoveGripper) -> bool:
-        return any(
-            isinstance(end_effector, HasParallelGripperCommandServer)
-            for end_effector in plan_node.robot.all_end_effectors
-        )
+    def is_applicable(self, plan_node: MoveFingers) -> bool:
+        return isinstance(plan_node.gripper, Robotiq85Gripper)
 
-    def apply(self, plan_node: MoveGripper) -> None:
+    def apply(self, plan_node: MoveFingers) -> None:
         plan_node.gripper_goal_type = RobotiqGripperActionServerTask
