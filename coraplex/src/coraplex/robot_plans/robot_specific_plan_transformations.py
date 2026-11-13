@@ -20,9 +20,10 @@ from coraplex.robot_plans.actions.core.container import (
     MovesContainerByItsHandle,
 )
 from coraplex.robot_plans.actions.core.navigation import DrivesBase
-from coraplex.robot_plans.mixins import MovesToolCenterPoint
+from coraplex.robot_plans.mixins import MovesToolCenterPoint, OperatesGripper
 from cramph.composites import ControlStructureNode, Parallel
 from cramph.node import StatechartNode
+from giskardpy.motion_statechart.ros2_nodes.action_servers import RobotiqGripperActionServerTask
 from giskardpy.motion_statechart.weights import DefaultWeights
 from giskardpy.motion_statechart.tasks.drive_tasks import DifferentialDriveBaseGoal
 from giskardpy.motion_statechart.tasks.cartesian_tasks import (
@@ -36,6 +37,7 @@ from giskardpy.motion_statechart.tasks.grasped_mechanism import (
 )
 from giskardpy.motion_statechart.tasks.align_planes import AlignPlanes
 from semantic_digital_twin.robots.justin import Justin
+from semantic_digital_twin.robots.robotiq_85_gripper import HasParallelGripperCommandServer
 from semantic_digital_twin.robots.stretch import Stretch
 from krrood_spatial_math.spatial_types import Pose, Vector3
 from semantic_digital_twin.world_description.connections import DifferentialDrive
@@ -256,3 +258,26 @@ class KeepStretchInFrontOfTheContainerItCloses(PlanTransformation[CloseAction]):
                 ]
             ),
         )
+
+
+@dataclass
+class DriveRobotiqGrippersThroughTheirActionServers(
+    ConfigurationTransformation[OperatesGripper]
+):
+    """
+    Brings the grippers of a robot that have a ``control_msgs/ParallelGripperCommand``
+    server into their configurations through that server, instead of with goals for
+    their finger joints.
+
+    Grippers whose servers take other action messages, such as the griplink grippers of
+    DAiSy, are left as they are.
+    """
+
+    def is_applicable(self, plan_node: OperatesGripper) -> bool:
+        return any(
+            isinstance(end_effector, HasParallelGripperCommandServer)
+            for end_effector in plan_node.robot.all_end_effectors
+        )
+
+    def apply(self, plan_node: OperatesGripper) -> None:
+        plan_node.gripper_goal_type = RobotiqGripperActionServerTask
