@@ -50,11 +50,11 @@ class PiecewiseConstantCurvatureConnection(Connection):
 
     @classmethod
     def _from_json(cls, data: dict[str, Any], **kwargs) -> Self:
-        tracker = WorldEntityWithIDKwargsTracker.from_kwargs(kwargs)
+        tracker = WorldEntityWithIDKwargsTracker.from_kwargs(from_json_kwargs=kwargs)
         return cls(
             name=from_json(data["name"]),
-            parent=tracker.get(from_json(data["parent_id"])),
-            child=tracker.get(from_json(data["child_id"])),
+            parent=tracker.get(key=from_json(data["parent_id"])),
+            child=tracker.get(key=from_json(data["child_id"])),
             parent_T_connection_expression=from_json(
                 data["parent_T_connection_expression"], **kwargs
             ),
@@ -64,40 +64,6 @@ class PiecewiseConstantCurvatureConnection(Connection):
             kappa_dof_id=from_json(data["kappa_dof_id"]),
             phi_dof_id=from_json(data["phi_dof_id"]),
             segment_length=data["segment_length"],
-        )
-
-    def copy_for_world(self, world: World) -> Self:
-        (
-            parent,
-            child,
-            parent_T_connection_expression,
-            connection_T_child_expression,
-        ) = self._find_references_in_world(world)
-        return self.__class__(
-            parent=parent,
-            child=child,
-            parent_T_connection_expression=parent_T_connection_expression,
-            connection_T_child_expression=connection_T_child_expression,
-            name=PrefixedName(self.name.name, prefix=self.name.prefix),
-            kappa_dof_id=self.kappa_dof_id,
-            phi_dof_id=self.phi_dof_id,
-            segment_length=self.segment_length,
-        )
-
-    def copy_with_new_parent(
-        self,
-        new_parent: KinematicStructureEntity,
-        parent_T_connection_expression: HomogeneousTransformationMatrix,
-    ) -> Self:
-        return self.__class__(
-            name=PrefixedName(self.name.name, prefix=self.name.prefix),
-            parent=new_parent,
-            child=self.child,
-            parent_T_connection_expression=parent_T_connection_expression,
-            connection_T_child_expression=self.connection_T_child_expression,
-            kappa_dof_id=self.kappa_dof_id,
-            phi_dof_id=self.phi_dof_id,
-            segment_length=self.segment_length,
         )
 
     @classmethod
@@ -256,11 +222,11 @@ class CosseratRodConnection(Connection):
 
     @classmethod
     def _from_json(cls, data: dict[str, Any], **kwargs) -> Self:
-        tracker = WorldEntityWithIDKwargsTracker.from_kwargs(kwargs)
+        tracker = WorldEntityWithIDKwargsTracker.from_kwargs(from_json_kwargs=kwargs)
         return cls(
             name=from_json(data["name"]),
-            parent=tracker.get(from_json(data["parent_id"])),
-            child=tracker.get(from_json(data["child_id"])),
+            parent=tracker.get(key=from_json(data["parent_id"])),
+            child=tracker.get(key=from_json(data["child_id"])),
             parent_T_connection_expression=from_json(
                 data["parent_T_connection_expression"], **kwargs
             ),
@@ -272,44 +238,6 @@ class CosseratRodConnection(Connection):
             torsion_dof_id=from_json(data["torsion_dof_id"]),
             extension_dof_id=from_json(data["extension_dof_id"]),
             segment_length=data["segment_length"],
-        )
-
-    def copy_for_world(self, world: World) -> Self:
-        (
-            parent,
-            child,
-            parent_T_connection_expression,
-            connection_T_child_expression,
-        ) = self._find_references_in_world(world)
-        return self.__class__(
-            parent=parent,
-            child=child,
-            parent_T_connection_expression=parent_T_connection_expression,
-            connection_T_child_expression=connection_T_child_expression,
-            name=PrefixedName(self.name.name, prefix=self.name.prefix),
-            bending_x_dof_id=self.bending_x_dof_id,
-            bending_y_dof_id=self.bending_y_dof_id,
-            torsion_dof_id=self.torsion_dof_id,
-            extension_dof_id=self.extension_dof_id,
-            segment_length=self.segment_length,
-        )
-
-    def copy_with_new_parent(
-        self,
-        new_parent: KinematicStructureEntity,
-        parent_T_connection_expression: HomogeneousTransformationMatrix,
-    ) -> Self:
-        return self.__class__(
-            name=PrefixedName(self.name.name, prefix=self.name.prefix),
-            parent=new_parent,
-            child=self.child,
-            parent_T_connection_expression=parent_T_connection_expression,
-            connection_T_child_expression=self.connection_T_child_expression,
-            bending_x_dof_id=self.bending_x_dof_id,
-            bending_y_dof_id=self.bending_y_dof_id,
-            torsion_dof_id=self.torsion_dof_id,
-            extension_dof_id=self.extension_dof_id,
-            segment_length=self.segment_length,
         )
 
     @classmethod
@@ -414,7 +342,7 @@ class CosseratRodConnection(Connection):
             )
 
         # RK4 Integration along the length
-        accumulated_transform = sm.Matrix.eye(4)
+        accumulated_transform = sm.Matrix.eye(size=4)
         num_steps = 10
         step_length = self.segment_length / num_steps
 

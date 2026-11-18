@@ -121,13 +121,16 @@ def _place_at(
                         context=context_of(extensions),
                     ),
                 )
-            )
+            ),
+            holding_arms=[robot.right_arm],
         ),
         face_and_look_at=a(FaceAndLookAtAction)(
             face_at=a(FaceAtAction)(target=target),
             look_at=a(LookAtAction)(target=target),
         ),
-        place=a(PlaceAction)(object_designator=placed, target_location=target),
+        place=a(PlaceAction)(
+            arm=robot.right_arm, object_designator=placed, target_location=target
+        ),
     )
 
 
@@ -198,6 +201,9 @@ def test_a_transport_of_a_graspable_stands_around_the_object_then_the_target(
     )
     assert pick_up_location.target_pose.reference_frame is milk.root
     assert place_location.target_pose is target
+    assert transport.place._kwargs_["carry"]._kwargs_["holding_arms"] == [
+        robot.right_arm
+    ]
 
 
 # %% picking up and placing without moving
@@ -214,6 +220,7 @@ def pick_and_place_of_the_milk(world: World, arm: Arm) -> PickAndPlaceAction:
             grasp=variable(GraspCandidate, domain=milk.grasp_candidates()), arm=arm
         ),
         place=a(PlaceAction)(
+            arm=arm,
             object_designator=milk,
             target_location=Pose(reference_frame=world.root),
         ),
@@ -385,7 +392,9 @@ def _assert_each_standing_pose_keeps_the_closest_grasps(
         closest = {
             _grasp_signature(grasp)
             for grasp in GraspsByCloseness(
-                graspable, standing_position, number_of_grasps
+                graspable=graspable,
+                standing_position=standing_position,
+                number_of_grasps=number_of_grasps,
             )()
         }
         kept = [
@@ -444,7 +453,9 @@ def test_grasps_ranked_from_the_robot_are_ranked_from_where_it_stands_when_ranke
     """
     world, robot, extensions = pr2_apartment_context
     milk = world.get_semantic_annotations_by_type(Milk)[0]
-    ranking = GraspsByCloseness(milk, Pose(reference_frame=robot.root))
+    ranking = GraspsByCloseness(
+        graspable=milk, standing_position=Pose(reference_frame=robot.root)
+    )
     grasp = milk.grasp_candidates()[grasp_index]
 
     robot.root.parent_connection.origin = _standing_in_front_of(
@@ -459,7 +470,11 @@ def test_grasps_ranked_without_a_number_are_all_kept(pr2_apartment_context):
     world, robot, extensions = pr2_apartment_context
     milk = world.get_semantic_annotations_by_type(Milk)[0]
 
-    ranked = GraspsByCloseness(milk, Pose(reference_frame=robot.root), None)()
+    ranked = GraspsByCloseness(
+        graspable=milk,
+        standing_position=Pose(reference_frame=robot.root),
+        number_of_grasps=None,
+    )()
 
     assert sorted(map(_grasp_signature, ranked)) == sorted(
         map(_grasp_signature, milk.grasp_candidates())
@@ -545,7 +560,7 @@ def test_a_pick_up_of_a_graspable_tries_each_standing_pose_with_its_closest_gras
 
     pick_ups = list(
         itertools.islice(
-            EntityQueryLanguageGenerativeBackend().evaluate(step),
+            EntityQueryLanguageGenerativeBackend().evaluate(expression=step),
             2 * GraspsByCloseness.number_of_grasps,
         )
     )
@@ -570,7 +585,7 @@ def test_a_pick_up_of_a_graspable_tries_as_many_closest_grasps_as_asked_for(
 
     pick_ups = list(
         itertools.islice(
-            EntityQueryLanguageGenerativeBackend().evaluate(step),
+            EntityQueryLanguageGenerativeBackend().evaluate(expression=step),
             2 * NON_DEFAULT_NUMBER_OF_GRASPS,
         )
     )
@@ -592,7 +607,7 @@ def test_a_pick_up_of_a_graspable_tries_the_grasps_from_each_standing_pose_close
 
     pick_ups = list(
         itertools.islice(
-            EntityQueryLanguageGenerativeBackend().evaluate(step),
+            EntityQueryLanguageGenerativeBackend().evaluate(expression=step),
             2 * GraspsByCloseness.number_of_grasps,
         )
     )
@@ -616,7 +631,9 @@ def test_a_transport_of_a_graspable_picks_it_up_by_the_closest_grasps(
 
     pick_ups = list(
         itertools.islice(
-            EntityQueryLanguageGenerativeBackend().evaluate(transport.pick_up),
+            EntityQueryLanguageGenerativeBackend().evaluate(
+                expression=transport.pick_up
+            ),
             GraspsByCloseness.number_of_grasps,
         )
     )
@@ -641,7 +658,9 @@ def test_a_transport_of_a_graspable_tries_as_many_closest_grasps_as_asked_for(
 
     pick_ups = list(
         itertools.islice(
-            EntityQueryLanguageGenerativeBackend().evaluate(transport.pick_up),
+            EntityQueryLanguageGenerativeBackend().evaluate(
+                expression=transport.pick_up
+            ),
             NON_DEFAULT_NUMBER_OF_GRASPS,
         )
     )
@@ -777,16 +796,20 @@ def _hold_the_milk(world: World, arm: Arm) -> Milk:
 def test_a_move_and_place_from_a_standing_position_places_the_given_object(
     pr2_apartment_context,
 ) -> None:
+    """
+    Each step of the placing gets the part of the description it needs.
+    """
     world, robot, extensions = pr2_apartment_context
     milk = world.get_semantic_annotations_by_type(Milk)[0]
     standing_position = Pose(reference_frame=world.root)
     target = Pose.from_xyz_rpy(4.0, 1.5, 0.9, reference_frame=world.root)
 
     move_and_place = MoveAndPlaceAction.from_standing_position(
-        standing_position, target, milk
+        standing_position, target, milk, robot.left_arm
     )
 
     assert move_and_place.carry.navigate.target_location is standing_position
+    assert move_and_place.carry.holding_arms == [robot.left_arm]
     assert move_and_place.face_and_look_at.face_at.target is target
     assert move_and_place.face_and_look_at.look_at.target is target
     assert move_and_place.place.object_designator is milk
@@ -821,7 +844,7 @@ def test_an_opening_of_a_handle_is_grounded_by_every_grasp_the_handle_offers(
 
     openings = list(
         EntityQueryLanguageGenerativeBackend().evaluate(
-            OpenAction.from_handle(handle, robot.left_arm)
+            expression=OpenAction.from_handle(handle, robot.left_arm)
         )
     )
 
@@ -855,7 +878,9 @@ def test_an_opening_of_a_handle_first_tries_the_grasp_facing_the_robot(
         standing.x, standing.y, 0.0, reference_frame=world.root
     )
 
-    first_opening = next(iter(EntityQueryLanguageGenerativeBackend().evaluate(opening)))
+    first_opening = next(
+        iter(EntityQueryLanguageGenerativeBackend().evaluate(expression=opening))
+    )
 
     assert _grasp_signature(first_opening.grasp) == _grasp_signature(facing_grasp)
 
@@ -875,7 +900,7 @@ def test_a_move_and_open_tries_the_grasps_from_each_standing_pose_closest_first(
 
     openings = list(
         itertools.islice(
-            EntityQueryLanguageGenerativeBackend().evaluate(step),
+            EntityQueryLanguageGenerativeBackend().evaluate(expression=step),
             2 * GraspsByCloseness.number_of_grasps,
         )
     )
@@ -901,7 +926,7 @@ def _navigation_targets(action: Action) -> list[Pose]:
     """
     return [
         node.target_location
-        for node in action.statechart.get_nodes_by_type(NavigateAction)
+        for node in action.statechart.get_nodes_by_type(node_type=NavigateAction)
     ]
 
 
@@ -912,12 +937,16 @@ def _standing_pose(world: World) -> Pose:
 def _placing_the_held_milk(
     world: World, extensions: list[ContextExtension]
 ) -> MoveAndPlaceAction:
+    """
+    :return: A placing of the milk the left arm holds already.
+    """
     robot = robot_of(extensions)
     milk = _hold_the_milk(world, robot.left_arm)
     return MoveAndPlaceAction.from_standing_position(
         standing_position=_standing_pose(world),
         target_location=Pose.from_xyz_rpy(4.0, 1.5, 0.9, reference_frame=world.root),
         object_designator=milk,
+        arm=robot.left_arm,
     )
 
 

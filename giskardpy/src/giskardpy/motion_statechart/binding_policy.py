@@ -1,3 +1,7 @@
+"""
+Fixing forward kinematics to the values they have at one moment of a motion.
+"""
+
 from dataclasses import dataclass, field
 from enum import Enum
 
@@ -24,7 +28,7 @@ class GoalBindingPolicy(Enum):
     """Forward kinematics is computed during on_start of the MotionStatechartNode."""
 
 
-@dataclass
+@dataclass(kw_only=True)
 class ForwardKinematicsBinding:
     """
     Fixes the forward kinematics of the chain between root and tip to the state they
@@ -76,9 +80,9 @@ class ForwardKinematicsBinding:
             )
         self.root_T_tip.reference_frame = self.root
         self.root_T_tip.child_frame = self.tip
-        self.float_variable_data.register_expression(self.root_T_tip)
+        self.float_variable_data.register_expression(expression=self.root_T_tip)
 
-    def change_root(self, root: KinematicStructureEntity, world: World) -> None:
+    def change_root(self, *, root: KinematicStructureEntity, world: World) -> None:
         """
         Measure the chain from `root`, such as after the branch holding :attr:`tip` was
         moved under another parent, keeping the pose of :attr:`tip` that was bound last.
@@ -89,17 +93,31 @@ class ForwardKinematicsBinding:
         new_root_T_root = world.compute_forward_kinematics_np(root, self.root)
         self.root = root
         self.root_T_tip.reference_frame = root
-        self._set_root_T_tip(new_root_T_root @ self._bound_root_T_tip)
+        self._set_root_T_tip(root_T_tip=new_root_T_root @ self._bound_root_T_tip)
 
-    def bind(self, world: World) -> None:
+    def change_tip(self, *, tip: KinematicStructureEntity, world: World) -> None:
+        """
+        Measure the chain up to `tip`, such as once a task knows only when it starts which
+        entity ends the chain.
+
+        :param tip: The new tip of the chain.
+        :param world: The world used for computing the forward kinematics.
+        """
+        self.tip = tip
+        self.root_T_tip.child_frame = tip
+        self.bind(world=world)
+
+    def bind(self, *, world: World) -> None:
         """
         Set :attr:`root_T_tip` to the current forward kinematics of the chain.
 
         :param world: The world used for computing the forward kinematics.
         """
-        self._set_root_T_tip(world.compute_forward_kinematics_np(self.root, self.tip))
+        self._set_root_T_tip(
+            root_T_tip=world.compute_forward_kinematics_np(self.root, self.tip)
+        )
 
-    def _set_root_T_tip(self, root_T_tip: NDArray[np.float64]) -> None:
+    def _set_root_T_tip(self, *, root_T_tip: NDArray[np.float64]) -> None:
         """
         Set :attr:`root_T_tip` to `root_T_tip`.
 
@@ -107,5 +125,5 @@ class ForwardKinematicsBinding:
         """
         self._bound_root_T_tip = root_T_tip
         self.float_variable_data.set_value(
-            self.root_T_tip, root_T_tip[:3, :4].T.flatten()
+            expression=self.root_T_tip, value=root_T_tip[:3, :4].T.flatten()
         )

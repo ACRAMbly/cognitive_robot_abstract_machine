@@ -24,17 +24,17 @@ from coraplex.robot_plans.mixins import MovesToolCenterPoint
 from cramph.composites import ControlStructureNode, Parallel
 from cramph.node import StatechartNode
 from giskardpy.motion_statechart.weights import DefaultWeights
-from giskardpy.motion_statechart.goals.base_pose_goals import DifferentialDriveBaseGoal
-from giskardpy.motion_statechart.goals.cartesian_goals import CartesianPoseStraight
-from giskardpy.motion_statechart.goals.grasped_mechanism import (
-    ArticulateGraspedMechanism,
-)
-from giskardpy.motion_statechart.tasks.align_planes import AlignPlanes
+from giskardpy.motion_statechart.tasks.drive_tasks import DifferentialDriveBaseGoal
 from giskardpy.motion_statechart.tasks.cartesian_tasks import (
+    CartesianPoseStraight,
     CartesianPose,
     CartesianPositionTrajectory,
     HoldOrientation,
 )
+from giskardpy.motion_statechart.tasks.grasped_mechanism import (
+    ArticulateGraspedMechanism,
+)
+from giskardpy.motion_statechart.tasks.align_planes import AlignPlanes
 from semantic_digital_twin.robots.justin import Justin
 from semantic_digital_twin.robots.stretch import Stretch
 from krrood_spatial_math.spatial_types import Pose, Vector3
@@ -161,21 +161,23 @@ class MoveStretchToolCenterPointInAStraightLine(PlanTransformation[CartesianPose
     Moves the tool center point of a Stretch to each of its targets along a straight
     line, by giving every pose goal that an action moving it sets relative to its
     controlled root the tasks of a
-    :class:`~giskardpy.motion_statechart.goals.cartesian_goals.CartesianPoseStraight`
+    :class:`~giskardpy.motion_statechart.tasks.cartesian_tasks.CartesianPoseStraight`
     reaching the same pose. Pose goals inside another goal are left as they are.
     """
 
     def is_applicable(self, plan_node: CartesianPose) -> bool:
         if type(plan_node) is not CartesianPose:
             return False
-        owner = next(
-            (
-                node
-                for node in plan_node.path
-                if isinstance(node, Action)
-                or not isinstance(node, ControlStructureNode)
-            ),
-            None,
+        parent = plan_node.parent_node
+        owner = (
+            None
+            if parent is None
+            else parent.find_upwards(
+                predicate=lambda node: (
+                    isinstance(node, Action)
+                    or not isinstance(node, ControlStructureNode)
+                )
+            )
         )
         return (
             isinstance(owner, MovesToolCenterPoint)
@@ -195,7 +197,7 @@ class MoveStretchToolCenterPointInAStraightLine(PlanTransformation[CartesianPose
         )
         # the tasks of a pose goal come before the nodes accompanying it
         for task, straight_task in zip(list(plan_node.nodes), straight.create_tasks()):
-            plan_node.statechart.replace(task, straight_task)
+            plan_node.statechart.replace(node=task, replacement=straight_task)
 
 
 # %% closing a container
@@ -231,8 +233,8 @@ class KeepStretchInFrontOfTheContainerItCloses(PlanTransformation[CloseAction]):
         tool_frame = closing_goal.tip_link
         robot_root = plan_node.robot.root
         plan_node.statechart.replace(
-            closing_goal,
-            Parallel(
+            node=closing_goal,
+            replacement=Parallel(
                 nodes=[
                     CartesianPose(
                         name="Keep holding handle",

@@ -287,7 +287,7 @@ class BulletWorldDemonstration(RobotDemonstration):
         :return: The PR2, placed at :attr:`robot_start` through its odom.
         """
         return RobotSpecification(
-            semantic_annotation_type=self.used_robot, world_T_odom=self.robot_start
+            semantic_annotation_type=self.used_robot, localization_pose=self.robot_start
         )
 
     def is_scene_populated(self, world: World) -> bool:
@@ -306,7 +306,9 @@ class BulletWorldDemonstration(RobotDemonstration):
 
     def build_context_extensions(self, world: World) -> list[ContextExtension]:
         return [
-            RobotAccess(world.get_semantic_annotations_by_type(self.used_robot)[0]),
+            RobotAccess(
+                robot=world.get_semantic_annotations_by_type(self.used_robot)[0]
+            ),
             StatementGrounding(),
             PlanRewriting(transformations=[OpenDrawerBeforeMoveAndPickUp()]),
         ]
@@ -334,11 +336,11 @@ class BulletWorldDemonstration(RobotDemonstration):
         Carry each object to its place on the table.
         """
         world = context.world
-        robot = context.require_extension(RobotAccess).robot
+        robot = context.require_extension(extension_type=RobotAccess).robot
         left_arm = robot.left_arm
         statechart = Statechart(context=context)
         statechart.add_node(
-            Sequence(
+            node=Sequence(
                 nodes=[
                     ParkArmsAction(arms=robot.all_arms),
                     MoveTorsoAction(torso_state=TorsoState.HIGH),

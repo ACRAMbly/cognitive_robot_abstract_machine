@@ -3,14 +3,16 @@
 # Built before the imports below, which read a mapped datastructure: pytest imports every
 # conftest of a run before calling any hook, so a hook would fire too late. The build runs
 # once per process and never on an xdist worker.
+from cognitive_robot_abstract_machine.orm_interfaces import OrmPackage
+
 from ..orm_interface_build import regenerate_orm_interfaces
 
-regenerate_orm_interfaces()
+regenerate_orm_interfaces(OrmPackage.GISKARDPY)
 
 
 import pytest
 
-from giskardpy.middleware.ros2.utils.utils_for_tests import GiskardTester
+from giskardpy.middleware.ros2.giskard_tester import GiskardTester
 from giskardpy.motion_statechart.graph_node import EndMotion
 from giskardpy.motion_statechart.monitors.overwrite_state_monitors import (
     SetSeedConfiguration,
@@ -37,9 +39,13 @@ from semantic_digital_twin.world_description.shape_collection import ShapeCollec
 from semantic_digital_twin.world_description.world_entity import (
     Body,
 )
-from semantic_digital_twin.robots.daisy import DAiSyJoint
-from semantic_digital_twin.robots.hsrb import HSRBJoint
-from semantic_digital_twin.robots.pr2 import PR2Joint
+from semantic_digital_twin.robots.daisy import DAiSy, DAiSyJoint
+from semantic_digital_twin.robots.hsrb import HSRB, HSRBJoint
+from semantic_digital_twin.robots.pr2 import PR2, PR2Joint
+from semantic_digital_twin.robots.stretch import Stretch
+from semantic_digital_twin.robots.tracy import Tracy
+from semantic_digital_twin.specifications.robots import RobotSpecification
+from semantic_digital_twin.specifications.worlds import WorldSpecification
 
 
 @pytest.fixture()
@@ -191,7 +197,7 @@ def pr2_with_box(pr2_world_copy) -> World:
 
 
 @pytest.fixture()
-def giskard_factory(init_rospy, robot: GiskardTester):
+def giskard_factory(init_background_node, robot: GiskardTester):
     def _create_giskard(seed_joint_state: dict[str, float]) -> GiskardTester:
         parse_seed_joint_state = {
             robot.api.world.get_connection_by_name(name): target
@@ -203,14 +209,14 @@ def giskard_factory(init_rospy, robot: GiskardTester):
             name="initial configuration",
             seed_configuration=JointState.from_mapping(parse_seed_joint_state),
         )
-        statechart.add_node(initial_config)
+        statechart.add_node(node=initial_config)
 
         if robot.has_odometry_joint():
             base_goal = HomogeneousTransformationMatrix(
                 reference_frame=robot.api.world.root
             )
             base_pose_reached = SetOdometry(name="initial pose", base_pose=base_goal)
-            statechart.add_node(base_pose_reached)
+            statechart.add_node(node=base_pose_reached)
             done = logic_and(
                 initial_config.observes_true,
                 base_pose_reached.observes_true,
@@ -218,9 +224,9 @@ def giskard_factory(init_rospy, robot: GiskardTester):
         else:
             done = initial_config.observes_true
         end = EndMotion(name="end")
-        statechart.add_node(end)
+        statechart.add_node(node=end)
         end.start_condition = done
-        robot.api.compile(statechart)
+        robot.api.compile(statechart=statechart)
         robot.api.execute()
         return robot
 
@@ -334,6 +340,17 @@ def prismatic_world_with_acceleration_limit(request):
     )
 
 
+@pytest.fixture()
+def prismatic_bot_with_acceleration_limit():
+    """
+    A prismatic joint like :func:`prismatic_bot` with an acceleration limit of its own,
+    which brakes with a jerk limit far below the one of the default braking time.
+    """
+    return _make_prismatic_world(
+        [_symmetric_prismatic_limits(1, 1, acceleration=ACCELERATION_LIMIT)]
+    )
+
+
 @pytest.fixture(
     params=[1, None], ids=["with_position_limits", "without_position_limits"]
 )
@@ -349,3 +366,46 @@ def prismatic_world_with_low_jerk_limit(request):
             )
         ]
     )
+
+
+# %% worlds of single robots as Giskard sets them up
+
+
+@pytest.fixture()
+def pr2_world_specification() -> WorldSpecification:
+    """
+    The PR2 alone, as Giskard sets it up.
+    """
+    return WorldSpecification(robots=[RobotSpecification.specify_real_robot(PR2)])
+
+
+@pytest.fixture()
+def hsr_world_specification() -> WorldSpecification:
+    """
+    The HSR alone, as Giskard sets it up.
+    """
+    return WorldSpecification(robots=[RobotSpecification.specify_real_robot(HSRB)])
+
+
+@pytest.fixture()
+def stretch_world_specification() -> WorldSpecification:
+    """
+    Stretch alone, as Giskard sets it up.
+    """
+    return WorldSpecification(robots=[RobotSpecification.specify_real_robot(Stretch)])
+
+
+@pytest.fixture()
+def tracy_world_specification() -> WorldSpecification:
+    """
+    Tracy alone, as Giskard sets it up.
+    """
+    return WorldSpecification(robots=[RobotSpecification.specify_real_robot(Tracy)])
+
+
+@pytest.fixture()
+def daisy_world_specification() -> WorldSpecification:
+    """
+    DAiSy alone, as Giskard sets it up.
+    """
+    return WorldSpecification(robots=[RobotSpecification.specify_real_robot(DAiSy)])

@@ -13,8 +13,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing_extensions import TYPE_CHECKING, Any, Iterable, Self
 
-import random_events.variable
-from random_events.product_algebra import Event
 from krrood.entity_query_language.core.base_expressions import (
     BinaryExpression,
     OperationResult,
@@ -29,14 +27,10 @@ from krrood.entity_query_language.operators.core_logical_operators import (
 )
 
 if TYPE_CHECKING:
-    from probabilistic_model.causal_structure.identification import Identification
     from krrood.entity_query_language.core.mapped_variable import Attribute
-    from probabilistic_model.probabilistic_circuit.probabilistic_circuit_representation import (
-        ProbabilisticCircuitRepresentation,
-    )
 
 
-@dataclass(eq=False, repr=False)
+@dataclass(kw_only=True, eq=False, repr=False)
 class CausalRoleMarker(Literal):
     """
     Marks a keyword argument of a match pattern as a variable whose value the query
@@ -49,7 +43,7 @@ class CausalRoleMarker(Literal):
 
     _value_: Any = field(default=Ellipsis, init=False)
 
-    def _as_assigned_variable_(self, attribute_type: type | None) -> Self:
+    def _as_assigned_variable_(self, *, attribute_type: type | None) -> Self:
         """
         :param attribute_type: The type of the attribute this marks.
         :return: This marker if it already has a type, otherwise a fresh copy of it
@@ -60,7 +54,7 @@ class CausalRoleMarker(Literal):
         return type(self)(_type_=attribute_type)
 
 
-@dataclass(eq=False, repr=False)
+@dataclass(kw_only=True, eq=False, repr=False)
 class Cause(CausalRoleMarker):
     """
     Marks a :class:`~krrood.entity_query_language.query.match.Match` keyword argument as
@@ -84,7 +78,7 @@ Marks a :class:`~krrood.entity_query_language.query.match.Match` keyword argumen
 """
 
 
-@dataclass(eq=False, repr=False)
+@dataclass(kw_only=True, eq=False, repr=False)
 class Confounder(CausalRoleMarker):
     """
     Marks a :class:`~krrood.entity_query_language.query.match.Match` keyword argument
@@ -109,17 +103,14 @@ variable to adjust for when searching a :class:`Cause` intervention -- see
 """
 
 
-@dataclass(eq=False, repr=False)
+@dataclass(kw_only=True, eq=False, repr=False)
 class CausesEffect(LogicalOperator, UnaryExpression):
     """
     Tags a condition as the effect side of a causal query.
 
-    Evaluates transparently -- the same truth value as its wrapped condition -- under
-    every backend, so filtering behaves identically whether or not a condition is
-    wrapped in :meth:`~krrood.entity_query_language.query.match.Match.causes_effect`.
-    Only :class:`~krrood.entity_query_language.backends.ProbabilisticBackend`
-    additionally reads it, to find which variable(s) a :class:`Cause` search should
-    optimize for.
+    Evaluates to the same truth value as its wrapped condition under every backend; a
+    causal backend additionally reads it to find which variables a :class:`Cause` search
+    optimizes for.
     """
 
     cause_attributes: list[Attribute] = field(default_factory=list, kw_only=True)
@@ -138,185 +129,18 @@ class CausesEffect(LogicalOperator, UnaryExpression):
             not isinstance(self._child_, BinaryExpression)
             or not self._child_._is_equality_literal_comparator_or_conjunction_()
         ):
-            raise CausesEffectRequiresEqualityComparator(self._child_)
+            raise CausesEffectRequiresEqualityComparator(condition=self._child_)
 
     def _evaluate__(
         self,
+        *,
         sources: OperationResult,
     ) -> Iterable[OperationResult]:
-        for child_result in self._evaluate_child_as_condition_(self._child_, sources):
+        for child_result in self._evaluate_child_as_condition_(
+            child=self._child_, sources=sources
+        ):
             yield self._build_operation_result_with_truth_(
-                child_result.is_true, child_result.bindings, child_result
+                truth=child_result.is_true,
+                bindings=child_result.bindings,
+                child_result=child_result,
             )
-
-
-@dataclass
-class CauseEffectVariables:
-    """
-    The cause candidates and effect variable a ``cause`` search resolves to.
-    """
-
-    cause_variables: list[random_events.variable.Variable]
-    """
-    The variable(s) a ``cause`` intervention is searched over.
-
-    When there is more than one, each is tried independently -- there is no joint,
-    multi-variable intervention -- and the one with the highest
-    :attr:`~krrood.entity_query_language.operators.causal.ScoredIntervention.effect_probability_given_region`
-    becomes the primary cause: the candidate whose own best region gives the highest
-    ``P(effect | do(cause in best_region))``.
-    """
-
-    effect_variable: random_events.variable.Variable
-    """
-    The variable a ``causes_effect(...)`` condition declares as the effect.
-    """
-
-    adjustment_variables_by_cause: dict[
-        random_events.variable.Variable, list[random_events.variable.Variable]
-    ]
-    """
-    Per cause candidate, the variables its interventional search adjusts for: Pearl's
-    backdoor-criterion adjustment set, summed back out of the candidate's interventional
-    probability so it is not left baked into the correlation between cause and effect.
-    They are the variables marked ``confounder``, and those a learned causal structure
-    chose for the candidate.
-
-    Empty for a candidate with neither, so its search falls back to an empty adjustment
-    set.
-    """
-
-
-@dataclass
-class ScoredIntervention:
-    """
-    One cause candidate's best-region search result, scored for comparison against the
-    other candidates when a query has more than one ``cause`` field.
-    """
-
-    cause_variable: random_events.variable.Variable
-    """
-    The candidate cause variable this result is for.
-    """
-
-    effect_probability_given_region: float
-    """
-    The interventional probability that the effect holds, given this variable is
-    restricted to its best region -- how *reliably* this candidate's best value produces
-    the effect.
-
-    Comparable across candidates regardless of how much of each candidate's own domain
-    that region happens to cover: the higher one is the better explanation.
-    """
-
-    narrowed_circuit: ProbabilisticCircuitRepresentation
-    """
-    The interventional joint, truncated to the effect condition and this candidate's
-    best region -- what the query samples from if this candidate turns out to be the
-    primary cause.
-
-    Of the circuit type the causal circuit was read from.
-    """
-
-
-@dataclass
-class CandidateAdjustment:
-    """
-    One set of a query's variables that the effect of a cause may be identified by
-    adjusting for.
-    """
-
-    variables: list[random_events.variable.Variable]
-    """
-    The variables to adjust for.
-    """
-
-
-@dataclass
-class AdjustmentCandidates:
-    """
-    What a learned causal structure says one cause candidate adjusts for.
-    """
-
-    cause_variable: random_events.variable.Variable
-    """
-    The cause candidate.
-    """
-
-    identification: Identification
-    """
-    What the structure says about the effect of the cause.
-    """
-
-    adjustments: list[CandidateAdjustment]
-    """
-    Each set the effect may be identified by adjusting for: the one chosen set if the
-    effect is identified, one per candidate if it is partially identified, none if it
-    is not identified.
-    """
-
-    @property
-    def variables(self) -> list[random_events.variable.Variable]:
-        """
-        :return: The variables of every candidate, each once, in order of first use.
-        """
-        return list(
-            dict.fromkeys(
-                variable
-                for adjustment in self.adjustments
-                for variable in adjustment.variables
-            )
-        )
-
-
-@dataclass
-class RegionRange:
-    """
-    The effect's probability under an intervention setting the cause to one region,
-    across every candidate adjustment set.
-    """
-
-    cause_region: Event
-    """
-    The region of the cause.
-    """
-
-    lowest_effect_probability: float
-    """
-    The lowest probability of the effect across the candidates.
-    """
-
-    highest_effect_probability: float
-    """
-    The highest probability of the effect across the candidates.
-    """
-
-
-@dataclass
-class InterventionalRange:
-    """
-    The range an effect's interventional probability lies in, per region of one cause,
-    when the learned causal structure identifies it only up to a few candidate
-    adjustment sets.
-    """
-
-    cause_variable: random_events.variable.Variable
-    """
-    The cause.
-    """
-
-    candidate_adjustments: list[CandidateAdjustment]
-    """
-    The candidate adjustment sets the range is taken across.
-    """
-
-    includes_no_effect: bool
-    """
-    Whether the range also takes in the effect's probability without any intervention,
-    since in some graph the structure stands for the cause does not cause it at all.
-    """
-
-    regions: list[RegionRange]
-    """
-    The range per region of the cause.
-    """

@@ -1,3 +1,8 @@
+"""
+Actions that move a robot's base or point it at something: driving to a pose, along a
+planned path or by elevator, and looking or facing at a target.
+"""
+
 from __future__ import annotations
 
 from abc import ABC
@@ -14,7 +19,7 @@ from coraplex.robot_plans.actions.base import (
 )
 from coraplex.robot_plans.mixins import ReattachesBranches
 from cramph.composites import Parallel, PausedUntilTrue
-from giskardpy.motion_statechart.goals.base_pose_goals import (
+from giskardpy.motion_statechart.tasks.drive_tasks import (
     MobileBasePoseGoal,
     DifferentialDriveBaseGoal,
     HolonomicBaseGoal,
@@ -80,9 +85,9 @@ class NavigateAction(DrivesBase, GoalAction):
 
     def create_goal(self) -> StatechartNode:
         return self.base_goal_type.moving_base_of(
-            self.robot,
-            self.robot.mobile_base.pose_facing(self.target_location),
-            self.base_pose_threshold,
+            robot=self.robot,
+            goal_pose=self.robot.mobile_base.pose_facing(self.target_location),
+            threshold=self.base_pose_threshold,
         )
 
 
@@ -189,7 +194,7 @@ class PathPlanningNavigateAction(DrivesBase, SequentialAction):
     def create_steps(self) -> list[StatechartNode]:
         return [
             self.base_goal_type.moving_base_of(
-                self.robot, waypoint, self.base_pose_threshold
+                robot=self.robot, goal_pose=waypoint, threshold=self.base_pose_threshold
             )
             for waypoint in self._path()
         ]
@@ -285,12 +290,7 @@ class PathPlanningNavigateAction(DrivesBase, SequentialAction):
             target's.
         """
         base_pose = self.robot.root.global_pose
-        free_space = self._floor.planar_free_space(
-            max_height=self.robot.as_bounding_box_collection_in_frame(self.robot.root)
-            .bounding_box()
-            .scale.z,
-            bloat_obstacles=self.robot.mobile_base.base_radius,
-        )
+        free_space = self._floor.navigable_space(robot=self.robot, margin=0.0)
         return free_space.path_from_to(
             Point2.from_pose(base_pose), Point2.from_pose(self.target)
         )
@@ -359,7 +359,8 @@ class ElevatorNavigation(ReattachesBranches, SequentialAction):
         current_floor = [
             floor
             for floor in self.world.get_semantic_annotations_by_type(Level)
-            if InsideOf(self.robot.bodies_with_collision[0], floor.root)() > 0.9
+            if InsideOf(body=self.robot.bodies_with_collision[0], other=floor.root)()
+            > 0.9
         ]
         if len(current_floor) == 0:
             raise NotOnASingleLevelException("Robot is not on any recognized floor.")

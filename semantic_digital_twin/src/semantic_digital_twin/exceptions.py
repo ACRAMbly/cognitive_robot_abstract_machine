@@ -1,3 +1,7 @@
+"""
+The exceptions raised across the semantic digital twin.
+"""
+
 from __future__ import annotations, absolute_import
 
 # %% Imports
@@ -12,12 +16,11 @@ from typing_extensions import TYPE_CHECKING, Callable, Any
 
 from krrood.adapters.exceptions import UntrackedObjectError
 from krrood.exceptions import DataclassException
-from krrood.ormatic.utils import classproperty
+from krrood.patterns.classproperty import classproperty
 from semantic_digital_twin.datastructures.definitions import JointStateType
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 
 if TYPE_CHECKING:
-    from semantic_digital_twin.adapters.ros.messages import MetaData
     from semantic_digital_twin.input_synchronization import InputSynchronizer
     from semantic_digital_twin.semantic_annotations.mixins import (
         HasRootBody,
@@ -543,6 +546,52 @@ class InvalidRollbackVersionError(WorldValidationError):
 
     def suggest_correction(self) -> str:
         return "pass a version between 0 and the world's current version."
+
+
+@dataclass(kw_only=True)
+class RollbackBeforeClearError(WorldValidationError):
+    """
+    Raised when attempting to roll back to a version from before the world's history was
+    last cleared, which the history no longer holds the modifications to restore.
+    """
+
+    target_version: int
+    """
+    The version that was requested.
+    """
+
+    version_at_last_clear: int
+    """
+    The version the world was at when its history was last cleared.
+    """
+
+    def error_message(self) -> str:
+        return (
+            f"Cannot roll back to version {self.target_version}: the world's history "
+            f"was cleared at version {self.version_at_last_clear}, so no version up to "
+            f"it can be restored."
+        )
+
+    def suggest_correction(self) -> str:
+        return f"pass a version after {self.version_at_last_clear}."
+
+
+@dataclass(kw_only=True)
+class WorldMergedWithItselfError(UsageError):
+    """
+    Raised when a world is asked to merge itself into itself.
+    """
+
+    world: World
+    """
+    The world that was to be merged with itself.
+    """
+
+    def error_message(self) -> str:
+        return f"Cannot merge the world {self.world} with itself."
+
+    def suggest_correction(self) -> str:
+        return "merge another world, or a copy of this one."
 
 
 @dataclass
@@ -1388,6 +1437,28 @@ class StateUpdateContainsUnknownDegreesOfFreedomError(UsageError):
 
 
 @dataclass
+class StateUpdateContainsNonNumericValuesError(UsageError):
+    """
+    Raised when a received WorldStateUpdate gives a degree of freedom a value that is
+    not a number.
+    """
+
+    non_numeric_states: list[Any]
+    """
+    The values that are not numbers.
+    """
+
+    def error_message(self) -> str:
+        return (
+            f"Received a WorldStateUpdate whose states {self.non_numeric_states} are "
+            f"not numbers."
+        )
+
+    def suggest_correction(self) -> str:
+        return "publish the positions of degrees of freedom as numbers."
+
+
+@dataclass
 class WorldHasNoSynchronizerError(UsageError):
     """
     Raised when the synchronizer of a world is asked for, but the world publishes its
@@ -1431,49 +1502,6 @@ class SynchronizerNotConnectedError(UsageError):
 
     def suggest_correction(self) -> str:
         return "Check that the ros node of the synchronizer is alive and its middleware is running."
-
-
-@dataclass
-class WorldUpdateReferencesUnknownEntityError(UsageError):
-    """
-    Raised when an update refers to an entity this world never received, which leaves
-    everything the missing update carried out of reach.
-    """
-
-    publisher: MetaData
-    """
-    The synchronizer whose update could not be applied.
-    """
-
-    entity_id: UUID
-    """
-    The entity the update refers to.
-
-    Only its id is known, because the update that created it never arrived.
-    """
-
-    entity_name: PrefixedName | None
-    """
-    The name the update calls that entity, or ``None`` where it carries none.
-    """
-
-    def error_message(self) -> str:
-        named_entity = (
-            f"'{self.entity_name}' ({self.entity_id})"
-            if self.entity_name is not None
-            else f"'{self.entity_id}'"
-        )
-        return (
-            f"The update of '{self.publisher.node_name}' refers to the entity "
-            f"{named_entity}, which this world never received."
-        )
-
-    def suggest_correction(self) -> str:
-        return (
-            "Create the synchronizer of a world before modifying that world: changes made "
-            "before it exists reach nobody, and every later change that builds on them "
-            "cannot be applied."
-        )
 
 
 @dataclass
@@ -2394,36 +2422,6 @@ class ExerciseVerificationFailed(UsageError):
 
 
 @dataclass
-class DriveVelocityLimitsOnUndrivenRobot(UsageError):
-    """
-    Raised when drive velocity limits are given for a robot that is attached to its
-    localization frame rigidly rather than by a drive.
-    """
-
-    robot_type_name: str
-    """
-    The name of the robot type the limits were given for.
-    """
-
-    connection_type_name: str
-    """
-    The name of the connection type that robot attaches to its localization frame with.
-    """
-
-    def error_message(self) -> str:
-        return (
-            f"'{self.robot_type_name}' attaches to its localization frame with a "
-            f"'{self.connection_type_name}', which carries no velocity limits."
-        )
-
-    def suggest_correction(self) -> str:
-        return (
-            "leave the drive velocity limits unset, or give the robot a mobile base "
-            "whose drive can carry them."
-        )
-
-
-@dataclass
 class NothingHeld(UsageError):
     """
     Raised when the grasp of a gripper that holds nothing is asked for.
@@ -2642,6 +2640,31 @@ class SimulationAlreadyRunningError(UsageError):
 
     def suggest_correction(self) -> str:
         return "Stop the simulation before starting it again."
+
+
+@dataclass(kw_only=True)
+class SnapshotDoesNotFitSimulationError(UsageError):
+    """
+    Raised when a simulation is restored from a snapshot of a simulation that was built
+    from a different world.
+    """
+
+    world_name: str
+    """
+    Name of the root of the world whose simulation the snapshot was restored into.
+    """
+
+    def error_message(self) -> str:
+        return (
+            f"The snapshot was not taken of the simulation of the world rooted at "
+            f"{self.world_name}: its physics or world state has a different size."
+        )
+
+    def suggest_correction(self) -> str:
+        return (
+            "Restore only snapshots taken of this simulation, after the last change to "
+            "its world's model."
+        )
 
 
 @dataclass

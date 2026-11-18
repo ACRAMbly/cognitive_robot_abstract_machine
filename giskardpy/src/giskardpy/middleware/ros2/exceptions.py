@@ -7,7 +7,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import timedelta
 
-from giskardpy.data_types.exceptions import (
+from giskardpy.exceptions import (
     GiskardException,
     SetupException,
 )
@@ -15,7 +15,7 @@ from semantic_digital_twin.adapters.ros.messages import MetaData
 from semantic_digital_twin.world_description.connections import WheeledDrive
 
 
-@dataclass
+@dataclass(kw_only=True)
 class UnknownMinimumVelocityJointError(SetupException):
     """
     Raised when a minimum velocity override names a joint that is not commanded.
@@ -41,25 +41,7 @@ class UnknownMinimumVelocityJointError(SetupException):
         return f"Use one of {sorted(self.commanded_joint_names)}."
 
 
-@dataclass
-class ServiceUnavailableError(SetupException):
-    """
-    Raised when a service Giskard needs for its setup does not become available.
-    """
-
-    service_name: str
-    """
-    The service that was waited for.
-    """
-
-    def error_message(self) -> str:
-        return f'The service "{self.service_name}" is not available.'
-
-    def suggest_correction(self) -> str:
-        return "Make sure the node offering the service is running."
-
-
-@dataclass
+@dataclass(kw_only=True)
 class ControllersNotLoadedError(SetupException):
     """
     Raised when controllers Giskard was told to use are not loaded by their controller
@@ -86,7 +68,7 @@ class ControllersNotLoadedError(SetupException):
         return "Load the controllers or remove them from the whitelist."
 
 
-@dataclass
+@dataclass(kw_only=True)
 class ControllersNotActiveError(SetupException):
     """
     Raised when controllers Giskard was told to use are loaded by their controller
@@ -113,7 +95,7 @@ class ControllersNotActiveError(SetupException):
         return "Activate the controllers or remove them from the whitelist."
 
 
-@dataclass
+@dataclass(kw_only=True)
 class NoUniqueDriveError(SetupException):
     """
     Raised when Giskard is told to command the drive of a world without being told which
@@ -135,14 +117,27 @@ class NoUniqueDriveError(SetupException):
         return "Name the drive to command."
 
 
-@dataclass
+@dataclass(kw_only=True)
 class ExecutionException(GiskardException):
     """
     Base class for errors that occur while executing a trajectory.
     """
 
 
-@dataclass
+@dataclass(kw_only=True)
+class InterruptedExecutionException(ExecutionException):
+    """
+    Ends a goal because of something outside Giskard, such as a cancellation, a lost
+    client or a missing world update, rather than because of a fault in Giskard.
+    """
+
+    print_stack_trace: bool = field(default=False, kw_only=True)
+    """
+    Off, because the interruption is an expected outcome that its message explains.
+    """
+
+
+@dataclass(kw_only=True)
 class NoActiveGoalToCancelError(ExecutionException):
     """
     Raised when a goal cancellation is requested but no goal is active.
@@ -155,13 +150,11 @@ class NoActiveGoalToCancelError(ExecutionException):
         return ""
 
 
-@dataclass
-class ExecutionCanceledException(ExecutionException):
+@dataclass(kw_only=True)
+class ExecutionCanceledException(InterruptedExecutionException):
     """
     Raised when the execution of a goal is canceled.
     """
-
-    print_stack_trace: bool = field(default=False, kw_only=True)
 
     action_server_name: str
     """
@@ -180,16 +173,14 @@ class ExecutionCanceledException(ExecutionException):
         return ""
 
 
-@dataclass
-class ClientDisconnectedError(ExecutionException):
+@dataclass(kw_only=True)
+class ClientDisconnectedError(InterruptedExecutionException):
     """
     Raised when the client that sent the running goal disconnected.
 
     Nobody is waiting for the motion any more, so it is stopped instead of being run to
     its end.
     """
-
-    print_stack_trace: bool = field(default=False, kw_only=True)
 
     client: MetaData
     """
@@ -206,7 +197,7 @@ class ClientDisconnectedError(ExecutionException):
         return "Restart the client and send the goal again."
 
 
-@dataclass
+@dataclass(kw_only=True)
 class NoWatchedClientError(GiskardException):
     """
     Raised when a presence check is asked about a client while it watches none.
@@ -224,8 +215,8 @@ class NoWatchedClientError(GiskardException):
         return "Only ask a check about a client that it started watching."
 
 
-@dataclass
-class WorldModelModifiedDuringMotionError(ExecutionException):
+@dataclass(kw_only=True)
+class WorldModelModifiedDuringMotionError(InterruptedExecutionException):
     """
     Raised when another process modified the world model while a motion was running.
 
@@ -235,8 +226,6 @@ class WorldModelModifiedDuringMotionError(ExecutionException):
     again.
     """
 
-    print_stack_trace: bool = field(default=False, kw_only=True)
-
     def error_message(self) -> str:
         return "The world model was modified by another process during the motion."
 
@@ -244,16 +233,14 @@ class WorldModelModifiedDuringMotionError(ExecutionException):
         return "Send the goal again; the modification is applied by then."
 
 
-@dataclass
-class RequiredWorldUpdateNotReceivedError(ExecutionException):
+@dataclass(kw_only=True)
+class RequiredWorldUpdateNotReceivedError(InterruptedExecutionException):
     """
     Raised when a goal names a change of the client's world that never arrived.
 
     The goal refers to a world the client already changed, so executing it against the
     world Giskard has would act on something else than what was asked for.
     """
-
-    print_stack_trace: bool = field(default=False, kw_only=True)
 
     publisher_name: str
     """
@@ -288,16 +275,50 @@ class RequiredWorldUpdateNotReceivedError(ExecutionException):
         )
 
 
-@dataclass
-class GiskardWorldUpdateNotReceivedError(ExecutionException):
+@dataclass(kw_only=True)
+class RequiredWorldUpdateNotAppliedError(InterruptedExecutionException):
+    """
+    Raised when a goal names a change of the client's world, and an update of the client
+    could not be applied to Giskard's world, which may differ from it since.
+    """
+
+    publisher_name: str
+    """
+    The node whose change was waited for.
+    """
+
+    failed_sequence_number: int
+    """
+    The position in that node's stream of the update that could not be applied.
+    """
+
+    awaited_sequence_number: int
+    """
+    The position in that node's stream that was waited for.
+    """
+
+    def error_message(self) -> str:
+        return (
+            f"Update #{self.failed_sequence_number} of '{self.publisher_name}' could "
+            f"not be applied to Giskard's world, so update "
+            f"#{self.awaited_sequence_number} the goal requires cannot be relied on."
+        )
+
+    def suggest_correction(self) -> str:
+        return (
+            "Make Giskard's world equal to the client's again, for example by "
+            "reloading it, then send the goal again."
+        )
+
+
+@dataclass(kw_only=True)
+class GiskardWorldUpdateNotReceivedError(InterruptedExecutionException):
     """
     Raised when the changes Giskard made during a goal never reached the client.
 
     Reading the world of the client after such a goal would show a world that Giskard
     has already moved on from.
     """
-
-    print_stack_trace: bool = field(default=False, kw_only=True)
 
     awaited_sequence_number: int
     """
@@ -319,48 +340,7 @@ class GiskardWorldUpdateNotReceivedError(ExecutionException):
         return "Check that this world is still connected to the world sync topic."
 
 
-@dataclass
-class ExecutionPreemptedException(ExecutionException):
-    """
-    Raised when the execution of a goal is preempted.
-    """
-
-    namespace: str
-    """
-    The namespace of the action server that was preempted.
-    """
-
-    def error_message(self) -> str:
-        return f"'{self.namespace}' preempted. Stopping execution."
-
-    def suggest_correction(self) -> str:
-        return ""
-
-
-@dataclass
-class ExecutionTimeoutException(ExecutionException):
-    """
-    Raised when the execution of a goal takes too long.
-    """
-
-    namespace: str
-    """
-    The namespace of the action server that timed out.
-    """
-
-    reason: str
-    """
-    A description of why the execution timed out.
-    """
-
-    def error_message(self) -> str:
-        return f"'{self.namespace}' timed out. {self.reason}"
-
-    def suggest_correction(self) -> str:
-        return ""
-
-
-@dataclass
+@dataclass(kw_only=True)
 class ExecutionAbortedException(ExecutionException):
     """
     Raised when the execution is aborted by Giskard.
@@ -373,7 +353,80 @@ class ExecutionAbortedException(ExecutionException):
         return ""
 
 
-@dataclass
+@dataclass(kw_only=True)
+class GoalRequestNotAnsweredError(ExecutionException):
+    """
+    Raised when no action server answered a goal request in time.
+
+    A server whose node is no longer spun still advertises its action, so a client can
+    find it and send its goal there, where nobody will ever accept or reject it.
+    """
+
+    action_name: str
+    """
+    The action the goal was sent to.
+    """
+
+    timeout: timedelta
+    """
+    How long the client waited for the answer.
+    """
+
+    def error_message(self) -> str:
+        return (
+            f"No server of '{self.action_name}' accepted or rejected the goal within "
+            f"{self.timeout.total_seconds()}s."
+        )
+
+    def suggest_correction(self) -> str:
+        return (
+            f"Check that exactly one running server offers '{self.action_name}', for "
+            f"example with 'ros2 action info', then send the goal again."
+        )
+
+
+@dataclass(kw_only=True)
+class ActionClientClosedError(ExecutionException):
+    """
+    Raised when a goal is sent through an action client that was closed.
+    """
+
+    action_name: str
+    """
+    The action the closed client was built for.
+    """
+
+    def error_message(self) -> str:
+        return f"The client of '{self.action_name}' was closed and sends no more goals."
+
+    def suggest_correction(self) -> str:
+        return "Build a new client for the action and send the goal through it."
+
+
+@dataclass(kw_only=True)
+class UnexpectedGoalStatusError(ExecutionException):
+    """
+    Raised when a goal ends in a status that a finished goal cannot have.
+    """
+
+    action_name: str
+    """
+    The action the goal was sent to.
+    """
+
+    status: int
+    """
+    The :class:`action_msgs.msg.GoalStatus` the goal reported.
+    """
+
+    def error_message(self) -> str:
+        return f"A goal of '{self.action_name}' ended with status {self.status}."
+
+    def suggest_correction(self) -> str:
+        return "Report this to the maintainers of the action server."
+
+
+@dataclass(kw_only=True)
 class UnserializableGoalError(ExecutionException):
     """
     Stands in for the error a goal failed with when that error could not be serialized,
@@ -397,83 +450,7 @@ class UnserializableGoalError(ExecutionException):
         return ""
 
 
-@dataclass
-class ExecutionSucceededPrematurely(ExecutionException):
-    """
-    Raised when the execution finishes before the minimum execution time.
-    """
-
-    namespace: str
-    """
-    The namespace of the action server that finished too early.
-    """
-
-    def error_message(self) -> str:
-        return f"'{self.namespace}' executed too quickly, stopping execution."
-
-    def suggest_correction(self) -> str:
-        return ""
-
-
-@dataclass
-class FollowJointTrajectoryError(ExecutionException):
-    """
-    Raised when a follow joint trajectory action server fails to execute a goal.
-    """
-
-    namespace: str
-    """
-    The namespace of the action server that failed.
-    """
-
-    error_description: str
-    """
-    A human-readable description of the action server error code.
-    """
-
-    def error_message(self) -> str:
-        return f"'{self.namespace}' failed to execute goal. Error: '{self.error_description}'"
-
-    def suggest_correction(self) -> str:
-        return ""
-
-
-@dataclass
-class FollowJointTrajectory_INVALID_GOAL(FollowJointTrajectoryError):
-    """
-    Raised when the action server reports an invalid goal.
-    """
-
-
-@dataclass
-class FollowJointTrajectory_INVALID_JOINTS(FollowJointTrajectoryError):
-    """
-    Raised when the action server reports invalid joints.
-    """
-
-
-@dataclass
-class FollowJointTrajectory_OLD_HEADER_TIMESTAMP(FollowJointTrajectoryError):
-    """
-    Raised when the action server reports an outdated header timestamp.
-    """
-
-
-@dataclass
-class FollowJointTrajectory_PATH_TOLERANCE_VIOLATED(FollowJointTrajectoryError):
-    """
-    Raised when the action server reports a path tolerance violation.
-    """
-
-
-@dataclass
-class FollowJointTrajectory_GOAL_TOLERANCE_VIOLATED(FollowJointTrajectoryError):
-    """
-    Raised when the action server reports a goal tolerance violation.
-    """
-
-
-@dataclass
+@dataclass(kw_only=True)
 class StatechartOutOfStepError(ExecutionException):
     """
     Raised when a client sends a child for a statechart that holds other nodes than the
@@ -500,7 +477,7 @@ class StatechartOutOfStepError(ExecutionException):
         return "Send children only for the goal the client's statechart was sent as."
 
 
-@dataclass
+@dataclass(kw_only=True)
 class StatechartNotEndedByResultError(ExecutionException):
     """
     Raised when the result of a goal that succeeded leaves the client's statechart in a
@@ -517,7 +494,7 @@ class StatechartNotEndedByResultError(ExecutionException):
         )
 
 
-@dataclass
+@dataclass(kw_only=True)
 class StateUpdateAheadOfStatechartError(ExecutionException):
     """
     Raised when Giskard reports the states of more nodes than the client's copy of the
@@ -546,7 +523,7 @@ class StateUpdateAheadOfStatechartError(ExecutionException):
         )
 
 
-@dataclass
+@dataclass(kw_only=True)
 class MotionServerThreadStillRunningError(GiskardException):
     """
     Raised when a motion server's background thread does not stop in time.

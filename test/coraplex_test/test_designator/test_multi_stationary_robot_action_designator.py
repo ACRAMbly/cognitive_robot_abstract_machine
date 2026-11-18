@@ -1,9 +1,18 @@
+"""
+Actions performed by each stationary robot in the shared block world.
+"""
+
+from dataclasses import dataclass, field
+
 import mujoco
 import numpy as np
 import pytest
 from rustworkx import NoEdgeBetweenNodes
 
 from coraplex.datastructures.trajectory import PoseTrajectory
+from coraplex.datastructures.enums import InsertionPosition
+from coraplex.plans.failures import PlanFailure
+from coraplex.plans.plan_transformation import SequentialInsertion
 from coraplex.robot_plans.actions.core.pick_up import (
     ReachAction,
     GraspingAction,
@@ -16,9 +25,11 @@ from coraplex.robot_plans.actions.core.robot_body import (
     FollowToolCenterPointPathAction,
 )
 from coraplex.testing import _make_sine_scan_poses
-from cramph.composites import Sequence
-from giskardpy.utils.utils_for_tests import compare_axis_angle, compare_orientations
-from krrood.entity_query_language.factories import an, entity, variable
+from cramph.composites import Sequence, StatementNode
+from cramph.data_types import LifeCycleValue
+from cramph.node import StatechartNode
+from cramph.threaded_nodes import FunctionCall
+from krrood.entity_query_language.factories import a, an, entity, variable
 from semantic_digital_twin.adapters.multi_sim import MujocoSim
 from semantic_digital_twin.datastructures.definitions import (
     GripperState,
@@ -36,9 +47,19 @@ from semantic_digital_twin.world_description.connections import Connection6DoF
 from semantic_digital_twin.world_description.geometry import Box, Scale
 from semantic_digital_twin.world_description.shape_collection import ShapeCollection
 from semantic_digital_twin.world_description.world_entity import Body
+from krrood_spatial_math.testing.orientation_comparison import (
+    assert_same_axis_angle,
+    assert_same_orientation,
+)
 from ..conftest import grasp_point_of, left_or_only_arm, right_or_only_arm
 from ..world_snapshot import WorldSnapshot
-from ...plan_running import perform_in_physics, run_plan, robot_extensions
+from ...plan_running import (
+    perform_in_physics,
+    run_plan,
+    robot_extensions,
+    simulated_executor,
+    statechart_of,
+)
 from ...pytest_environment import runs_in_continuous_integration
 
 
@@ -154,6 +175,9 @@ def stationary_block_context(robot_setup):
 
 
 def test_park_arms_multi(stationary_block_context):
+    """
+    Parking every arm of the robot moves each arm joint to its park position.
+    """
     world, view, extensions = stationary_block_context
 
     description = ParkArmsAction(arms=view.all_arms)
@@ -166,7 +190,7 @@ def test_park_arms_multi(stationary_block_context):
         joints.extend(joint_state.connections)
         states.extend(joint_state.target_values)
     for connection, value in zip(joints, states):
-        compare_axis_angle(
+        assert_same_axis_angle(
             connection.position,
             np.array([1, 0, 0]),
             value,
@@ -176,6 +200,10 @@ def test_park_arms_multi(stationary_block_context):
 
 
 def test_reach_action_multi(stationary_block_context):
+    """
+    Reaching for the box moves the grasp point of the left arm onto the box and its tool
+    frame into the orientation the grasp asks for.
+    """
     world, view, extensions = stationary_block_context
     left_arm = left_or_only_arm(view)
 
@@ -201,7 +229,7 @@ def test_reach_action_multi(stationary_block_context):
     target_orientation = left_arm.end_effector.tool_frame_goal(grasp_pose).quaternion
 
     assert grasp_point_of(left_arm) == pytest.approx(position[:3], abs=0.01)
-    compare_orientations(
+    assert_same_orientation(
         end_effector_orientation, target_orientation.to_np(), decimal=2
     )
 
@@ -300,6 +328,7 @@ def test_place_multi(stationary_block_context, place_position):
                 grasp=top_down_grasp(world, box_body), arm=left_or_only_arm(view)
             ),
             PlaceAction(
+                arm=left_or_only_arm(view),
                 object_designator=graspable_annotation(world, box_body),
                 target_location=Pose(place_position, reference_frame=world.root),
             ),
@@ -470,6 +499,7 @@ def test_a_place_in_physics_leaves_the_box_to_the_release(
             ParkArmsAction(arms=view.all_arms),
             PickUpAction(grasp=grasp_near_the_top(world, box), arm=arm),
             PlaceAction(
+                arm=arm,
                 object_designator=graspable_annotation(world, box),
                 target_location=Pose(target, reference_frame=world.root),
             ),
@@ -484,3 +514,76 @@ def test_a_place_in_physics_leaves_the_box_to_the_release(
         target.to_np().flatten()[:3],
         atol=0.01,
     )
+
+
+# %% a pick-up failing after its grasp
+
+
+def _fail_the_lift() -> None:
+    """
+    Fail as a lift slipping out of the grip would.
+    """
+    raise PlanFailure()
+
+
+@dataclass
+class FailTheFirstLift(SequentialInsertion[PickUpAction]):
+    """
+    Fails the first pick-up it is offered once its object hangs off the gripper, right
+    before it lifts the object.
+    """
+
+    failed_once: bool = field(default=False, init=False)
+    """
+    Whether a pick-up was made to fail already.
+    """
+
+    @property
+    def position(self) -> InsertionPosition:
+        return InsertionPosition.BEFORE
+
+    def is_applicable(self, plan_node: PickUpAction) -> bool:
+        return not self.failed_once
+
+    def anchor(self, plan_node: PickUpAction) -> StatechartNode:
+        return plan_node.nodes[-1]
+
+    def nodes_to_insert(self, plan_node: PickUpAction) -> list[StatechartNode]:
+        self.failed_once = True
+        return [FunctionCall(function=_fail_the_lift, failure_types=(PlanFailure,))]
+
+
+def test_a_pick_up_failing_after_its_grasp_grasps_the_held_box_again(
+    stationary_block_context,
+):
+    """
+    The box hangs off the gripper once the first pick-up failed, and the model moves it
+    with the gripper, so the next grasp passes its trial and runs, opening the gripper
+    around the box it holds.
+    """
+    world, view, extensions = stationary_block_context
+    arm = left_or_only_arm(view)
+    box_body = world.get_body_by_name("box1")
+    pick_up = StatementNode(
+        statement=a(PickUpAction)(
+            grasp=variable(
+                GraspCandidate,
+                domain=graspable_annotation(world, box_body).grasp_candidates(),
+            ),
+            arm=arm,
+        )
+    )
+    plan = Sequence(nodes=[ParkArmsAction(arms=view.all_arms), pick_up])
+    executor = simulated_executor(extensions, plan_adaptations=[FailTheFirstLift()])
+
+    executor.compile(statechart=statechart_of(executor, plan))
+    executor.execute()
+
+    first, second = pick_up.grounded_nodes
+    assert [child.life_cycle_state for child in pick_up.chosen_children] == [
+        LifeCycleValue.FAILED,
+        LifeCycleValue.SUCCEEDED,
+    ]
+    assert second.grasp is not first.grasp
+    [grasping] = [node for node in second.nodes if isinstance(node, GraspingAction)]
+    assert grasping.life_cycle_state == LifeCycleValue.SUCCEEDED

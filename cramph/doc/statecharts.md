@@ -28,6 +28,8 @@ the state of other nodes. All nodes are updated together once per **tick**.
   example a counter waiting for a number of ticks, is a plain `StatechartNode`; there is no
   monitor class (see [Who ends a node](#who-ends-a-node)). Packages built on cramph add their
   own kinds of nodes, for example giskardpy's motion tasks.
+- **FailureHandlingNode**: A node that starts once the node it observes failed and runs a
+  strategy that changes the plan to recover (see [Handling failures](#handling-failures)).
 - **CompositeNode**: A node that contains other nodes and wires their conditions. Composite
   nodes encapsulate reusable, parameterized patterns, such as [the templates](#templates) that
   run steps in order or retry a failed step.
@@ -51,7 +53,7 @@ A node's life cycle has six states:
 | PAUSED           | the node was running and is suspended until it resumes   |
 | SUCCEEDED        | the node ended successfully                              |
 | FAILED           | the node ended because it could not continue             |
-| INTERRUPTED      | the node was ended from outside                          |
+| INTERRUPTED      | the node was ended from outside, or the statechart was cancelled while it ran |
 
 Only RUNNING is active: its observation is recomputed and its `on_tick` callback is
 called. SUCCEEDED, FAILED and INTERRUPTED are **final states**,
@@ -154,8 +156,9 @@ has a say in it only where one of these conditions reads the observation:
 
 - **SUCCEEDED**: the node's success condition held.
 - **FAILED**: the node's fail condition held: it cannot continue.
-- **INTERRUPTED**: the node's interrupt condition held, or one of its ancestors ended. Neither
-  is a judgement of the node itself.
+- **INTERRUPTED**: the node's interrupt condition held, one of its ancestors ended, however
+  that ancestor ended, or a `CancelStatechart` ended the statechart while the node ran. None
+  of these is a judgement of the node itself.
 
 ### When several conditions hold at once
 
@@ -318,6 +321,9 @@ A few rules keep a tick predictable:
   force through several states within one tick gets each matching callback once, in
   order, for example `on_pause`, `on_end` and `on_reset`. A node that starts paused gets
   `on_start` and then `on_pause`.
+- A reset requested from a callback with `Statechart.request_reset` lands at the start of the
+  next tick that settles, before anything else happens in it. The node stays NOT_STARTED for
+  that tick and starts on the next one at the earliest, so the history keeps how it ended.
 - A `CancelStatechart` that starts during a tick raises its exception only after all
   life cycle callbacks of that tick ran and the tick was recorded, even
   if it was interrupted again within the same tick.
@@ -349,11 +355,11 @@ leaves it abstract raises a `TypeError`.
   only its owner ends it. Monitors (`CountSeconds`, `CountTicks`, `Print`, …), `Parallel`
   and the monitored composite nodes are examples.
 - **`SucceedsOnObservingTrue`**: ending the node undoes nothing it did, so it ends itself: it
-  succeeds once it observes True. Examples are the ordering templates, `FunctionCall`, `MoveBranch` and `CompositeNodeChoosingItsChild`.
+  succeeds once it observes True. Examples are the ordering templates, `FunctionCall`, `MoveBranch`, `CompositeNodeChoosingItsChild`, `FailureHandlingNode` and `HandledOnFailure`.
 
 Independently, a node class can inherit **`FailsOnObservingFalse`**: observing False
 means it can no longer reach its goal, so it fails once it observes False. The ordering
-templates and `FunctionCall` do.
+templates, `HandledOnFailure` and `FunctionCall` do.
 
 What a class brings is its *inherent* success and fail condition
 (`inherent_success_condition`, `inherent_fail_condition`). The conditions written on a node
@@ -379,7 +385,7 @@ flowchart LR
     subgraph itself ["SucceedsOnObservingTrue"]
         direction TB
         ordering(["Sequence, TryInOrder,<br/>TryAll, RepeatUntil"])
-        steps(["FunctionCall, MoveBranch,<br/>CompositeNodeChoosingItsChild"])
+        steps(["FunctionCall, MoveBranch,<br/>CompositeNodeChoosingItsChild,<br/>HandledOnFailure"])
     end
     owner -- "ended at its goal by" --> ordering
     itself -- "usable as a step of" --> ordering
@@ -567,7 +573,11 @@ monitor's `last_observed_true` is True.
 
 The statechart ends once an `EndStatechart` node is running and observes True, which it does
 as soon as it runs. A `CancelStatechart` node ends the statechart by raising its exception at
-the end of the tick it starts in.
+the end of the tick it starts in. Before it raises, every other node still running or paused
+is INTERRUPTED and its `on_end` callback runs, and this is recorded as the last item of the
+state history, whose `cancelled_by` names the `CancelStatechart` node and whose
+`cancellation_error` keeps the exception it raised, so a stored statechart still says why it
+was cancelled.
 
 An `EndStatechart` must be added at the top level of the statechart; adding it to a composite
 node raises `EndInCompositeNodeError`. A `CancelStatechart` may be placed anywhere.
@@ -585,6 +595,11 @@ Both are usually created with factory methods that set their start condition:
 The `CancelStatechart` factories also take the `exception` to raise. `when_true` and
 `when_failed` default to one naming `node`; `when_all_true` and `when_any_true` require it.
 
+`Statechart.is_ended()` tells whether an `EndStatechart` observes True.
+`StatechartExecutor.tick_until_end()` ticks until it does; to drive a statechart by hand,
+compile it with `executor.compile(statechart=statechart)` and call `executor.tick()` until
+`statechart.is_ended()` is True.
+
 Once `execute()` or `tick_until_end()` returns or raises, because the statechart ended, was
 cancelled or ran out of ticks, the executor calls every node's `cleanup`. Calling `tick()`
 by hand cleans up nothing.
@@ -597,7 +612,7 @@ A node class inherits `EndedByOwner` or `SucceedsOnObservingTrue` (see
 - `build_artifacts()` returns `NodeArtifacts` whose `observation` is a symbolic
   expression. It is compiled into the tick, so it costs no Python call per tick.
 - `on_tick()` is called every tick the node was running at the start of, and may
-  return an `ObservationStateValues`, which takes precedence over the expression. Returning
+  return an `ObservationStateValue`, which takes precedence over the expression. Returning
   None keeps the expression's value, or, for a node without one, the observation of its
   last tick.
 
@@ -623,7 +638,7 @@ Data or services that are not part of every statechart reach a node through its
 `required_context_extensions`, and a composite node class those it reads only while expanding
 in `context_extensions_required_to_expand`; a statechart whose context lacks one raises
 `NodesMissingContextExtensionsError`. Every hook reads the context of the node's statechart
-through the node's `context` property, and `self.context.require_extension(type)` returns an
+through the node's `context` property, and `self.context.require_extension(extension_type=type)` returns an
 extension.
 
 cramph ships these nodes besides the templates:
@@ -648,7 +663,8 @@ nodes it already held keep their state and history. Changes made inside a
 nodes added in a block that raises are dropped again. A node the latest compile covered
 cannot be removed, and a composite node it covered takes no new children, unless its class
 accepts children after compiling, as a [node choosing its child](#choosing-a-child-while-running)
-does.
+does, or the change happens in a `with statechart.modify(rewrites_compiled_nodes=True):` block,
+as the strategies of a [failure handling node](#handling-failures) do.
 
 When the kinematic structure of the world changes, every node is built again before the next
 tick settles, so expressions reading the structure follow it.
@@ -656,6 +672,43 @@ tick settles, so expressions reading the structure follow it.
 Before compiling again or letting a node choose its child, both of which block the tick, the
 statechart asks its recompile callbacks whether what they drive is at rest. Until all are,
 the statechart keeps ticking and asks again on the next tick.
+
+## Handling failures
+
+A `FailureHandlingNode` is attached to the node it observes: it starts once that node failed and
+hands the failed node to the `handle_failure` of its `failure_handling_strategy` in `on_start`.
+A strategy is a `FailureHandlingStrategy` dataclass, and it recovers by changing the plan. A
+strategy that leaves the node failed has given up. The handler succeeds on the next tick, which says the strategy ran and
+not that it recovered, and is ready again once the observed node was reset.
+
+The handler has to be a sibling of the node it observes, and every control structure reacts to a
+failed child on the tick it fails, so a handler next to a step would never start. Inside a plan,
+`HandledOnFailure` therefore holds the step and its handler, and is the step of the control
+structure in its place:
+
+- It observes **True** once the handled node succeeded.
+- It observes **False** once the handled node is failed and its handler ended, so a strategy that
+  gave up fails it and the control structure holding it.
+- It rejects a handled node that cannot fail, with a `ChildCannotFailError`.
+
+```{mermaid}
+flowchart LR
+    subgraph handled ["HandledOnFailure"]
+        direction LR
+        node(["handled node"])
+        handler(["FailureHandlingNode"])
+    end
+    node -- "start: is_failed<br/>reset: is_not_started" --> handler
+    handler -. "on_start: handle_failure(handled node)" .-> plan(["the plan"])
+```
+
+`RetryFailedNode` is the strategy running the failed node again, up to `maximum_attempts` times.
+It resets the node with `Statechart.request_reset`, which any strategy may call, also on a node
+holding the failed one. A strategy may also insert nodes into the compiled plan; coraplex's
+`RecoveryByInsertion` does that with a plan transformation and then runs the failed step again.
+
+A strategy is sent through JSON with the node holding it. A strategy that changes the structure
+of the plan, such as `RecoveryByInsertion`, only works in a statechart that is ticked locally.
 
 ## Choosing a child while running
 
@@ -720,8 +773,8 @@ plan = Sequence(
         CountTicks(name="retreat", ticks=5),
     ]
 )
-statechart.add_node(plan)
-statechart.add_node(EndStatechart.when_true(plan))
+statechart.add_node(node=plan)
+statechart.add_node(node=EndStatechart.when_true(node=plan))
 ```
 
 After running it:

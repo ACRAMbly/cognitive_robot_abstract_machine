@@ -1,7 +1,13 @@
+"""
+Monitors that detect when the tasks of a motion stop approaching their goals, and cancel
+the motion then.
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import timedelta
+
 
 import numpy as np
 from numpy.typing import NDArray
@@ -15,12 +21,17 @@ from krrood.symbolic_math.symbolic_math import (
     Vector,
 )
 from giskardpy.motion_statechart.context import MotionControlContext
-from krrood.ormatic.utils import classproperty
+from krrood.patterns.classproperty import classproperty
 from cramph.node import EndedByOwner
 from cramph.context import ContextExtension
-from cramph.data_types import LifeCycleValues, ObservationStateValues
+from cramph.data_types import LifeCycleValue, ObservationStateValue
 from giskardpy.motion_statechart.exceptions import NoProgressError
-from cramph.node import CancelStatechart, CompositeNode, NodeArtifacts
+from cramph.node import (
+    CancelStatechart,
+    CompositeNode,
+    NodeArtifacts,
+    StatechartNode,
+)
 from giskardpy.motion_statechart.graph_node import ConvergingTask, MotionStatechartNode
 from cramph.monitors import CountSimulationTimeSeconds
 
@@ -132,7 +143,7 @@ class NoMonitoredTaskApproachingItsGoal(EndedByOwner, MotionStatechartNode):
         :return: The monitored tasks that are running but did not approach their goal
             on the last control cycle, leaving out those that already hold it.
         """
-        stalled = self._judged() & self._falls_too_slowly(self._previous_errors)
+        stalled = self._judged() & self._falls_too_slowly(errors=self._previous_errors)
         return [
             task
             for task, is_stalled in zip(self.monitored_tasks, stalled)
@@ -145,13 +156,13 @@ class NoMonitoredTaskApproachingItsGoal(EndedByOwner, MotionStatechartNode):
         """
         super().set_up()
         self._control_dt = self.context.require_extension(
-            MotionControlContext
+            extension_type=MotionControlContext
         ).qp_controller_config.control_time_step.total_seconds()
         self._errors_at_last_progress_variables = self._registered_variables(
-            "error_at_last_progress"
+            name="error_at_last_progress"
         )
         self._seconds_since_last_progress_variables = self._registered_variables(
-            "seconds_since_last_progress"
+            name="seconds_since_last_progress"
         )
         self._errors_at_last_progress = np.full(len(self.monitored_tasks), np.inf)
         self._seconds_since_last_progress = np.zeros(len(self.monitored_tasks))
@@ -166,14 +177,14 @@ class NoMonitoredTaskApproachingItsGoal(EndedByOwner, MotionStatechartNode):
             observation=sm.min(
                 sm.Vector(
                     [
-                        self._not_approaching(task, index)
+                        self._not_approaching(task=task, index=index)
                         for index, task in enumerate(self.monitored_tasks)
                     ]
                 )
             )
         )
 
-    def _not_approaching(self, task: ConvergingTask, index: int) -> Scalar:
+    def _not_approaching(self, *, task: ConvergingTask, index: int) -> Scalar:
         """
         :param task: One of the monitored tasks.
         :param index: Its position in :attr:`monitored_tasks`.
@@ -181,8 +192,8 @@ class NoMonitoredTaskApproachingItsGoal(EndedByOwner, MotionStatechartNode):
         """
         error = task.error_signal
         return sm.trinary_logic_or(
-            sm.Scalar(task.life_cycle_variable != int(LifeCycleValues.RUNNING)),
-            task.goal_reached_at(error),
+            sm.Scalar(task.life_cycle_variable != int(LifeCycleValue.RUNNING)),
+            task.goal_reached_at(error=error),
             self._fell_too_little(
                 error_at_last_progress=self._errors_at_last_progress_variables[index],
                 error=error,
@@ -195,6 +206,7 @@ class NoMonitoredTaskApproachingItsGoal(EndedByOwner, MotionStatechartNode):
 
     def _fell_too_little(
         self,
+        *,
         error_at_last_progress: Scalar | NDArray[np.float64],
         error: Scalar | NDArray[np.float64],
         seconds_since_last_progress: Scalar | NDArray[np.float64],
@@ -219,7 +231,7 @@ class NoMonitoredTaskApproachingItsGoal(EndedByOwner, MotionStatechartNode):
         )
         return error_at_last_progress - error < required_fall
 
-    def _falls_too_slowly(self, errors: NDArray[np.float64]) -> NDArray[np.bool_]:
+    def _falls_too_slowly(self, *, errors: NDArray[np.float64]) -> NDArray[np.bool_]:
         """
         :param errors: An error per monitored task, NaN where there is none.
         :return: Per monitored task, whether the error is known and fell by too little
@@ -234,7 +246,7 @@ class NoMonitoredTaskApproachingItsGoal(EndedByOwner, MotionStatechartNode):
             )
         return ~np.isnan(errors) & fell_too_little
 
-    def _registered_variables(self, name: str) -> Vector:
+    def _registered_variables(self, *, name: str) -> Vector:
         """
         :param name: What the variables hold.
         :return: One new variable of this node per monitored task, registered with that
@@ -247,7 +259,7 @@ class NoMonitoredTaskApproachingItsGoal(EndedByOwner, MotionStatechartNode):
             ]
         )
         if self.monitored_tasks:
-            self.context.float_variable_data.register_expression(variables)
+            self.context.float_variable_data.register_expression(expression=variables)
         return variables
 
     def _compile_errors(self) -> None:
@@ -265,9 +277,11 @@ class NoMonitoredTaskApproachingItsGoal(EndedByOwner, MotionStatechartNode):
             sparse=False,
         )
         self._compiled_errors.bind_args_to_memory_view(
-            0, self.context.world.state.positions
+            arg_idx=0, numpy_array=self.context.world.state.positions
         )
-        self.context.float_variable_data.bind_argument(self._compiled_errors, 1)
+        self.context.float_variable_data.bind_argument(
+            compiled_function=self._compiled_errors, argument_index=1
+        )
 
     def _running(self) -> NDArray[np.bool_]:
         """
@@ -275,7 +289,7 @@ class NoMonitoredTaskApproachingItsGoal(EndedByOwner, MotionStatechartNode):
         """
         return np.array(
             [
-                task.life_cycle_state == LifeCycleValues.RUNNING
+                task.life_cycle_state == LifeCycleValue.RUNNING
                 for task in self.monitored_tasks
             ],
             dtype=bool,
@@ -288,14 +302,14 @@ class NoMonitoredTaskApproachingItsGoal(EndedByOwner, MotionStatechartNode):
         """
         return self._running() & np.array(
             [
-                task.observation_state != ObservationStateValues.TRUE
+                task.observation_state != ObservationStateValue.TRUE
                 for task in self.monitored_tasks
             ],
             dtype=bool,
         )
 
     def on_start(self) -> None:
-        self._forget_progress(np.ones(len(self.monitored_tasks), dtype=bool))
+        self._forget_progress(tasks=np.ones(len(self.monitored_tasks), dtype=bool))
         self._store_progress()
 
     def on_tick(self) -> None:
@@ -314,16 +328,16 @@ class NoMonitoredTaskApproachingItsGoal(EndedByOwner, MotionStatechartNode):
         previous_errors, self._previous_errors = self._previous_errors, errors.copy()
         still_judged = self._judged()
         judged = still_judged & ~np.isnan(previous_errors)
-        stalled = judged & self._falls_too_slowly(previous_errors)
+        stalled = judged & self._falls_too_slowly(errors=previous_errors)
         approached = judged & ~stalled
         self._errors_at_last_progress[approached] = previous_errors[approached]
         self._seconds_since_last_progress[approached] = 0.0
         self._seconds_since_last_progress[stalled] += self._control_dt
-        self._forget_progress(~self._running())
+        self._forget_progress(tasks=~self._running())
         self._store_progress()
         return None
 
-    def _forget_progress(self, tasks: NDArray[np.bool_]) -> None:
+    def _forget_progress(self, *, tasks: NDArray[np.bool_]) -> None:
         """
         Start judging the progress of `tasks` afresh, from their next measured errors.
 
@@ -340,11 +354,12 @@ class NoMonitoredTaskApproachingItsGoal(EndedByOwner, MotionStatechartNode):
         """
         if self.monitored_tasks:
             self.context.float_variable_data.set_value(
-                self._errors_at_last_progress_variables, self._errors_at_last_progress
+                expression=self._errors_at_last_progress_variables,
+                value=self._errors_at_last_progress,
             )
             self.context.float_variable_data.set_value(
-                self._seconds_since_last_progress_variables,
-                self._seconds_since_last_progress,
+                expression=self._seconds_since_last_progress_variables,
+                value=self._seconds_since_last_progress,
             )
 
 
@@ -379,7 +394,7 @@ class AnyMonitoredTaskShortOfItsGoal(EndedByOwner, MotionStatechartNode):
                 sm.Vector(
                     [
                         sm.Scalar(
-                            task.life_cycle_variable == int(LifeCycleValues.RUNNING)
+                            task.life_cycle_variable == int(LifeCycleValue.RUNNING)
                         )
                         * sm.logic_not(task.observes_true)
                         for task in self.monitored_tasks
@@ -406,7 +421,7 @@ class StillProgressing(EndedByOwner, CompositeNode):
     the negation of its observation to a node's fail condition to give up on that node.
     """
 
-    monitored_node: MotionStatechartNode
+    monitored_node: StatechartNode
     """
     The task or goal whose progress is watched.
     """
@@ -423,7 +438,13 @@ class StillProgressing(EndedByOwner, CompositeNode):
     """
 
     @property
-    def prerequisite_nodes(self) -> list[MotionStatechartNode]:
+    def prerequisite_nodes(self) -> list[StatechartNode]:
+        """
+        See :meth:`~cramph.node.StatechartNode.prerequisite_nodes`.
+
+        :return: :attr:`monitored_node`, whose converging tasks this node only finds
+            once it expanded.
+        """
         return [self.monitored_node]
 
     @property
@@ -482,9 +503,9 @@ class StillProgressing(EndedByOwner, CompositeNode):
         timer = CountSimulationTimeSeconds(
             name=f"{self.name}/timer", seconds=self.timeout.total_seconds()
         )
-        self._add_child_to_statechart(timer)
+        self._add_child_to_statechart(node=timer)
         stall_monitors = self._expand_stall_detection(
-            self._find_converging_tasks(self.monitored_node)
+            monitored_tasks=self._find_converging_tasks(node=self.monitored_node)
         )
         timer.start_condition = sm.logic_and(
             Scalar.const_true(), *[monitor.observes_true for monitor in stall_monitors]
@@ -495,7 +516,7 @@ class StillProgressing(EndedByOwner, CompositeNode):
         )
 
     def _expand_stall_detection(
-        self, monitored_tasks: list[ConvergingTask]
+        self, *, monitored_tasks: list[ConvergingTask]
     ) -> list[MotionStatechartNode]:
         """
         Adds one monitor watching every converging task, next to one observing whether
@@ -520,7 +541,7 @@ class StillProgressing(EndedByOwner, CompositeNode):
         still_working = AnyMonitoredTaskShortOfItsGoal(
             name=f"{self.name}/short_of_its_goal", monitored_tasks=monitored_tasks
         )
-        self._add_children_to_statechart([not_approaching, still_working])
+        self._add_children_to_statechart(nodes=[not_approaching, still_working])
         return [not_approaching, still_working]
 
     def build_artifacts(self) -> NodeArtifacts:
@@ -535,9 +556,7 @@ class StillProgressing(EndedByOwner, CompositeNode):
         """
         return NodeArtifacts(observation=sm.logic_not(self._timer.observes_true))
 
-    def _find_converging_tasks(
-        self, node: MotionStatechartNode
-    ) -> list[ConvergingTask]:
+    def _find_converging_tasks(self, *, node: StatechartNode) -> list[ConvergingTask]:
         """
         Collect every converging task at or below ``node``.
 
@@ -550,7 +569,7 @@ class StillProgressing(EndedByOwner, CompositeNode):
             return []
         tasks = []
         for child_node in node.nodes:
-            tasks.extend(self._find_converging_tasks(child_node))
+            tasks.extend(self._find_converging_tasks(node=child_node))
         return tasks
 
 
@@ -592,4 +611,11 @@ class _CancelBecauseNoProgress(CancelStatechart):
     """
 
     def create_exception(self) -> NoProgressError:
-        return NoProgressError(progress_monitor=self.progress_monitor)
+        """
+        :return: An error naming the tasks that are stalled when this node starts, see
+            :meth:`~cramph.node.CancelStatechart.create_exception`.
+        """
+        return NoProgressError(
+            progress_monitor=self.progress_monitor,
+            stalled_tasks=self.progress_monitor.stalled_tasks,
+        )

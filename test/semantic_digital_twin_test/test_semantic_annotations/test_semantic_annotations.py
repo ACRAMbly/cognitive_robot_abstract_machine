@@ -1,3 +1,7 @@
+"""
+Tests of the semantic annotations of an environment and how they are found in a world.
+"""
+
 import logging
 
 from krrood.entity_query_language.core.base_expressions import SymbolicExpression
@@ -189,7 +193,9 @@ def test_build_bloated_obstacle_collection_includes_bloated_walls():
     wall_annotation = Wall(root=wall_body, _world=world)
 
     result = obstacle_annotation.build_bloated_obstacle_collection(
-        search_space, semantic_wall_annotation=wall_annotation, bloat_walls=0.5
+        search_space=search_space,
+        semantic_wall_annotation=wall_annotation,
+        bloat_walls=0.5,
     )
 
     assert len(result.bounding_boxes) == 2
@@ -313,8 +319,8 @@ def test_verbalize_query_that_inferred_semantic_annotations(apartment_world_copy
     explanation = explain_inference(drawer)
     verbalization_paragraph = verbalize_expression(explanation.query_root)
     verbalization_hierarchical = VerbalizationPipeline(
-        HierarchicalRenderer()
-    ).verbalize(explanation.query_root)
+        renderer=HierarchicalRenderer()
+    ).verbalize(expression=explanation.query_root)
     assert verbalization_paragraph == (
         "If the child of a PrismaticConnection has collision geometry,"
         " the child of the PrismaticConnection is not part of a robot,"
@@ -354,7 +360,7 @@ def test_semantic_annotation_serialization_deserialization_once(apartment_world_
     tracker = WorldEntityWithIDKwargsTracker.from_world(apartment_world_copy)
     kwargs = tracker.create_kwargs()
 
-    door_de = Door.from_json(door_se, **kwargs)
+    door_de = Door.from_json(data=door_se, **kwargs)
 
     assert type(door.handle) == type(door_de.handle)
     assert type(door.root) == type(door_de.root)

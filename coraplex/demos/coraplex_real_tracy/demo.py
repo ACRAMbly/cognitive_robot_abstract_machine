@@ -35,11 +35,21 @@ from coraplex.plans.executors import (
     RealRobotPlanExecutor,
     KinematicallySimulatedPlanExecutor,
 )
+from coraplex.robot_plans.plan_transformations import (
+    CloseFingersToObjectWidth,
+    DetectWithRoboKudo,
+)
+from coraplex.robotiq_grippers import DriveRobotiqGrippersThroughTheirActionServers
 from cramph.statechart import Statechart
 from cramph.composites import Sequence
+from giskardpy.middleware.ros2.scripts.iai_robots.tracy.launch_files import (
+    TracyGiskardLaunchFile,
+)
+
+giskard_launch_file = TracyGiskardLaunchFile.STANDALONE
 
 giskard_process = subprocess.Popen(
-    ["ros2", "launch", "giskardpy_ros", "giskardpy_tracy_standalone.launch.py"],
+    ["ros2", "launch", "giskardpy_ros", giskard_launch_file],
     start_new_session=True,
 )
 
@@ -145,12 +155,24 @@ with world.modify_world():
     )
 
 # The executor needs the ROS node to reach the real robot
-executor_type: type[PlanExecutor] = (
-    RealRobotPlanExecutor if controls_real_robot else KinematicallySimulatedPlanExecutor
+context = StatechartContext.with_extensions(
+    world=world, extensions=[RobotAccess(robot=tracy)]
 )
-executor = executor_type(
-    StatechartContext.with_extensions(world, [RobotAccess(tracy)]), ros_node=node
-)
+executor: PlanExecutor
+if controls_real_robot:
+    real_robot_plan_adaptations = [CloseFingersToObjectWidth(), DetectWithRoboKudo()]
+    # Nothing serves the gripper actions while giskard simulates Tracy.
+    if giskard_launch_file is not TracyGiskardLaunchFile.STANDALONE:
+        real_robot_plan_adaptations.insert(
+            0, DriveRobotiqGrippersThroughTheirActionServers()
+        )
+    executor = RealRobotPlanExecutor(
+        context=context,
+        ros_node=node,
+        plan_adaptations=real_robot_plan_adaptations,
+    )
+else:
+    executor = KinematicallySimulatedPlanExecutor(context=context, ros_node=node)
 
 plan = Sequence(
     nodes=[
@@ -166,6 +188,7 @@ plan = Sequence(
             arm=tracy.left_arm,
         ),
         PlaceAction(
+            arm=tracy.left_arm,
             object_designator=box2_annotation,
             target_location=Pose.from_xyz_rpy(
                 0.8, 0.0, table_top_z + 1.5 * box_edge, reference_frame=world.root
@@ -183,6 +206,7 @@ plan = Sequence(
             arm=tracy.right_arm,
         ),
         PlaceAction(
+            arm=tracy.right_arm,
             object_designator=box3_annotation,
             target_location=Pose.from_xyz_rpy(
                 0.8, 0.0, table_top_z + 2.5 * box_edge, reference_frame=world.root
@@ -193,8 +217,8 @@ plan = Sequence(
 try:
     print("Perform Plan")
     statechart = Statechart(context=executor.context)
-    statechart.add_node(plan)
-    executor.compile(statechart)
+    statechart.add_node(node=plan)
+    executor.compile(statechart=statechart)
     executor.execute()
 finally:
     executor.close()

@@ -10,7 +10,7 @@ from dataclasses import dataclass, field, fields
 
 from typing_extensions import TYPE_CHECKING, Self
 
-from krrood.entity_query_language.backends import ProbabilisticBackend
+from krrood.parametrization.probabilistic_backend import ProbabilisticBackend
 from krrood.entity_query_language.factories import a
 from krrood.entity_query_language.query.match import Match
 from krrood.parametrization.model_registries import (
@@ -156,7 +156,9 @@ def draw_grasps(
     if number_of_grasps == 0:
         return []
     return list(
-        statement.limit(number_of_grasps).evaluate(
-            backend=ProbabilisticBackend(model_registry or UniformPriorRegistry())
+        statement.limit(n=number_of_grasps).evaluate(
+            backend=ProbabilisticBackend(
+                model_registry=model_registry or UniformPriorRegistry()
+            )
         )
     )

@@ -8,7 +8,7 @@ from coraplex.plans.failures import EmptyUnderspecified
 from coraplex.robot_plans.actions.core.navigation import NavigateAction
 from coraplex.robot_plans.actions.core.pick_up import PickUpAction
 from coraplex.robot_plans.actions.core.robot_body import MoveTorsoAction
-from krrood.entity_query_language.backends import ProbabilisticBackend
+from krrood.parametrization.probabilistic_backend import ProbabilisticBackend
 from krrood.entity_query_language.factories import (
     variable_from,
     a,
@@ -108,7 +108,7 @@ def test_parameterization_of_pick_up(apartment_world_pr2_copy_with_context):
         approach_clearance=0.05,
     )
 
-    parameters = UnderspecifiedParameters(pick_up_description)
+    parameters = UnderspecifiedParameters(statement=pick_up_description)
 
     [approach_clearance] = [
         v for v in parameters.variables.values() if v.name.endswith("clearance")

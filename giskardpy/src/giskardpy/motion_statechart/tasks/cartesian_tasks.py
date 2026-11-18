@@ -1,3 +1,8 @@
+"""
+Tasks moving or holding a tip link relative to a root link in Cartesian space, and the
+nodes limiting how fast it moves.
+"""
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
@@ -9,7 +14,7 @@ from typing_extensions import ClassVar
 
 import krrood.symbolic_math.symbolic_math as sm
 from cramph.composites import Parallel
-from cramph.data_types import ObservationStateValues
+from cramph.data_types import ObservationStateValue
 from cramph.node import StatechartNode
 from giskardpy.motion_statechart.binding_policy import (
     GoalBindingPolicy,
@@ -46,6 +51,9 @@ from semantic_digital_twin.world_description.geometry import Color
 from semantic_digital_twin.world_description.world_entity import (
     KinematicStructureEntity,
 )
+
+
+# %% reaching Cartesian goals
 
 
 @dataclass(eq=False, repr=False, kw_only=True)
@@ -92,12 +100,12 @@ class CartesianTask(ConvergingTask, ABC):
             tip=self.goal_reference_frame,
             float_variable_data=self.context.float_variable_data,
         )
-        self._forward_kinematics_binding.bind(self.context.world)
+        self._forward_kinematics_binding.bind(world=self.context.world)
         self.root_T_goal_reference_frame = self._forward_kinematics_binding.root_T_tip
 
     def on_start(self) -> None:
         if self.binding_policy == GoalBindingPolicy.Bind_on_start:
-            self._forward_kinematics_binding.bind(self.context.world)
+            self._forward_kinematics_binding.bind(world=self.context.world)
 
     @property
     @abstractmethod
@@ -108,6 +116,7 @@ class CartesianTask(ConvergingTask, ABC):
 
     def add_goal_and_current_debug_expressions(
         self,
+        *,
         artifacts: MotionNodeArtifacts,
         goal: SpatialType,
         current: SpatialType,
@@ -123,10 +132,16 @@ class CartesianTask(ConvergingTask, ABC):
         :param current: The spatial expression describing the current state.
         """
         artifacts.debug_expressions.append(
-            DebugExpression(f"{self.name}/goal", goal, color=self.GOAL_COLOR)
+            DebugExpression(
+                name=f"{self.name}/goal", expression=goal, color=self.GOAL_COLOR
+            )
         )
         artifacts.debug_expressions.append(
-            DebugExpression(f"{self.name}/current", current, color=self.CURRENT_COLOR)
+            DebugExpression(
+                name=f"{self.name}/current",
+                expression=current,
+                color=self.CURRENT_COLOR,
+            )
         )
 
 
@@ -175,7 +190,7 @@ class CartesianPosition(CartesianTask):
         )
 
         self.add_goal_and_current_debug_expressions(
-            artifacts, goal=root_P_goal, current=root_P_current
+            artifacts=artifacts, goal=root_P_goal, current=root_P_current
         )
 
         artifacts.error = root_P_goal.euclidean_distance(root_P_current)
@@ -315,9 +330,11 @@ class CartesianPositionTrajectory(CartesianTask):
         super().set_up()
         self._goal_points_to_np()
         self._init_goal_reference_frame_P_current_target_point(
-            self.context.float_variable_data
+            float_variable_data=self.context.float_variable_data
         )
-        self._init_remaining_distance(self.context.float_variable_data)
+        self._init_remaining_distance(
+            float_variable_data=self.context.float_variable_data
+        )
 
     def build_artifacts(self) -> MotionNodeArtifacts:
         """
@@ -347,14 +364,16 @@ class CartesianPositionTrajectory(CartesianTask):
         )
 
         self.add_goal_and_current_debug_expressions(
-            artifacts, goal=root_P_goal, current=root_P_current
+            artifacts=artifacts, goal=root_P_goal, current=root_P_current
         )
 
         self.compile_current_point_on_tick()
         artifacts.error = self.remaining_distance
         return artifacts
 
-    def _init_remaining_distance(self, float_variable_data: FloatVariableData) -> None:
+    def _init_remaining_distance(
+        self, *, float_variable_data: FloatVariableData
+    ) -> None:
         """
         Create the variable holding the distance left to travel along the trajectory and
         seed it with the full trajectory length.
@@ -364,14 +383,16 @@ class CartesianPositionTrajectory(CartesianTask):
         self.remaining_distance = FloatVariable(
             str(PrefixedName("remaining_distance", str(self.name)))
         )
-        float_variable_data.register_expression(self.remaining_distance)
+        float_variable_data.register_expression(expression=self.remaining_distance)
         float_variable_data.set_value(
-            self.remaining_distance,
-            self._distance_left_from(0, self._goal_points_np[0]),
+            expression=self.remaining_distance,
+            value=self._distance_left_from(
+                index=0, goal_reference_frame_P_tip_np=self._goal_points_np[0]
+            ),
         )
 
     def _distance_left_from(
-        self, index: int, goal_reference_frame_P_tip_np: np.ndarray
+        self, *, index: int, goal_reference_frame_P_tip_np: np.ndarray
     ) -> float:
         """
         :param index: Index of the trajectory point the tip is currently at.
@@ -416,13 +437,14 @@ class CartesianPositionTrajectory(CartesianTask):
             sparse=False,
         )
         self._compiled_goal_reference_frame_P_tip.bind_args_to_memory_view(
-            0, self.context.world.state.positions
+            arg_idx=0, numpy_array=self.context.world.state.positions
         )
         self.context.float_variable_data.bind_argument(
-            self._compiled_goal_reference_frame_P_tip, 1
+            compiled_function=self._compiled_goal_reference_frame_P_tip,
+            argument_index=1,
         )
 
-    def _update_trajectory_index(self, goal_reference_frame_P_tip_np: np.ndarray):
+    def _update_trajectory_index(self, *, goal_reference_frame_P_tip_np: np.ndarray):
         """
         Search for the closest point in the trajectory to the current position, without going backwards.
         :param goal_reference_frame_P_tip_np: the current position in the goal reference frame as a 3d numpy array.
@@ -439,7 +461,7 @@ class CartesianPositionTrajectory(CartesianTask):
         self.current_index += int(np.argmin(distances))
 
     def _compute_target_point(
-        self, goal_reference_frame_P_tip_np: np.ndarray
+        self, *, goal_reference_frame_P_tip_np: np.ndarray
     ) -> np.ndarray:
         """
         Computes a target point at a fixed distance away from the current position projected onto the trajectory.
@@ -474,7 +496,7 @@ class CartesianPositionTrajectory(CartesianTask):
         # which creates a vector that pulls the robot back to the path AND forward.
         return p_projected + unit_tangent * self.look_ahead_distance
 
-    def on_tick(self) -> ObservationStateValues | None:
+    def on_tick(self) -> ObservationStateValue | None:
         """
         Update the target point on the trajectory and the distance left to travel.
 
@@ -483,19 +505,27 @@ class CartesianPositionTrajectory(CartesianTask):
         goal_reference_frame_P_tip_np = (
             self._compiled_goal_reference_frame_P_tip.evaluate()
         )
-        self._update_trajectory_index(goal_reference_frame_P_tip_np)
-        target_point = self._compute_target_point(goal_reference_frame_P_tip_np)
-        self.context.float_variable_data.set_value(
-            self.goal_reference_frame_P_current_target_point, target_point
+        self._update_trajectory_index(
+            goal_reference_frame_P_tip_np=goal_reference_frame_P_tip_np
+        )
+        target_point = self._compute_target_point(
+            goal_reference_frame_P_tip_np=goal_reference_frame_P_tip_np
         )
         self.context.float_variable_data.set_value(
-            self.remaining_distance,
-            self._distance_left_from(self.current_index, goal_reference_frame_P_tip_np),
+            expression=self.goal_reference_frame_P_current_target_point,
+            value=target_point,
+        )
+        self.context.float_variable_data.set_value(
+            expression=self.remaining_distance,
+            value=self._distance_left_from(
+                index=self.current_index,
+                goal_reference_frame_P_tip_np=goal_reference_frame_P_tip_np,
+            ),
         )
         return None
 
     def _init_goal_reference_frame_P_current_target_point(
-        self, float_variable_data: FloatVariableData
+        self, *, float_variable_data: FloatVariableData
     ):
         """
         Initialize the symbolic expression representing the current target point in the goal reference frame.
@@ -508,11 +538,11 @@ class CartesianPositionTrajectory(CartesianTask):
             self.goal_reference_frame
         )
         float_variable_data.register_expression(
-            self.goal_reference_frame_P_current_target_point
+            expression=self.goal_reference_frame_P_current_target_point
         )
         float_variable_data.set_value(
-            self.goal_reference_frame_P_current_target_point,
-            self.goal_points[self.current_index].to_np()[:-1],
+            expression=self.goal_reference_frame_P_current_target_point,
+            value=self.goal_points[self.current_index].to_np()[:-1],
         )
 
 
@@ -563,7 +593,7 @@ class CartesianPositionStraight(CartesianTask):
             tip=self.tip_link,
             float_variable_data=self.context.float_variable_data,
         )
-        self._line_start_binding.bind(self.context.world)
+        self._line_start_binding.bind(world=self.context.world)
 
     def on_start(self) -> None:
         """
@@ -574,7 +604,7 @@ class CartesianPositionStraight(CartesianTask):
         decides when the goal is computed.
         """
         super().on_start()
-        self._line_start_binding.bind(self.context.world)
+        self._line_start_binding.bind(world=self.context.world)
 
     def build_artifacts(self) -> MotionNodeArtifacts:
         """
@@ -626,7 +656,7 @@ class CartesianPositionStraight(CartesianTask):
         )
 
         self.add_goal_and_current_debug_expressions(
-            artifacts, goal=root_P_goal, current=root_P_tip
+            artifacts=artifacts, goal=root_P_goal, current=root_P_tip
         )
 
         artifacts.error = root_P_goal.euclidean_distance(root_P_tip)
@@ -679,8 +709,13 @@ class CartesianOrientation(CartesianTask):
             quadratic_weight=self.weight,
         )
 
+        # the goal axes are drawn at the tip, next to the current ones
         self.add_goal_and_current_debug_expressions(
-            artifacts, goal=root_R_goal, current=root_R_current
+            artifacts=artifacts,
+            goal=HomogeneousTransformationMatrix.from_point_rotation_matrix(
+                point=root_T_current.position, rotation_matrix=root_R_goal
+            ),
+            current=root_T_current,
         )
 
         artifacts.error = sm.abs(root_R_current.rotational_distance(root_R_goal))
@@ -745,7 +780,7 @@ class CartesianPose(Parallel):
         if self.root_link is None:
             self.root_link = self.context.world.root
         for position, task in enumerate(self.create_tasks()):
-            self._insert_at(position, task)
+            self._insert_at(position=position, node=task)
 
     def create_tasks(self) -> list[MotionStatechartNode]:
         """
@@ -819,10 +854,10 @@ class HoldOrientation(Task):
             tip=self.tip_link,
             float_variable_data=self.context.float_variable_data,
         )
-        self._pose_to_keep.bind(self.context.world)
+        self._pose_to_keep.bind(world=self.context.world)
 
     def on_start(self) -> None:
-        self._pose_to_keep.bind(self.context.world)
+        self._pose_to_keep.bind(world=self.context.world)
 
     def build_artifacts(self) -> MotionNodeArtifacts:
         """
@@ -930,22 +965,29 @@ class RigidCoupling(Task):
         )
         root_R_tip = root_T_tip.rotation_matrix
         self._keep_at_rest(
-            artifacts,
-            root_T_tip.position,
-            VelocityScale.TRANSLATION,
-            "position",
+            artifacts=artifacts,
+            vector=root_T_tip.position,
+            velocity_scale=VelocityScale.TRANSLATION,
+            name="position",
         )
         self._keep_at_rest(
-            artifacts, root_R_tip.x_vector(), VelocityScale.ROTATION, "x_axis"
+            artifacts=artifacts,
+            vector=root_R_tip.x_vector(),
+            velocity_scale=VelocityScale.ROTATION,
+            name="x_axis",
         )
         self._keep_at_rest(
-            artifacts, root_R_tip.y_vector(), VelocityScale.ROTATION, "y_axis"
+            artifacts=artifacts,
+            vector=root_R_tip.y_vector(),
+            velocity_scale=VelocityScale.ROTATION,
+            name="y_axis",
         )
         artifacts.observation = sm.Scalar.const_true()
         return artifacts
 
     def _keep_at_rest(
         self,
+        *,
         artifacts: MotionNodeArtifacts,
         vector: Point3 | Vector3,
         velocity_scale: float,
@@ -1020,7 +1062,7 @@ class CartesianPositionVelocityLimit(Task):
             root_P_tip
         )
         root_P_tip_dot = root_P_tip.total_derivative(
-            position_variables, velocity_variables
+            variables=position_variables, variables_dot=velocity_variables
         )
 
         artifacts.observation = root_P_tip_dot.norm() <= self.max_linear_velocity
@@ -1139,4 +1181,49 @@ class CartesianVelocityLimit(Parallel):
             ),
         ]
         for position, limit in enumerate(limits):
-            self._insert_at(position, limit)
+            self._insert_at(position=position, node=limit)
+
+
+# %% reaching a Cartesian pose along a straight line
+
+
+@dataclass(eq=False, repr=False, kw_only=True)
+class CartesianPoseStraight(CartesianPose):
+    """
+    Differs from
+    :class:`~giskardpy.motion_statechart.tasks.cartesian_tasks.CartesianPose` in moving
+    the tip link along a straight line towards the goal position.
+    """
+
+    weight: float = DefaultWeights.WEIGHT_ABOVE_COLLISION_AVOIDANCE
+    """
+    Task priority relative to other tasks.
+    """
+
+    def create_tasks(self) -> list[MotionStatechartNode]:
+        """
+        :return: New position and orientation tasks reaching :attr:`goal_pose`, the
+            position along a straight line.
+        """
+        return [
+            CartesianPositionStraight(
+                name=f"{self.name}/position",
+                root_link=self.root_link,
+                tip_link=self.tip_link,
+                goal_point=self.goal_pose.position,
+                cruise_velocity=self.cruise_linear_velocity,
+                threshold=self.translation_threshold,
+                weight=self.weight,
+                binding_policy=self.binding_policy,
+            ),
+            CartesianOrientation(
+                name=f"{self.name}/orientation",
+                root_link=self.root_link,
+                tip_link=self.tip_link,
+                goal_orientation=self.goal_pose.rotation_matrix,
+                cruise_velocity=self.cruise_angular_velocity,
+                threshold=self.orientation_threshold,
+                weight=self.weight,
+                binding_policy=self.binding_policy,
+            ),
+        ]

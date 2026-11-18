@@ -1,3 +1,7 @@
+"""
+The parts a robot is made of: kinematic chains, sensors, cameras, fingers and the like.
+"""
+
 from __future__ import annotations
 
 import inspect
@@ -16,7 +20,6 @@ from typing_extensions import (
     TypeVar,
     Union,
     Unpack,
-    cast,
     get_args,
     get_origin,
 )
@@ -28,7 +31,7 @@ from krrood.class_diagrams.attribute_introspector import (
     DataclassOnlyIntrospector,
 )
 from krrood.entity_query_language.factories import a, contains, entity, variable
-from krrood.ormatic.utils import classproperty
+from krrood.patterns.classproperty import classproperty
 from krrood.patterns.subclass_safe_generic import SubClassSafeGeneric
 from krrood.utils import get_generic_type_parameters
 from semantic_digital_twin.datastructures.camera_model import (
@@ -65,6 +68,7 @@ from semantic_digital_twin.exceptions import (
 from semantic_digital_twin.input_synchronization import InputSynchronizer
 from semantic_digital_twin.robots.exceptions import (
     MissingDriveConnectionError,
+    RobotDescriptionMissingError,
 )
 from semantic_digital_twin.robots.input_source import (
     BasePoseSource,
@@ -77,7 +81,6 @@ from semantic_digital_twin.robots.robot_part_mixins import (
     HasEndEffector,
     HasInputSource,
     HasLeftRightArm,
-    HasMobileBase,
     HasSensors,
     RobotPartMixin,
     TGenericEndEffector,
@@ -115,6 +118,7 @@ from semantic_digital_twin.world_description.geometry import (
 )
 from semantic_digital_twin.world_description.connection_properties import (
     DriveServos,
+    DriveVelocityLimits,
     JointDrive,
     JointServo,
 )
@@ -181,7 +185,7 @@ class HasRobotParts(ABC):
             seen.add(self.id)
             robot_parts.append(self)
 
-        for field_ in introspector.discover(self.__class__):
+        for field_ in introspector.discover(owner_cls=self.__class__):
             value = getattr(self, field_.public_name)
 
             if isinstance(value, CollectionKind.ELEMENT_SEQUENCE.value):
@@ -201,7 +205,7 @@ class HasRobotParts(ABC):
         """
         introspector = DataclassOnlyIntrospector()
 
-        for attr in introspector.discover(self.__class__):
+        for attr in introspector.discover(owner_cls=self.__class__):
             field_name = attr.public_name
             field_type = attr.field.type
 
@@ -411,7 +415,9 @@ class AbstractRobotPart(HasRootBody, HasRobotParts, ABC):
         """
         for robot_part in self._robot_parts:
             for connection in robot_part.active_connections:
-                connection.has_hardware_interface = True
+                self._world.set_dofs_has_hardware_interface(
+                    connection.active_dofs, True
+                )
 
     @property
     def active_connections(self) -> list[ActiveConnection]:
@@ -514,6 +520,22 @@ class ServoedRobotPart(AbstractRobotPart, ABC):
             self._declare_servo(connection, drive.servo_for(connection))
         if self.holds_its_own_weight:
             self._compensate_gravity()
+
+
+@dataclass(eq=False)
+class HasGripperActionServers(AbstractRobotPart, ABC):
+    """
+    A gripper whose real hardware moves through ROS actions its driver serves, rather
+    than through commands for its joints.
+    """
+
+    @abstractmethod
+    def action_topic_serving(self, state_type: JointStateType | None) -> str | None:
+        """
+        :param state_type: The state to bring the gripper into.
+        :return: The name the driver serves the action bringing the gripper into
+            `state_type` under, None if it serves none for that state.
+        """
 
 
 @dataclass(eq=False)
@@ -912,9 +934,20 @@ class EndEffector(AbstractRobotPart, ABC):
         body = self.held_body
         if body is None:
             raise NothingHeld(self)
+        return self.body_T_grasp(body=body, tool_P_grasp=tool_P_point)
+
+    def body_T_grasp(self, *, body: Body, tool_P_grasp: Point3) -> Pose:
+        """
+        The grasp this gripper has on `body` as both stand now, whether or not `body`
+        hangs off the tool frame.
+
+        :param body: The body the grasp is on.
+        :param tool_P_grasp: The point of the gripper the grasp sits at.
+        :return: The grasp frame, in the frame of `body`.
+        """
         body_T_tool = self._world.transform(self.tool_frame.global_transform, body)
         return HomogeneousTransformationMatrix.from_point_rotation_matrix(
-            point=body_T_tool @ tool_P_point,
+            point=body_T_tool @ tool_P_grasp,
             rotation_matrix=body_T_tool.rotation_matrix @ self.tool_R_grasp,
             reference_frame=body,
         ).pose
@@ -1058,6 +1091,45 @@ class MobileBase(
         ``None`` if the base is moved kinematically there.
         """
         return None
+
+    @classproperty
+    def odometry_body_name(cls) -> str:
+        """
+        The name of the frame the real robot reports the odometry of this base relative
+        to.
+        """
+        return "odom"
+
+    @classproperty
+    def drive_velocity_limits(cls) -> DriveVelocityLimits:
+        """
+        How fast the drive of the real robot may move this base.
+        """
+        return DriveVelocityLimits(translation=0.2, rotation=0.2)
+
+    @classmethod
+    def create_drive(
+        cls,
+        world: World,
+        parent: KinematicStructureEntity,
+        child: KinematicStructureEntity,
+    ) -> TGenericDrive:
+        """
+        Create the drive this base declares, limited to :attr:`drive_velocity_limits`.
+
+        :param world: The world the drive's degrees of freedom are added to.
+        :param parent: The body the base drives relative to.
+        :param child: The root of the base's robot.
+        :return: The created drive.
+        """
+        limits = cls.drive_velocity_limits
+        return cls.get_drive_connection_type().create_with_dofs(
+            world=world,
+            parent=parent,
+            child=child,
+            translation_velocity_limits=limits.translation,
+            rotation_velocity_limits=limits.rotation,
+        )
 
     def _setup_servos(self) -> None:
         drive = self._robot.drive
@@ -1262,10 +1334,15 @@ class AbstractRobot(Agent, HasRobotParts, ABC):
         :return: This robot, in a world holding nothing but it, read from its own
             description: the URDF :meth:`get_ros_file_path` points to, unless the robot
             is described in another format.
+        :raises RobotDescriptionMissingError: If this robot declares no description
+            file.
         """
+        description_file_path = cls.get_ros_file_path()
+        if not description_file_path:
+            raise RobotDescriptionMissingError(robot_class=cls)
         return cls.from_world(
             URDFParser.from_file(
-                cls.get_ros_file_path(),
+                description_file_path,
                 use_visual_as_collision_backup=cls.uses_visual_as_collision_backup,
             ).create_world()
         )
@@ -1277,21 +1354,6 @@ class AbstractRobot(Agent, HasRobotParts, ABC):
         Returns the name of the root body of the robot in the world, which serves as the
         entry point for traversing the robot's kinematic structure.
         """
-
-    @classmethod
-    def get_drive_connection_type(cls) -> type[Connection]:
-        """
-        The connection type attaching this robot to its ``odom`` frame.
-
-        :return: The mobile base's drive connection type, or :class:`FixedConnection`
-            when the robot has no mobile base and is therefore rigidly attached.
-        """
-        if not issubclass(cls, HasMobileBase):
-            return FixedConnection
-        mobile_base_type = cast(
-            MobileBase, get_generic_type_parameters(cls, HasMobileBase)[0]
-        )
-        return mobile_base_type.get_drive_connection_type()
 
     def setup_robot_part_semantic_annotations(self) -> None:
         """

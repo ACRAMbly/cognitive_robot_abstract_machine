@@ -1,7 +1,11 @@
+"""
+The errors a motion statechart raises while it is built or run.
+"""
+
 from __future__ import annotations
 
 from abc import ABC
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from typing_extensions import TYPE_CHECKING
 
@@ -11,6 +15,7 @@ from semantic_digital_twin.collision_checking.collision_variable_managers import
 )
 
 if TYPE_CHECKING:
+    from giskardpy.motion_statechart.graph_node import ConvergingTask
     from giskardpy.motion_statechart.monitors.progress_monitors import StillProgressing
     from semantic_digital_twin.datastructures.definitions import GripperState
     from semantic_digital_twin.robots.robot_parts import AbstractRobot, EndEffector
@@ -20,7 +25,7 @@ if TYPE_CHECKING:
 from cramph.exceptions import StatechartError, NodeInitializationError
 
 
-@dataclass
+@dataclass(kw_only=True)
 class CollisionViolatedError(DataclassException):
     """
     Raised when bodies came closer to each other than their collision threshold allows.
@@ -43,14 +48,14 @@ class CollisionViolatedError(DataclassException):
         return ""
 
 
-@dataclass
+@dataclass(kw_only=True)
 class MotionStatechartError(StatechartError, ABC):
     """
     Base class for errors in the motion statechart that concern motion control.
     """
 
 
-@dataclass
+@dataclass(kw_only=True)
 class WorldStateArrayReplacedError(MotionStatechartError):
     """
     Raised when the world replaced its state array while a motion statechart was
@@ -83,7 +88,7 @@ class WorldStateArrayReplacedError(MotionStatechartError):
         )
 
 
-@dataclass
+@dataclass(kw_only=True)
 class UnexpectedWorldEntityCountError(NodeInitializationError):
     """
     Raised when a node searches the world for entities and finds a different number than
@@ -113,7 +118,7 @@ class UnexpectedWorldEntityCountError(NodeInitializationError):
         return ""
 
 
-@dataclass
+@dataclass(kw_only=True)
 class EmptyGoalStateError(NodeInitializationError):
     """
     Raised when a node is given a goal state that names no degree of freedom.
@@ -126,7 +131,7 @@ class EmptyGoalStateError(NodeInitializationError):
         return ""
 
 
-@dataclass
+@dataclass(kw_only=True)
 class EmptyDegreesOfFreedomError(NodeInitializationError):
     """
     Raised when a node is explicitly given an empty list of degrees of freedom.
@@ -139,7 +144,7 @@ class EmptyDegreesOfFreedomError(NodeInitializationError):
         return "Pass at least one degree of freedom, or leave it None to use every active degree of freedom in the world."
 
 
-@dataclass
+@dataclass(kw_only=True)
 class GoalPointsReferenceFrameMismatchError(NodeInitializationError):
     """
     Raised when the goal points of a node are expressed in more than one reference
@@ -163,7 +168,7 @@ class GoalPointsReferenceFrameMismatchError(NodeInitializationError):
         return "Make sure all goal points have the same reference frame."
 
 
-@dataclass
+@dataclass(kw_only=True)
 class MissingErrorSignalError(NodeInitializationError):
     """
     Raised when a converging task builds artifacts that carry no error signal.
@@ -182,7 +187,7 @@ class MissingErrorSignalError(NodeInitializationError):
         )
 
 
-@dataclass
+@dataclass(kw_only=True)
 class NoProgressError(MotionStatechartError):
     """
     Raised when the watched tasks stopped approaching their goal for too long.
@@ -190,12 +195,16 @@ class NoProgressError(MotionStatechartError):
 
     progress_monitor: StillProgressing
     """
-    The monitor that detected the stall and knows which tasks are affected.
+    The monitor that detected the stall.
+    """
+
+    stalled_tasks: list[ConvergingTask] = field(default_factory=list)
+    """
+    The tasks that had stopped approaching their goal when the stall was detected.
     """
 
     def error_message(self) -> str:
-        stalled_tasks = self.progress_monitor.stalled_tasks
-        names = ", ".join(task.unique_name for task in stalled_tasks)
+        names = ", ".join(task.unique_name for task in self.stalled_tasks)
         return (
             f"{names or self.progress_monitor.monitored_node.unique_name} stopped "
             f"approaching a goal for {self.progress_monitor.timeout}."
@@ -208,7 +217,7 @@ class NoProgressError(MotionStatechartError):
         )
 
 
-@dataclass
+@dataclass(kw_only=True)
 class InvalidConstraintExpressionShapeError(MotionStatechartError):
     """
     Raised when a constraint expression is not a scalar.
@@ -227,7 +236,7 @@ class InvalidConstraintExpressionShapeError(MotionStatechartError):
         return "Ensure the expression evaluates to a (1, 1) scalar."
 
 
-@dataclass
+@dataclass(kw_only=True)
 class UnknownGriplinkActionError(MotionStatechartError):
     """
     Raised when a griplink action server task is built for a griplink action it does not
@@ -246,7 +255,7 @@ class UnknownGriplinkActionError(MotionStatechartError):
         return "Build the task with Grip, Release, Flexgrip or Flexrelease."
 
 
-@dataclass
+@dataclass(kw_only=True)
 class NoGriplinkEndpoint(MotionStatechartError):
     """
     Raised when a gripper state has no griplink action server endpoint to command it on.
@@ -275,7 +284,7 @@ class NoGriplinkEndpoint(MotionStatechartError):
         )
 
 
-@dataclass
+@dataclass(kw_only=True)
 class GriplinkParameterOutOfRangeError(MotionStatechartError):
     """
     Raised when a griplink parameter lies outside the interval the gripper accepts.
@@ -311,7 +320,7 @@ class GriplinkParameterOutOfRangeError(MotionStatechartError):
         return f"Choose a {self.parameter_name} within the valid interval."
 
 
-@dataclass
+@dataclass(kw_only=True)
 class ActionClientTypeMismatchError(MotionStatechartError):
     """
     Raised when an action topic is requested with a different message type than the one
@@ -344,7 +353,7 @@ class ActionClientTypeMismatchError(MotionStatechartError):
         return "Use a unique action_topic per message type."
 
 
-@dataclass
+@dataclass(kw_only=True)
 class RobotWithoutMobileBaseError(MotionStatechartError):
     """
     Raised when a goal is to drive the mobile base of a robot that has none.
@@ -362,14 +371,22 @@ class RobotWithoutMobileBaseError(MotionStatechartError):
         return "Move the base of this robot with a goal that needs no mobile base."
 
 
-@dataclass
-class EmptyDebugExpressionTrajectoryError(MotionStatechartError):
+@dataclass(kw_only=True)
+class MarkerPublishingThreadEndedError(DataclassException):
     """
-    Raised when a plot is requested but no debug expression samples were recorded.
+    Raised when markers are submitted for publishing after the thread publishing them
+    ended because publishing raised; the exception it raised is the cause.
     """
 
     def error_message(self) -> str:
-        return "Cannot plot: no debug expression samples were recorded."
+        return (
+            "The thread publishing the debug markers ended, so no submitted marker "
+            "would ever be published."
+        )
 
     def suggest_correction(self) -> str:
-        return "Call tick() at least once before plotting, or configure debug expressions to record."
+        return (
+            "Read the cause of this error, often a ROS node that was destroyed while "
+            "it still published. Publishing starts again with the next compiled "
+            "statechart."
+        )

@@ -1,3 +1,7 @@
+"""
+A task that inserts a held object by wiggling it into place.
+"""
+
 from __future__ import annotations
 
 import random
@@ -7,11 +11,11 @@ import numpy as np
 
 import krrood.symbolic_math.symbolic_math as symbolic_math
 from giskardpy.motion_statechart.context import MotionControlContext
-from krrood.ormatic.utils import classproperty
+from krrood.patterns.classproperty import classproperty
 from cramph.context import ContextExtension
 from giskardpy.motion_statechart.cruise_velocities import DefaultCruiseVelocity
 from giskardpy.motion_statechart.weights import DefaultWeights
-from cramph.data_types import ObservationStateValues
+from cramph.data_types import ObservationStateValue
 from giskardpy.motion_statechart.graph_node import (
     ConvergingTask,
     DebugExpression,
@@ -169,7 +173,7 @@ class WiggleInsert(ConvergingTask):
         """
         super().set_up()
         control_time_step = self.context.require_extension(
-            MotionControlContext
+            extension_type=MotionControlContext
         ).qp_controller_config.control_time_step
         self._control_frequency = 1 / control_time_step.total_seconds()
 
@@ -182,10 +186,14 @@ class WiggleInsert(ConvergingTask):
             f"{self.name}_rand_translation"
         )
         self._random_translation.reference_frame = self.root_link
-        self.context.float_variable_data.register_expression(self._random_translation)
+        self.context.float_variable_data.register_expression(
+            expression=self._random_translation
+        )
 
         self._random_angle = symbolic_math.FloatVariable(f"{self.name}_rand_angle")
-        self.context.float_variable_data.register_expression(self._random_angle)
+        self.context.float_variable_data.register_expression(
+            expression=self._random_angle
+        )
 
     def build_artifacts(self) -> MotionNodeArtifacts:
         """
@@ -207,7 +215,7 @@ class WiggleInsert(ConvergingTask):
         )
 
         self._perpendicular_basis_first, self._perpendicular_basis_second = (
-            self._calculate_perpendicular_basis(hole_normal.to_np()[:3])
+            self._calculate_perpendicular_basis(normal=hole_normal.to_np()[:3])
         )
 
         root_P_current = self.context.world.compose_forward_kinematics_expression(
@@ -245,16 +253,18 @@ class WiggleInsert(ConvergingTask):
         )
 
         artifacts.debug_expressions.append(
-            DebugExpression(f"{self.name}/root_P_hole", root_P_hole)
+            DebugExpression(name=f"{self.name}/root_P_hole", expression=root_P_hole)
         )
         artifacts.debug_expressions.append(
-            DebugExpression(f"{self.name}/root_P_hole_wiggled", root_P_hole_wiggled)
+            DebugExpression(
+                name=f"{self.name}/root_P_hole_wiggled", expression=root_P_hole_wiggled
+            )
         )
 
         artifacts.error = root_P_current.euclidean_distance(root_P_hole)
         return artifacts
 
-    def on_tick(self) -> ObservationStateValues | None:
+    def on_tick(self) -> ObservationStateValue | None:
         if self.random_walk:
             translation = self._random_walk_translation()
             angle = self._random_walk_angle()
@@ -262,9 +272,11 @@ class WiggleInsert(ConvergingTask):
             translation = self._random_sample_translation()
             angle = self._random_sample_angle()
         self.context.float_variable_data.set_value(
-            self._random_translation, translation
+            expression=self._random_translation, value=translation
         )
-        self.context.float_variable_data.set_value(self._random_angle, angle)
+        self.context.float_variable_data.set_value(
+            expression=self._random_angle, value=angle
+        )
         return None
 
     def _random_sample_angle(self) -> float:
@@ -344,6 +356,7 @@ class WiggleInsert(ConvergingTask):
 
     @staticmethod
     def _calculate_perpendicular_basis(
+        *,
         normal: np.ndarray,
     ) -> tuple[np.ndarray, np.ndarray]:
         """
