@@ -76,7 +76,7 @@ class AnalysisEngine(AnalysisEngineInterface):
             The pipeline includes commented-out options for adding triggers
             and slow processing simulation, which can be useful for debugging.
         """
-        kinect_config = CrDescriptorFactory.create_descriptor("kinect_wo_tf")
+        kinect_config = CrDescriptorFactory.create_descriptor("orbbec")
 
         seq = Pipeline("RWPipeline")
         seq.add_children(
