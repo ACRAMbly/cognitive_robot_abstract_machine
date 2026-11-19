@@ -198,3 +198,5 @@ basstler/board.json
 
 # Some robokudo annotators have default models downloaded
 robokudo/src/robokudo/models/
+random_events/src/random_events_lib/bazel-bin/
+random_events/src/random_events_lib/bazel-out/
