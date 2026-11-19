@@ -7,6 +7,7 @@ from contextlib import suppress
 from dataclasses import dataclass
 import logging
 import os
+from pathlib import Path
 import sys
 import time
 import traceback
@@ -143,12 +144,11 @@ def run_ae(
             time.sleep(interval - elapsed)
 
 
-def main() -> None:
+def create_argument_parser() -> argparse.ArgumentParser:
+    """Create the parser for the RoboKudo command-line arguments.
+
+    :return: Parser accepting arguments prefixed with ``_``, e.g. ``_ae=demo``.
     """
-    Entry point for the RoboKudo system, setting up ROS, parsing arguments,
-    loading the requested Analysis Engine, and spinning the ROS executors.
-    """
-    # 1. Parse CLI arguments (prefix_chars='_'):
     parser = argparse.ArgumentParser(prefix_chars="_")
     parser.add_argument(
         "_ae",
@@ -196,7 +196,23 @@ def main() -> None:
         help="If set, the rcply root logger will be set to DEBUG log level which will yield many ROS-related debug messages.",
     )
     parser.set_defaults(debugmode=False)
-    args = parser.parse_args()
+    parser.add_argument(
+        "_output_directory",
+        dest="output_directory",
+        type=Path,
+        default=None,
+        help="Directory for the MCAP recording (storage_red only). Must not already exist.",
+    )
+    return parser
+
+
+def main() -> None:
+    """
+    Entry point for the RoboKudo system, setting up ROS, parsing arguments,
+    loading the requested Analysis Engine, and spinning the ROS executors.
+    """
+    # 1. Parse CLI arguments (prefix_chars='_'):
+    args = create_argument_parser().parse_args()
 
     # 2. Initialize RCL
     initialize_rclpy(sys.argv)
@@ -252,7 +268,14 @@ def main() -> None:
     # 7. Dynamically load the requested Analysis Engine (AE) using the **refactored** ModuleLoader
     loader = ModuleLoader()
     logger.info(f"Loading AE '{args.ae}' from package '{args.ros_pkg}'...")
-    loaded_ae = loader.load_ae(ros_pkg_name=args.ros_pkg, module_name=args.ae)
+    engine_arguments = (
+        {}
+        if args.output_directory is None
+        else {"output_directory": args.output_directory.expanduser().absolute()}
+    )
+    loaded_ae = loader.load_ae(
+        ros_pkg_name=args.ros_pkg, module_name=args.ae, **engine_arguments
+    )
 
     # 8. Build your Behavior Tree from the loaded AE
     #    (Assuming loaded_ae.implementation() returns a py_trees root or something similar)

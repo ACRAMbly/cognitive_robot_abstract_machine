@@ -14,7 +14,7 @@ from robokudo.annotators.mcap_recorder import (
     McapRecorderConfiguration,
     McapRecordingPathExistsError,
 )
-from robokudo.descriptors.analysis_engines import storage
+from robokudo.descriptors.analysis_engines import storage_red
 
 
 @dataclass
@@ -215,12 +215,12 @@ def test_storage_engine_uses_mcap_recorder_after_preprocessing(
         camera_interface=AvailableSensorDataInterface(),
     )
     monkeypatch.setattr(
-        storage.CrDescriptorFactory,
+        storage_red.CrDescriptorFactory,
         'create_descriptor',
         lambda camera: camera_descriptor,
     )
 
-    pipeline = storage.AnalysisEngine().implementation()
+    pipeline = storage_red.AnalysisEngine().implementation()
 
     recorder = pipeline.children[-1]
     assert isinstance(recorder, McapRecorderAnnotator)
@@ -240,3 +240,53 @@ def test_storage_engine_uses_mcap_recorder_after_preprocessing(
         'ImagePreprocessorAnnotator',
         'McapRecorderAnnotator',
     ]
+
+
+@pytest.fixture
+def orbbec_camera_descriptor(
+    monkeypatch: pytest.MonkeyPatch,
+) -> CollectionReaderAnnotator.Descriptor:
+    """Replace the Orbbec descriptor with one that needs no camera."""
+    camera_descriptor = CollectionReaderAnnotator.Descriptor(
+        camera_config=OrbbecTopicConfiguration(),
+        camera_interface=AvailableSensorDataInterface(),
+    )
+    monkeypatch.setattr(
+        storage_red.CrDescriptorFactory,
+        'create_descriptor',
+        lambda camera: camera_descriptor,
+    )
+    return camera_descriptor
+
+
+def test_storage_engine_records_to_requested_directory(
+    orbbec_camera_descriptor: CollectionReaderAnnotator.Descriptor,
+    tmp_path: Path,
+) -> None:
+    """Record into the directory chosen when the engine is created."""
+    output_directory = tmp_path / 'run_01'
+
+    pipeline = storage_red.AnalysisEngine(
+        output_directory=output_directory
+    ).implementation()
+
+    recorder = pipeline.children[-1]
+    assert isinstance(recorder, McapRecorderAnnotator)
+    assert recorder.configuration.output_directory == output_directory
+
+
+def test_storage_engine_without_directory_records_to_blue_data(
+    orbbec_camera_descriptor: CollectionReaderAnnotator.Descriptor,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Fall back to a timestamped directory below the blue data path."""
+    monkeypatch.setattr(Path, 'home', lambda: tmp_path)
+
+    pipeline = storage_red.AnalysisEngine().implementation()
+
+    recorder = pipeline.children[-1]
+    assert isinstance(recorder, McapRecorderAnnotator)
+    output_directory = recorder.configuration.output_directory
+    assert output_directory.parent == tmp_path / 'blue' / 'data'
+    assert output_directory.name.startswith('robokudo_orbbec_')

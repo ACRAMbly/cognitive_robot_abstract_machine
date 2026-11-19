@@ -3,6 +3,9 @@ To record new data with red
 1. Start the real Orbbec camera driver.(ros2 launch iai_tracy_bringup tracy_ros2.launch.py)
 2. workon red
 3. command for running sensor data recording analysis engine. it is a variation of original storage.py analysis engine described in robokudo documnetation for the recording: ros2 run robokudo_ros main _ae=storage_red
+    * by default the recording is stored in ~/blue/data/robokudo_orbbec_<timestamp>
+    * to choose the recording directory: ros2 run robokudo_ros main _ae=storage_red _output_directory=/path/to/run_01
+    * the directory must not exist yet, otherwise the recording refuses to start instead of overwriting it
 4. when recorded enough data ctr+c
 
 To use the recorded ros2 bag data 

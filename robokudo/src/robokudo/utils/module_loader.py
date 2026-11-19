@@ -117,7 +117,9 @@ class ModuleLoader:
             loaded_module = importlib.import_module(import_path)
         return loaded_module
 
-    def load_ae(self, ros_pkg_name: str, module_name: str) -> AnalysisEngineInterface:
+    def load_ae(
+        self, ros_pkg_name: str, module_name: str, **engine_arguments: Any
+    ) -> AnalysisEngineInterface:
         """Load an Analysis Engine (AE). Expects a class `AnalysisEngine` in the loaded module.
 
         The ROS package must be in the same workspace with path structure:
@@ -125,13 +127,14 @@ class ModuleLoader:
 
         :param ros_pkg_name: Name of ROS package containing AE
         :param module_name: Name of analysis engine module
+        :param engine_arguments: Keyword arguments for the `AnalysisEngine` constructor
         :return: Root of loaded analysis engine
         """
         module_type = RobokudoModuleType.AnalysisEngine
         loaded_module = self._load_module(ros_pkg_name, module_type, module_name)
 
         # e.g. the module should define: class AnalysisEngine: ...
-        loaded_ae = loaded_module.AnalysisEngine()
+        loaded_ae = loaded_module.AnalysisEngine(**engine_arguments)
         return loaded_ae
 
     def load_annotator(self, ros_pkg_name: str, module_name: str) -> ModuleType:

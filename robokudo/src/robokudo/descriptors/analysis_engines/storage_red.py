@@ -10,6 +10,11 @@ The pipeline implements the following functionality:
 * MCAP recording of RGB-D, calibration, and transform topics
 """
 
+from __future__ import annotations
+
+from dataclasses import dataclass, replace
+from pathlib import Path
+
 from robokudo.analysis_engine import AnalysisEngineInterface
 from robokudo.annotators.collection_reader import CollectionReaderAnnotator
 from robokudo.annotators.image_preprocessor import ImagePreprocessorAnnotator
@@ -22,12 +27,17 @@ from robokudo.idioms import pipeline_init
 from robokudo.pipeline import Pipeline
 
 
+@dataclass
 class AnalysisEngine(AnalysisEngineInterface):
     """Record replayable Orbbec input while running image preprocessing.
 
     The MCAP bag contains the three configured Orbbec topics and both transform
     topics required by the camera-to-world lookup.
     """
+
+    output_directory: Path | None = None
+    """Directory for the MCAP recording; a timestamped directory below
+    ``~/blue/data`` is used when unset."""
 
     def name(self) -> str:
         """Get the name of the analysis engine.
@@ -52,6 +62,11 @@ class AnalysisEngine(AnalysisEngineInterface):
                 '/tf_static',
             )
         )
+        if self.output_directory is not None:
+            recording_configuration = replace(
+                recording_configuration,
+                output_directory=self.output_directory,
+            )
 
         seq = Pipeline()
         seq.add_children(
