@@ -50,7 +50,11 @@ and applies them at moments it chooses.
   Giskard and Coraplex.
 - The Coraplex demo script creates its `WorldSynchronizer` with
   `defer_incoming_updates=True` and applies the held-back updates
-  (`apply_missed_messages()`) at moments it chooses, for example between plans.
+  (`apply_missed_messages()`) only between plans.
+- The demo script splits a task into plans that run one after another, so
+  that every perception point falls between two plans. There the script
+  triggers one capture, waits for a fresh observation, applies the updates and
+  builds the next plan (see [Perception points between plans](#perception-points-between-plans)).
 
 ### Connector and synchronizer
 
@@ -98,8 +102,18 @@ and applies them at moments it chooses.
   includes the vertices. `robokudo_acrambly/aircraft/types.py` imports only
   `semantic_digital_twin`.
 
-Not there yet: no RoboKudo code does the fetch and sync, and no demo holds back
-updates.
+- Gates that hold a RoboKudo pipeline until it is triggered: `QueryAnnotator`
+  waits for a query on RoboKudo's query action server
+  (`robokudo/src/robokudo/annotators/query.py:128-155`), and `PipelineTrigger`
+  waits for a blackboard flag inside the RoboKudo process
+  (`robokudo/src/robokudo/annotators/pipeline_trigger.py`).
+
+Not there yet: no RoboKudo code does the fetch and sync, no demo holds back
+updates, and the capture time of an accepted observation stays on the RoboKudo
+side. It is on the CAS and the `StampedPose`
+(`robokudo/src/robokudo/annotators/semantic_world_connector.py:237-243`);
+the aircraft annotations in `robokudo_acrambly/aircraft/types.py` have no
+timestamp, so Coraplex cannot tell how old a pose in the shared world is.
 
 ## Steps
 
@@ -108,7 +122,8 @@ updates.
    aircraft observation in the RoboKudo world. Assert that the receiving world
    has the same UUIDs, types, and poses. A second test holds back updates on
    the receiving side and asserts the world is unchanged until
-   `apply_missed_messages()` runs.
+   `apply_missed_messages()` runs. A third test asserts that the receiving
+   world can read the capture time of the accepted observation (step 6).
 2. **RoboKudo starts from the shared world.** Where the aircraft engine starts
    up (for example `AircraftBeliefInspection.__enter__` in
    `aircraft_observations/inspection.py`), before the pipeline runs:
@@ -141,32 +156,101 @@ updates.
 5. **Coraplex holds back updates.** The demo script creates its
    `WorldSynchronizer` with `defer_incoming_updates=True` and calls
    `apply_missed_messages()` between plans.
-6. **Plans read parts from the world, not from RoboKudo queries.** For example
+6. **The capture time reaches Coraplex.** Each accepted aircraft observation
+   carries its capture time into the shared world, for example as a field on
+   the aircraft annotation, so Coraplex can tell a fresh pose from an old one.
+   Not yet checked: whether `WorldSynchronizer` publishes a changed annotation
+   field. If it does not, RoboKudo publishes a small "capture at T accepted,
+   parts seen: …" message instead.
+7. **Split each task into plans at its perception points.** The demo script
+   runs the plans one after another and, between two of them, does what
+   [Perception points between plans](#perception-points-between-plans)
+   describes. Today `acrambly/tracy_real.py:130-138` builds one plan per task
+   and calls `perform()` once.
+8. **Real camera: gate the pipeline.** The real aircraft analysis engine starts
+   with a gate, so NOCTIS and FoundationPose run once per trigger rather than
+   on every frame (see [GPU load with a real camera](#gpu-load-with-a-real-camera)).
+   `QueryAnnotator` can be triggered from the Coraplex process over the
+   existing query action. Its reply is ignored, since the result arrives
+   through synchronization.
+9. **Plans read parts from the world, not from RoboKudo queries.** For example
    `world.get_semantic_annotations_by_type(TopWing)[0].root`.
    - In REAL mode, `DetectAction` and `DetectBeforeGrasp` always use
      `RoboKudoPerception` (hard-wired at
      `coraplex/src/coraplex/robot_plans/motions/misc.py:67`), so aircraft plans
      leave both out. This removes the double write through `apply_to`.
-7. **Make the aircraft types importable in the Coraplex process.** Install
+10. **Make the aircraft types importable in the Coraplex process.** Install
    `robokudo_acrambly` in Coraplex's environment so incoming annotations can be
    deserialized. Only the plan script imports
    `robokudo_acrambly.aircraft.types`; the `coraplex` package stays independent
    of it.
 
+## Order of work
+
+The work is split in two. Part 1 needs no Coraplex plan and can be built and
+tested now. Part 2 depends on decisions only the Coraplex action plan makes:
+where the perception points are, which parts each plan needs, and how retries
+work.
+
+### Part 1: now (RoboKudo side)
+
+| Step | What |
+|---|---|
+| 1 | tests: two synchronized worlds, held-back updates, capture time readable on the receiving side |
+| 2 | RoboKudo fetches the shared world, sets up the tracker, attaches the synchronizer |
+| 3 | `world_frame` points at the shared root |
+| 4 | world server for the synthetic target |
+| 6 | capture time reaches the receiving world, including the open check whether `WorldSynchronizer` publishes a changed annotation field |
+
+Done when a second process with `defer_incoming_updates=True` receives the 12
+parts with the right UUIDs, types, poses and capture times, and sees them only
+after `apply_missed_messages()`.
+
+### Part 2: after the Coraplex action plan exists
+
+| Step | What |
+|---|---|
+| 5 | the demo script holds back updates |
+| 7 | tasks split into plans at perception points; trigger, wait and timeout |
+| 9 | plans read parts from the world |
+| 10 | aircraft types installed in the Coraplex process |
+
+### Real-camera work, later
+
+- Step 8, the gate on the pipeline: needed only once NOCTIS and FoundationPose
+  are wired in.
+- The camera link's second parent: a `robokudo/` change (**outside**).
+
+### Rules for the split
+
+- Part 1 makes RoboKudo a writer in the robot's world. Until part 2 and the
+  real-camera risks are resolved, run it only against the synthetic target or
+  a stand-in world server, never against a real Giskard.
+- The capture-time format is where part 1 meets part 2. Keep it simple and
+  general so the Coraplex plan does not force a rewrite.
+- These open questions stay open until part 2: belief vs the robot's own
+  action, two writers on one part, and when to skip the wait.
+- The two rear wheels question is a catalog change inside
+  `robokudo_acrambly`. Decide it before part 1's tests are written, so they do
+  not have to be rewritten.
+- With `/add-plan-item`, this becomes two items, part 2 depending on part 1.
+
 ## Changes
 
 | Directory | Change | Size |
 |---|---|---|
-| `robokudo_acrambly/` | fetch, switch world, tracker, synchronizer; `world_frame` | small-medium |
-| `acrambly/` (**outside**) | demo, world server for simulation, deferral flag and apply calls | small |
-| `test/robokudo_acrambly_test/` (**outside**) | synchronization tests | small |
-| `coraplex/` | none, as long as updates are applied between plans | none |
+| `robokudo_acrambly/` | fetch, switch world, tracker, synchronizer; `world_frame`; capture time on accepted observations; gate on the real analysis engine | small-medium |
+| `acrambly/` (**outside**) | demo, world server for simulation, deferral flag and apply calls; tasks split into plans at perception points; trigger, wait and timeout between plans | small-medium |
+| `test/robokudo_acrambly_test/` (**outside**) | synchronization and capture-time tests | small |
+| `coraplex/` | none, as long as every perception point falls between plans | none |
 | `robokudo/` | none for the synthetic target | none |
 
 Changes only some situations need:
 
-- **Applying updates inside a running plan**, e.g. at a `DetectAction`: a
-  `coraplex/` plan node (**outside**, small).
+- **A perception point that cannot become a plan boundary**, i.e. one that has
+  to sit in the middle of one plan's motion: a `coraplex/` plan node that
+  waits and applies updates (**outside**, small). For sequential assembly
+  steps this is not expected; it is the fallback, not the plan.
 - **Real camera:** `setup_world_for_camera_frame`
   (`robokudo/src/robokudo/world.py:188`) would give the robot's camera link a
   second parent; a small `robokudo/` change (**outside**).
@@ -182,14 +266,21 @@ decide whether it becomes its own item.
 - Parts that are out of view still exist, and several copies of a kind work.
 - Little new code; almost every piece already exists.
 - The world no longer changes under a running Coraplex plan.
+- At a perception point the plan gets a pose captured after the robot
+  settled, and with a gated pipeline the GPU runs only then.
 - It fits PR 13's brief: "`WorldSynchronizer` transfers accepted changes to
   another process's world".
 
 ## Cons
 
-- Coraplex sees updates only at chosen moments, so a plan may act on a pose one
-  perception cycle old.
-- Fine-grained moments (inside a plan) need a `coraplex/` change.
+- Coraplex sees updates only between plans. A plan acts on the pose from the
+  capture taken before it started, and nothing newer.
+- Each perception point costs one full NOCTIS + FoundationPose pass of waiting.
+- Tasks have to be split into plans at their perception points, and retries
+  (a timed-out observation, a failed grasp that needs another look) move from
+  the plan into the demo script.
+- A perception point in the middle of one plan's motion needs a `coraplex/`
+  change.
 
 Holding back updates only changes *when* Coraplex applies what RoboKudo
 publishes. RoboKudo still publishes every change at once, and the held-back
@@ -207,6 +298,75 @@ changes still land in full. So these remain:
    overwrites the pose when Coraplex applies it (open question below).
 3. **RoboKudo becomes a writer** in the robot's world. A perception bug
    reaches motion planning, one apply step later.
+
+## Perception points between plans
+
+A perception point is where the next motion needs a part's current pose, for
+example before a grasp. Applying whatever updates have arrived is not enough
+there: they may come from a capture taken before the robot last moved the
+part, or while the arm or camera was still moving. So the demo script waits
+for a fresh observation.
+
+The demo script runs a task as plans, one after another:
+
+```
+plan A (e.g. move to the viewing pose)  → perform()
+trigger capture → wait for capture_time > end of A → apply_missed_messages()
+build plan B (e.g. grasp the TopWing)   → perform()
+...
+```
+
+1. A plan ends when the robot reaches the viewing pose. The moment `perform()`
+   returns is the settle time: the motion is done.
+2. The script triggers one capture on the gated pipeline.
+3. It waits until an update arrives, for each part the next plan needs, with a
+   capture time after the settle time.
+4. It calls `apply_missed_messages()`.
+5. It builds the next plan from the world *after* applying. A plan built
+   earlier may have read the old pose.
+
+Rules:
+
+- **Timeout.** An occluded part never produces a fresh observation. After a
+  configured number of captures the script fails explicitly or falls back to
+  the last belief under the rule in
+  [Belief vs the robot's own action](#belief-vs-the-robots-own-action). It
+  never hangs.
+- **Skip the wait** when nothing relevant changed since the last accepted
+  capture: the robot did not touch the part and the camera did not move.
+- **Wait only for the parts the next plan needs**, not all 12.
+- Splitting plans does not solve the two-writers problem: a part held across a
+  plan boundary is still overwritten by RoboKudo's next pose when the updates
+  are applied.
+
+Depends on step 6 (capture time reaches Coraplex) and, with a real camera,
+step 8 (a gate on the pipeline).
+
+## GPU load with a real camera
+
+With a real camera, a pipeline tick runs camera frame → NOCTIS segmentation
+(GPU) → FoundationPose 6D pose (GPU) → `SemanticDigitalTwinConnector`
+acceptance (CPU) → `WorldSynchronizer` publish. Acceptance starts no GPU work.
+How busy the GPU is depends only on how often the pipeline ticks:
+
+| Pipeline | GPU |
+|---|---|
+| Continuous, like `scripted_aircraft.py` today | busy all the time; NOCTIS and FoundationPose run back to back on every frame |
+| Gated (`QueryAnnotator`, `PipelineTrigger`) | idle between triggers; the models stay loaded in GPU memory |
+
+Holding back updates in Coraplex does not reduce GPU load: RoboKudo still
+computes and publishes every tick, and most results are overwritten before
+Coraplex applies them. With a continuous pipeline a fresh observation also
+takes up to about two cycles (the frame in flight was captured before the
+settle time), against exactly one with a gate.
+
+Recommendation: gate the real aircraft pipeline (step 8). The GPU then runs one
+NOCTIS + FoundationPose pass per perception point.
+
+Later option: FoundationPose tracking mode (one full detection, then cheap
+per-frame tracking) would shorten each pass. It needs earlier poses linked to
+persistent hypotheses, which does not exist yet
+(see [synchronization research sources](synchronization_research_sources.md)).
 
 ## Risk
 
@@ -243,12 +403,15 @@ belief. The fix must use the robot's own record of where it put the wheel.
 
 ### When does Coraplex apply held-back updates?
 
-- Between plans: no `coraplex/` change.
-- At perception points inside a plan (`DetectAction`, `DetectBeforeGrasp`):
-  needs a `coraplex/` plan node. `DetectingMotion` is built so that "a motion
-  planned after it binds the corrected pose".
+Recommendation: only between plans, and the task is split so that every
+perception point falls between two plans
+(see [Perception points between plans](#perception-points-between-plans)).
+This needs no `coraplex/` change.
 
-Starting point: between plans.
+Fallback: a perception point that has to stay inside one plan
+(`DetectAction`, `DetectBeforeGrasp`) needs a `coraplex/` plan node that does
+the same trigger, wait and apply. `DetectingMotion` is built so that "a motion
+planned after it binds the corrected pose".
 
 ### Belief vs the robot's own action
 
