@@ -1,0 +1,30 @@
+[
+  {
+    "bloom_level": "REMEMBERING",
+    "measurement_count": 9,
+    "average": {
+      "mean": 1.0,
+      "standard_deviation": 0.0,
+      "unit": "NONE"
+    },
+    "confidence_interval": {
+      "lower": 1.0,
+      "upper": 1.0,
+      "confidence_level": 0.95
+    }
+  },
+  {
+    "bloom_level": "UNDERSTANDING",
+    "measurement_count": 70,
+    "average": {
+      "mean": 0.9,
+      "standard_deviation": 0.3022,
+      "unit": "NONE"
+    },
+    "confidence_interval": {
+      "lower": 0.8292144191111287,
+      "upper": 0.9707855808888713,
+      "confidence_level": 0.95
+    }
+  }
+]

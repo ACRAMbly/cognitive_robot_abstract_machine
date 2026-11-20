@@ -51,7 +51,7 @@ from acrambly.sub_parts.shared.utils import spawn_body
 # Mode flag
 # ---------------------------------------------------------------------------
 
-USE_REAL_ROBOT = False
+USE_REAL_ROBOT = True
 
 
 # ---------------------------------------------------------------------------
@@ -153,7 +153,7 @@ DELAY_MOVE = 1.0
 DELAY_SPIRAL = 0.0
 
 # F/T thresholds (real robot only)
-FT_TOPIC = "/left_ft_data"
+FT_TOPIC = "/left_arm/force_torque_sensor_broadcaster/wrench_filtered"
 FT_HOLE_THRESHOLD_N = 2.0
 FT_INSERTION_MAX_N = 15.0
 

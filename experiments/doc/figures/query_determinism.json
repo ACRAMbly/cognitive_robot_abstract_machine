@@ -1,0 +1,198 @@
+[
+  {
+    "query": "Did any object recently move?",
+    "measurement_count": 5,
+    "average": {
+      "mean": 1.0,
+      "standard_deviation": 0.0,
+      "unit": "NONE"
+    },
+    "confidence_interval": {
+      "lower": 1.0,
+      "upper": 1.0,
+      "confidence_level": 0.95
+    }
+  },
+  {
+    "query": "Did you move them?",
+    "measurement_count": 5,
+    "average": {
+      "mean": 1.0,
+      "standard_deviation": 0.0,
+      "unit": "NONE"
+    },
+    "confidence_interval": {
+      "lower": 1.0,
+      "upper": 1.0,
+      "confidence_level": 0.95
+    }
+  },
+  {
+    "query": "How many joints do you have?",
+    "measurement_count": 5,
+    "average": {
+      "mean": 1.0,
+      "standard_deviation": 0.0,
+      "unit": "NONE"
+    },
+    "confidence_interval": {
+      "lower": 1.0,
+      "upper": 1.0,
+      "confidence_level": 0.95
+    }
+  },
+  {
+    "query": "How many links do you have?",
+    "measurement_count": 5,
+    "average": {
+      "mean": 1.0,
+      "standard_deviation": 0.0,
+      "unit": "NONE"
+    },
+    "confidence_interval": {
+      "lower": 1.0,
+      "upper": 1.0,
+      "confidence_level": 0.95
+    }
+  },
+  {
+    "query": "Is the rectangular_prism_0 currently in your hand?",
+    "measurement_count": 5,
+    "average": {
+      "mean": 1.0,
+      "standard_deviation": 0.0,
+      "unit": "NONE"
+    },
+    "confidence_interval": {
+      "lower": 1.0,
+      "upper": 1.0,
+      "confidence_level": 0.95
+    }
+  },
+  {
+    "query": "Is the rectangular_prism_0 left of the triangular_prism_1?",
+    "measurement_count": 5,
+    "average": {
+      "mean": 1.0,
+      "standard_deviation": 0.0,
+      "unit": "NONE"
+    },
+    "confidence_interval": {
+      "lower": 1.0,
+      "upper": 1.0,
+      "confidence_level": 0.95
+    }
+  },
+  {
+    "query": "Is the rectangular_prism_0 right of the triangular_prism_1?",
+    "measurement_count": 5,
+    "average": {
+      "mean": 1.0,
+      "standard_deviation": 0.0,
+      "unit": "NONE"
+    },
+    "confidence_interval": {
+      "lower": 1.0,
+      "upper": 1.0,
+      "confidence_level": 0.95
+    }
+  },
+  {
+    "query": "Was the rectangular_prism_0 recently picked up?",
+    "measurement_count": 5,
+    "average": {
+      "mean": 1.0,
+      "standard_deviation": 0.0,
+      "unit": "NONE"
+    },
+    "confidence_interval": {
+      "lower": 1.0,
+      "upper": 1.0,
+      "confidence_level": 0.95
+    }
+  },
+  {
+    "query": "What colours are they?",
+    "measurement_count": 5,
+    "average": {
+      "mean": 0.2,
+      "standard_deviation": 0.4472,
+      "unit": "NONE"
+    },
+    "confidence_interval": {
+      "lower": -0.1919927969080107,
+      "upper": 0.5919927969080108,
+      "confidence_level": 0.95
+    }
+  },
+  {
+    "query": "What objects do you see now?",
+    "measurement_count": 5,
+    "average": {
+      "mean": 0.2,
+      "standard_deviation": 0.4472,
+      "unit": "NONE"
+    },
+    "confidence_interval": {
+      "lower": -0.1919927969080107,
+      "upper": 0.5919927969080108,
+      "confidence_level": 0.95
+    }
+  },
+  {
+    "query": "What surface is the rectangular_prism_0 standing on?",
+    "measurement_count": 5,
+    "average": {
+      "mean": 0.2,
+      "standard_deviation": 0.4472,
+      "unit": "NONE"
+    },
+    "confidence_interval": {
+      "lower": -0.1919927969080107,
+      "upper": 0.5919927969080108,
+      "confidence_level": 0.95
+    }
+  },
+  {
+    "query": "Where are they?",
+    "measurement_count": 5,
+    "average": {
+      "mean": 0.2,
+      "standard_deviation": 0.4472,
+      "unit": "NONE"
+    },
+    "confidence_interval": {
+      "lower": -0.1919927969080107,
+      "upper": 0.5919927969080108,
+      "confidence_level": 0.95
+    }
+  },
+  {
+    "query": "Where is your l_gripper_tool_frame located?",
+    "measurement_count": 5,
+    "average": {
+      "mean": 0.2,
+      "standard_deviation": 0.4472,
+      "unit": "NONE"
+    },
+    "confidence_interval": {
+      "lower": -0.1919927969080107,
+      "upper": 0.5919927969080108,
+      "confidence_level": 0.95
+    }
+  },
+  {
+    "query": "Which objects recently moved?",
+    "measurement_count": 5,
+    "average": {
+      "mean": 1.0,
+      "standard_deviation": 0.0,
+      "unit": "NONE"
+    },
+    "confidence_interval": {
+      "lower": 1.0,
+      "upper": 1.0,
+      "confidence_level": 0.95
+    }
+  }
+]
