@@ -202,3 +202,8 @@ random_events/src/random_events_lib/bazel-bin/
 random_events/src/random_events_lib/bazel-out/
 random_events/src/random_events_lib/bazel-bin
 random_events/src/random_events_lib/bazel-out
+
+# Python cache files
+__pycache__/
+*.py[cod]
+*.mcap
