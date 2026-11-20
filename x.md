@@ -1,0 +1,1 @@
+❯ /mattpocock-skills:grill-with-docs '/home/nasim/Desktop/cognitive_robot_abstract_machine/robokudo_acrambly/doc/coraplex_belief_consumption.md' coraplex uses RoboKudo's aircraft-part beliefs: shared world with held-back updates. with this approach, might need some commits in this pr and but main commits to a new stacked pr to pr 13, is it good

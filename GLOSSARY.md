@@ -28,7 +28,8 @@ accepted state across observations, including observations in which it is absent
 _Avoid_: Object hypothesis, detection
 
 **Local belief world**:
-The world of object beliefs maintained by RoboKudo from accepted observations.
+The world of object beliefs RoboKudo maintains on its own from accepted
+observations, not shared with other processes.
 
 **Motion pause**:
 An interval in a scenario during which block poses remain unchanged and
