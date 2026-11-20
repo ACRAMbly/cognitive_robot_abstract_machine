@@ -62,10 +62,11 @@ TABLE_TOP_Z = 0.88
 NODE_NAME = "acrambly_top_wing_assembly"
 
 FIXTURE_POSITION = (0.925, -0.05, TABLE_TOP_Z + 0.02)
-FIXTURE_YPR = (pi / 2, 0.0, pi / 2)
+FIXTURE_YPR = (pi / 2 + pi, 0.0, pi / 2)  # Rotate the fixture 180 degrees about world Z
 
 TOP_WING_HOLDER_POSITION = (0.925, 0.343, TABLE_TOP_Z + 0.02)
 TOP_WING_HOLDER_YPR = (pi, 0.0, 0.0)
+TOP_WING_HOLDER_FIXTURE_YPR = (pi - pi / 2, 0.0, 0.0)  # Rotate only the fixture below TopWing by 90 degrees about world Z
 
 BOTTOM_WING_YPR = (0.0, 0.0, 0.0)
 UNDER_BODY_YPR = (pi, pi, 0.0)
@@ -454,7 +455,7 @@ def spawn_fixture_and_holders() -> None:
     # Keep the dedicated TopWing fixture beneath the staged wing.  The
     # separate UnderBody staging support remains omitted.
     spawn_mesh("battat/HolderTopWing.stl",
-               TOP_WING_HOLDER_POSITION, TOP_WING_HOLDER_YPR)
+               TOP_WING_HOLDER_POSITION, TOP_WING_HOLDER_FIXTURE_YPR)
     spawn_mesh("battat/Plane_horizontal_holder_tall.stl",
                FIXTURE_POSITION, FIXTURE_YPR)
     spawn_mesh("battat/HolderBottomWing.stl",
