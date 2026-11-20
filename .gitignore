@@ -207,3 +207,4 @@ random_events/src/random_events_lib/bazel-out
 __pycache__/
 *.py[cod]
 *.mcap
+.mcp.json
