@@ -23,7 +23,7 @@ source "$HOME/.virtualenvs/cram-env/bin/activate"
 uv sync --active
 python scripts/regenerate_all_orm.py
 export AIRCRAFT_FRAME_CONFIGURATION="$PWD/robokudo_acrambly/doc/aircraft_frames.json"
-export AIRCRAFT_MESH_DIRECTORY="$PWD/plane"
+export AIRCRAFT_MESH_DIRECTORY="$PWD/meshes/plane"
 python -m robokudo.scripts.main _ros_pkg robokudo_acrambly _ae scripted_aircraft _headless _tickrate 20
 ```
 
@@ -79,12 +79,12 @@ must match `world_frame`, and its child frame must match `camera_frame`.
 ## Optional native mesh verification
 
 Load the same ROS and Python environment, configure the frame document, then
-explicitly select your mesh directory. The checkout's `plane/` directory is an
+explicitly select your mesh directory. The checkout's `meshes/plane/` directory is an
 example; it is not bundled in the application wheel:
 
 ```bash
 export AIRCRAFT_FRAME_CONFIGURATION="$PWD/robokudo_acrambly/doc/aircraft_frames.json"
-export AIRCRAFT_MESH_DIRECTORY="$PWD/plane"
+export AIRCRAFT_MESH_DIRECTORY="$PWD/meshes/plane"
 python -m robokudo.scripts.main _ros_pkg robokudo_acrambly _ae scripted_aircraft _tickrate 20
 ```
 
@@ -227,7 +227,7 @@ above, run this command instead of the ordinary headless runner:
 
 ```bash
 export AIRCRAFT_FRAME_CONFIGURATION="$PWD/robokudo_acrambly/doc/aircraft_frames.json"
-export AIRCRAFT_MESH_DIRECTORY="$PWD/plane"
+export AIRCRAFT_MESH_DIRECTORY="$PWD/meshes/plane"
 python -m robokudo_acrambly.aircraft_observations.inspection
 ```
 

@@ -10,7 +10,7 @@ are defined.
 
 `robokudo_acrambly.aircraft.models.AircraftModel` is the model inventory. Each
 member's `value` holds its `AircraftLabel`, concrete semantic type, relative
-resource path, and metres per mesh unit. The original `plane/*.stl` files are
+resource path, and metres per mesh unit. The original `meshes/plane/*.stl` files are
 already measured in metres and use scale 1.0.
 
 Construct `AircraftModelCatalog(mesh_directory=...)` with the directory containing

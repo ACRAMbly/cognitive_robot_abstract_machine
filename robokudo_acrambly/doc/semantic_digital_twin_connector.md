@@ -27,7 +27,7 @@ running local world.
 `WorldSynchronizer` transfers accepted changes to another process's world. That
 transfer remains a separate responsibility.
 
-The acceptance scenario uses the 12 named STL parts in `plane/`. Tetris belongs
+The acceptance scenario uses the 12 named STL parts in `meshes/plane/`. Tetris belongs
 to the previous task. This brief supersedes the earlier Tetris connector brief.
 
 ## Application-owned semantics and model resources
@@ -37,18 +37,18 @@ Define aircraft-part semantic annotations in `robokudo_acrambly`, under a common
 
 | Mesh part | Current model resource |
 | --- | --- |
-| BottomWing | `plane/BottomWing.stl` |
-| Chassis | `plane/Chassis.stl` |
-| FrontWheel | `plane/FrontWheel.stl` |
-| MotorGrill | `plane/MotorGrill.stl` |
-| Propeller | `plane/Propeller.stl` |
-| RearWheelLeft | `plane/RearWheelLeft.stl` |
-| RearWheelRight | `plane/RearWheelRight.stl` |
-| RearWing | `plane/RearWing.stl` |
-| TopWing | `plane/TopWing.stl` |
-| UnderBody | `plane/UnderBody.stl` |
-| UpperBody | `plane/UpperBody.stl` |
-| Window | `plane/Window.stl` |
+| BottomWing | `meshes/plane/BottomWing.stl` |
+| Chassis | `meshes/plane/Chassis.stl` |
+| FrontWheel | `meshes/plane/FrontWheel.stl` |
+| MotorGrill | `meshes/plane/MotorGrill.stl` |
+| Propeller | `meshes/plane/Propeller.stl` |
+| RearWheelLeft | `meshes/plane/RearWheelLeft.stl` |
+| RearWheelRight | `meshes/plane/RearWheelRight.stl` |
+| RearWing | `meshes/plane/RearWing.stl` |
+| TopWing | `meshes/plane/TopWing.stl` |
+| UnderBody | `meshes/plane/UnderBody.stl` |
+| UpperBody | `meshes/plane/UpperBody.stl` |
+| Window | `meshes/plane/Window.stl` |
 
 The generic connector accepts a configurable mapping from classification labels
 to semantic annotation types. `robokudo_acrambly` supplies that mapping and the

@@ -2,7 +2,7 @@
 
 The acceptance boundary is the local RoboKudo belief world. Tests exercise the
 public connector and world interfaces; aircraft tests configure the actual
-application model catalog and checked-in `plane/*.stl` resources.
+application model catalog and checked-in `meshes/plane/*.stl` resources.
 
 ## Focused batches
 

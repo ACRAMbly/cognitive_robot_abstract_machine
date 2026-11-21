@@ -21,7 +21,7 @@ This emits a finite sequence of minimal aircraft-part CAS observations. The
 example file explicitly configures world/camera frames and a camera-to-world
 pose; replace it with your application's calibration. Headless emission needs no
 meshes. For optional native mesh verification, configure `AIRCRAFT_MESH_DIRECTORY`
-explicitly (for example, `$PWD/plane`) and omit `_headless`.
+explicitly (for example, `$PWD/meshes/plane`) and omit `_headless`.
 
 - [Aircraft configuration, playback, CAS contract, and optional preview](doc/scripted_aircraft.md)
 - [Aircraft model catalog and separate belief-consumer setup](doc/aircraft_models.md)
