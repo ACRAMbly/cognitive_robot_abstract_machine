@@ -16,12 +16,21 @@ aircraft parts into RoboKudo's local belief world. Each part has one persistent
 belief, body, UUID, semantic annotation, mesh geometry, and accepted pose. These
 survive movement, absence, and reappearance.
 
+Part 1 removes the two rear wheels from the catalog, leaving 10 aircraft parts.
+
+Order of pull requests: PR 13 is merged first, then the Tetris PR gives the
+scripted Tetris blocks typed beliefs the same way
+([prompt](tetris_beliefs_prompt.md)) and is merged, then this work branches
+from `main`. This work moves
+the aircraft engine to the shared world, with no local belief world left for
+it (`docs/adr/0001-accept-beliefs-into-the-shared-robot-world.md`). The Tetris
+engine follows in a later PR of its own.
+
 Goal: Coraplex uses those beliefs while it executes a plan.
 
-Terms: no new glossary term. This document writes out what happens, for example
+Terms: accepted capture, capture time, perception point, and settle time are
+defined in `GLOSSARY.md`. Otherwise this document writes out what happens, for example
 "Coraplex's world, which `WorldSynchronizer` keeps identical with Giskard's".
-The existing terms local belief world, acceptance, and synchronization stay as
-they are.
 
 ## How the worlds relate today
 
@@ -81,6 +90,30 @@ and applies them at moments it chooses.
     itself, so both processes would write the same pose.
   - Queries take about 10 s each (`acrambly/sub_parts/real/cube_perception.py:85-87`).
 
+### Why not keep RoboKudo's local belief world and query it
+
+CRAM usually keeps two worlds: RoboKudo's local belief world, and one world
+that Coraplex and Giskard share. Coraplex queries RoboKudo at a `DetectAction`,
+and `Detection.apply_to` moves the part in the shared world. The cube and
+Tetris tasks in `acrambly/sub_parts/real/` work this way. For the aircraft
+parts this setup has two drawbacks:
+
+1. **The query answers from the current frame, not from beliefs.**
+   `GenerateQueryResult` (`robokudo/src/robokudo/annotators/query.py:283`)
+   reports the current frame's object hypotheses. So PR 13's persistence, where
+   a part that is out of view keeps its belief, goes unused, unless
+   `robokudo_acrambly` adds a step that answers queries from beliefs.
+2. **Each part has two identities.** Coraplex creates the parts itself from
+   `AircraftModelCatalog`, so each part has a belief UUID in RoboKudo and a
+   separate UUID in Coraplex, with nothing linking them. `Detection` matches by
+   type only (`coraplex/src/coraplex/perception.py:141`). This works while every
+   kind exists once, but fails with `AmbiguousDetection` once several copies of
+   one kind come in, such as bolts and nuts. Fixing that needs a UUID field on
+   `Detection`, which is a `coraplex/` change.
+
+With one shared world, the belief UUID is the part's only identity in every
+process, and parts that are out of view stay in the world.
+
 ### What already exists
 
 - `fetch_world_from_service`, `FetchWorldServer`, and `WorldSynchronizer` in
@@ -122,8 +155,10 @@ timestamp, so Coraplex cannot tell how old a pose in the shared world is.
    aircraft observation in the RoboKudo world. Assert that the receiving world
    has the same UUIDs, types, and poses. A second test holds back updates on
    the receiving side and asserts the world is unchanged until
-   `apply_missed_messages()` runs. A third test asserts that the receiving
-   world can read the capture time of the accepted observation (step 6).
+   `apply_missed_messages()` runs. A third test asserts that the receiver
+   records the accepted capture's time and belief UUIDs, and that
+   `has_applied` on its stream position is true only after the receiving world
+   applied the poses (step 6).
 2. **RoboKudo starts from the shared world.** Where the aircraft engine starts
    up (for example `AircraftBeliefInspection.__enter__` in
    `aircraft_observations/inspection.py`), before the pipeline runs:
@@ -139,29 +174,49 @@ timestamp, so Coraplex cannot tell how old a pose in the shared world is.
      `robokudo/src/robokudo/io/cas_view_codecs.py:526` read.
    - Never call a clearing function once the synchronizer is attached (see
      risks).
-3. **Point the aircraft world frame at the shared root.** In
-   `aircraft_frames.json`, change `world_frame` from `aircraft_world` to the
-   shared root's name, e.g. `map`.
-   - The aircraft engine
-     (`robokudo_acrambly/src/robokudo_acrambly/descriptors/analysis_engines/scripted_aircraft.py:99-107`)
-     adds a missing world frame under the existing root with a
-     `FixedConnection`, so `aircraft_world` would not become a second root.
-     Using `map` keeps an extra frame from being published to Giskard.
+3. **The aircraft world frame is the fetched world's root.** The aircraft
+   engine takes its world frame from the root of the fetched world at startup,
+   and `world_frame` is removed from `aircraft_frames.json`. Tracy's Giskard
+   world has the root `map2`
+   (`giskardpy/src/giskardpy/middleware/ros2/scripts/iai_robots/tracy/configs.py:54`),
+   Giskard's generic default is `map`, and the stand-in world server (step 4)
+   uses `map`; none of them needs a configuration change.
+   - No extra world frame is added under the root, so none is published to
+     Giskard.
    - The synthetic source keeps `aircraft_camera`; its scripted calibration is
      independent of the robot's camera link.
 4. **Serve a world for the synthetic target.** Coraplex only fetches and syncs
    in REAL mode. For simulation, a process has to serve the world
    (`FetchWorldServer`): Giskard or a stand-in, and Coraplex fetches from it
-   even though no real robot is involved.
+   even though no real robot is involved. Since the aircraft engine always
+   fetches its world, the stand-in is also what the inspection tool and a
+   hand-run of the synthetic engine fetch from. In this PR it lives in
+   `acrambly_temp/`, which stands in for `acrambly/` until the demo work moves
+   it there. It builds a world with the root `map`, serves it, and attaches its
+   own `WorldSynchronizer`, so a process that fetches later gets the parts
+   already accepted.
 5. **Coraplex holds back updates.** The demo script creates its
    `WorldSynchronizer` with `defer_incoming_updates=True` and calls
    `apply_missed_messages()` between plans.
-6. **The capture time reaches Coraplex.** Each accepted aircraft observation
-   carries its capture time into the shared world, for example as a field on
-   the aircraft annotation, so Coraplex can tell a fresh pose from an old one.
-   Not yet checked: whether `WorldSynchronizer` publishes a changed annotation
-   field. If it does not, RoboKudo publishes a small "capture at T accepted,
-   parts seen: …" message instead.
+6. **The capture time reaches Coraplex.** After each accepted capture,
+   RoboKudo publishes a small message on its own topic: the capture time, the
+   belief UUIDs of the parts accepted in it, and the position of RoboKudo's
+   `WorldSynchronizer` stream after their poses were published
+   (`StreamPosition`, `latest_published_position`). The receiver trusts the
+   capture only once `has_applied(position)` is true, so the message can never
+   be used before its poses are applied. The capture time is not written into
+   the world (`docs/adr/0004-publish-capture-times-beside-the-world.md`).
+   - The message is an `AcceptedCapture` dataclass, sent as `std_msgs/String`
+     holding JSON from `DataclassJSONSerializer`, the transport
+     `WorldSynchronizer` uses. No new ROS interface package.
+   - A publishing annotator after the connector in the aircraft pipeline finds
+     the beliefs accepted in this capture: those whose latest hypothesis is one
+     of the current CAS's object hypotheses. It shares the synchronizer's node.
+   - A receiver class records the newest accepted capture per part UUID (time
+     and stream position), with no history. The topic uses volatile QoS; a
+     process that starts late waits for the next capture.
+   - The message, the publisher and the receiver live in `robokudo_acrambly`;
+     the Coraplex demo imports the receiver in part 2 (step 10).
 7. **Split each task into plans at its perception points.** The demo script
    runs the plans one after another and, between two of them, does what
    [Perception points between plans](#perception-points-between-plans)
@@ -198,11 +253,12 @@ work.
 |---|---|
 | 1 | tests: two synchronized worlds, held-back updates, capture time readable on the receiving side |
 | 2 | RoboKudo fetches the shared world, sets up the tracker, attaches the synchronizer |
-| 3 | `world_frame` points at the shared root |
-| 4 | world server for the synthetic target |
-| 6 | capture time reaches the receiving world, including the open check whether `WorldSynchronizer` publishes a changed annotation field |
+| 3 | the aircraft world frame is the fetched world's root; `world_frame` leaves `aircraft_frames.json` |
+| 4 | stand-in world server for the synthetic target, in `acrambly_temp/` |
+| 6 | capture message (time, accepted UUIDs, stream position) published per accepted capture and readable on the receiving side |
 
-Done when a second process with `defer_incoming_updates=True` receives the 12
+Done when a receiving world with its own `WorldSynchronizer` and
+`defer_incoming_updates=True` (in the same pytest process) receives the 10
 parts with the right UUIDs, types, poses and capture times, and sees them only
 after `apply_missed_messages()`.
 
@@ -230,17 +286,15 @@ after `apply_missed_messages()`.
   general so the Coraplex plan does not force a rewrite.
 - These open questions stay open until part 2: belief vs the robot's own
   action, two writers on one part, and when to skip the wait.
-- The two rear wheels question is a catalog change inside
-  `robokudo_acrambly`. Decide it before part 1's tests are written, so they do
-  not have to be rewritten.
 - With `/add-plan-item`, this becomes two items, part 2 depending on part 1.
 
 ## Changes
 
 | Directory | Change | Size |
 |---|---|---|
-| `robokudo_acrambly/` | fetch, switch world, tracker, synchronizer; `world_frame`; capture time on accepted observations; gate on the real analysis engine | small-medium |
-| `acrambly/` (**outside**) | demo, world server for simulation, deferral flag and apply calls; tasks split into plans at perception points; trigger, wait and timeout between plans | small-medium |
+| `robokudo_acrambly/` | fetch, switch world, tracker, synchronizer; `world_frame`; capture message per accepted capture; gate on the real analysis engine | small-medium |
+| `acrambly_temp/` (new) | stand-in world server for simulation, in place of `acrambly/` for this PR | small |
+| `acrambly/` (**outside**) | demo, deferral flag and apply calls; tasks split into plans at perception points; trigger, wait and timeout between plans | small-medium |
 | `test/robokudo_acrambly_test/` (**outside**) | synchronization and capture-time tests | small |
 | `coraplex/` | none, as long as every perception point falls between plans | none |
 | `robokudo/` | none for the synthetic target | none |
@@ -334,7 +388,7 @@ Rules:
   never hangs.
 - **Skip the wait** when nothing relevant changed since the last accepted
   capture: the robot did not touch the part and the camera did not move.
-- **Wait only for the parts the next plan needs**, not all 12.
+- **Wait only for the parts the next plan needs**, not all 10.
 - Splitting plans does not solve the two-writers problem: a part held across a
   plan boundary is still overwritten by RoboKudo's next pose when the updates
   are applied.
@@ -370,6 +424,13 @@ persistent hypotheses, which does not exist yet
 
 ## Risk
 
+**A new part aborts a running Giskard motion.** Giskard raises
+`WorldModelModifiedDuringMotionError` when a model change is waiting during a
+motion (`giskardpy/src/giskardpy/middleware/ros2/control_loop.py:110-121`).
+Pose updates are state changes and do not trigger it, but the first acceptance
+of a part adds a body, which is a model change. With a gated pipeline that
+captures only between plans this does not happen during a motion.
+
 **Clearing would wipe the robot's world.** `unsafe_clear_world`
 (`robokudo/src/robokudo/world.py:153`) empties the world. With a synchronizer
 attached, the removal is published, and Coraplex applies it at its next chosen
@@ -381,23 +442,6 @@ moment.
   happen in normal use.
 - Step 2 installs the fetched world with `set_world` and
   `init_world_entity_tracker_from_world` and never takes that path.
-
-## The two rear wheels
-
-The aircraft has two identical rear wheels. The catalog has two kinds,
-`RearWheelLeft` and `RearWheelRight`, whose meshes differ by 3 mm in width
-(26 mm vs 29 mm, measured with trimesh), which a camera can't reliably tell
-apart. PR 13 never lets one kind match a belief of another kind, so a single
-mislabel produces a wrong or duplicate belief.
-
-In this approach each wheel is its own body with its own belief UUID, and
-RoboKudo's one-to-one matching keeps them apart by position. The plan picks a
-wheel from `get_semantic_annotations_by_type(RearWheel)`; with identical wheels
-either one fits.
-
-Still a risk: if the robot moves one wheel far, its match falls below
-`confidence_threshold` (default `0.05`) and RoboKudo creates a third wheel
-belief. The fix must use the robot's own record of where it put the wheel.
 
 ## Open questions
 
@@ -433,19 +477,41 @@ connector in a RoboKudo process, Coraplex in simulation in a second process
 over ROS), then the real robot with Giskard. The real robot depends on the
 camera-link con and the clearing risk being resolved.
 
-### The two rear wheels: one kind or two?
+### Decided in the planning session (2026-11-21)
 
-- (a) One kind, `RearWheel`, with two physical copies. "Left" and "right"
-  become where each wheel goes in the assembly, which the plan decides later.
-- (b) Keep `RearWheelLeft` and `RearWheelRight`, and trust perception to tell
-  them apart.
+- **Order and branches:** PR 13 is merged, then the Tetris PR (built like PR
+  13) is merged, then the Coraplex PR branches from `main`. Its plan documents
+  are written now on PR 13's branch; the user saves them and removes the
+  planning commits from PR 13 before merging it. Line numbers cited here were
+  read before the Tetris PR and must be checked again.
+- **Scope:** this work covers the aircraft engine only. The Tetris engine
+  moves to the shared world in a later PR.
+- **World frame:** the fetched world's root (step 3).
+- **Stand-in world server:** in `acrambly_temp/`, root `map`, with its own
+  synchronizer (step 4).
+- **Tests:** synchronization tests run in one pytest process with
+  `rclpy_node`. The engine depends on an abstract world source: production
+  fetches from the service, and the existing tests get a world with root `map`
+  through one shared fixture, their bodies unchanged.
+- **Inspection with no world server:** start the stand-in first; after a
+  timeout, inspection raises a custom exception naming the stand-in script.
+- **Rear wheels:** removed from the perception catalog and its tests only.
+  Every STL, IPT and mesh-report file stays for the assembly side.
+- **Glossary:** capture time, perception point and settle time.
+- **No local mode:** chosen to keep the code base clean (ADR 0001).
+- **Capture time:** an `AcceptedCapture` message per accepted capture with the
+  capture time, the accepted belief UUIDs and the stream position after their
+  poses; `std_msgs/String` with `DataclassJSONSerializer` JSON; publisher and
+  receiver in `robokudo_acrambly`; the receiver keeps the newest capture per
+  part, volatile QoS (step 6, ADR 0004).
+- **12 parts to 10:** the current docs change (`aircraft_models.md`,
+  `semantic_digital_twin_connector.md`, `scripted_aircraft.md`,
+  `aircraft_belief_verification.md`); the discussion record and PR 13's spec,
+  tickets and PR text stay as records.
 
-Recommendation: (a). It changes PR 13's catalog and types in
-`robokudo_acrambly/aircraft/` (inside) and brings back the two-copies test
-that PR 13's spec left out.
+### Where the plan lives
 
-### Permission to write the plan outside `robokudo_acrambly`
-
-Proposal: `.scratch/coraplex-belief-consumption/` with `spec.md`, `map.md`, and
-tickets; `GLOSSARY.md` or `docs/adr/0004-…` only if a decision really needs it.
-Documents only. Not yet granted.
+Part 1's [spec](../../.scratch/coraplex-belief-consumption/spec.md),
+[map](../../.scratch/coraplex-belief-consumption/map.md) and tickets are in
+`.scratch/coraplex-belief-consumption/`. Documents need no permission in any
+directory.
