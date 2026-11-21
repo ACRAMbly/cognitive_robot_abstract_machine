@@ -31,6 +31,22 @@ _Avoid_: Object hypothesis, detection
 The world of object beliefs RoboKudo maintains on its own from accepted
 observations, not shared with other processes.
 
+**Capture time**:
+The moment the camera took an observation, not the moment RoboKudo accepted it.
+_Avoid_: Timestamp, acceptance time
+
+**Accepted capture**:
+A capture from which RoboKudo accepted at least one observation into the shared
+robot world.
+
+**Perception point**:
+A point in a task where the next motion needs a part's current pose, such as
+before a grasp.
+
+**Settle time**:
+The moment the motion before a perception point has ended, so that a capture
+taken afterwards shows the robot and camera at rest.
+
 **Motion pause**:
 An interval in a scenario during which block poses remain unchanged and
 observations continue.
