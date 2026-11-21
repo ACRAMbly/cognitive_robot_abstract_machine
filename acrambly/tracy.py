@@ -1,118 +1,118 @@
 """
-Tracy Unified Task Runner
-==========================
-Single entry-point for all Tracy tasks on both real and simulated robots.
+Tracy Unified Task Runner.
 
-::
-
-    tracy.py                        ← unified orchestrator (this file)
-    ├── sub_parts/
-    │   ├── real/                   ← real-robot tasks (RoboKudo, Giskard)
-    │   │   ├── task_cubes.py
-    │   │   └── cube_perception.py
-    │   ├── sim/                    ← simulation tasks (hardcoded, RViz2)
-    │   │   └── task_cubes.py
-    │   └── shared/                ← environment-agnostic tasks & plans
-    │       ├── available_plans.py
-    │       └── task_park_arms.py
-
-Usage
------
-    python tracy.py --env sim  --task cubes       # RViz2 simulation
-    python tracy.py --env real --task cubes       # Real robot through Giskard
-    python tracy.py --env real --task park_arms
-    python tracy.py --env sim --task hand_over
-    python tracy.py --env sim --task hand_over2     # right-to-left handover
-    python tracy.py --env real --task hand_over2
+Tasks are imported lazily so an unused legacy task cannot prevent
+another task from running.
 """
 
 import logging
 import threading
+
 from typing import Annotated, Callable, Literal
 
 import rclpy
 import typer
 
-# --- real-robot imports ---
-from coraplex.alternative_motion_mappings.tracy_motion_mapping import (
-    TracyRealMoveGripperMotion,
-)
-from coraplex.datastructures.dataclasses import Context  # noqa: E402
-from coraplex.execution_environment import real_robot, simulated_robot
-from coraplex.plans.plan import Plan
 from rclpy.node import Node
 
-# --- simulation imports ---
+from coraplex.datastructures.dataclasses import Context
+from coraplex.execution_environment import (
+    real_robot,
+    kinematically_simulated_robot,
+)
+from coraplex.plans.plan import Plan
+
 from semantic_digital_twin.adapters.ros.visualization.viz_marker import (
     VizMarkerPublisher,
 )
-from semantic_digital_twin.adapters.ros.world_fetcher import fetch_world_from_service
-from semantic_digital_twin.adapters.ros.world_synchronizer import WorldSynchronizer
+from semantic_digital_twin.adapters.ros.world_fetcher import (
+    fetch_world_from_service,
+)
+from semantic_digital_twin.adapters.ros.world_synchronizer import (
+    WorldSynchronizer,
+)
 from semantic_digital_twin.adapters.urdf import URDFParser
+
 from semantic_digital_twin.robots.robot_parts import AbstractRobot
 from semantic_digital_twin.robots.tracy import Tracy
 from semantic_digital_twin.world import World
 
-# --- task imports ---
-from sub_parts.real.task_cubes import setup_and_build_plan as cubes_real_task
-from sub_parts.shared.task_park_arms import setup_and_build_plan as park_arms_task
-from sub_parts.sim.task_cubes import setup_and_build_plan as cubes_sim_task
-from sub_parts.sim.task_tetris import setup_and_build_plan as task_tetris_task
-from sub_parts.real.task_hand_over2 import setup_and_build_plan as hand_over2_real_task
-from sub_parts.sim.task_hand_over2 import setup_and_build_plan as hand_over2_sim_task
 
-# Enable runtime action logging (fires only during actual robot execution)
-logging.getLogger("coraplex.plans.executables").setLevel(logging.INFO)
-
-# ---------------------------------------------------------------------------
-# Task registry – maps (task_name, env) → factory
-# ---------------------------------------------------------------------------
-TaskFactory = Callable[[object, object, Context, Node], Plan | None]
-
-TASKS: dict[tuple[str, str], TaskFactory] = {
-    ("cubes", "real"): cubes_real_task,
-    ("cubes", "sim"): cubes_sim_task,
-    ("park_arms", "real"): park_arms_task,
-    ("park_arms", "sim"): park_arms_task,
-    ("task_tetris", "sim"): task_tetris_task,
-    ("task_tetris", "real"): task_tetris_task,
-    ("hand_over2", "sim"): hand_over2_sim_task,
-    ("hand_over2", "real"): hand_over2_real_task,
-}
+logging.getLogger(
+    "coraplex.plans.executables"
+).setLevel(logging.INFO)
 
 
-# ---------------------------------------------------------------------------
-# Environment setup functions
-# ---------------------------------------------------------------------------
-def setup_real(node: Node) -> tuple[World, object, Context]:
-    """Fetch the live world from Giskard and create a real-robot context."""
+TaskFactory = Callable[
+    [object, object, Context, Node],
+    Plan | None,
+]
+
+
+# ---------------------------------------------------------------------
+# Environment setup
+# ---------------------------------------------------------------------
+
+def setup_real(node: Node):
+    """Fetch the live robot world and create its execution context."""
+
+    # Import real-robot mappings only when the real environment is used.
+    from coraplex.alternative_motion_mappings.tracy_motion_mapping import (
+        TracyRealMoveGripperMotion,
+    )
+
     print("Getting live world from Giskard...")
-    world = fetch_world_from_service(node, timeout_seconds=300)
-    print(f"World received with {len(list(world.bodies))} bodies.")
-    WorldSynchronizer(_world=world, node=node)
-    print("Synchronized.")
 
-    print("Building Tracy semantic robot from giskard world...")
-    tracy = world.get_semantic_annotations_by_type(AbstractRobot)[0]
+    world = fetch_world_from_service(
+        node,
+        timeout_seconds=300,
+    )
+
+    print(
+        f"World received with {len(list(world.bodies))} bodies."
+    )
+
+    WorldSynchronizer(
+        _world=world,
+        node=node,
+    )
+
+    print("Synchronized.")
+    print("Building Tracy semantic robot...")
+
+    tracy = world.get_semantic_annotations_by_type(
+        AbstractRobot
+    )[0]
 
     context = Context(
         world=world,
         robot=tracy,
         ros_node=node,
-        alternative_motion_mappings=[TracyRealMoveGripperMotion],
+        alternative_motion_mappings=[
+            TracyRealMoveGripperMotion
+        ],
         evaluate_conditions=False,
     )
+
     return world, tracy, context
 
 
-def setup_sim(node: Node) -> tuple[World, object, Context]:
-    """Build a fresh Tracy world from URDF and create a simulation context."""
+def setup_sim(node: Node):
+    """Build a fresh Tracy simulation world from its URDF."""
+
     print("Building simulation world from Tracy URDF...")
-    world: World = URDFParser.from_file(Tracy.get_ros_file_path()).parse()
 
-    VizMarkerPublisher(_world=world, node=node).with_tf_publisher()
+    world: World = URDFParser.from_file(
+        Tracy.get_ros_file_path()
+    ).parse()
 
-    print("Building Tracy semantic robot from simulation world...")
+    VizMarkerPublisher(
+        _world=world,
+        node=node,
+    )
+
+    print("Building Tracy semantic robot...")
+
     tracy = Tracy.from_world(world)
 
     context = Context(
@@ -120,66 +120,196 @@ def setup_sim(node: Node) -> tuple[World, object, Context]:
         robot=tracy,
         evaluate_conditions=False,
     )
+
     return world, tracy, context
 
 
-# ---------------------------------------------------------------------------
-# Main orchestrator
-# ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------
+# Lazy task factory loader
+# ---------------------------------------------------------------------
+
+def get_task_factory(
+    task: str,
+    env: str,
+) -> TaskFactory | None:
+    """
+    Import only the requested task.
+
+    This prevents unrelated legacy task modules from breaking startup.
+    """
+
+    if task == "hand_over2" and env == "sim":
+        from sub_parts.sim.task_hand_over2 import (
+            setup_and_build_plan,
+        )
+
+        return setup_and_build_plan
+
+    if task == "hand_over2" and env == "real":
+        from sub_parts.real.task_hand_over2 import (
+            setup_and_build_plan,
+        )
+
+        return setup_and_build_plan
+
+    if task == "park_arms":
+        from sub_parts.shared.task_park_arms import (
+            setup_and_build_plan,
+        )
+
+        return setup_and_build_plan
+
+    if task == "cubes" and env == "sim":
+        from sub_parts.sim.task_cubes import (
+            setup_and_build_plan,
+        )
+
+        return setup_and_build_plan
+
+    if task == "cubes" and env == "real":
+        from sub_parts.real.task_cubes import (
+            setup_and_build_plan,
+        )
+
+        return setup_and_build_plan
+
+    if task == "task_tetris" and env == "sim":
+        from sub_parts.sim.task_tetris import (
+            setup_and_build_plan,
+        )
+
+        return setup_and_build_plan
+
+    return None
+
+
+# ---------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------
+
 def main(
-    env: Annotated[Literal["real", "sim"], typer.Option("--env", "-e")],
-    task: Annotated[Literal["park_arms", "cubes", "hand_over2", "task_tetris"], typer.Option("--task", "-t")],
+    env: Annotated[
+        Literal["real", "sim"],
+        typer.Option("--env", "-e"),
+    ],
+    task: Annotated[
+        Literal[
+            "park_arms",
+            "cubes",
+            "hand_over2",
+            "task_tetris",
+        ],
+        typer.Option("--task", "-t"),
+    ],
 ):
+
     rclpy.init()
 
-    node: Node = rclpy.create_node("coraplex_task_runner")
+    node: Node = rclpy.create_node(
+        "coraplex_task_runner"
+    )
 
     spinner = threading.Thread(
         target=rclpy.spin,
         args=(node,),
         daemon=True,
     )
+
     spinner.start()
 
-    # ---- env-specific setup ----
-    world, tracy, context = setup_real(node) if env == "real" else setup_sim(node)
-
-    # ---- task-specific ----
-    task_key = (task, env)
-    print(f"Executing task '{task}' on environment '{env}'.")
-
-    if task_key not in TASKS:
-        print(f"Unknown task '{task}' for environment '{env}'.")
-        print(f"Available: {list(TASKS.keys())}")
-        return
-
-    plan = TASKS[task_key](world, tracy, context, node)
-
-    if plan is None:
-        print("No valid plan could be generated. Exiting.")
-        return
-
-    # ---- execution ----
-    execution_env = real_robot if env == "real" else simulated_robot
-    env_label = "REAL" if env == "real" else "SIMULATED"
-
-    print(f"Executing Plan on {env_label} robot...")
-
-    if env == "real":
-        print("Keep E-stop reachable.")
-
     try:
+        # ---------------------------------------------------------
+        # Environment setup
+        # ---------------------------------------------------------
+
+        if env == "real":
+            world, tracy, context = setup_real(node)
+            execution_env = real_robot
+            env_label = "REAL"
+
+        else:
+            world, tracy, context = setup_sim(node)
+            execution_env = kinematically_simulated_robot
+            env_label = "KINEMATICALLY SIMULATED"
+
+        # ---------------------------------------------------------
+        # Load only the requested task
+        # ---------------------------------------------------------
+
+        print(
+            f"Loading task '{task}' "
+            f"for environment '{env}'..."
+        )
+
+        task_factory = get_task_factory(
+            task,
+            env,
+        )
+
+        if task_factory is None:
+            print(
+                f"Task '{task}' is not implemented "
+                f"for environment '{env}'."
+            )
+            return
+
+        # ---------------------------------------------------------
+        # Build plan
+        # ---------------------------------------------------------
+
+        print(
+            f"Building plan for '{task}'..."
+        )
+
+        plan = task_factory(
+            world,
+            tracy,
+            context,
+            node,
+        )
+
+        if plan is None:
+            print(
+                "No valid plan could be generated."
+            )
+            return
+
+        # ---------------------------------------------------------
+        # Execute
+        # ---------------------------------------------------------
+
+        print(
+            f"Executing plan on {env_label} robot..."
+        )
+
+        if env == "real":
+            print(
+                "Keep the emergency stop reachable."
+            )
+
         with execution_env:
             plan.perform()
-            print("Plan completed.")
 
-            # TODO: make it work
-            for i in world.bodies:
-                if "None" in str(i.name):
-                    i.remove_from_world()
+        print("Plan completed successfully.")
 
-    except Exception as e:
-        print(f"Error during plan execution: {e}")
+        # Remove unnamed temporary bodies.
+        for body in list(world.bodies):
+            if "None" in str(body.name):
+                body.remove_from_world()
+
+    except KeyboardInterrupt:
+        print("\nExecution interrupted.")
+
+    except Exception:
+        logging.exception(
+            "Task execution failed."
+        )
+        raise
+
+    finally:
+        if rclpy.ok():
+            node.destroy_node()
+            rclpy.shutdown()
 
 
 if __name__ == "__main__":
