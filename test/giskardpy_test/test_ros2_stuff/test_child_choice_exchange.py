@@ -44,7 +44,7 @@ from giskardpy.middleware.ros2.world_updates import (
     ClientWorldUpdates,
     OutgoingWorldUpdates,
 )
-from semantic_digital_twin.adapters.ros.messages import MetaData, StreamPosition
+from krrood_synchronization.messages import MessageOrigin, Sender, StreamPosition
 from semantic_digital_twin.world import World
 
 from .test_client_presence import SteppingClock
@@ -357,6 +357,10 @@ class ClientAndRunningStatechart:
     """
 
     def __post_init__(self) -> None:
+        """
+        Wire the chooser that takes the client's choices into the running statechart,
+        and connect the feedback to the action server mimic.
+        """
         self.receiving_chooser = ChildSentByClient(
             world_updates=self.world_updates, action_server=self.action_server
         )
@@ -384,7 +388,8 @@ class ClientAndRunningStatechart:
             child_chooser_access=ChildChooserAccess(choosers=[self.client_chooser]),
             world_updates=self.client_world_updates,
             required_position=StreamPosition(
-                origin=MetaData(node_name="client", process_id=0), sequence_number=1
+                origin=MessageOrigin(sender=Sender(node_name="client", process_id=0)),
+                sequence_number=1,
             ),
         )
 
@@ -681,9 +686,14 @@ def test_the_running_side_asks_again_only_once_the_repeat_period_passed(
 # %% the statechart rebuilt from the feedback
 
 
-def test_the_statechart_rebuilt_from_the_feedback_holds_the_children_that_joined(
-    exchange: ClientAndRunningStatechart,
-) -> None:
+def statechart_rebuilt_from_the_feedback(
+    *, exchange: ClientAndRunningStatechart
+) -> Statechart:
+    """
+    Reports the structure, lets both nodes take their child and reports again.
+
+    :return: The statechart rebuilt from every feedback sent.
+    """
     exchange.feedback_publisher.publish_structure()
     exchange.let_both_nodes_be_answered_before_any_choice_is_taken()
     exchange.executor.tick()
@@ -693,9 +703,37 @@ def test_the_statechart_rebuilt_from_the_feedback_holds_the_children_that_joined
     reported_statechart = ReportedStatechart()
     for message in exchange.action_server.sent_feedback:
         reported_statechart.take_over(payload=json.loads(message.feedback))
+    return reported_statechart.statechart
 
-    assert [node.name for node in reported_statechart.statechart.nodes] == [
+
+def test_the_statechart_rebuilt_from_the_feedback_holds_the_children_that_joined(
+    exchange: ClientAndRunningStatechart,
+) -> None:
+    """
+    The children both nodes took join the rebuilt statechart in the same order.
+    """
+    rebuilt_statechart = statechart_rebuilt_from_the_feedback(exchange=exchange)
+
+    assert [node.name for node in rebuilt_statechart.nodes] == [
         node.name for node in exchange.running.statechart.nodes
+    ]
+
+
+def test_the_statechart_rebuilt_from_the_feedback_reads_the_conditions_of_the_running_one(
+    exchange: ClientAndRunningStatechart,
+) -> None:
+    """
+    Taking a child also changes the conditions of nodes that joined before it, such as
+    the node that took it.
+    """
+    rebuilt_statechart = statechart_rebuilt_from_the_feedback(exchange=exchange)
+
+    assert [
+        [str(condition) for condition in node.conditions]
+        for node in rebuilt_statechart.nodes
+    ] == [
+        [str(condition) for condition in node.conditions]
+        for node in exchange.running.statechart.nodes
     ]
 
 
