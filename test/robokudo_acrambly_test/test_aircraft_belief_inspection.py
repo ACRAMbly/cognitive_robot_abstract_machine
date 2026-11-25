@@ -106,7 +106,7 @@ def test_finished_inspection_keeps_annotator_controls_responsive(
     )
     scene_ticks = geometry_backend.viewer3d.event_ticks
     key_polls = native_key_events.call_count
-    source, connector = inspection.pipeline.get_annotators()
+    source, connector, _ = inspection.pipeline.get_annotators()
 
     image_backend.handle_keycallback(DesktopKey.NEXT_ANNOTATOR)
     inspection.tick()

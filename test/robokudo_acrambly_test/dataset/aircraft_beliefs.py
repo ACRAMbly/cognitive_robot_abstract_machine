@@ -6,6 +6,7 @@ from dataclasses import dataclass
 
 from py_trees.common import Status
 
+from robokudo.annotators.core import ThreadedAnnotator
 from robokudo.pipeline import Pipeline
 
 # %% Completed pipeline captures
@@ -18,7 +19,7 @@ class AircraftBeliefCapture:
     """
 
     pipeline: Pipeline
-    """Aircraft pipeline with its observation source followed by the connector."""
+    """Aircraft pipeline with its observation source, connector and publishers."""
 
     def complete(self) -> None:
         """
@@ -27,6 +28,10 @@ class AircraftBeliefCapture:
         self.pipeline.tick_once()
         if self.pipeline.status is not Status.RUNNING:
             return
-        connector = self.pipeline.get_annotators()[-1]
+        connector = next(
+            annotator
+            for annotator in self.pipeline.get_annotators()
+            if isinstance(annotator, ThreadedAnnotator)
+        )
         connector.compute_worker_thread.join()
         self.pipeline.tick_once()

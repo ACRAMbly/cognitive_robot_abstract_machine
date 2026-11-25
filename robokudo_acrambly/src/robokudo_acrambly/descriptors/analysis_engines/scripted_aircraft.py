@@ -26,7 +26,9 @@ from robokudo_acrambly.annotators.aircraft_observation import (
     AircraftObservationLabel,
 )
 from robokudo_acrambly.playback.clock import SystemClock
+from robokudo_acrambly.shared_world.accepted_capture import AcceptedCapturePublisher
 from robokudo_acrambly.shared_world.world_source import WorldServerSource
+from semantic_digital_twin.adapters.ros.world_synchronizer import WorldSynchronizer
 
 if TYPE_CHECKING:
     from robokudo_acrambly.aircraft_observations.scenario import AircraftFrames
@@ -97,7 +99,7 @@ class AnalysisEngine(AnalysisEngineInterface):
         }
         descriptor.parameters.model_geometry = catalog.models
 
-        self.world_source.install()
+        robot_world = self.world_source.install()
 
         pipeline = Pipeline(self.name())
         pipeline.add_child(
@@ -109,4 +111,6 @@ class AnalysisEngine(AnalysisEngineInterface):
             )
         )
         pipeline.add_child(SemanticDigitalTwinConnector(descriptor=descriptor))
+        if WorldSynchronizer.all_callbacks_of_this_type_from_world(robot_world):
+            pipeline.add_child(AcceptedCapturePublisher())
         return pipeline
