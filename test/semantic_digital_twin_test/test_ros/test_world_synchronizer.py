@@ -63,7 +63,7 @@ from semantic_digital_twin.semantic_annotations.semantic_annotations import (
     Fridge,
     Drawer,
 )
-from semantic_digital_twin.spatial_types import Vector3
+from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix, Vector3
 from semantic_digital_twin.world import World
 from semantic_digital_twin.world_description.connections import (
     Connection6DoF,
@@ -3139,3 +3139,115 @@ def test_a_split_part_and_its_rollback_reach_a_synchronized_world(rclpy_node):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def test_a_body_placed_inside_its_modification_reaches_another_world_at_that_place(
+    rclpy_node,
+):
+    """
+    A movable body added and placed within one modification reaches a synchronized world
+    at that place, with no position arriving before the degrees of freedom it sets.
+    """
+    publisher_world = World()
+    receiver_world = World()
+    root = Body(name=PrefixedName("root"))
+    with publisher_world.modify_world():
+        publisher_world.add_body(root)
+    with receiver_world.modify_world():
+        receiver_world.add_body(deepcopy_body_with_id(root))
+    publisher_synchronizer = WorldSynchronizer(node=rclpy_node, _world=publisher_world)
+    receiver_synchronizer = WorldSynchronizer(node=rclpy_node, _world=receiver_world)
+    try:
+        placed_body = Body(name=PrefixedName("placed_inside_modification_body"))
+        with publisher_world.modify_world():
+            connection = Connection6DoF.create_with_dofs(
+                parent=root, child=placed_body, world=publisher_world
+            )
+            publisher_world.add_connection(connection)
+            connection.origin = HomogeneousTransformationMatrix.from_xyz_rpy(
+                x=1.0, y=2.0, z=3.0, yaw=0.5, reference_frame=root
+            )
+
+        assert wait_for_condition(
+            lambda: receiver_synchronizer.has_applied(
+                publisher_synchronizer.latest_published_position
+            )
+        ), "the receiver never applied the modification"
+        received_body = receiver_world.get_kinematic_structure_entity_by_id(
+            placed_body.id
+        )
+        np.testing.assert_array_almost_equal(
+            received_body.global_transform.to_np(),
+            placed_body.global_transform.to_np(),
+        )
+    finally:
+        publisher_synchronizer.close()
+        receiver_synchronizer.close()
+
+
+def deepcopy_body_with_id(body: Body) -> Body:
+    """
+    A detached body with the same name and UUID, as a fetched world would hold it.
+    """
+    return Body(name=body.name, id=body.id)
+
+
+def test_updates_published_while_a_receiver_is_busy_are_not_lost(rclpy_node):
+    """
+    Only what changed is published, so an update that is lost while the receiver is busy
+    applying another one leaves a degree of freedom that does not move again stale for
+    good.
+    """
+    publisher_world = World()
+    receiver_world = World()
+    root = Body(name=PrefixedName("busy_receiver_root"))
+    with publisher_world.modify_world():
+        publisher_world.add_body(root)
+    with receiver_world.modify_world():
+        receiver_world.add_body(deepcopy_body_with_id(root))
+    publisher_synchronizer = WorldSynchronizer(node=rclpy_node, _world=publisher_world)
+    receiver_synchronizer = WorldSynchronizer(node=rclpy_node, _world=receiver_world)
+    try:
+        moved_once_body = Body(name=PrefixedName("busy_receiver_moved_once"))
+        moving_body = Body(name=PrefixedName("busy_receiver_moving"))
+        with publisher_world.modify_world():
+            moved_once = Connection6DoF.create_with_dofs(
+                parent=root, child=moved_once_body, world=publisher_world
+            )
+            publisher_world.add_connection(moved_once)
+            moving = Connection6DoF.create_with_dofs(
+                parent=root, child=moving_body, world=publisher_world
+            )
+            publisher_world.add_connection(moving)
+        assert wait_for_condition(
+            lambda: receiver_synchronizer.has_applied(
+                publisher_synchronizer.latest_published_position
+            )
+        ), "the receiver never caught up with the new connections"
+
+        with receiver_world._world_lock:
+            moving.origin = HomogeneousTransformationMatrix.from_xyz_rpy(
+                y=0.1, reference_frame=root
+            )
+            moved_once.origin = HomogeneousTransformationMatrix.from_xyz_rpy(
+                x=0.5, reference_frame=root
+            )
+            for step in range(100):
+                moving.origin = HomogeneousTransformationMatrix.from_xyz_rpy(
+                    y=0.001 * (step + 1), reference_frame=root
+                )
+
+        assert wait_for_condition(
+            lambda: receiver_synchronizer.has_applied(
+                publisher_synchronizer.latest_published_position
+            )
+        ), "the receiver never caught up with the burst"
+        np.testing.assert_array_almost_equal(
+            receiver_world.get_kinematic_structure_entity_by_id(
+                moved_once_body.id
+            ).global_transform.to_np(),
+            moved_once_body.global_transform.to_np(),
+        )
+    finally:
+        publisher_synchronizer.close()
+        receiver_synchronizer.close()

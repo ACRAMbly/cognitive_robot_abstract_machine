@@ -36,7 +36,7 @@ class AircraftFixtureResource(StrEnum):
     Resource names used by aircraft catalog acceptance fixtures.
     """
 
-    SOURCE_DIRECTORY = "plane"
+    SOURCE_DIRECTORY = "meshes/plane"
     DATASET_DIRECTORY = "dataset"
     INVENTORY = "aircraft_models.csv"
     REPLACEMENT = "replacement.stl"

@@ -59,7 +59,7 @@ creation and validation, existing connector behavior, and comparators.
 
 The aircraft pipeline test is
 `test/robokudo_acrambly_test/test_aircraft_observation_sequence.py`. It creates a
-local `Pipeline` with the real connector and fresh CAS instances. All twelve
+local `Pipeline` with the real connector and fresh CAS instances. All ten
 configured kinds retain beliefs, bodies, UUIDs, annotations, and mesh shapes
 through initial creation, translation, rotation, partial absence, total absence,
 and reappearance. Visible parts accept the fixture's pose and timestamp; absent

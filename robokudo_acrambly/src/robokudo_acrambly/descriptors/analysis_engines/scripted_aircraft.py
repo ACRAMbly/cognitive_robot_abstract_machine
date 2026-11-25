@@ -26,14 +26,14 @@ from robokudo_acrambly.annotators.aircraft_observation import (
     AircraftObservationLabel,
 )
 from robokudo_acrambly.playback.clock import SystemClock
-from robokudo.world import world_instance
-from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
-from semantic_digital_twin.world_description.world_entity import Body
-from semantic_digital_twin.world_description.connections import FixedConnection
+from robokudo_acrambly.shared_world.accepted_capture import AcceptedCapturePublisher
+from robokudo_acrambly.shared_world.world_source import WorldServerSource
+from semantic_digital_twin.adapters.ros.world_synchronizer import WorldSynchronizer
 
 if TYPE_CHECKING:
     from robokudo_acrambly.aircraft_observations.scenario import AircraftFrames
     from robokudo_acrambly.playback.clock import Clock
+    from robokudo_acrambly.shared_world.world_source import WorldSource
 
 
 # %% Public analysis engine
@@ -42,12 +42,12 @@ if TYPE_CHECKING:
 @dataclass
 class AnalysisEngine(AnalysisEngineInterface):
     """
-    Accept scripted aircraft observations into RoboKudo's local belief world.
+    Accept scripted aircraft observations into the robot's shared world.
     """
 
     frames: AircraftFrames | None = None
     """
-    Declared frame identifiers and explicit camera-to-world calibration.
+    Declared camera frame and its calibration relative to the robot world's root.
     """
 
     scenario: AircraftScenario = field(default_factory=AircraftScenario)
@@ -65,17 +65,21 @@ class AnalysisEngine(AnalysisEngineInterface):
     Optional catalog geometry displayed independently of the CAS payload.
     """
 
+    world_source: WorldSource = field(default_factory=WorldServerSource)
+    """
+    Supplier of the robot's world that the beliefs are accepted into.
+    """
+
     def name(self) -> str:
         return AircraftObservationLabel.SOURCE
 
     def implementation(self) -> Pipeline:
         """
-        Construct the aircraft source and configured local belief consumer.
+        Install the robot's world, then build the aircraft source and belief consumer.
         """
         frames = self.frames
         if frames is None:
             frames = AircraftFrameConfiguration.from_environment().create_frames()
-        frames.validate()
 
         mesh_directory = os.environ.get(AircraftEnvironment.MESH_DIRECTORY)
         if not mesh_directory:
@@ -95,17 +99,7 @@ class AnalysisEngine(AnalysisEngineInterface):
         }
         descriptor.parameters.model_geometry = catalog.models
 
-        runtime_world = world_instance()
-        if not runtime_world.get_bodies_by_name(frames.world_frame):
-            root = runtime_world.root
-            world_body = Body(name=PrefixedName(frames.world_frame))
-            with runtime_world.modify_world():
-                if root is None:
-                    runtime_world.add_body(world_body)
-                else:
-                    runtime_world.add_connection(
-                        FixedConnection(parent=root, child=world_body)
-                    )
+        robot_world = self.world_source.install()
 
         pipeline = Pipeline(self.name())
         pipeline.add_child(
@@ -117,4 +111,6 @@ class AnalysisEngine(AnalysisEngineInterface):
             )
         )
         pipeline.add_child(SemanticDigitalTwinConnector(descriptor=descriptor))
+        if WorldSynchronizer.all_callbacks_of_this_type_from_world(robot_world):
+            pipeline.add_child(AcceptedCapturePublisher())
         return pipeline

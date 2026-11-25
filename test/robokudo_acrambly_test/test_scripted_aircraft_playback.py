@@ -12,6 +12,7 @@ from scipy.spatial.transform import Rotation
 from typing_extensions import TYPE_CHECKING
 
 from .dataset.aircraft_source import AircraftObservationSequence
+from robokudo.world import world_instance
 from robokudo.types.tf import Pose
 from robokudo_acrambly.aircraft_observations.scenario import AircraftLayout
 from robokudo_acrambly.playback.exceptions import (
@@ -446,17 +447,15 @@ def test_every_aircraft_capture_rewrites_explicit_frame_configuration(
     """
     frames = aircraft_captures.engine.frames
     for observation in aircraft_captures.observations.values():
-        assert observation.world_frame == frames.world_frame
+        assert observation.world_frame == str(world_instance().root.name)
         assert observation.camera_frame == frames.camera_frame
         assert observation.camera_to_world_transform.reference_frame is (
-            frames.camera_to_world_transform.reference_frame
+            world_instance().root
         )
-        assert observation.camera_to_world_transform.child_frame is (
-            frames.camera_to_world_transform.child_frame
-        )
+        assert observation.camera_to_world_transform.child_frame is frames.camera_body
         numpy.testing.assert_array_equal(
             observation.camera_to_world_transform.to_np(),
-            frames.camera_to_world_transform.to_np(),
+            frames.camera_pose.to_np(),
         )
 
 

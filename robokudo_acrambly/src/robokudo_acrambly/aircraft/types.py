@@ -52,20 +52,6 @@ class Propeller(AircraftPart):
 
 
 @dataclass(eq=False)
-class RearWheelLeft(AircraftPart):
-    """
-    The aircraft's left rear wheel component.
-    """
-
-
-@dataclass(eq=False)
-class RearWheelRight(AircraftPart):
-    """
-    The aircraft's right rear wheel component.
-    """
-
-
-@dataclass(eq=False)
 class RearWing(AircraftPart):
     """
     The aircraft's rear wing component.

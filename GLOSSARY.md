@@ -28,7 +28,29 @@ accepted state across observations, including observations in which it is absent
 _Avoid_: Object hypothesis, detection
 
 **Local belief world**:
-The world of object beliefs maintained by RoboKudo from accepted observations.
+The world of object beliefs RoboKudo maintains on its own from accepted
+observations, not shared with other processes.
+
+**Shared robot world**:
+The robot's world that Giskard, Coraplex and RoboKudo each hold a copy of, kept
+identical by synchronization, with one identity per part.
+_Avoid_: Local belief world
+
+**Capture time**:
+The moment the camera took an observation, not the moment RoboKudo accepted it.
+_Avoid_: Timestamp, acceptance time
+
+**Accepted capture**:
+A capture from which RoboKudo accepted at least one observation into the shared
+robot world.
+
+**Perception point**:
+A point in a task where the next motion needs a part's current pose, such as
+before a grasp.
+
+**Settle time**:
+The moment the motion before a perception point has ended, so that a capture
+taken afterwards shows the robot and camera at rest.
 
 **Motion pause**:
 An interval in a scenario during which block poses remain unchanged and

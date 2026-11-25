@@ -25,6 +25,7 @@ from robokudo_acrambly.descriptors.analysis_engines.scripted_aircraft import (
 )
 
 from .dataset.aircraft_beliefs import AircraftBeliefCapture
+from .dataset.robot_world import RobotWorldFrame, create_robot_world
 from .test_aircraft_belief_creation import aircraft_catalog, semdt_cas
 from .test_scripted_aircraft import aircraft_frames
 from .test_scripted_aircraft_native_preview import PreviewKey
@@ -60,7 +61,7 @@ def inspection(
     node: Node,
 ) -> Iterator[AircraftBeliefInspection]:
     """Inspect a single completed aircraft capture in an isolated belief world."""
-    world.clear_world()
+    world.set_world(create_robot_world(root_frame=RobotWorldFrame.MAP))
     monkeypatch.setenv(
         AircraftEnvironment.MESH_DIRECTORY, str(aircraft_catalog.mesh_directory)
     )
@@ -105,7 +106,7 @@ def test_finished_inspection_keeps_annotator_controls_responsive(
     )
     scene_ticks = geometry_backend.viewer3d.event_ticks
     key_polls = native_key_events.call_count
-    source, connector = inspection.pipeline.get_annotators()
+    source, connector, _ = inspection.pipeline.get_annotators()
 
     image_backend.handle_keycallback(DesktopKey.NEXT_ANNOTATOR)
     inspection.tick()

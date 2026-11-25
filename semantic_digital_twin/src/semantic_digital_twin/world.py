@@ -2094,16 +2094,18 @@ class World(HasSimulatorProperties):
         If you have changed the state of the world, call this function to trigger
         necessary events and increase the state version.
 
-        Inside a :meth:`batch_state_changes` context the notification is collected and
-        emitted once when that context ends, with the ``publish_changes`` of that
-        context: the setters that write the state cannot know they are part of a batch,
-        so the batch is what decides whether its changes are published.
+        Within :meth:`batch_state_changes` the batch announces it once when it ends,
+        with its own ``publish_changes``. Within :meth:`modify_world` the outermost
+        block announces it when it ends.
         """
         if self._state_change_batch_depth > 0:
             self._state_change_batch_has_collected_change = True
             return
         if not self.is_empty():
             self._forward_kinematic_manager.recompute()
+        # the outermost modify_world block announces the whole state after its model
+        if self._model_manager._active_world_model_update_context_manager_ids:
+            return
         self.state._notify_state_change(publish_changes=publish_changes, **kwargs)
 
     def _notify_model_change(self, publish_changes: bool = True, **kwargs) -> None:

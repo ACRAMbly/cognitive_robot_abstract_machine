@@ -1,6 +1,6 @@
 # Aircraft semantic types and model resources
 
-`robokudo_acrambly.aircraft.types` defines `AircraftPart` and the twelve concrete
+`robokudo_acrambly.aircraft.types` defines `AircraftPart` and the ten concrete
 part types from the connector inventory. They inherit `HasRootBody` and
 `IsPerceivable`: instantiate an annotation with `root=body` and
 `class_label=definition.label`, then register it through the world's existing
@@ -14,7 +14,7 @@ resource path, and metres per mesh unit. The original `meshes/plane/*.stl` files
 already measured in metres and use scale 1.0.
 
 Construct `AircraftModelCatalog(mesh_directory=...)` with the directory containing
-the twelve STL files. The default is the complete inventory; the directory is
+the ten catalog STL files. The default is the complete inventory; the directory is
 required and has no machine-specific default. Missing or unreadable files, or
 paths naming a directory raise `MissingAircraftResource`, whose correction
 identifies the required filename. Every resource is checked before any is loaded.
