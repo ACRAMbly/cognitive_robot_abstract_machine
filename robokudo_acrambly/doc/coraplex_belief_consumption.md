@@ -1,9 +1,10 @@
 # How Coraplex uses RoboKudo's aircraft-part beliefs: shared world with held-back updates
 
 Status: chosen approach (E3b from
-[the discussion record](coraplex_belief_consumption_discussion.md)). Nothing has
-been implemented yet. Every step below comes from reading the code, and none
-has been run.
+[the discussion record](coraplex_belief_consumption_discussion.md)). Part 1 is
+implemented on PR 14's branch, on top of PR 13; part 2 and the real-camera work
+are not. Steps marked *done* were built and tested; the others still come only
+from reading the code.
 
 Any change to a file outside `robokudo_acrambly/` or `acrambly/` ust be mentioned explicitly
 and approved by the user.
@@ -38,7 +39,7 @@ defined in `GLOSSARY.md`. Otherwise this document writes out what happens, for e
 |---|---|---|
 | Giskard | the robot's world | the original copy (serves `fetch_world`, `giskardpy/src/giskardpy/middleware/ros2/giskard.py:210`) |
 | Coraplex | the robot's world | a copy of Giskard's, kept identical by `WorldSynchronizer` (`coraplex/src/coraplex/demonstrations.py:275-276`) |
-| RoboKudo | the local belief world | separate: its own root, frames, and UUIDs, not synchronized with anything (`robokudo/src/robokudo/world.py:47`) |
+| RoboKudo | the local belief world | separate: its own root, frames, and UUIDs, not synchronized with anything (`robokudo/src/robokudo/world.py:48`) |
 
 In simulation (not `ExecutionType.REAL`), the Coraplex demo builds its own world
 instead of fetching Giskard's (`coraplex/src/coraplex/demonstrations.py:263-273`).
@@ -119,7 +120,7 @@ process, and parts that are out of view stay in the world.
 - `fetch_world_from_service`, `FetchWorldServer`, and `WorldSynchronizer` in
   `semantic_digital_twin`. Coraplex demos already use the fetch-then-sync pair.
 - `WorldSynchronizer.defer_incoming_updates`, `apply_missed_messages()`
-  (`world_synchronizer.py:665`) and `resume()` (`world_synchronizer.py:724`).
+  (`world_synchronizer.py:673`) and `resume()` (`world_synchronizer.py:732`).
 - Giskard already holds back updates the same way
   (`giskardpy/src/giskardpy/middleware/ros2/giskard.py:208`,
   `giskardpy/src/giskardpy/middleware/ros2/world_updates.py:62-70`), so the
@@ -141,8 +142,8 @@ process, and parts that are out of view stay in the world.
   waits for a blackboard flag inside the RoboKudo process
   (`robokudo/src/robokudo/annotators/pipeline_trigger.py`).
 
-Not there yet: no RoboKudo code does the fetch and sync, no demo holds back
-updates, and the capture time of an accepted observation stays on the RoboKudo
+Before part 1, no RoboKudo code did the fetch and sync, no demo held back
+updates, and the capture time of an accepted observation stayed on the RoboKudo
 side. It is on the CAS and the `StampedPose`
 (`robokudo/src/robokudo/annotators/semantic_world_connector.py:237-243`);
 the aircraft annotations in `robokudo_acrambly/aircraft/types.py` have no
@@ -249,13 +250,20 @@ work.
 
 ### Part 1: now (RoboKudo side)
 
-| Step | What |
-|---|---|
-| 1 | tests: two synchronized worlds, held-back updates, capture time readable on the receiving side |
-| 2 | RoboKudo fetches the shared world, sets up the tracker, attaches the synchronizer |
-| 3 | the aircraft world frame is the fetched world's root; `world_frame` leaves `aircraft_frames.json` |
-| 4 | stand-in world server for the synthetic target, in `acrambly_temp/` |
-| 6 | capture message (time, accepted UUIDs, stream position) published per accepted capture and readable on the receiving side |
+| Step | What | Status |
+|---|---|---|
+| 1 | tests: two synchronized worlds, held-back updates, capture time readable on the receiving side | done: `test_aircraft_world_synchronization.py`, `test_accepted_captures.py` |
+| 2 | RoboKudo fetches the shared world, sets up the tracker, attaches the synchronizer | done: `shared_world/world_source.py` |
+| 3 | the aircraft world frame is the fetched world's root; `world_frame` leaves `aircraft_frames.json` | done |
+| 4 | stand-in world server for the synthetic target, in `acrambly_temp/` | done: `acrambly_temp/stand_in_world_server.py` |
+| 6 | capture message (time, accepted UUIDs, stream position) published per accepted capture and readable on the receiving side | done: `shared_world/accepted_capture.py` |
+
+Two Semantic Digital Twin fixes from upstream `main` were backported, because
+part 1 needs them and this branch predates them: positions written inside a
+`modify_world` block are published after its model change (upstream PR 1018),
+and `WorldSynchronizer` keeps up to 1000 messages for a busy receiver instead
+of 10 (upstream `a0f9688646`). Without them a receiving world rejected new parts
+or lost some of them.
 
 Done when a receiving world with its own `WorldSynchronizer` and
 `defer_incoming_updates=True` (in the same pytest process) receives the 10

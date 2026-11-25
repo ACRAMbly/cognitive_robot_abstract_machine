@@ -1,10 +1,10 @@
 # 02: Run the aircraft engine on a fetched, synchronized world
 
-Status: ready-for-agent
+Status: done
 Type: task
 Blocked by: 01
 
-Implementation permission: not granted.
+Implementation permission: granted 2026-11-25.
 
 ## Outcome
 

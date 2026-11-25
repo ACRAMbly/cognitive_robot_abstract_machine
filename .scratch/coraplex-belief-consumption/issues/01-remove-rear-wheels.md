@@ -1,10 +1,10 @@
 # 01: Remove the rear wheels from the perception catalog
 
-Status: ready-for-agent
+Status: done
 Type: task
 Blocked by: None
 
-Implementation permission: not granted.
+Implementation permission: granted 2026-11-25.
 
 ## Outcome
 

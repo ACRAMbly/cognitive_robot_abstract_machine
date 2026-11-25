@@ -1,8 +1,8 @@
 # Coraplex belief consumption
 
-Status: ready-for-agent
+Status: part 1 done
 
-Implementation permission: not granted (2026-11-21: specification and tickets
+Implementation permission: part 1 granted 2026-11-25 (2026-11-21: specification and tickets
 only, no code).
 
 ## Notes

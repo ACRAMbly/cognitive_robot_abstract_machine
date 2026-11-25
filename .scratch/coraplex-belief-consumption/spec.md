@@ -1,8 +1,8 @@
 # Aircraft beliefs in the shared robot world (part 1)
 
-Status: ready-for-agent
+Status: part 1 done
 
-Implementation permission: not granted. The user asked on 2026-11-21 for the
+Implementation permission: granted 2026-11-25 for part 1. The user first asked on 2026-11-21 for the
 specification and tickets only, with no code.
 
 ## Problem

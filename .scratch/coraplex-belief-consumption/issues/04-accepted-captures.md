@@ -1,10 +1,10 @@
 # 04: Publish and receive accepted captures
 
-Status: ready-for-agent
+Status: done
 Type: task
 Blocked by: 02
 
-Implementation permission: not granted.
+Implementation permission: granted 2026-11-25.
 
 ## Outcome
 

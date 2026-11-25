@@ -1,10 +1,10 @@
 # 05: Stand-in world server, and inspection that needs it
 
-Status: ready-for-agent
+Status: done
 Type: task
 Blocked by: 02, 03
 
-Implementation permission: not granted.
+Implementation permission: granted 2026-11-25.
 
 ## Outcome
 

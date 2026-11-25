@@ -8,9 +8,10 @@ controller gets collision geometry for every accepted part. The cost is that
 RoboKudo becomes a writer in the robot's world, so a perception error reaches
 motion planning.
 
-The scripted aircraft and Tetris engines keep no separate local belief world:
-they always run against a world fetched from a world server, also for the
-synthetic target and when inspecting perception on its own.
+The scripted aircraft engine keeps no separate local belief world: it always
+runs against a world fetched from a world server, also for the synthetic target
+and when inspecting perception on its own. The Tetris engine follows in a later
+pull request.
 
 ## Considered Options
 

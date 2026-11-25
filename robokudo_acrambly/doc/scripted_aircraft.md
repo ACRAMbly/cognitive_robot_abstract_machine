@@ -1,8 +1,9 @@
 # Scripted aircraft observations
 
 The `scripted_aircraft` analysis engine emits camera-relative aircraft-part
-observations and accepts them into RoboKudo's local belief world through
-`SemanticDigitalTwinConnector`. Its default scenario
+observations and accepts them through `SemanticDigitalTwinConnector` into the
+robot's world, which it fetches from a world server and keeps synchronized with
+every other process holding it. Its default scenario
 contains one part of every kind in
 [`AircraftModel`](../src/robokudo_acrambly/aircraft/models.py). The catalog owns
 the labels, semantic types, resource paths, metric scale, and source mesh origins;
@@ -27,6 +28,19 @@ export AIRCRAFT_MESH_DIRECTORY="$PWD/meshes/plane"
 python -m robokudo.scripts.main _ros_pkg robokudo_acrambly _ae scripted_aircraft _headless _tickrate 20
 ```
 
+Start a world server first. Without Giskard, run the stand-in in its own terminal
+with the same environment, and keep it running:
+
+```bash
+python acrambly_temp/stand_in_world_server.py
+```
+
+It serves a world whose only body is its root `map`, and keeps a synchronizer of
+its own, so a process that fetches the world later also gets every part accepted
+since. Never run the aircraft engine next to a real Giskard yet. When no world
+server answers within ten seconds (`WorldServerSource.timeout_seconds`), the
+engine raises `WorldServerUnavailable`, which names the stand-in script.
+
 Use the configured Python 3.12 interpreter, here
 `$HOME/.virtualenvs/cram-env/bin/python`; ROS modules such as `sensor_msgs` must
 remain importable in that interpreter. Regenerate ORM interfaces for a fresh
@@ -35,7 +49,7 @@ requires the configured aircraft meshes; it needs no display, camera topics,
 inference service, or credentials.
 
 `_ros_pkg robokudo_acrambly` selects the application's descriptors and
-`_ae scripted_aircraft` selects the aircraft source and local belief connector.
+`_ae scripted_aircraft` selects the aircraft source and belief connector.
 `_headless` disables native windows. `_tickrate 20` ticks the tree twenty times
 per second, accommodating the
 default ten captures per second. Keep the tick rate at least as high as the
@@ -54,27 +68,27 @@ the preceding CAS. Exhaustion retains the final CAS and never loops.
 
 `AIRCRAFT_FRAME_CONFIGURATION` names a JSON document with the shape in
 [`aircraft_frames.json`](aircraft_frames.json). Copy that file for your deployment
-and supply all three fields:
+and supply both fields:
 
 | Field | Meaning |
 | --- | --- |
-| `world_frame` | Nonempty application world-frame identifier |
-| `camera_frame` | Distinct optical camera-frame identifier |
-| `camera_pose` | Explicit camera pose in the world, with `translation` in metres and `rotation` as an xyzw quaternion |
+| `camera_frame` | Optical camera-frame identifier, distinct from the world's root |
+| `camera_pose` | Explicit camera pose relative to the root of the robot's world, with `translation` in metres and `rotation` as an xyzw quaternion |
 
-The supplied example declares `aircraft_world` and `aircraft_camera`, a camera
+The world frame is the root of the fetched world, whatever its name: `map` for
+the stand-in and Giskard's generic world, `map2` for Tracy's Giskard. It is not
+configured. The supplied example declares `aircraft_camera`, a camera
 translation of `(10, 20, 30)` metres, and identity orientation. These are
 illustrative values, not sensor calibration. Replace them with the known
 camera-to-world calibration. Explicit identity calibration is allowed; missing
 configuration never supplies identity implicitly.
 
-The launcher creates detached calibration references and registers the declared
-world-frame body in RoboKudo's world if absent. In a populated world the new
-frame has a fixed identity connection to the existing root; an existing named
-frame is reused. Programmatic applications can instead pass
-`AnalysisEngine(frames=AircraftFrames(...))` with their own frame references and
-explicit `HomogeneousTransformationMatrix`. The transform's reference frame
-must match `world_frame`, and its child frame must match `camera_frame`.
+The launcher adds no frame body to the world: accepted parts hang directly from
+its root. Programmatic applications can instead pass
+`AnalysisEngine(frames=AircraftFrames(camera_frame=..., camera_pose=...))` with
+an explicit `HomogeneousTransformationMatrix` relative to the root, and
+`world_source=ProvidedWorldSource(world=...)` to hand over a world they already
+hold.
 
 ## Optional native mesh verification
 
@@ -190,7 +204,7 @@ when no parts are visible:
 | CAS field | Value |
 | --- | --- |
 | `data_timestamp` | Scheduled Unix capture time as integer nanoseconds, starting at the first tick's clock time |
-| `world_frame` | Configured world-frame identifier |
+| `world_frame` | Name of the root of the robot's world |
 | `camera_frame` | Configured optical camera-frame identifier |
 | `camera_to_world_transform` | Explicit finite rigid camera-to-world transform with matching reference/child frames |
 
@@ -201,8 +215,7 @@ per-detection mesh/shape annotations are supplied. The hypothesis's existing
 empty ROI default remains. Preview meshes stay in native annotator output.
 
 The observation source itself creates no beliefs or semantic annotations. The
-engine initializes the declared world frame and passes the completed CAS to the
-connector. Camera poses convert exactly once as
+engine installs the fetched world and passes the completed CAS to the connector. Camera poses convert exactly once as
 `world_T_part = world_T_camera @ camera_T_part`.
 
 The configured connector creates a typed belief and mesh-bearing body for each
@@ -211,7 +224,25 @@ total absence retains its identity, geometry, last accepted pose, and capture
 time; reappearance uses the existing association rules. Different model kinds
 cannot associate. The source preview continues to show visible detections in
 camera coordinates, so it clears absent parts even while beliefs persist.
-Use the RViz inspection command below to display the resulting belief world.
+Use the RViz inspection command below to display the resulting beliefs.
+
+## Sharing beliefs with other processes
+
+The engine installs the fetched world as RoboKudo's world and, when RoboKudo's
+ROS node is registered, attaches one `WorldSynchronizer` on
+`/semantic_digital_twin/world_sync`. Every new part, with its UUID, mesh and
+semantic annotation, and every accepted pose change reaches the other
+synchronized worlds; a receiving world created with
+`defer_incoming_updates=True` sees them only after `apply_missed_messages()`.
+
+After each capture from which it accepted at least one part, the engine publishes
+an `AcceptedCapture` on `/robokudo_acrambly/accepted_captures`, as
+`std_msgs/String` holding JSON, with volatile delivery. It lists the capture time
+in Unix nanoseconds, the belief UUIDs accepted from that capture, and the
+synchronizer's stream position after their poses. `AcceptedCaptureReceiver`
+keeps the newest capture of each part; `PartCapture.is_applied` tells whether a
+receiving world already holds that pose. The capture time is never written into
+the world.
 
 The engine derives `semantic_types` and `model_geometry` from one loaded
 `AircraftModelCatalog`, following [aircraft model setup](aircraft_models.md) and
@@ -220,10 +251,11 @@ Source-only tests exercise `AircraftObservationAnnotator` independently; the
 engine integration test runs the real threaded consumer through movement,
 partial absence, total absence, and reappearance for all ten aircraft kinds.
 
-## Inspecting annotators and the local belief world
+## Inspecting annotators and the beliefs
 
 With the same ROS overlay, Python environment, and aircraft configuration as
-above, run this command instead of the ordinary headless runner:
+above, start the stand-in world server first, then run this command instead of
+the ordinary headless runner:
 
 ```bash
 export AIRCRAFT_FRAME_CONFIGURATION="$PWD/robokudo_acrambly/doc/aircraft_frames.json"
@@ -234,8 +266,8 @@ python -m robokudo_acrambly.aircraft_observations.inspection
 This opens RoboKudo's standard OpenCV annotator controls and Open3D viewer,
 alongside the ROS visualizers. The controls and camera-relative source preview
 work as described under [native mesh verification](#optional-native-mesh-verification).
-The inspection command requires a desktop display. Use RViz to view the retained
-local belief world in world coordinates.
+The inspection command requires a desktop display and never starts a world
+server itself. Use RViz to view the retained beliefs in world coordinates.
 
 In another terminal, source the same ROS installation and overlay, then run
 from the checkout root:
@@ -259,10 +291,10 @@ ticks per second. `VizMarkerPublisher` publishes the actual
 `robokudo.world.world_instance()` on `/semworld/viz_marker`, with its existing
 visual geometry and collision fallback. TF locates each body's frame in the
 world. Poses are in world coordinates, including the configured camera-to-world
-calibration. This process owns the world; run one aircraft runner at a time.
+calibration. Run one aircraft runner at a time against one world server.
 
 The preset enables **Local belief geometry** and **Belief frames**, with reliable,
-transient-local delivery for markers. Its fixed frame is `aircraft_world`, and
+transient-local delivery for markers. Its fixed frame is `map`, the stand-in's root, and
 its view is centered near the supplied example camera translation `(10, 20, 30)`.
 For different calibration, adjust the view's focal point. For another world frame,
 set **Global Options → Fixed Frame** to the root printed by `VizMarkerPublisher`
@@ -281,7 +313,8 @@ scene. RViz can also be opened after playback has finished: geometry is latched
 and transforms continue to receive fresh timestamps. As in the standard RoboKudo
 runner, Escape in the OpenCV window or closing Open3D stops the inspection
 process. Ctrl-C also stops it. Closing RViz leaves the inspection process running.
-Restart that process to replay the sequence from a fresh local world.
+Restart the stand-in and then the inspection to replay the sequence from a fresh
+world: the stand-in keeps the parts accepted by earlier runs.
 
 ## Independent Tetris engine
 

@@ -31,6 +31,11 @@ _Avoid_: Object hypothesis, detection
 The world of object beliefs RoboKudo maintains on its own from accepted
 observations, not shared with other processes.
 
+**Shared robot world**:
+The robot's world that Giskard, Coraplex and RoboKudo each hold a copy of, kept
+identical by synchronization, with one identity per part.
+_Avoid_: Local belief world
+
 **Capture time**:
 The moment the camera took an observation, not the moment RoboKudo accepted it.
 _Avoid_: Timestamp, acceptance time
