@@ -1,3 +1,8 @@
+"""
+Conversion of worlds into MultiSim simulations, with their cameras, lights and MuJoCo
+properties.
+"""
+
 from __future__ import annotations
 
 import logging
@@ -29,10 +34,12 @@ from physics_simulators.base_simulator import (
     SimulatorCallbackResult,
     SimulatorConstraints,
 )
+from krrood.adapters.json_field import JSONField
+from krrood.adapters.json_serializer import ExternalClassJSONSerializer
 from krrood.exceptions import UnboundGenericParameter
-from krrood.ormatic.utils import classproperty
+from krrood.patterns.classproperty import classproperty
 from krrood.patterns.subclass_safe_generic import SubClassSafeGeneric
-from krrood.utils import recursive_subclasses
+from krrood.utils import get_full_class_name, recursive_subclasses
 from scipy.spatial.transform import Rotation
 from trimesh.visual import TextureVisuals
 
@@ -56,6 +63,7 @@ from krrood_spatial_math.spatial_types import (
     RotationMatrix,
     Vector3,
 )
+from semantic_digital_twin.semantic_annotations.semantic_annotations import Floor
 from semantic_digital_twin.world import World
 from semantic_digital_twin.world_description.connections import (
     RevoluteConnection,
@@ -78,7 +86,10 @@ from semantic_digital_twin.world_description.geometry import (
     MeshFileFormat,
     Color,
 )
-from semantic_digital_twin.world_description.contact import ContactParameters
+from semantic_digital_twin.world_description.contact import (
+    ContactFriction,
+    ContactParameters,
+)
 from semantic_digital_twin.world_description.world_entity import (
     Region,
     Body,
@@ -165,6 +176,70 @@ class MujocoActuatorProperty(StrEnum):
     """
 
 
+class MujocoContactDimensionality(IntEnum):
+    """
+    The dimensions MuJoCo resolves a contact in, its ``condim``, which decide which
+    friction coefficients of the contact act. MuJoCo resolves a contact in
+    :attr:`SLIDING` unless told otherwise, and in the more dimensions of its two geoms.
+
+    For more information, see:
+    https://mujoco.readthedocs.io/en/stable/modeling.html#contact
+    """
+
+    FRICTIONLESS = 1
+    """
+    Only the push along the contact normal; no friction acts.
+    """
+
+    SLIDING = 3
+    """
+    Sliding friction acts; the bodies are free to turn against each other.
+    """
+
+    SLIDING_AND_TORSIONAL = 4
+    """
+    Sliding and torsional friction act, so the bodies also resist turning around the
+    contact normal.
+    """
+
+    SLIDING_TORSIONAL_AND_ROLLING = 6
+    """
+    Sliding, torsional and rolling friction act, so the bodies also resist rolling over
+    each other.
+    """
+
+    @classmethod
+    def from_friction(cls, *, friction: ContactFriction) -> MujocoContactDimensionality:
+        """
+        :param friction: The friction a geom offers.
+        :return: The fewest dimensions in which every coefficient of `friction` that is
+            not zero acts.
+        """
+        if friction.rolling != 0:
+            return cls.SLIDING_TORSIONAL_AND_ROLLING
+        if friction.torsional != 0:
+            return cls.SLIDING_AND_TORSIONAL
+        if friction.sliding != 0:
+            return cls.SLIDING
+        return cls.FRICTIONLESS
+
+    def acting_friction(self, *, friction: ContactFriction) -> ContactFriction:
+        """
+        :param friction: The coefficients a geom declares.
+        :return: The coefficients of `friction` that act in these dimensions, the others
+            zero.
+        """
+        return ContactFriction(
+            sliding=friction.sliding if self >= self.SLIDING else 0.0,
+            torsional=(
+                friction.torsional if self >= self.SLIDING_AND_TORSIONAL else 0.0
+            ),
+            rolling=(
+                friction.rolling if self >= self.SLIDING_TORSIONAL_AND_ROLLING else 0.0
+            ),
+        )
+
+
 class GeomVisibilityAndCollisionType(IntEnum):
     """
     Enumeration of geometric visibility and collision attributes.
@@ -220,9 +295,9 @@ class MultiSimCamera(SimulatorAdditionalProperty):
     The name of the camera.
     """
 
-    body: Any = None
+    body: Body | None = None
     """
-    The body that the camera is attached to. This can be set to the name of the body or a reference to the body object itself.
+    The body the camera is attached to.
     """
 
 
@@ -688,7 +763,7 @@ class Connection1DOFConverter(ConnectionConverter, ABC):
         if dof.name.name != joint_props["name"] and dof.name.name != "dof":
             joint_props["equality_joint"] = {
                 "joint": dof.name.name,
-                "data": [entity.offset, entity.multiplier, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                "polynomial_coefficients": [entity.offset, entity.multiplier, 0, 0, 0],
             }
         return joint_props
 
@@ -1190,6 +1265,46 @@ class MujocoLight(MultiSimLight):
     """
     Radius of the light's bulb, used for soft shadows.
     """
+
+
+# %% json of MuJoCo's enums
+
+
+class MujocoEnumJSONKey(StrEnum):
+    """
+    The keys of a serialized MuJoCo enum member besides its type.
+    """
+
+    VALUE = "value"
+    """
+    The integer MuJoCo gives the member.
+    """
+
+
+@dataclass
+class MujocoEnumJSONSerializer(ExternalClassJSONSerializer[None]):
+    """
+    Json serializer for the enums MuJoCo defines, such as :class:`mujoco.mjtLimited`,
+    so that the simulator properties carrying them can be synchronized.
+
+    The enums are bound from C and share no Python base class, which is why T is set to
+    None and they are recognized by the module that defines them.
+    """
+
+    @classmethod
+    def to_json(cls, *, instance: Any, **kwargs) -> dict[str, Any]:
+        return {
+            JSONField.TYPE: get_full_class_name(instance.__class__),
+            MujocoEnumJSONKey.VALUE: int(instance),
+        }
+
+    @classmethod
+    def from_json(cls, *, data: dict[str, Any], clazz: type, **kwargs: Any) -> Any:
+        return clazz(data[MujocoEnumJSONKey.VALUE])
+
+    @classmethod
+    def matches_generic_type(cls, *, clazz: type) -> bool:
+        return clazz.__module__ == mujoco.mjtLimited.__module__
 
 
 @dataclass
@@ -1840,7 +1955,10 @@ class MujocoSingleJoint(MujocoConnectionJoints[ConnectionType]):
             equality.objtype = mujoco.mjtObj.mjOBJ_JOINT
             equality.name1 = joint_name
             equality.name2 = self._mimicked_joint_name()
-            equality.data = equality_joint["data"]
+            coefficients = equality_joint["polynomial_coefficients"]
+            data = numpy.array(equality.data)
+            data[: len(coefficients)] = coefficients
+            equality.data = data
         mujoco_joint = self.connection.get_simulator_property_of_type(MujocoJoint)
         if mujoco_joint is not None:
             joint_props["stiffness"] = (
@@ -1991,6 +2109,9 @@ class MujocoWheeledDriveJoints(MujocoConnectionJoints[DriveType], ABC):
     ``odom`` frame: the servos push its base across the floor at the commanded
     velocity, and the positions the joints reach are the drive's odometry. Otherwise it
     is built as no joint at all and its base stays where it is built.
+
+    The joints hold the base at its height, so no floor can carry it; the bodies the
+    drive carries do not collide with any :class:`Floor`, which would only drag them.
     """
 
     @classproperty
@@ -2015,14 +2136,45 @@ class MujocoWheeledDriveJoints(MujocoConnectionJoints[DriveType], ABC):
         :return: Whether servos drive every degree of freedom the drive is commanded
             with.
         """
-        actuated = {
+        return {
+            degree_of_freedom.id for degree_of_freedom in self.connection.active_dofs
+        } <= self._actuated_degree_of_freedom_ids
+
+    @property
+    def _actuated_degree_of_freedom_ids(self) -> set[UUID]:
+        """
+        :return: The id of every degree of freedom of the world a servo drives.
+        """
+        return {
             degree_of_freedom.id
             for actuator in self.world.actuators
             for degree_of_freedom in actuator.dofs
         }
-        return {
-            degree_of_freedom.id for degree_of_freedom in self.connection.active_dofs
-        } <= actuated
+
+    @property
+    def carried_bodies(self) -> list[Body]:
+        """
+        :return: The colliding bodies the drive holds at its base's height: the base
+            and every body hanging from it through joints no servo drives, such as its
+            wheels and casters.
+        """
+        actuated = self._actuated_degree_of_freedom_ids
+        carried = []
+        unvisited = [self.connection.child]
+        while unvisited:
+            entity = unvisited.pop()
+            if isinstance(entity, Body) and entity.collision:
+                carried.append(entity)
+            unvisited += [
+                child
+                for child in entity.child_kinematic_structure_entities
+                if not {
+                    degree_of_freedom.id
+                    for degree_of_freedom in child.parent_connection.dofs
+                }
+                & actuated
+            ]
+        return carried
 
     @property
     def axes(self) -> list[DriveAxis]:
@@ -2047,6 +2199,10 @@ class MujocoWheeledDriveJoints(MujocoConnectionJoints[DriveType], ABC):
                 axis=(child_T_connection[:3, :3] @ axis.direction).tolist(),
                 pos=child_T_connection[:3, 3].tolist(),
             )
+        carried_bodies = self.carried_bodies
+        for floor in self.world.get_semantic_annotations_by_type(Floor):
+            for body in carried_bodies:
+                builder.exclude_contact(body, floor.root)
 
     def home_joint_positions(self) -> list[float]:
         return [self.world.state[axis.measured.id].position for axis in self.axes]
@@ -2665,7 +2821,10 @@ class MujocoBuilder(MultiSimBuilder):
             body_spec = self.spec.bodies[body_id + 1]
             if numpy.isclose(body_spec.mass, 0.0):
                 continue
-            inertial_element = ET.SubElement(body_element, "inertial")
+            inertial_element = body_element.find("inertial")
+            if inertial_element is None:
+                inertial_element = ET.SubElement(body_element, "inertial")
+            inertial_element.attrib.clear()
             inertial_element.set("mass", f"{body_spec.mass}")
             inertial_element.set(
                 "diaginertia", " ".join(map(str, body_spec.inertia.tolist()))
@@ -2733,6 +2892,9 @@ class MujocoBuilder(MultiSimBuilder):
         contact = shape.get_simulator_property_of_type(ContactParameters)
         if contact is not None:
             geom_props["friction"] = contact.friction.to_list()
+            geom_props["condim"] = MujocoContactDimensionality.from_friction(
+                friction=contact.friction
+            )
             if contact.stiffness is not None:
                 geom_props["solref"] = contact.stiffness.to_list()
             if contact.impedance is not None:
@@ -2825,17 +2987,34 @@ class MujocoBuilder(MultiSimBuilder):
         os.makedirs(os.path.dirname(asset_file_path), exist_ok=True)
         return asset_file_path
 
-    def _mesh_name_for(self, mesh_file_path: str, mesh_scale: list[float]) -> str:
+    def _mesh_name_for(
+        self,
+        *,
+        mesh_file_path: str,
+        mesh_scale: list[float],
+        file_T_mesh: HomogeneousTransformationMatrix,
+    ) -> str:
         """
-        The name of the mesh asset for a mesh file at a scale, adding the asset to the
-        spec if no geom used this file at this scale yet.
+        The name of the mesh asset for a mesh file at a scale and in a frame of its
+        file, adding the asset to the spec if no geom used this file so yet.
 
         :param mesh_file_path: The mesh file MuJoCo loads.
         :param mesh_scale: The scale along x, y and z.
-        :return: The name, unique to this file and scale.
+        :param file_T_mesh: The mesh's own frame in its file, see
+            :attr:`~semantic_digital_twin.world_description.geometry.Mesh.file_T_mesh`.
+        :return: The name, unique to this file, scale and frame.
         """
+        file_T_mesh_matrix = file_T_mesh.to_np()
+        reference_position = file_T_mesh_matrix[:3, 3]
+        reference_orientation = numpy.zeros(4)
+        mujoco.mju_mat2Quat(reference_orientation, file_T_mesh_matrix[:3, :3].flatten())
         for mesh in self.spec.meshes:
-            if mesh.file == mesh_file_path and numpy.allclose(mesh.scale, mesh_scale):
+            if (
+                mesh.file == mesh_file_path
+                and numpy.allclose(mesh.scale, mesh_scale)
+                and numpy.allclose(mesh.refpos, reference_position)
+                and numpy.allclose(mesh.refquat, reference_orientation)
+            ):
                 return mesh.name
         mesh_name = os.path.splitext(os.path.basename(mesh_file_path))[0]
         if not numpy.allclose(mesh_scale, [1.0, 1.0, 1.0]):
@@ -2845,6 +3024,8 @@ class MujocoBuilder(MultiSimBuilder):
         mesh = self.spec.add_mesh(name=mesh_name)
         mesh.file = mesh_file_path
         mesh.scale = mesh_scale
+        mesh.refpos = reference_position
+        mesh.refquat = reference_orientation
         return mesh_name
 
     def _thicken_if_near_planar(self, mesh_file_path: str) -> str:
@@ -2946,7 +3127,11 @@ class MujocoBuilder(MultiSimBuilder):
         mesh_file_path = self._thicken_if_near_planar(mesh_file_path)
 
         mesh_scale = [mesh_entity.scale.x, mesh_entity.scale.y, mesh_entity.scale.z]
-        geom_props["meshname"] = self._mesh_name_for(mesh_file_path, mesh_scale)
+        geom_props["meshname"] = self._mesh_name_for(
+            mesh_file_path=mesh_file_path,
+            mesh_scale=mesh_scale,
+            file_T_mesh=mesh_entity.file_T_mesh,
+        )
         if isinstance(texture_file_path, str):
             geom_props["material"] = self._register_texture_material(
                 texture_file_path=texture_file_path
@@ -3216,6 +3401,16 @@ class MujocoBuilder(MultiSimBuilder):
         if pair in excluded:
             return
         excluded.add(pair)
+        self.exclude_contact(body_a, body_b)
+
+    def exclude_contact(self, body_a: Body, body_b: Body) -> None:
+        """
+        Tell MuJoCo never to check the two bodies for contact with each other.
+
+        :param body_a: One of the two bodies.
+        :param body_b: The other.
+        """
+        pair = sorted((self.body_spec_of(body_a).name, self.body_spec_of(body_b).name))
         self.spec.add_exclude(name="_".join(pair), bodyname1=pair[0], bodyname2=pair[1])
 
     def _build_equalities(self):
