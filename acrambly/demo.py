@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import mujoco
 import rclpy
-
+from torchvision import extension
 
 from coraplex.plans.context_extensions import RobotAccess
 from coraplex.plans.executors import KinematicallySimulatedPlanExecutor
@@ -60,9 +60,10 @@ def spawn_plane_parts(world):
     return plane
 
 def build_plan(context, battatco, holders):
-    tracy = context.require_extension(RobotAccess).robot
+    tracy = context.require_extension(extension_type=RobotAccess).robot
     actions = [
         ParkArmsAction(arms=tracy.all_arms),
+        ## Step 1: bottom wing on middle holder and hold there
         PickUpAction(
             grasp=GraspCandidate(battatco["BottomWing"], Pose.from_xyz_rpy(0.09, 0.05,0, pi/2, 0, -pi/2,reference_frame=battatco["BottomWing"].root)),
             arm=tracy.right_arm
@@ -72,6 +73,7 @@ def build_plan(context, battatco, holders):
             end_effector=tracy.right_arm.end_effector,
             allow_gripper_collision=False
         ),
+        ## Step 2: Upper body on lower body
         PickUpAction(
                 grasp=GraspCandidate(battatco["UpperBody"], Pose.from_xyz_rpy(-0.1,0,0.03,0, pi/2,0,reference_frame=battatco["UpperBody"].root)),
                 arm=tracy.left_arm
@@ -81,6 +83,7 @@ def build_plan(context, battatco, holders):
             target_location=Pose.from_xyz_rpy(0, 0.037, -0.028, pi, 0, -pi/2,reference_frame=battatco["UnderBody"].root)
         ),
         MoveBranch(branch_root=battatco["UnderBody"].root, new_parent=battatco["UpperBody"].root),
+        ## Step 3: Body on lower wing
         PickUpAction(
                 grasp=GraspCandidate(battatco["UpperBody"], Pose.from_xyz_rpy(-0.1,0,0.03,0, pi/2,0,reference_frame=battatco["UpperBody"].root)),
                 arm=tracy.left_arm
@@ -91,6 +94,16 @@ def build_plan(context, battatco, holders):
         ),
         MoveBranch(branch_root=battatco["BottomWing"].root, new_parent=battatco["UnderBody"].root),
         MoveBranch(branch_root=battatco["RearWing"].root, new_parent=battatco["UnderBody"].root),
+        ## Step 4: Top wing on body
+        PickUpAction(
+            grasp=GraspCandidate(battatco["TopWing"], Pose.from_xyz_rpy(-0.05, -0.1,0, pi/2, 0, 0,reference_frame=battatco["TopWing"].root)),
+            arm=tracy.left_arm
+        ),
+        PlaceAction(
+            object_designator=battatco["TopWing"],
+            target_location=Pose.from_xyz_rpy(0.078, 0, 0.028, pi, 0, 0,reference_frame=battatco["UpperBody"].root)
+        ),
+        #retract right holding arm
         MoveFingersToWidthAction(gripper=tracy.right_arm.end_effector, width=0.075),
         MoveManipulatorAction(
             target_pose=Pose.from_xyz_rpy(-0.2, 0.13, -0.1, pi/2, 0, pi/2, reference_frame=holders["HolderHorizontal"].root),
@@ -101,7 +114,7 @@ def build_plan(context, battatco, holders):
     ]
 
     statechart = Statechart(context=context)
-    statechart.add_node(Sequence(nodes=actions))
+    statechart.add_node(node=Sequence(nodes=actions))
     return statechart
 
 MUJOCO = False
@@ -124,7 +137,7 @@ if MUJOCO:
     #     simulation.step_simulation(timedelta(seconds=1))
     #     with PhysicallySimulatedRobot(simulation=simulation):
     #         plan.perform()
-    # finally:git
+    # finally:
     #     simulation.stop_simulation()
 elif RVIZ:
     world = URDFParser.from_file(Tracy.get_ros_file_path()).create_world()
@@ -143,9 +156,9 @@ elif RVIZ:
     world.notify_state_change()
 
     executor = KinematicallySimulatedPlanExecutor(
-        StatechartContext.with_extensions(world, [RobotAccess(tracy)]),
+        context=StatechartContext.with_extensions(world=world, extensions=[RobotAccess(robot=tracy)]),
         ros_node=node,
     )
-    executor.compile(build_plan(executor.context, battatco, holders))
+    executor.compile(statechart=build_plan(executor.context, battatco, holders))
     executor.execute()
     executor.close()
