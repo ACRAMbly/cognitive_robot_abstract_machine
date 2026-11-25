@@ -13,8 +13,12 @@ from enum import StrEnum
 import numpy
 import pytest
 
+from robokudo_acrambly.descriptors.analysis_engines import (
+    synthetic_aircraft,
+    synthetic_tetris,
+)
 from robokudo_acrambly.synthetic_observations.parts import AircraftPart, TetrisBlock
-from robokudo_acrambly.synthetic_observations.scenario import PlaneLayout, Scenario
+from robokudo_acrambly.synthetic_observations.scenario import Scenario
 
 
 # %% Motion limits
@@ -54,12 +58,12 @@ def motion_limits() -> MotionLimits:
 @dataclass(kw_only=True)
 class ScenarioUnderTest:
     """
-    A scenario and the parts it has to contain.
+    A scenario of an analysis engine and the parts it has to contain.
     """
 
     scenario: Scenario
     """
-    The scenario under test.
+    The scenario the analysis engine plays back.
     """
 
     expected_labels: type[StrEnum]
@@ -68,15 +72,20 @@ class ScenarioUnderTest:
     """
 
 
-@pytest.fixture(params=[TetrisBlock, AircraftPart], ids=["tetris", "aircraft"])
+@pytest.fixture(
+    params=[
+        (synthetic_tetris.AnalysisEngine, TetrisBlock),
+        (synthetic_aircraft.AnalysisEngine, AircraftPart),
+    ],
+    ids=["tetris", "aircraft"],
+)
 def scenario_under_test(request: pytest.FixtureRequest) -> ScenarioUnderTest:
     """
-    The tetris blocks and the aircraft parts, each set out on the default plane layout.
+    The scenario of each synthetic analysis engine.
     """
-    expected_labels = request.param
+    engine_type, expected_labels = request.param
     return ScenarioUnderTest(
-        scenario=Scenario(parts=PlaneLayout().arrange(labels=list(expected_labels))),
-        expected_labels=expected_labels,
+        scenario=engine_type().scenario, expected_labels=expected_labels
     )
 
 

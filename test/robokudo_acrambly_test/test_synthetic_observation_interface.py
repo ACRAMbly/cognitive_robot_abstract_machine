@@ -18,12 +18,12 @@ from robokudo.types.annotation import Classification, PoseAnnotation
 from robokudo.types.scene import ObjectHypothesis
 from semantic_digital_twin.robots.robot_parts import Camera
 
+from robokudo_acrambly.descriptors.analysis_engines import synthetic_aircraft
 from robokudo_acrambly.synthetic_observations.camera_interface import (
     SyntheticCameraConfig,
     SyntheticObservationInterface,
 )
-from robokudo_acrambly.synthetic_observations.parts import AircraftPart
-from robokudo_acrambly.synthetic_observations.scenario import PlaneLayout, Scenario
+from robokudo_acrambly.synthetic_observations.scenario import Scenario
 
 from .dataset.clocks import SteppedClock
 
@@ -71,7 +71,7 @@ def synthetic_reader(clock: SteppedClock) -> SyntheticReaderPipeline:
     A reader of the aircraft scenario whose sequence has started at the time of
     ``clock``.
     """
-    scenario = Scenario(parts=PlaneLayout().arrange(labels=list(AircraftPart)))
+    scenario = synthetic_aircraft.AnalysisEngine().scenario
     camera_config = SyntheticCameraConfig(scenario=scenario)
     camera_interface = SyntheticObservationInterface(
         camera_config=camera_config, clock=clock
