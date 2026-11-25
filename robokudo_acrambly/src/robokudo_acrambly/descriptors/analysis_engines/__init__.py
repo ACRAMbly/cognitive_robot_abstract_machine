@@ -1,5 +1,3 @@
-# %% Analysis engines
-
 """
-Analysis engines discoverable by RoboKudo's package loader.
+Analysis engines RoboKudo runs from this package.
 """

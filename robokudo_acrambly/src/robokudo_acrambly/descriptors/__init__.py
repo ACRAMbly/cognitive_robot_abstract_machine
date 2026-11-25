@@ -1,5 +1,3 @@
-# %% Descriptors
-
 """
-Configurations and pipelines for ACRAMbly perception.
+Descriptors RoboKudo loads by name from this package.
 """

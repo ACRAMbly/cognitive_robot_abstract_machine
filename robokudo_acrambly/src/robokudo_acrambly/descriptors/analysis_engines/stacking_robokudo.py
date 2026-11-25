@@ -12,7 +12,9 @@ from robokudo.annotators.collection_reader import CollectionReaderAnnotator
 from robokudo.annotators.image_cluster_extractor import ImageClusterExtractor
 from robokudo.annotators.image_preprocessor import ImagePreprocessorAnnotator
 from robokudo.annotators.query import GenerateQueryResult, QueryAnnotator
-from robokudo.descriptors import CrDescriptorFactory
+from robokudo.descriptors.factories.cr_descriptor_factory import (
+    CollectionReaderDescriptorFactory,
+)
 from robokudo.idioms import pipeline_init
 from robokudo.pipeline import Pipeline
 
@@ -60,7 +62,7 @@ class AnalysisEngine(AnalysisEngineInterface):
         """
         Create the query-driven color segmentation pipeline.
         """
-        camera_descriptor = CrDescriptorFactory.create_descriptor("orbbec")
+        camera_descriptor = CollectionReaderDescriptorFactory.create_descriptor("orbbec")
         color_cluster_descriptor = create_color_cluster_descriptor()
 
         pipeline = Pipeline("ColoredCubePipeline")
