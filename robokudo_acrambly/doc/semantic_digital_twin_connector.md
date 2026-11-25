@@ -27,7 +27,7 @@ running local world.
 `WorldSynchronizer` transfers accepted changes to another process's world. That
 transfer remains a separate responsibility.
 
-The acceptance scenario uses the 12 named STL parts in `meshes/plane/`. Tetris belongs
+The acceptance scenario uses 10 named STL parts in `meshes/plane/`; the two rear-wheel meshes stay in the directory but are not perceived. Tetris belongs
 to the previous task. This brief supersedes the earlier Tetris connector brief.
 
 ## Application-owned semantics and model resources
@@ -42,8 +42,6 @@ Define aircraft-part semantic annotations in `robokudo_acrambly`, under a common
 | FrontWheel | `meshes/plane/FrontWheel.stl` |
 | MotorGrill | `meshes/plane/MotorGrill.stl` |
 | Propeller | `meshes/plane/Propeller.stl` |
-| RearWheelLeft | `meshes/plane/RearWheelLeft.stl` |
-| RearWheelRight | `meshes/plane/RearWheelRight.stl` |
 | RearWing | `meshes/plane/RearWing.stl` |
 | TopWing | `meshes/plane/TopWing.stl` |
 | UnderBody | `meshes/plane/UnderBody.stl` |
@@ -206,7 +204,7 @@ Cover:
 - Partial absence, empty observations, and reappearance retain or update exactly
   the expected beliefs and their accepted state.
 
-Construct a six-stage pipeline sequence using all 12 configured part kinds:
+Construct a six-stage pipeline sequence using all 10 configured part kinds:
 all present, translation, rotation, some absent, all absent, and all reappearing.
 Use deterministic test poses; an assembled-plane layout is unnecessary. Assert
 exact belief counts, UUIDs, semantic types, accepted poses, model geometry, and

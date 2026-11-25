@@ -23,8 +23,6 @@ from robokudo_acrambly.aircraft.types import (
     FrontWheel,
     MotorGrill,
     Propeller,
-    RearWheelLeft,
-    RearWheelRight,
     RearWing,
     TopWing,
     UnderBody,
@@ -49,8 +47,6 @@ class AircraftLabel(StrEnum):
     FRONT_WHEEL = "FrontWheel"
     MOTOR_GRILL = "MotorGrill"
     PROPELLER = "Propeller"
-    REAR_WHEEL_LEFT = "RearWheelLeft"
-    REAR_WHEEL_RIGHT = "RearWheelRight"
     REAR_WING = "RearWing"
     TOP_WING = "TopWing"
     UNDER_BODY = "UnderBody"
@@ -90,7 +86,7 @@ class AircraftModelDefinition:
 
 class AircraftModel(Enum):
     """
-    The twelve configured aircraft models.
+    The ten configured aircraft models.
     """
 
     BOTTOM_WING = AircraftModelDefinition(
@@ -107,12 +103,6 @@ class AircraftModel(Enum):
     )
     PROPELLER = AircraftModelDefinition(
         AircraftLabel.PROPELLER, Propeller, Path("Propeller.stl")
-    )
-    REAR_WHEEL_LEFT = AircraftModelDefinition(
-        AircraftLabel.REAR_WHEEL_LEFT, RearWheelLeft, Path("RearWheelLeft.stl")
-    )
-    REAR_WHEEL_RIGHT = AircraftModelDefinition(
-        AircraftLabel.REAR_WHEEL_RIGHT, RearWheelRight, Path("RearWheelRight.stl")
     )
     REAR_WING = AircraftModelDefinition(
         AircraftLabel.REAR_WING, RearWing, Path("RearWing.stl")

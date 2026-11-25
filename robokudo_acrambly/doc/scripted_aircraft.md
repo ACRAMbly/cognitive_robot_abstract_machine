@@ -218,7 +218,7 @@ The engine derives `semantic_types` and `model_geometry` from one loaded
 the generic [observation contract](../../robokudo/docs/semantic_observations.md).
 Source-only tests exercise `AircraftObservationAnnotator` independently; the
 engine integration test runs the real threaded consumer through movement,
-partial absence, total absence, and reappearance for all twelve aircraft kinds.
+partial absence, total absence, and reappearance for all ten aircraft kinds.
 
 ## Inspecting annotators and the local belief world
 
