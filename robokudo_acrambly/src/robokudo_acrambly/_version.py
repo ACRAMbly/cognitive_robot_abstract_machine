@@ -1,3 +1,7 @@
-# %% Workspace version
+"""
+Version of the :mod:`robokudo_acrambly` distribution.
+"""
 
-__version__ = "26.07.0"
+# %% Package version
+
+__version__ = "26.10.0"
