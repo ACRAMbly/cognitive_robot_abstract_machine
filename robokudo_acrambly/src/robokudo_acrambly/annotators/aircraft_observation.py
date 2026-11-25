@@ -12,6 +12,7 @@ from robokudo.annotators.core import BaseAnnotator
 from robokudo.annotators.semantic_observations import ObservationPose
 from robokudo.types.annotation import Classification, PoseAnnotation
 from robokudo.types.scene import ObjectHypothesis
+from robokudo.world import world_instance
 from robokudo_acrambly.playback.schedule import CaptureSchedule
 
 if TYPE_CHECKING:
@@ -76,7 +77,7 @@ class AircraftObservationAnnotator(BaseAnnotator):
         Initialize the public observation source.
         """
         BaseAnnotator.__init__(self, name=AircraftObservationLabel.SOURCE)
-        self.frames.validate()
+        self.frames.validate(world_root=world_instance().root)
         self.scenario.timing.validate()
         for part in self.scenario.parts:
             part.validate_keyframes(self.scenario.timing)
@@ -89,7 +90,11 @@ class AircraftObservationAnnotator(BaseAnnotator):
             return capture
         pipeline = self.get_parent_pipeline()
         pipeline.create_new_cas()
-        self.frames.write_metadata(pipeline.cas, capture.capture_timestamp)
+        self.frames.write_metadata(
+            observation=pipeline.cas,
+            capture_timestamp=capture.capture_timestamp,
+            world_root=world_instance().root,
+        )
         self.write_hypotheses(pipeline.cas, capture)
         self.write_preview(pipeline.cas)
         self.schedule.observation_index += 1

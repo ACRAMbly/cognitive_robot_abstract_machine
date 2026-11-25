@@ -121,10 +121,7 @@ def test_launcher_emits_the_documented_camera_calibration(
     AircraftBeliefCapture(pipeline).complete()
 
     assert pipeline.status is Status.SUCCESS
-    assert (
-        pipeline.cas.world_frame
-        == configuration[AircraftConfigurationField.WORLD_FRAME]
-    )
+    assert pipeline.cas.world_frame == str(robokudo_world.world_instance().root.name)
     assert (
         pipeline.cas.camera_frame
         == configuration[AircraftConfigurationField.CAMERA_FRAME]

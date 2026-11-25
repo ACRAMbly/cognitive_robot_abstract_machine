@@ -18,9 +18,7 @@ from robokudo_acrambly.aircraft_observations.exceptions import (
     MissingAircraftFrameConfiguration,
 )
 from robokudo_acrambly.aircraft_observations.scenario import AircraftFrames
-from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix
-from semantic_digital_twin.world_description.world_entity import Body
 
 if TYPE_CHECKING:
     from typing_extensions import Any
@@ -46,25 +44,17 @@ class AircraftConfigurationField(StrEnum):
     Fields in an application's aircraft frame configuration document.
     """
 
-    WORLD_FRAME = "world_frame"
-    """Declared world coordinate frame identifier."""
-
     CAMERA_FRAME = "camera_frame"
     """Declared optical camera coordinate frame identifier."""
 
     CAMERA_POSE = "camera_pose"
-    """Camera origin and orientation in world coordinates."""
+    """Camera origin and orientation relative to the world's root."""
 
 
 @dataclass
 class AircraftFrameConfiguration:
     """
-    Declared frames and the camera's world pose.
-    """
-
-    world_frame: str
-    """
-    Application-owned world coordinate frame identifier.
+    The declared camera frame and its pose relative to the robot world's root.
     """
 
     camera_frame: str
@@ -74,16 +64,15 @@ class AircraftFrameConfiguration:
 
     camera_pose: Pose
     """
-    Camera origin in world coordinates, in metres and xyzw quaternion order.
+    Camera origin relative to the world's root, in metres and xyzw quaternion order.
     """
 
     @classmethod
     def from_json(cls, payload: dict[str, Any]) -> AircraftFrameConfiguration:
         """
-        Read the required frame identifiers and explicit camera world pose.
+        Read the camera frame identifier and its explicit pose.
         """
         return cls(
-            world_frame=payload[AircraftConfigurationField.WORLD_FRAME],
             camera_frame=payload[AircraftConfigurationField.CAMERA_FRAME],
             camera_pose=Pose(**payload[AircraftConfigurationField.CAMERA_POSE]),
         )
@@ -103,7 +92,7 @@ class AircraftFrameConfiguration:
 
     def create_frames(self) -> AircraftFrames:
         """
-        Create detached frame references without registering world bodies.
+        Create the camera calibration without registering world bodies.
         """
         ObservationPose.from_hypothesis(
             ObjectHypothesis(
@@ -115,12 +104,9 @@ class AircraftFrameConfiguration:
                 ]
             )
         )
-        world_body = Body(name=PrefixedName(self.world_frame))
-        camera_body = Body(name=PrefixedName(self.camera_frame))
-        world_T_camera = HomogeneousTransformationMatrix.from_xyz_quaternion(
-            *self.camera_pose.translation,
-            *self.camera_pose.rotation,
-            reference_frame=world_body,
-            child_frame=camera_body,
+        return AircraftFrames(
+            camera_frame=self.camera_frame,
+            camera_pose=HomogeneousTransformationMatrix.from_xyz_quaternion(
+                *self.camera_pose.translation, *self.camera_pose.rotation
+            ),
         )
-        return AircraftFrames(self.world_frame, self.camera_frame, world_T_camera)

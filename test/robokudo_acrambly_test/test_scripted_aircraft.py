@@ -21,9 +21,7 @@ from robokudo.types.cv import ImageROI
 from robokudo.types.scene import ObjectHypothesis
 from robokudo_acrambly.aircraft.models import AircraftModel
 from robokudo_acrambly.aircraft_observations.scenario import AircraftFrames
-from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix
-from semantic_digital_twin.world_description.world_entity import Body
 
 from .test_scripted_tetris import ControlledClock
 
@@ -40,9 +38,6 @@ if TYPE_CHECKING:
 class AircraftFrameLabel(StrEnum):
     """Frame identifiers for detached aircraft source calibration."""
 
-    WORLD = "aircraft_world"
-    """Declared world frame of the isolated source fixture."""
-
     CAMERA = "aircraft_camera"
     """Declared optical camera frame of the isolated source fixture."""
 
@@ -50,20 +45,12 @@ class AircraftFrameLabel(StrEnum):
 @pytest.fixture
 def aircraft_frames() -> AircraftFrames:
     """
-    Supply detached frame references without initializing a belief world.
+    Supply a camera calibration relative to the robot world's root.
     """
-    world_body = Body(name=PrefixedName(AircraftFrameLabel.WORLD))
-    camera_body = Body(name=PrefixedName(AircraftFrameLabel.CAMERA))
     return AircraftFrames(
-        world_frame=str(world_body.name),
-        camera_frame=str(camera_body.name),
-        camera_to_world_transform=HomogeneousTransformationMatrix.from_xyz_rpy(
-            x=10.0,
-            y=20.0,
-            z=30.0,
-            yaw=1.0,
-            reference_frame=world_body,
-            child_frame=camera_body,
+        camera_frame=AircraftFrameLabel.CAMERA,
+        camera_pose=HomogeneousTransformationMatrix.from_xyz_rpy(
+            x=10.0, y=20.0, z=30.0, yaw=1.0
         ),
     )
 
@@ -131,19 +118,18 @@ def test_aircraft_capture_contains_only_explicit_frame_and_capture_metadata(
     }
     assert type(observation.data_timestamp) is int
     assert observation.data_timestamp == clock.timestamp_nanoseconds
-    assert observation.world_frame == aircraft_frames.world_frame
+    assert observation.world_frame == str(robokudo_world.world_instance().root.name)
     assert observation.camera_frame == aircraft_frames.camera_frame
     numpy.testing.assert_array_equal(
         observation.camera_to_world_transform.to_np(),
-        aircraft_frames.camera_to_world_transform.to_np(),
+        aircraft_frames.camera_pose.to_np(),
     )
     assert (
         observation.camera_to_world_transform.reference_frame
-        is aircraft_frames.camera_to_world_transform.reference_frame
+        is robokudo_world.world_instance().root
     )
     assert (
-        observation.camera_to_world_transform.child_frame
-        is aircraft_frames.camera_to_world_transform.child_frame
+        observation.camera_to_world_transform.child_frame is aircraft_frames.camera_body
     )
     assert len(observation.annotations) == len(engine.scenario.parts)
     for hypothesis in observation.annotations:
@@ -212,7 +198,7 @@ def test_aircraft_source_rejects_conflicting_transform_frames(
     """
     A transform must explicitly map between the configured frame identifiers.
     """
-    aircraft_frames.camera_frame = aircraft_frames.world_frame
+    aircraft_frames.camera_frame = str(robokudo_world.world_instance().root.name)
     engine = AircraftObservationSequence(
         frames=aircraft_frames, clock=ControlledClock()
     )

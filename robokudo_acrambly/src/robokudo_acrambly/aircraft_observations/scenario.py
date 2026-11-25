@@ -14,6 +14,9 @@ from robokudo.annotators.semantic_observations import ObservationCapture
 from robokudo.cas import CAS
 from robokudo.types.tf import Pose
 from robokudo_acrambly.aircraft.models import AircraftModel
+from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
+from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix
+from semantic_digital_twin.world_description.world_entity import Body
 from robokudo_acrambly.playback.schedule import PlaybackTiming
 from robokudo_acrambly.playback.motion import (
     AbsenceInterval,
@@ -24,52 +27,76 @@ from robokudo_acrambly.playback.motion import (
     VisibilityBoundary,
 )
 
-if TYPE_CHECKING:
-    from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix
-
-
 # %% Frame configuration
 
 
 @dataclass
 class AircraftFrames:
     """
-    Explicit camera calibration retained across independent captures.
+    Explicit camera calibration relative to the root of the robot's world.
     """
-
-    world_frame: str
-    """Declared world coordinate frame supplied by the application."""
 
     camera_frame: str
     """
     Optical camera frame with X right, Y down, and Z forward.
     """
 
-    camera_to_world_transform: HomogeneousTransformationMatrix
-    """Rigid transform from the camera frame into the declared world frame."""
+    camera_pose: HomogeneousTransformationMatrix
+    """
+    Camera origin and orientation in the coordinates of the world's root.
+    """
 
-    def validate(self) -> None:
+    camera_body: Body = field(init=False)
+    """
+    Detached body naming the camera frame in every capture.
+    """
+
+    def __post_init__(self) -> None:
         """
-        Require distinct frames and explicit finite rigid calibration.
+        Name the camera frame once, so every capture refers to the same body.
         """
-        if not self.world_frame:
+        self.camera_body = Body(name=PrefixedName(self.camera_frame))
+
+    def create_camera_to_world_transform(
+        self, *, world_root: Body
+    ) -> HomogeneousTransformationMatrix:
+        """
+        Express the calibrated camera pose as a transform from the camera to the root.
+        """
+        return HomogeneousTransformationMatrix(
+            self.camera_pose.to_np(),
+            reference_frame=world_root,
+            child_frame=self.camera_body,
+        )
+
+    def validate(self, *, world_root: Body | None) -> None:
+        """
+        Require a world root distinct from the camera and a finite rigid calibration.
+        """
+        if world_root is None:
             raise InvalidObservationFrame(ObservationProblem.WORLD_FRAME)
-        if self.world_frame == self.camera_frame:
+        if str(world_root.name) == self.camera_frame:
             raise InvalidObservationFrame(ObservationProblem.AMBIGUOUS_FRAME)
         observation = CAS()
-        observation.camera_to_world_transform = self.camera_to_world_transform
+        observation.camera_to_world_transform = self.create_camera_to_world_transform(
+            world_root=world_root
+        )
         ObservationCapture(
-            self.world_frame, self.camera_frame, Time()
+            str(world_root.name), self.camera_frame, Time()
         ).validate_camera_transform(observation)
 
-    def write_metadata(self, observation: CAS, capture_timestamp: int) -> None:
+    def write_metadata(
+        self, *, observation: CAS, capture_timestamp: int, world_root: Body
+    ) -> None:
         """
-        Write the configured frames and precise scheduled time into one capture.
+        Write the root as world frame, the camera calibration and the scheduled time.
         """
         observation.data_timestamp = capture_timestamp
-        observation.world_frame = self.world_frame
+        observation.world_frame = str(world_root.name)
         observation.camera_frame = self.camera_frame
-        observation.camera_to_world_transform = self.camera_to_world_transform
+        observation.camera_to_world_transform = self.create_camera_to_world_transform(
+            world_root=world_root
+        )
 
 
 # %% Independent part poses

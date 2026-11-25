@@ -127,9 +127,7 @@ def test_scripted_aircraft_updates_local_beliefs_through_absence_and_reappearanc
             camera_T_part = numpy.eye(4)
             camera_T_part[:3, :3] = Rotation.from_quat(camera_pose.rotation).as_matrix()
             camera_T_part[:3, 3] = camera_pose.translation
-            world_T_part = (
-                aircraft_frames.camera_to_world_transform.to_np() @ camera_T_part
-            )
+            world_T_part = aircraft_frames.camera_pose.to_np() @ camera_T_part
             numpy.testing.assert_allclose(
                 belief.body.global_transform.to_np(),
                 world_T_part,

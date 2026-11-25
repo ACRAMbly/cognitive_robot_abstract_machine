@@ -10,6 +10,7 @@ from rclpy.constants import S_TO_NS
 from scipy.spatial.transform import Rotation
 from typing_extensions import TYPE_CHECKING
 
+from robokudo.world import world_instance
 from robokudo.annotators.semantic_observations import (
     ObservationCapture,
     SemanticObservationAcceptance,
@@ -57,9 +58,8 @@ def aircraft_frames(
     Supply registered frame references before source construction begins.
     """
     return AircraftFrames(
-        world_frame=captured_cas.world_frame,
         camera_frame=captured_cas.camera_frame,
-        camera_to_world_transform=captured_cas.camera_to_world_transform,
+        camera_pose=captured_cas.camera_to_world_transform,
     )
 
 
@@ -170,7 +170,7 @@ def test_aircraft_capture_metadata_is_accepted_through_total_absence(
         assert capture.timestamp.sec * S_TO_NS + capture.timestamp.nanosec == (
             expected_timestamp
         )
-        assert capture.world_frame == frames.world_frame
+        assert capture.world_frame == str(world_instance().root.name)
         assert capture.camera_frame == frames.camera_frame
         for hypothesis in observation.annotations:
             prepared = aircraft_acceptance.prepare(

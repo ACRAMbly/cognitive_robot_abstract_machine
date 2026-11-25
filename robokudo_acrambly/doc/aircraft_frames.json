@@ -1,5 +1,4 @@
 {
-  "world_frame": "aircraft_world",
   "camera_frame": "aircraft_camera",
   "camera_pose": {
     "translation": [10.0, 20.0, 30.0],
