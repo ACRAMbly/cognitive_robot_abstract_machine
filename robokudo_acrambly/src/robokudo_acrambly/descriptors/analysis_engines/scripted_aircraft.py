@@ -26,7 +26,7 @@ from robokudo_acrambly.annotators.aircraft_observation import (
     AircraftObservationLabel,
 )
 from robokudo_acrambly.playback.clock import SystemClock
-from robokudo.world import world_instance
+from robokudo_acrambly.shared_world.world_source import WorldServerSource
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 from semantic_digital_twin.world_description.world_entity import Body
 from semantic_digital_twin.world_description.connections import FixedConnection
@@ -34,6 +34,7 @@ from semantic_digital_twin.world_description.connections import FixedConnection
 if TYPE_CHECKING:
     from robokudo_acrambly.aircraft_observations.scenario import AircraftFrames
     from robokudo_acrambly.playback.clock import Clock
+    from robokudo_acrambly.shared_world.world_source import WorldSource
 
 
 # %% Public analysis engine
@@ -42,7 +43,7 @@ if TYPE_CHECKING:
 @dataclass
 class AnalysisEngine(AnalysisEngineInterface):
     """
-    Accept scripted aircraft observations into RoboKudo's local belief world.
+    Accept scripted aircraft observations into the robot's shared world.
     """
 
     frames: AircraftFrames | None = None
@@ -65,12 +66,17 @@ class AnalysisEngine(AnalysisEngineInterface):
     Optional catalog geometry displayed independently of the CAS payload.
     """
 
+    world_source: WorldSource = field(default_factory=WorldServerSource)
+    """
+    Supplier of the robot's world that the beliefs are accepted into.
+    """
+
     def name(self) -> str:
         return AircraftObservationLabel.SOURCE
 
     def implementation(self) -> Pipeline:
         """
-        Construct the aircraft source and configured local belief consumer.
+        Install the robot's world, then build the aircraft source and belief consumer.
         """
         frames = self.frames
         if frames is None:
@@ -95,7 +101,7 @@ class AnalysisEngine(AnalysisEngineInterface):
         }
         descriptor.parameters.model_geometry = catalog.models
 
-        runtime_world = world_instance()
+        runtime_world = self.world_source.install()
         if not runtime_world.get_bodies_by_name(frames.world_frame):
             root = runtime_world.root
             world_body = Body(name=PrefixedName(frames.world_frame))
