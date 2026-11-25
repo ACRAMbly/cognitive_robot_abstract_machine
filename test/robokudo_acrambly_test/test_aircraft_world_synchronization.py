@@ -17,14 +17,11 @@ from robokudo_acrambly.descriptors.analysis_engines.scripted_aircraft import (
     AnalysisEngine,
 )
 from robokudo_acrambly.shared_world.world_source import ProvidedWorldSource
-from semantic_digital_twin.adapters.ros.world_fetcher import (
-    FetchWorldServer,
-    fetch_world_from_service,
-)
+from acrambly_temp.stand_in_world_server import StandInWorldServer
+from semantic_digital_twin.adapters.ros.world_fetcher import fetch_world_from_service
 from semantic_digital_twin.adapters.ros.world_synchronizer import WorldSynchronizer
 
 from .dataset.aircraft_beliefs import AircraftBeliefCapture
-from .dataset.robot_world import RobotWorldFrame, create_robot_world
 from .dataset.synchronization import DeliveryWait, has_buffered
 from .test_aircraft_belief_creation import aircraft_catalog, semdt_cas
 from .test_scripted_aircraft import aircraft_frames
@@ -47,21 +44,18 @@ if TYPE_CHECKING:
 
 
 @pytest.fixture
-def world_server(spinning_node: Node) -> Iterator[FetchWorldServer]:
+def world_server(spinning_node: Node) -> Iterator[StandInWorldServer]:
     """
     Serve a synchronized robot world with root ``map``, as Giskard does.
     """
-    world = create_robot_world(root_frame=RobotWorldFrame.MAP)
-    synchronizer = WorldSynchronizer(_world=world, node=spinning_node)
-    server = FetchWorldServer(node=spinning_node, world=world)
-    yield server
-    server.close()
-    synchronizer.close()
+    stand_in = StandInWorldServer(node=spinning_node)
+    yield stand_in
+    stand_in.close()
 
 
 @pytest.fixture
 def aircraft_engine(
-    world_server: FetchWorldServer,
+    world_server: StandInWorldServer,
     spinning_node: Node,
     aircraft_catalog: AircraftModelCatalog,
     aircraft_frames: AircraftFrames,
@@ -90,7 +84,7 @@ def aircraft_engine(
         synchronizer.close()
 
 
-def build_pipeline(*, engine: AnalysisEngine, server: FetchWorldServer) -> Pipeline:
+def build_pipeline(*, engine: AnalysisEngine, server: StandInWorldServer) -> Pipeline:
     """
     Install the engine's world, set up its pipeline, and wait until the server applied
     what the installation published.
@@ -98,9 +92,7 @@ def build_pipeline(*, engine: AnalysisEngine, server: FetchWorldServer) -> Pipel
     pipeline = engine.implementation()
     pipeline.setup()
     position = WorldSynchronizer.of_world(world_instance()).latest_published_position
-    assert DeliveryWait().until(
-        lambda: WorldSynchronizer.of_world(server.world).has_applied(position)
-    )
+    assert DeliveryWait().until(lambda: server.synchronizer.has_applied(position))
     return pipeline
 
 
@@ -148,7 +140,9 @@ def accepted_parts(world: World) -> dict[UUID, AircraftPart]:
 
 
 def test_receiving_world_gets_accepted_parts_with_uuids_types_and_poses(
-    aircraft_engine: AnalysisEngine, spinning_node: Node, world_server: FetchWorldServer
+    aircraft_engine: AnalysisEngine,
+    spinning_node: Node,
+    world_server: StandInWorldServer,
 ) -> None:
     """
     Every part accepted into RoboKudo's world reaches a synchronized world.
@@ -173,7 +167,9 @@ def test_receiving_world_gets_accepted_parts_with_uuids_types_and_poses(
 
 
 def test_held_back_updates_reach_the_receiving_world_only_when_applied(
-    aircraft_engine: AnalysisEngine, spinning_node: Node, world_server: FetchWorldServer
+    aircraft_engine: AnalysisEngine,
+    spinning_node: Node,
+    world_server: StandInWorldServer,
 ) -> None:
     """
     With deferred updates the receiving world stays unchanged until it applies them.

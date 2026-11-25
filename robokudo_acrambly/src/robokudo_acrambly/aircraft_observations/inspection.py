@@ -17,6 +17,7 @@ from robokudo_acrambly.descriptors.analysis_engines.scripted_aircraft import (
     AnalysisEngine,
 )
 from semantic_digital_twin.adapters.ros.node_registry import ROSNodeRegistry
+from semantic_digital_twin.adapters.ros.world_synchronizer import WorldSynchronizer
 from semantic_digital_twin.adapters.ros.visualization.viz_marker import (
     VizMarkerPublisher,
 )
@@ -43,7 +44,11 @@ class InspectionNode(StrEnum):
 
 @dataclass
 class AircraftBeliefInspection(AbstractContextManager):
-    """Display aircraft annotator output and publish the retained belief world."""
+    """
+    Display aircraft annotator output and publish the robot's world with the beliefs.
+
+    The robot's world is fetched from a running world server, such as the stand-in.
+    """
 
     node: Node
     """Application-owned ROS node serving the inspection session."""
@@ -73,6 +78,10 @@ class AircraftBeliefInspection(AbstractContextManager):
         """Initialize the annotator GUI, playback, and world publication."""
         with ExitStack() as resources:
             self.pipeline = self.engine.implementation()
+            for synchronizer in WorldSynchronizer.all_callbacks_of_this_type_from_world(
+                world_instance()
+            ):
+                resources.callback(synchronizer.close)
             self.tree = grow_tree(self.pipeline, node=self.node)
             resources.callback(self.tree.shutdown)
             self.markers = VizMarkerPublisher(_world=world_instance(), node=self.node)

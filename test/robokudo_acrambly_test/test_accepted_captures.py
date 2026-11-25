@@ -40,7 +40,7 @@ if TYPE_CHECKING:
     from robokudo_acrambly.descriptors.analysis_engines.scripted_aircraft import (
         AnalysisEngine,
     )
-    from semantic_digital_twin.adapters.ros.world_fetcher import FetchWorldServer
+    from acrambly_temp.stand_in_world_server import StandInWorldServer
 
 
 # %% Message format
@@ -90,7 +90,7 @@ def receiver(spinning_node: Node) -> Iterator[AcceptedCaptureReceiver]:
 
 def test_receiver_records_the_capture_and_its_poses_count_only_once_applied(
     aircraft_engine: AnalysisEngine,
-    world_server: FetchWorldServer,
+    world_server: StandInWorldServer,
     receiver: AcceptedCaptureReceiver,
     spinning_node: Node,
 ) -> None:
@@ -127,7 +127,7 @@ def test_receiver_records_the_capture_and_its_poses_count_only_once_applied(
 
 def test_a_part_absent_from_a_capture_keeps_its_earlier_capture(
     aircraft_engine: AnalysisEngine,
-    world_server: FetchWorldServer,
+    world_server: StandInWorldServer,
     receiver: AcceptedCaptureReceiver,
 ) -> None:
     """

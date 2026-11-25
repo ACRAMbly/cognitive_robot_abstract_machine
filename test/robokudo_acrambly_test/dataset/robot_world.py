@@ -29,5 +29,5 @@ def create_robot_world(*, root_frame: RobotWorldFrame) -> World:
     """
     world = World()
     with world.modify_world():
-        world.add_body(Body(name=PrefixedName(root_frame)))
+        world.add_body(Body(name=PrefixedName(root_frame.value)))
     return world

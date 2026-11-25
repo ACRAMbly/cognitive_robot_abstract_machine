@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from dataclasses import dataclass
+from enum import StrEnum
 from threading import Thread
 
 import pytest
@@ -36,11 +37,33 @@ if TYPE_CHECKING:
 # %% Robot world
 
 
+class RobotWorldMarker(StrEnum):
+    """
+    Markers that change how a test gets the robot's world.
+    """
+
+    SERVED_WORLD = "served_world"
+    """The test fetches the robot's world from a real world server."""
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    """
+    Register the robot world markers.
+    """
+    config.addinivalue_line(
+        "markers",
+        f"{RobotWorldMarker.SERVED_WORLD}: fetch the robot's world from a world server",
+    )
+
+
 @pytest.fixture(autouse=True)
-def robot_world(monkeypatch: pytest.MonkeyPatch) -> World:
+def robot_world(
+    request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch
+) -> World:
     """
     Stand in for the world server: RoboKudo starts from a robot world with root
-    ``map``, and fetching the robot's world returns the world RoboKudo holds.
+    ``map``, and fetching the robot's world returns the world RoboKudo holds, unless
+    the test is marked to fetch it from a world server.
     """
     world = create_robot_world(root_frame=RobotWorldFrame.MAP)
     monkeypatch.setattr(robokudo_world, "world", world)
@@ -49,7 +72,8 @@ def robot_world(monkeypatch: pytest.MonkeyPatch) -> World:
         "world_entity_tracker",
         WorldEntityWithIDKwargsTracker.from_world(world),
     )
-    monkeypatch.setattr(WorldServerSource, "supply_world", supply_current_world)
+    if request.node.get_closest_marker(RobotWorldMarker.SERVED_WORLD) is None:
+        monkeypatch.setattr(WorldServerSource, "supply_world", supply_current_world)
     return world
 
 
