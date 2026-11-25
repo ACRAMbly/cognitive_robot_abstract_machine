@@ -65,49 +65,52 @@ def build_plan(context, battatco, holders):
         ParkArmsAction(arms=tracy.all_arms),
         ## Step 1: bottom wing on middle holder and hold there
         PickUpAction(
-            grasp=GraspCandidate(battatco["BottomWing"], Pose.from_xyz_rpy(0.09, 0.05,0, pi/2, 0, -pi/2,reference_frame=battatco["BottomWing"].root)),
+            grasp_candidate=GraspCandidate(battatco["BottomWing"], Pose.from_xyz_rpy(0.09, 0.05,0, pi/2, 0, -pi/2,reference_frame=battatco["BottomWing"].root)),
             arm=tracy.right_arm
         ),
         MoveManipulatorAction(
-            target_pose=Pose.from_xyz_rpy(-0.089, 0.13, -0.094, pi/2, 0, pi/2, reference_frame=holders["HolderHorizontal"].root),
-            end_effector=tracy.right_arm.end_effector,
+            goal_pose=Pose.from_xyz_rpy(-0.089, 0.13, -0.094, pi/2, 0, pi/2, reference_frame=holders["HolderHorizontal"].root),
+            arm=tracy.right_arm.end_effector,
             allow_gripper_collision=False
         ),
         ## Step 2: Upper body on lower body
         PickUpAction(
-                grasp=GraspCandidate(battatco["UpperBody"], Pose.from_xyz_rpy(-0.1,0,0.03,0, pi/2,0,reference_frame=battatco["UpperBody"].root)),
-                arm=tracy.left_arm
+            grasp_candidate=GraspCandidate(battatco["UpperBody"], Pose.from_xyz_rpy(-0.1,0,0.03,0, pi/2,0,reference_frame=battatco["UpperBody"].root)),
+            arm=tracy.left_arm
         ),
         PlaceAction(
-            object_designator=battatco["UpperBody"],
-            target_location=Pose.from_xyz_rpy(0, 0.037, -0.028, pi, 0, -pi/2,reference_frame=battatco["UnderBody"].root)
+            arm=tracy.left_arm,
+            graspable=battatco["UpperBody"],
+            goal_pose=Pose.from_xyz_rpy(0, 0.037, -0.028, pi, 0, -pi/2,reference_frame=battatco["UnderBody"].root)
         ),
         MoveBranch(branch_root=battatco["UnderBody"].root, new_parent=battatco["UpperBody"].root),
         ## Step 3: Body on lower wing
         PickUpAction(
-                grasp=GraspCandidate(battatco["UpperBody"], Pose.from_xyz_rpy(-0.1,0,0.03,0, pi/2,0,reference_frame=battatco["UpperBody"].root)),
-                arm=tracy.left_arm
+            grasp_candidate=GraspCandidate(battatco["UpperBody"], Pose.from_xyz_rpy(-0.1,0,0.03,0, pi/2,0,reference_frame=battatco["UpperBody"].root)),
+            arm=tracy.left_arm
         ),
         PlaceAction(
-            object_designator=battatco["UpperBody"],
-            target_location=Pose.from_xyz_rpy(0, 0.187, 0, -pi/2, pi, 0,reference_frame=holders["HolderHorizontal"].root)
+            arm=tracy.left_arm,
+            graspable=battatco["UpperBody"],
+            goal_pose=Pose.from_xyz_rpy(0, 0.187, 0, -pi/2, pi, 0,reference_frame=holders["HolderHorizontal"].root)
         ),
         MoveBranch(branch_root=battatco["BottomWing"].root, new_parent=battatco["UnderBody"].root),
         MoveBranch(branch_root=battatco["RearWing"].root, new_parent=battatco["UnderBody"].root),
         ## Step 4: Top wing on body
         PickUpAction(
-            grasp=GraspCandidate(battatco["TopWing"], Pose.from_xyz_rpy(-0.05, -0.1,0, pi/2, 0, 0,reference_frame=battatco["TopWing"].root)),
+            grasp_candidate=GraspCandidate(battatco["TopWing"], Pose.from_xyz_rpy(-0.05, -0.1,0, pi/2, 0, 0,reference_frame=battatco["TopWing"].root)),
             arm=tracy.left_arm
         ),
         PlaceAction(
-            object_designator=battatco["TopWing"],
-            target_location=Pose.from_xyz_rpy(0.078, 0, 0.028, pi, 0, 0,reference_frame=battatco["UpperBody"].root)
+            arm=tracy.left_arm,
+            graspable=battatco["TopWing"],
+            goal_pose=Pose.from_xyz_rpy(0.078, 0, 0.028, pi, 0, 0,reference_frame=battatco["UpperBody"].root)
         ),
         #retract right holding arm
-        MoveFingersToWidthAction(gripper=tracy.right_arm.end_effector, width=0.075),
+        MoveFingersToWidthAction(two_finger_gripper=tracy.right_arm.end_effector, width=0.075),
         MoveManipulatorAction(
-            target_pose=Pose.from_xyz_rpy(-0.2, 0.13, -0.1, pi/2, 0, pi/2, reference_frame=holders["HolderHorizontal"].root),
-            end_effector=tracy.right_arm.end_effector,
+            goal_pose=Pose.from_xyz_rpy(-0.2, 0.13, -0.1, pi/2, 0, pi/2, reference_frame=holders["HolderHorizontal"].root),
+            arm=tracy.right_arm.end_effector,
             allow_gripper_collision=False
         ),
         ParkArmsAction(arms=tracy.all_arms)
