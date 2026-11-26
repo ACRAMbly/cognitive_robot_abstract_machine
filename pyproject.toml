@@ -18,6 +18,7 @@ dependencies = [
   "giskardpy>=26.10.0",
   "cramph>=26.10.0",
   "semantic_digital_twin>=26.10.0",
+  "semantic_digital_twin_acrambly>=26.10.0",
   "krrood>=26.10.0",
   "random-events>=26.10.0",
   "probabilistic_model>=26.10.0",
@@ -90,6 +91,7 @@ members = [
   "giskardpy",
   "cramph",
   "semantic_digital_twin",
+  "semantic_digital_twin_acrambly",
   "krrood",
   "krrood/krrood-core",
   "krrood/krrood-serialization",
@@ -120,6 +122,7 @@ coraplex       = { workspace = true }
 giskardpy             = { workspace = true }
 cramph                = { workspace = true }
 semantic_digital_twin = { workspace = true }
+semantic_digital_twin_acrambly = { workspace = true }
 krrood                = { workspace = true }
 krrood-core = { workspace = true }
 krrood-serialization = { workspace = true }
@@ -152,6 +155,7 @@ coraplex = { path = "coraplex", develop = true }
 giskardpy = { path = "giskardpy", develop = true }
 cramph = { path = "cramph", develop = true }
 semantic_digital_twin = { path = "semantic_digital_twin", develop = true }
+semantic_digital_twin_acrambly = { path = "semantic_digital_twin_acrambly", develop = true }
 krrood = { path = "krrood", develop = true }
 krrood-core = { path = "krrood/krrood-core", develop = true }
 krrood-serialization = { path = "krrood/krrood-serialization", develop = true }
