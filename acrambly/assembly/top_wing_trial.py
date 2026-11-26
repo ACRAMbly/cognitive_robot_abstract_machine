@@ -44,7 +44,7 @@ from semantic_digital_twin.adapters.ros.visualization.viz_marker import (
 from semantic_digital_twin.adapters.urdf import URDFParser
 from semantic_digital_twin.datastructures.definitions import GripperState
 from semantic_digital_twin.robots.tracy import Tracy
-from semantic_digital_twin.spatial_types import Pose
+from krrood_spatial_math.spatial_types import Pose
 
 from acrambly.sub_parts.shared.utils import spawn_body
 
