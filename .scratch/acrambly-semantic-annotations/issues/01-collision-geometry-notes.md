@@ -1,6 +1,6 @@
 # Move the collision-geometry notes
 
-Status: ready-for-agent
+Status: resolved
 Type: task
 Blocked by:
 
@@ -25,3 +25,13 @@ Done when both notes are under `.scratch/aircraft-collision-geometry/` and
 every link in them resolves.
 
 ## Comments
+
+## Answer
+
+Both notes moved with `git mv` to `.scratch/aircraft-collision-geometry/`
+(`spec.md`, `collision_mesh_report.md`) in `cd1296899f`. The source directory
+and the report's scope line now name
+`semantic_digital_twin_acrambly/resources/meshes/aircraft`, the convention link
+points at `acrambly/assets/battat/convention`, and the code links are relative
+to the new location. The glossary sentence was dropped with its claim, which
+took the glossary link with it. Every relative link resolves.
