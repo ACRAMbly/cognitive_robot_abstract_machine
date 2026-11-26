@@ -27,8 +27,10 @@ from rclpy.action import ActionClient
 from rclpy.action.client import ClientGoalHandle
 from rclpy.task import Future
 from std_msgs.msg import Header
-from typing_extensions import Callable, TypeVar, Generic
-
+from typing_extensions import TypeVar
+from typing import Generic
+from collections.abc import Callable
+from control_msgs.action import ParallelGripperCommand
 import krrood.symbolic_math.symbolic_math as sm
 from krrood.patterns.classproperty import classproperty
 from cramph.node import EndedByOwner
@@ -50,6 +52,7 @@ from giskardpy.motion_statechart.tasks.gripper import (
     MoveFingers,
 )
 from krrood.patterns.called_positionally import called_positionally
+from cramph.node import StatechartNode
 
 logger = logging.getLogger(__name__)
 
@@ -415,7 +418,7 @@ class NavigateActionServerTask(
                 if self._result.error_code == NavigateToPose.Result.NONE
                 else ObservationStateValue.FALSE
             )
-        return ObservationStateValues.UNKNOWN
+        return ObservationStateValue.UNKNOWN
 
 
 @dataclass(eq=False, repr=False, kw_only=True)
@@ -461,30 +464,28 @@ class RobotiqGripperActionServerTask(
     _done: bool = field(init=False, default=False)
 
     @classmethod
-    def moving_gripper_to(
+    def create_gripper_goal(
         cls,
+        *,
         configuration: GripperConfiguration,
-        stall_minimum_time: float | None = None,
-        tolerate_stall: bool = False,
-    ):
-        """
-        Differs from :meth:`MovesGripperToConfiguration.moving_gripper_to` in driving a
-        two-finger :class:`HasParallelGripperCommandServer` through its server, to the
-        width of `configuration`; a stall always counts as done.
+        finger_stall_minimum_time: float | None = None,
+        tolerate_finger_stall: bool = False,
+    ) -> StatechartNode:
 
-        Any other configuration is reached as :meth:`MoveFingers.moving_gripper_to`
-        reaches it.
-        """
-        end_effector = configuration.end_effector
-        if not isinstance(end_effector, Robotiq85Gripper):
-            return MoveFingers.moving_gripper_to(
-                configuration, stall_minimum_time, tolerate_stall
+        gripper = configuration.end_effector
+
+        if not isinstance(gripper, Robotiq85Gripper):
+            return MoveFingers.create_gripper_goal(
+                configuration=configuration,
+                finger_stall_minimum_time=finger_stall_minimum_time,
+                tolerate_finger_stall=tolerate_finger_stall,
             )
+
         return cls(
-            action_topic=end_effector.action_topic_serving(
+            action_topic=gripper.action_topic_serving(
                 configuration.joint_state.state_type
             ),
-            target_position=end_effector.separation_at(configuration.joint_state),
+            target_position=float(configuration.joint_state.target_values[0]),
         )
 
     def build_action_goal(self) -> None:
@@ -498,52 +499,38 @@ class RobotiqGripperActionServerTask(
         self._goal_accepted = False
         self._done = False
 
-    def goal_response_callback(self, future):
-        """
-        Handles the server's response to the goal submission.
-        """
-        goal_handle = future.result()
-        if not goal_handle.accepted:
-            logger.error("Gripper goal rejected by action server")
-            self._goal_accepted = False
-            self._done = True
-            return
+    def send_goal(self) -> None:
+        self._goal_accepted = False
+        self._done = False
+        super().send_goal()
 
-        self._goal_accepted = True
-        logger.info("Gripper goal accepted, waiting for result...")
 
-        result_future = goal_handle.get_result_async()
-        result_future.add_done_callback(self.result_callback)
+    def record_goal_response(self, *, accepted: bool) -> None:
+        super().record_goal_response(accepted=accepted)
 
-    def result_callback(self, future):
-        """
-        Stores the action result and marks execution as done.
-        """
-        super().result_callback(future)
+        self._goal_accepted = accepted
+        self._done = not accepted
+
+
+    def result_callback(self, *, future: Future) -> None:
+        super().result_callback(future=future)
         self._done = True
-        if self._result and hasattr(self._result, "result"):
-            logger.info(
-                f"Gripper action finished. "
-                f"Reached goal: {self._result.result.reached_goal}, "
-                f"Stalled: {self._result.result.stalled}"
-            )
 
-    def on_tick(self) -> ObservationStateValues:
+    def on_tick(self) -> ObservationStateValue:
         """
         Observes whether the gripper action succeeded (reached goal or stalled on
         object).
         """
         # If goal was rejected, fail immediately
         if self._done and not self._goal_accepted:
-            return ObservationStateValues.FALSE
+            return ObservationStateValue.FALSE
 
         # If completed and result was received
         if self._done and self._result is not None:
             action_result = getattr(self._result, "result", self._result)
             if action_result is not None:
                 if action_result.reached_goal or action_result.stalled:
-                    return ObservationStateValues.TRUE
-                return ObservationStateValues.FALSE
+                    return ObservationStateValue.TRUE
+                return ObservationStateValue.FALSE
 
-        return ObservationStateValues.UNKNOWN
         return ObservationStateValue.UNKNOWN

@@ -7,11 +7,14 @@ from torchvision import extension
 
 from coraplex.plans.context_extensions import RobotAccess
 from coraplex.plans.executors import KinematicallySimulatedPlanExecutor
-from coraplex.robot_plans.actions.core.pick_up import PickUpAction
+from coraplex.robot_plans.actions.core.pick_up import (
+    PickUpAction,
+    ReachAction
+)
 from coraplex.robot_plans.actions.core.placing import PlaceAction
 from coraplex.robot_plans.actions.core.robot_body import (
     ParkArmsAction,
-    MoveManipulatorAction, MoveFingersToWidthAction,
+    SetGripperAction
 )
 from cramph.composites import Sequence
 from cramph.context import StatechartContext
@@ -31,6 +34,12 @@ from datetime import timedelta
 from semantic_digital_twin.datastructures.definitions import StaticJointState
 from acrambly.sub_parts.shared.utils import spawn_body
 from math import pi
+import threading
+from rclpy.executors import MultiThreadedExecutor
+from semantic_digital_twin.adapters.ros.world_fetcher import fetch_world_from_service
+from semantic_digital_twin.adapters.ros.world_synchronizer import WorldSynchronizer
+from coraplex.plans.executors import RealRobotPlanExecutor
+from semantic_digital_twin.datastructures.definitions import GripperState
 
 table_top_z = 0.88
 
@@ -68,20 +77,19 @@ def build_plan(context, battatco, holders):
             grasp_candidate=GraspCandidate(battatco["BottomWing"], Pose.from_xyz_rpy(0.09, 0.05,0, pi/2, 0, -pi/2,reference_frame=battatco["BottomWing"].root)),
             arm=tracy.right_arm
         ),
-        MoveManipulatorAction(
-            goal_pose=Pose.from_xyz_rpy(-0.089, 0.13, -0.094, pi/2, 0, pi/2, reference_frame=holders["HolderHorizontal"].root),
-            arm=tracy.right_arm.end_effector,
-            allow_gripper_collision=False
-        ),
+        # ReachAction(
+        #     grasp_candidate=GraspCandidate(battatco["BottomWing"], Pose.from_xyz_rpy(-0.089, 0.13, -0.094, pi/2, 0, pi/2, reference_frame=holders["HolderHorizontal"].root)),
+        #     arm=tracy.right_arm.end_effector,
+        # ),
         ## Step 2: Upper body on lower body
         PickUpAction(
-            grasp_candidate=GraspCandidate(battatco["UpperBody"], Pose.from_xyz_rpy(-0.1,0,0.03,0, pi/2,0,reference_frame=battatco["UpperBody"].root)),
+            grasp_candidate=GraspCandidate(battatco["UpperBody"], Pose.from_xyz_rpy(-0.1,0,0.045,0, pi/2,0,reference_frame=battatco["UpperBody"].root)),
             arm=tracy.left_arm
         ),
         PlaceAction(
             arm=tracy.left_arm,
             graspable=battatco["UpperBody"],
-            goal_pose=Pose.from_xyz_rpy(0, 0.037, -0.028, pi, 0, -pi/2,reference_frame=battatco["UnderBody"].root)
+            goal_pose=Pose.from_xyz_rpy(0, 0.037, -0.04, pi, 0, -pi/2,reference_frame=battatco["UnderBody"].root)
         ),
         MoveBranch(branch_root=battatco["UnderBody"].root, new_parent=battatco["UpperBody"].root),
         ## Step 3: Body on lower wing
@@ -107,21 +115,22 @@ def build_plan(context, battatco, holders):
             goal_pose=Pose.from_xyz_rpy(0.078, 0, 0.028, pi, 0, 0,reference_frame=battatco["UpperBody"].root)
         ),
         #retract right holding arm
-        MoveFingersToWidthAction(two_finger_gripper=tracy.right_arm.end_effector, width=0.075),
-        MoveManipulatorAction(
-            goal_pose=Pose.from_xyz_rpy(-0.2, 0.13, -0.1, pi/2, 0, pi/2, reference_frame=holders["HolderHorizontal"].root),
-            arm=tracy.right_arm.end_effector,
-            allow_gripper_collision=False
-        ),
+        SetGripperAction(gripper_configuration=tracy.right_arm.end_effector.default_configuration(GripperState.CLOSE)),
+        # ReachAction(
+        #     grasp_candidate=GraspCandidate(holders["HolderHorizontal"], Pose.from_xyz_rpy(-0.2, 0.13, -0.1, pi/2, 0, pi/2, reference_frame=holders["HolderHorizontal"].root)),
+        #     arm=tracy.right_arm.end_effector,
+        #     allow_gripper_collision=False
+        # ),
         ParkArmsAction(arms=tracy.all_arms)
-    ]
+    ][2:5]
 
     statechart = Statechart(context=context)
     statechart.add_node(node=Sequence(nodes=actions))
     return statechart
 
 MUJOCO = False
-RVIZ = True
+RVIZ = False
+REAL = True
 
 if MUJOCO:
     pass
@@ -163,5 +172,31 @@ elif RVIZ:
         ros_node=node,
     )
     executor.compile(statechart=build_plan(executor.context, battatco, holders))
+    executor.execute()
+    executor.close()
+elif REAL:
+    rclpy.init()
+    node = rclpy.create_node("coraplex_tracy_demo")
+
+    executor = MultiThreadedExecutor()
+    executor.add_node(node)
+
+    threading.Thread(target=executor.spin, daemon=True).start()
+
+    world = fetch_world_from_service(node=node, timeout_seconds=300)
+    WorldSynchronizer(_world=world, node=node)
+
+    holders = spawn_holders(world)
+    battatco = spawn_plane_parts(world)
+    
+    tracy = world.get_semantic_annotations_by_type(AbstractRobot)[0]
+    executor = RealRobotPlanExecutor(
+        context=StatechartContext.with_extensions(world=world,extensions=[RobotAccess(robot=tracy)]),
+        ros_node=node,
+        collision_avoidance=False,
+    )
+
+    executor.compile(statechart=build_plan(executor.context, battatco, holders))
+
     executor.execute()
     executor.close()
