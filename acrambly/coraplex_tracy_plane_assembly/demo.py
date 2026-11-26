@@ -344,6 +344,10 @@ class PlaneAssemblyPlan:
                 graspable=self.scene.parts["TopWing"],
                 goal_pose=self._part_pose("UpperBody", (0.078, 0, 0.028, pi, 0, 0)),
             ),
+            MoveBranch(
+                branch_root=self.scene.parts["TopWing"].root,
+                new_parent=self.scene.parts["UpperBody"].root,
+            ),
         ]
 
     def release_and_retract(self, tracy: Tracy) -> list[StatechartNode]:
@@ -361,6 +365,20 @@ class PlaneAssemblyPlan:
             ),
         ]
 
+    def lift_off_partial_plane(self, tracy: Tracy) -> list[StatechartNode]:
+        """Lift the whole body holding the plane together with on arm."""
+        return [
+            PickUpAction(
+                grasp_candidate=self._grasp("UpperBody", (0.1, 0, 0, pi/2, 0, pi)),
+                arm=tracy.right_arm,
+            ),
+            MoveManipulatorAction(
+                goal_pose=self._holder_pose("HolderHorizontal", (0, 0.25, -0.2, pi/2, pi, pi/2)),
+                arm=tracy.right_arm,
+                allow_gripper_collision=False,
+            ),
+        ]
+
     def build(self, context: StatechartContext) -> Statechart:
         tracy = context.require_extension(extension_type=RobotAccess).robot
         actions = [
@@ -370,7 +388,8 @@ class PlaneAssemblyPlan:
             *self.mount_body_on_wing(tracy),
             *self.mount_top_wing(tracy),
             *self.release_and_retract(tracy),
-            ParkArmsAction(arms=tracy.all_arms),
+            *self.lift_off_partial_plane(tracy),
+            ParkArmsAction(arms=[tracy.left_arm]),
         ]
 
         statechart = Statechart(context=context)
