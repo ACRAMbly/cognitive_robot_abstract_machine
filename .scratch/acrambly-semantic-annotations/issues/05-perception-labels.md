@@ -1,0 +1,25 @@
+# Perception labels from annotation classes
+
+Status: ready-for-agent
+Type: task
+Blocked by: 03
+
+Remove `robokudo_acrambly/src/robokudo_acrambly/synthetic_observations/parts.py`
+and its `TetrisBlock` and `AircraftPart` `StrEnum`s. The synthetic tetris and
+aircraft analysis engines arrange the concrete subclasses of the annotation
+classes `TetrisBlock` and `AircraftPart`, each labelled with its class name.
+Add `semantic_digital_twin_acrambly` to the dependencies of
+`robokudo_acrambly`.
+
+The tetris labels change from `child_cube_0_colored` and
+`child_cube_2_colored` to `StraightTetrisBlock` and `CornerTetrisBlock`; the
+aircraft labels `RearWheelLeft` and `RearWheelRight` change to
+`LeftRearWheel` and `RightRearWheel`.
+
+Update `test/robokudo_acrambly_test/test_synthetic_scenarios.py` to expect
+those classes instead of the removed enums. This follows the API change; it is
+not a fix to a failing test.
+
+Done when the `robokudo_acrambly` tests pass and nothing imports `parts.py`.
+
+## Comments
