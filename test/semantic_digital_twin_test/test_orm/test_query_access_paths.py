@@ -7,24 +7,33 @@ probabilistic model learned for it, so one query can be answered by any of them.
 
 from __future__ import annotations
 
+import random
+
 import numpy as np
 import pytest
 from random_events.interval import open
 from random_events.product_algebra import SimpleEvent
 
-import semantic_digital_twin.orm.ormatic_interface  # type: ignore  # noqa: F401
-from krrood.entity_query_language.backends import ProbabilisticBackend
-from krrood.entity_query_language.factories import an, entity, probability_of, variable
+from krrood.parametrization.probabilistic_backend import ProbabilisticBackend
+from krrood.entity_query_language.factories import (
+    a,
+    an,
+    entity,
+    variable,
+)
+from krrood.entity_query_language.factories import probability_of
 from krrood.ormatic.data_access_objects.helper import to_dao
 from krrood.ormatic.eql_interface import eql_to_sql
 from krrood.parametrization.feature_extraction.feature_extractor import FeatureExtractor
 from krrood.parametrization.model_registries import DictRegistry
 from krrood.parametrization.parameterizer import ConditionParameters
 from probabilistic_model.learning.jpt.jpt import JointProbabilityTree
-from semantic_digital_twin.spatial_types.spatial_types import (
+from krrood_spatial_math.spatial_types import (
     AxisAngle,
     HomogeneousTransformationMatrix,
+    Point2,
     Pose,
+    Pose2D,
     RotationMatrix,
     Vector3,
 )
@@ -83,11 +92,13 @@ def test_a_query_on_a_domain_attribute_reads_the_variable_learned_for_it(
 ):
     instances = rotations_about_varied_axes(rotation_from_axis_angle)
     columns = (
-        FeatureExtractor.from_instances(instances).create_dataframe(instances).columns
+        FeatureExtractor.from_instances(instances=instances)
+        .create_dataframe(instances=instances)
+        .columns
     )
 
     rotation = variable(spatial_type, domain=instances)
-    parameters = ConditionParameters(access_path(rotation) < threshold)
+    parameters = ConditionParameters(condition=access_path(rotation) < threshold)
 
     [queried_name] = parameters.variables
     assert queried_name in columns
@@ -100,17 +111,21 @@ def test_probability_of_a_domain_attribute_is_answered_by_the_learned_model(
 ):
     instances = rotations_about_varied_axes(rotation_from_axis_angle)
     model = JointProbabilityTree().fit(
-        FeatureExtractor.from_instances(instances).create_dataframe(instances)
+        FeatureExtractor.from_instances(instances=instances).create_dataframe(
+            instances=instances
+        )
     )
     rotation = variable(spatial_type, domain=instances)
     condition = access_path(rotation) < threshold
-    [queried_name] = ConditionParameters(condition).variables
+    [queried_name] = ConditionParameters(condition=condition).variables
     [learned_variable] = [
         learned for learned in model.variables if learned.name == queried_name
     ]
 
     result = probability_of(condition).first(
-        backend=ProbabilisticBackend(model_registry=DictRegistry({spatial_type: model}))
+        backend=ProbabilisticBackend(
+            model_registry=DictRegistry(models={spatial_type: model})
+        )
     )
 
     expected = model.probability(
@@ -152,4 +167,52 @@ def test_the_database_selects_the_same_objects_as_the_domain_model(
         float(access_path(selected.from_dao())) for selected in selected_in_database
     )
     assert expected
+    assert actual == pytest.approx(expected)
+
+
+# %% a query building an object through its constructor
+
+
+@pytest.fixture
+def scattered_poses_2d() -> list[Pose2D]:
+    generator = random.Random(0)
+    return [
+        Pose2D(
+            position=Point2(
+                x=generator.uniform(0.0, 1.0), y=generator.uniform(10.0, 11.0)
+            ),
+            yaw=generator.uniform(-1.0, 1.0),
+        )
+        for _ in range(30)
+    ]
+
+
+def test_a_pose_2d_built_by_a_query_takes_the_values_sampled_from_the_learned_model(
+    scattered_poses_2d,
+):
+    """
+    The constructor arguments of an underspecified query name the variables the model
+    learned through the domain object's mapping.
+    """
+    model = JointProbabilityTree().fit(
+        FeatureExtractor.from_instances(instances=scattered_poses_2d).create_dataframe(
+            instances=scattered_poses_2d
+        )
+    )
+    np.random.seed(0)
+    [expected_row] = model.sample(1)
+    expected = {
+        learned.name: value for learned, value in zip(model.variables, expected_row)
+    }
+
+    np.random.seed(0)
+    [sampled] = ProbabilisticBackend(
+        model_registry=DictRegistry(models={Pose2D: model}), number_of_samples=1
+    ).evaluate(expression=a(Pose2D)(position=a(Point2)(x=..., y=...), yaw=...))
+
+    [actual] = (
+        FeatureExtractor.from_instances(instances=[sampled])
+        .create_dataframe(instances=[sampled])
+        .to_dict(orient="records")
+    )
     assert actual == pytest.approx(expected)

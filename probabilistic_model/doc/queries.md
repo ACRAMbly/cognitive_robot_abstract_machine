@@ -35,6 +35,7 @@ The example below shows such a query.
 from random_events.set import SetElement, Set
 from random_events.variable import Symbolic, Continuous, Integer
 from random_events.product_algebra import Event, SimpleEvent
+from random_events.plotting import EventPlotter
 from random_events.interval import *
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
@@ -207,7 +208,7 @@ We can construct such a thing by invoking the `truncated` method with the corres
 
 ```{code-cell} ipython3
 event = SimpleEvent.from_data({sepal_length: closed(6, 7)}).as_composite_set()
-distribution, probability = distribution.truncated(event)
+distribution = distribution.truncated(event).distribution
 fig = go.Figure(distribution.plot(), distribution.plotly_layout())
 fig.show()
 ```
@@ -322,7 +323,7 @@ However, the mode is more accurately described as the set of points with the hig
 
 ```{code-cell} ipython3
 condition = closed(-float("inf"), -1) | closed(1, float("inf"))
-distribution, _ = distribution.truncated(SimpleEvent.from_data({distribution.variables[0]: condition}).as_composite_set())
+distribution = distribution.truncated(SimpleEvent.from_data({distribution.variables[0]: condition}).as_composite_set()).distribution
 go.Figure(distribution.plot(), distribution.plotly_layout()).show()
 ```
 
@@ -432,7 +433,7 @@ We can now calculate the probability that $x_1 \in (0.5, 1.)
 event = SimpleEvent.from_data({x1: closed(0.25, 1.), x2: closed(0., 1.)}).as_composite_set()
 monte_carlo_probability = sum([event.contains(sample) for sample in samples]) / len(samples)
 
-fig.add_traces(event.plot())
+fig.add_traces(EventPlotter(event).plot())
 fig.show()
 
 print("Monte Carlo Probability:", monte_carlo_probability)
@@ -473,7 +474,7 @@ center_island = SimpleEvent.from_data({x: closed(2, 4), y: closed(3, 5)}).as_com
 
 occupied_spaces = refrigerator | top_kitchen_island | left_cabinets | center_island
 free_space = kitchen - occupied_spaces
-fig = go.Figure(free_space.plot(), free_space.plotly_layout())
+fig = go.Figure(EventPlotter(free_space).plot(), EventPlotter(free_space).plotly_layout())
 fig.show()
 ```
 
@@ -501,7 +502,8 @@ Hence, we need to condition our probability distribution on the free space of th
 We can do this by invoking the `truncated` method of the distribution object.
 
 ```{code-cell} ipython3
-distribution, _ = p_xy.truncated(free_space)
+distribution = p_xy.truncated(free_space).distribution
+
 fig = go.Figure(distribution.plot(number_of_samples=500), distribution.plotly_layout())
 fig.show()
 ```

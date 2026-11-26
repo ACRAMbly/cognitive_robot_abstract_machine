@@ -1,5 +1,11 @@
+"""
+The base of input layers whose nodes are each a Gaussian over several continuous
+variables.
+"""
+
 from __future__ import annotations
 
+import copy
 import itertools
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
@@ -8,7 +14,7 @@ import numpy as np
 from random_events.product_algebra import Event, SimpleEvent
 from random_events.variable import Variable
 from sortedcontainers import SortedSet
-from typing_extensions import Any, Dict, List, Optional, Self, Type
+from typing_extensions import Any, Self
 
 from probabilistic_model.distributions.multivariate_gaussian import (
     MultivariateGaussianDistribution,
@@ -19,6 +25,7 @@ from probabilistic_model.probabilistic_circuit.tensorized.array_types import (
     NodeIndices,
     NodeMask,
     NodeScopeValues,
+    NodeVariableMask,
     SampleArray,
     SampleScopeValues,
     ScopeValues,
@@ -121,7 +128,7 @@ class AbstractMultivariateGaussianLayer(LeafLayer, ABC):
         """
         return events[:, self.scope]
 
-    def scope_variables(self, variables: SortedSet) -> List[Variable]:
+    def scope_variables(self, variables: SortedSet) -> list[Variable]:
         """
         :param variables: The variables of the circuit.
         :return: The variables of this layer.
@@ -153,7 +160,7 @@ class AbstractMultivariateGaussianLayer(LeafLayer, ABC):
 
     def hyperrectangles_of(
         self, event: SimpleEvent, variables: SortedSet
-    ) -> List[HyperrectangleArray]:
+    ) -> list[HyperrectangleArray]:
         """
         :param event: A simple event.
         :param variables: The variables of the circuit.
@@ -187,7 +194,7 @@ class AbstractMultivariateGaussianLayer(LeafLayer, ABC):
     # %% per node view
 
     @abstractmethod
-    def node_distribution(self, index: int, variables: SortedSet) -> Any:
+    def node_distribution(self, *, index: int, variables: SortedSet) -> Any:
         """
         :param index: The index of a node.
         :param variables: The variables of the circuit.
@@ -195,25 +202,25 @@ class AbstractMultivariateGaussianLayer(LeafLayer, ABC):
         """
         raise NotImplementedError
 
-    def node_distributions(self, variables: SortedSet) -> List[Any]:
+    def node_distributions(self, *, variables: SortedSet) -> list[Any]:
         """
         :param variables: The variables of the circuit.
         :return: The distribution of every node.
         """
         return [
-            self.node_distribution(index, variables)
+            self.node_distribution(index=index, variables=variables)
             for index in range(self.number_of_nodes)
         ]
 
     @abstractmethod
-    def select_nodes(self, mask: NodeMask) -> Self:
+    def select_nodes(self, *, mask: NodeMask) -> Self:
         """
         :param mask: A boolean mask over the nodes of this layer.
         :return: A layer that only holds the selected nodes.
         """
         raise NotImplementedError
 
-    def has_equal_parameters(self, other: Self) -> bool:
+    def has_equal_parameters(self, *, other: Self) -> bool:
         return np.array_equal(self.mean, other.mean) and np.array_equal(
             self.covariance.lower_triangles, other.covariance.lower_triangles
         )
@@ -222,10 +229,11 @@ class AbstractMultivariateGaussianLayer(LeafLayer, ABC):
 
     @memoized
     def support_of_nodes(
-        self, variables: SortedSet, cache: Optional[QueryCache] = None
-    ) -> List[Event]:
+        self, variables: SortedSet, cache: QueryCache | None = None
+    ) -> list[Event]:
         return [
-            distribution.support for distribution in self.node_distributions(variables)
+            distribution.support
+            for distribution in self.node_distributions(variables=variables)
         ]
 
     def sample_forward(
@@ -260,7 +268,7 @@ class AbstractMultivariateGaussianLayer(LeafLayer, ABC):
     @abstractmethod
     def type_of_layer_truncated_to_hyperrectangle(
         self, hyperrectangle: HyperrectangleArray
-    ) -> Type[Layer]:
+    ) -> type[Layer]:
         """
         :param hyperrectangle: A single hyperrectangle.
         :return: The type of the layer :meth:`log_truncated_of_hyperrectangle` returns
@@ -282,7 +290,7 @@ class AbstractMultivariateGaussianLayer(LeafLayer, ABC):
         raise NotImplementedError
 
     def log_truncated_of_hyperrectangles(
-        self, hyperrectangles: List[HyperrectangleArray]
+        self, hyperrectangles: list[HyperrectangleArray]
     ) -> LayerWithLogProbabilities:
         """
         Truncate every node to the union of disjoint hyperrectangles.
@@ -293,7 +301,7 @@ class AbstractMultivariateGaussianLayer(LeafLayer, ABC):
         """
         if not hyperrectangles:
             return LayerWithLogProbabilities(
-                self.__deepcopy__(), np.full(self.number_of_nodes, -np.inf)
+                copy.deepcopy(self), np.full(self.number_of_nodes, -np.inf)
             )
         pieces = [
             self.log_truncated_of_hyperrectangle(hyperrectangle)
@@ -304,8 +312,8 @@ class AbstractMultivariateGaussianLayer(LeafLayer, ABC):
         return SumLayer.mixture_of_pieces(pieces)
 
     def type_of_truncated_layer(
-        self, event: SimpleEvent, variables: SortedSet
-    ) -> Type[Layer]:
+        self, *, event: SimpleEvent, variables: SortedSet
+    ) -> type[Layer]:
         """
         :param event: A simple event.
         :param variables: The variables of the circuit.
@@ -323,7 +331,7 @@ class AbstractMultivariateGaussianLayer(LeafLayer, ABC):
         self,
         event: SimpleEvent,
         query: StructuralQuery,
-        cache: Optional[QueryCache] = None,
+        cache: QueryCache | None = None,
     ) -> LayerWithLogProbabilities:
         # a Gaussian gives every single point probability zero, so a singleton makes a
         # node impossible whether singletons are allowed or not
@@ -334,12 +342,15 @@ class AbstractMultivariateGaussianLayer(LeafLayer, ABC):
         )
 
     def can_truncate_in_one_batch(
-        self, events: List[SimpleEvent], query: StructuralQuery
+        self, events: list[SimpleEvent], query: StructuralQuery
     ) -> bool:
-        # the truncations are joined with concatenate, which needs them all to be
-        # layers of one Gaussian type
+        """
+        Like :meth:`Layer.can_truncate_in_one_batch`, only if the truncations are all
+        layers of one Gaussian type.
+        """
         types = {
-            self.type_of_truncated_layer(event, query.variables) for event in events
+            self.type_of_truncated_layer(event=event, variables=query.variables)
+            for event in events
         }
         return len(types) == 1 and issubclass(
             types.pop(), AbstractMultivariateGaussianLayer
@@ -348,9 +359,9 @@ class AbstractMultivariateGaussianLayer(LeafLayer, ABC):
     @memoized
     def log_truncated_of_simple_events(
         self,
-        events: List[SimpleEvent],
+        events: list[SimpleEvent],
         query: StructuralQuery,
-        cache: Optional[QueryCache] = None,
+        cache: QueryCache | None = None,
     ) -> LayerWithLogProbabilities:
         truncated = [
             self.log_truncated_of_hyperrectangles(
@@ -361,7 +372,7 @@ class AbstractMultivariateGaussianLayer(LeafLayer, ABC):
         layers = [piece.layer for piece in truncated]
         return query.log_probabilities.record(
             LayerWithLogProbabilities(
-                type(layers[0]).concatenate(layers),
+                type(layers[0]).concatenate(layers=layers),
                 np.concatenate([piece.log_probabilities for piece in truncated]),
             )
         )
@@ -371,7 +382,7 @@ class AbstractMultivariateGaussianLayer(LeafLayer, ABC):
         self,
         point: PartialPointType,
         query: StructuralQuery,
-        cache: Optional[QueryCache] = None,
+        cache: QueryCache | None = None,
     ) -> LayerWithLogProbabilities:
         # the fixed variables become Dirac deltas next to the Gaussians of the others,
         # conditioned on them
@@ -387,7 +398,7 @@ class AbstractMultivariateGaussianLayer(LeafLayer, ABC):
         if len(fixed) == 0:
             return query.log_probabilities.record(
                 LayerWithLogProbabilities(
-                    self.__deepcopy__(), np.zeros(self.number_of_nodes)
+                    copy.deepcopy(self), np.zeros(self.number_of_nodes)
                 )
             )
 
@@ -397,7 +408,7 @@ class AbstractMultivariateGaussianLayer(LeafLayer, ABC):
 
         point_masses = [
             DiracDeltaLayer(
-                int(self.scope[position]),
+                np.full(self.number_of_nodes, self.scope[position], dtype=np.int64),
                 np.full(self.number_of_nodes, value),
                 np.ones(self.number_of_nodes),
             )
@@ -427,22 +438,30 @@ class AbstractMultivariateGaussianLayer(LeafLayer, ABC):
 
     def rebuild(
         self,
-        needed: Dict[int, NodeMask],
-        rebuilt: Dict[int, Optional[Layer]],
-    ) -> Optional[Layer]:
+        needed: dict[int, NodeMask],
+        rebuilt: dict[int, Layer | None],
+    ) -> Layer | None:
         alive = needed[id(self)]
         if not alive.any():
             return None
-        return self.select_nodes(alive)
+        return self.select_nodes(mask=alive)
+
+    @memoized
+    def node_scopes(
+        self, *, width: int, cache: QueryCache | None = None
+    ) -> NodeVariableMask:
+        result = np.zeros((self.number_of_nodes, width), dtype=bool)
+        result[:, self.scope] = True
+        return result
 
     def marginal(
-        self, kept: VariableMask, cache: Optional[QueryCache] = None
-    ) -> Optional[Layer]:
+        self, kept: VariableMask, cache: QueryCache | None = None
+    ) -> Layer | None:
         positions = np.flatnonzero(kept[self.scope])
         if len(positions) == 0:
             return None
         if len(positions) == self.number_of_scope_variables:
-            return self.__deepcopy__()
+            return copy.deepcopy(self)
         return self.marginal_over(positions)
 
     @abstractmethod
@@ -454,9 +473,7 @@ class AbstractMultivariateGaussianLayer(LeafLayer, ABC):
         raise NotImplementedError
 
     @memoized
-    def remap_variables(
-        self, remap: VariableIndices, cache: Optional[QueryCache] = None
-    ):
+    def remap_variables(self, remap: VariableIndices, cache: QueryCache | None = None):
         remapped = remap[self.scope]
         order = np.argsort(remapped)
         self.scope = remapped[order]
@@ -471,10 +488,17 @@ class AbstractMultivariateGaussianLayer(LeafLayer, ABC):
         self.mean = self.mean[:, order]
         self.covariance = self.covariance.marginal(order)
 
-    def apply_translation_own(self, translation: VariableValues):
+    def apply_translation_own(self, *, translation: VariableValues) -> None:
+        """
+        Moves the mean of every node by the translation of its variables.
+        """
         self.mean = self.mean + translation[self.scope]
 
-    def apply_scaling_own(self, scaling: VariableValues):
+    def apply_scaling_own(self, *, scaling: VariableValues) -> None:
+        """
+        Multiplies the mean of every node by the scaling of its variables and scales its
+        covariance with them.
+        """
         factors = scaling[self.scope]
         self.mean = self.mean * factors
         self.covariance = self.covariance.scaled(factors)

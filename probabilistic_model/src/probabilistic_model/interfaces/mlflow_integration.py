@@ -1,10 +1,18 @@
+"""
+Logging probabilistic models to MLflow as Python models that answer likelihood queries.
+"""
+
+from __future__ import annotations
+
 import mlflow.pyfunc
+import numpy.typing as npt
 from mlflow.models.signature import ModelSignature
 from mlflow.types import ColSpec, DataType, Schema
 from krrood.adapters.json_serializer import SubclassJSONSerializer, from_json
 from random_events.variable import Continuous, Symbolic, Integer
-from typing_extensions import Optional
 import json
+
+from typing_extensions import Any
 
 from probabilistic_model.probabilistic_model import ProbabilisticModel
 
@@ -17,9 +25,9 @@ class ProbabilisticModelWrapper(mlflow.pyfunc.PythonModel):
     be parsed using the SubclassJSONSerializer.
     """
 
-    model: Optional[ProbabilisticModel] = None
+    model: ProbabilisticModel | None = None
 
-    def __init__(self, model: Optional[ProbabilisticModel] = None):
+    def __init__(self, model: ProbabilisticModel | None = None):
         self.model = model
         super().__init__()
 
@@ -28,8 +36,13 @@ class ProbabilisticModelWrapper(mlflow.pyfunc.PythonModel):
             model_dict = json.load(f)
         self.model = from_json(model_dict)
 
-    def predict(self, context, model_input):
-        return self.model.log_likelihood(model_input)
+    def predict(self, context: Any, model_input: npt.NDArray) -> npt.NDArray:
+        """
+        :param context: The context MLflow loads the model in.
+        :param model_input: Rows of values of the variables of the model.
+        :return: The log-likelihood of every row under the model.
+        """
+        return self.model.log_likelihood(events=model_input)
 
 
 def infer_signature(model: ProbabilisticModel) -> ModelSignature:

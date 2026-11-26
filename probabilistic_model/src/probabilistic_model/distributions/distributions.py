@@ -1,17 +1,32 @@
+"""
+Univariate distributions: continuous, discrete, symbolic, integer and Dirac delta
+distributions.
+"""
+
 from __future__ import annotations
 
 import os
 from abc import abstractmethod
 from dataclasses import dataclass, field
-from typing import Optional, Set as PythonSet
+from typing_extensions import (
+    Union,
+    Iterable,
+    Any,
+    Self,
+    Dict,
+    List,
+    Tuple,
+    Optional,
+    Set as PythonSet,
+)
 
 import numpy as np
 import numpy.typing as npt
 import plotly.graph_objects as go
+from krrood.patterns.dataclass_deep_copy import DataclassDeepcopyMixin
 from probabilistic_model.exceptions import UndefinedOperationError
 from random_events.interval import Interval, SimpleInterval, Bound, singleton, closed
 from random_events.product_algebra import Event, SimpleEvent, VariableMap
-from typing_extensions import Union, Iterable, Any, Self, Dict, List, Tuple
 
 from probabilistic_model.constants import SCALING_FACTOR_FOR_EXPECTATION_IN_PLOT
 from probabilistic_model.probabilistic_model import (
@@ -19,6 +34,12 @@ from probabilistic_model.probabilistic_model import (
     OrderType,
     MomentType,
     CenterType,
+)
+from probabilistic_model.query_results import (
+    LogConditioning,
+    LogMode,
+    LogTruncation,
+    UnivariateLogMode,
 )
 from probabilistic_model.utils import (
     MissingDict,
@@ -31,7 +52,7 @@ from random_events.variable import Variable, Continuous, Symbolic, Integer
 
 
 @dataclass
-class UnivariateDistribution(ProbabilisticModel):
+class UnivariateDistribution(ProbabilisticModel, DataclassDeepcopyMixin):
     """
     Abstract Base class for Univariate distributions.
     """
@@ -39,7 +60,7 @@ class UnivariateDistribution(ProbabilisticModel):
     variable: Variable
 
     @property
-    def variables(self) -> Tuple[Variable, ...]:
+    def variables(self) -> tuple[Variable, ...]:
         return (self.variable,)
 
     @property
@@ -56,21 +77,23 @@ class UnivariateDistribution(ProbabilisticModel):
         """
         raise NotImplementedError
 
-    def log_mode(self) -> Tuple[Event, float]:
-        mode, log_likelihood = self.univariate_log_mode()
-        return (
-            SimpleEvent.from_data({self.variable: mode}).as_composite_set(),
-            log_likelihood,
+    def log_mode(self) -> LogMode:
+        univariate_mode = self.univariate_log_mode()
+        return LogMode(
+            SimpleEvent.from_data(
+                {self.variable: univariate_mode.assignment}
+            ).as_composite_set(),
+            univariate_mode.log_likelihood,
         )
 
     @abstractmethod
-    def univariate_log_mode(self) -> Tuple[AbstractCompositeSet, float]:
+    def univariate_log_mode(self) -> UnivariateLogMode:
         """
-        :return: The univariate mode of the distribution and its log-likelihood. The mode is not an Event.
+        :return: The most likely values of the variable and their log-likelihood.
         """
         raise NotImplementedError
 
-    def marginal(self, variables: Iterable[Variable]) -> Optional[Self]:
+    def marginal(self, variables: Iterable[Variable]) -> Self | None:
         if self.variable in variables:
             return self
         else:
@@ -121,9 +144,9 @@ class ContinuousDistribution(UnivariateDistribution):
 
     def log_truncated(
         self, event: Event, singleton_allowed: bool = False
-    ) -> Tuple[Optional[ContinuousDistribution], float]:
+    ) -> LogTruncation[ContinuousDistribution]:
         if event.is_empty():
-            return None, -np.inf
+            return LogTruncation.impossible()
 
         interval = self.composite_set_from_event(event)
 
@@ -135,15 +158,15 @@ class ContinuousDistribution(UnivariateDistribution):
             raise UndefinedOperationError(self)
 
     def log_conditional(
-        self, point: Dict[Variable, Any]
-    ) -> Tuple[Optional[Union[ProbabilisticModel, Self]], float]:
+        self, point: dict[Variable, Any]
+    ) -> LogConditioning[DiracDeltaDistribution]:
         value = point[self.variable]
-        log_pdf_value = self.log_likelihood(np.array([[value]]))[0]
+        log_pdf_value = self.log_likelihood(events=np.array([[value]]))[0]
 
         if log_pdf_value == -np.inf:
-            return None, -np.inf
+            return LogConditioning.impossible()
 
-        return (
+        return LogConditioning(
             DiracDeltaDistribution(
                 variable=self.variable,
                 location=value,
@@ -154,7 +177,7 @@ class ContinuousDistribution(UnivariateDistribution):
 
     def log_conditional_from_simple_interval(
         self, interval: SimpleInterval, singleton_allowed: bool = False
-    ) -> Tuple[Optional[ContinuousDistribution], float]:
+    ) -> LogTruncation[ContinuousDistribution]:
         """
         Calculate the truncated distribution given a simple interval.
 
@@ -164,11 +187,11 @@ class ContinuousDistribution(UnivariateDistribution):
         :return: The truncated distribution and the log-probability of the interval.
         """
         if singleton_allowed and interval.is_singleton():
-            log_likelihood = self.log_likelihood(np.array([[interval.lower]]))[0]
+            log_likelihood = self.log_likelihood(events=np.array([[interval.lower]]))[0]
             if log_likelihood == -np.inf:
-                return None, -np.inf
+                return LogTruncation.impossible()
 
-            return (
+            return LogTruncation(
                 DiracDeltaDistribution(
                     variable=self.variable,
                     location=interval.lower,
@@ -182,7 +205,7 @@ class ContinuousDistribution(UnivariateDistribution):
     @abstractmethod
     def log_conditional_from_simple_interval_if_not_singleton(
         self, interval: SimpleInterval
-    ) -> Tuple[Optional[ContinuousDistribution], float]:
+    ) -> LogTruncation[ContinuousDistribution]:
         """
         Calculate the truncated distribution given a simple interval that is not a
         singleton.
@@ -193,9 +216,9 @@ class ContinuousDistribution(UnivariateDistribution):
 
 
 @dataclass(eq=False)
-class ContinuousDistributionWithFiniteSupport(ContinuousDistribution):
+class ContinuousDistributionWithConstrainedSupport(ContinuousDistribution):
     """
-    Abstract base class for continuous distributions with finite support.
+    Abstract base class for continuous distributions with constrained support.
     """
 
     interval: SimpleInterval
@@ -250,10 +273,10 @@ class ContinuousDistributionWithFiniteSupport(ContinuousDistribution):
         """
         return self.left_included_condition(x) & self.right_included_condition(x)
 
-    def log_likelihood(self, x: npt.NDArray) -> npt.NDArray:
-        result = np.full(x.shape[:-1], -np.inf)
-        include_condition = self.included_condition(x)
-        filtered_x = x[include_condition].reshape(-1, 1)
+    def log_likelihood(self, *, events: npt.NDArray) -> npt.NDArray:
+        result = np.full(events.shape[:-1], -np.inf)
+        include_condition = self.included_condition(events)
+        filtered_x = events[include_condition].reshape(-1, 1)
         result[include_condition[:, 0]] = self.log_likelihood_without_bounds_check(
             filtered_x
         )
@@ -270,7 +293,10 @@ class ContinuousDistributionWithFiniteSupport(ContinuousDistribution):
         """
         raise NotImplementedError
 
-    def apply_translation(self, translation: Dict[Variable, float]):
+    def apply_translation(self, *, translation: dict[Variable, float]) -> None:
+        """
+        Moves the :attr:`interval` by the translation of the variable.
+        """
         new_interval = SimpleInterval.from_data(
             self.interval.lower + translation[self.variable],
             self.interval.upper + translation[self.variable],
@@ -279,7 +305,10 @@ class ContinuousDistributionWithFiniteSupport(ContinuousDistribution):
         )
         self.interval = new_interval
 
-    def apply_scaling(self, scaling: Dict[Variable, float]):
+    def apply_scaling(self, *, scaling: dict[Variable, float]) -> None:
+        """
+        Multiplies the bounds of the :attr:`interval` by the scaling of the variable.
+        """
         new_interval = SimpleInterval.from_data(
             self.interval.lower * scaling[self.variable],
             self.interval.upper * scaling[self.variable],
@@ -295,7 +324,7 @@ class DiscreteDistribution(UnivariateDistribution):
     Abstract base class for univariate discrete distributions.
     """
 
-    variable: Union[Symbolic, Integer] = field(kw_only=True)
+    variable: Symbolic | Integer = field(kw_only=True)
 
     probabilities: MissingDict = field(
         kw_only=True, default_factory=lambda: MissingDict(float)
@@ -304,16 +333,28 @@ class DiscreteDistribution(UnivariateDistribution):
     A dict that maps from integers (hash(symbol) for symbols) to probabilities.
     """
 
-    def log_likelihood(self, events: npt.NDArray) -> npt.NDArray:
-        events = events[:, 0]
+    def __post_init__(self):
+        if not isinstance(self.probabilities, MissingDict):
+            self.probabilities = MissingDict(float, self.probabilities)
 
-        events = np.array([hash(e) for e in events])
-        result = np.full(len(events), -np.inf)
-        for x, p in self.probabilities.items():
-            result[events == x] = np.log(p)
+    @abstractmethod
+    def key_in_probabilities(self, *, value: Any) -> int:
+        """
+        :param value: A value of the variable.
+        :return: The key of the value in :attr:`probabilities`.
+        """
+        raise NotImplementedError
+
+    def log_likelihood(self, *, events: npt.NDArray) -> npt.NDArray:
+        keys = np.array(
+            [self.key_in_probabilities(value=value) for value in events[:, 0]]
+        )
+        result = np.full(len(keys), -np.inf)
+        for key, probability in self.probabilities.items():
+            result[keys == key] = np.log(probability)
         return result
 
-    def fit(self, data: npt.NDArray) -> Self:
+    def fit(self, *, data: npt.NDArray) -> Self:
         """
         Fit the distribution to the data.
 
@@ -327,18 +368,18 @@ class DiscreteDistribution(UnivariateDistribution):
         unique, counts = np.unique(data, return_counts=True)
         probabilities = MissingDict(float)
         for value, count in zip(unique, counts):
-            probabilities[hash(value)] = count / len(data)
+            probabilities[self.key_in_probabilities(value=value)] = count / len(data)
         self.probabilities = probabilities
         return self
 
     @abstractmethod
-    def probabilities_for_plotting(self) -> Dict[Union[int, str], float]:
+    def probabilities_for_plotting(self) -> dict[int | str, float]:
         """
         :return: The probabilities as dict that can be plotted.
         """
         raise NotImplementedError
 
-    def plot(self, **kwargs) -> List[go.Bar]:
+    def plot(self, **kwargs) -> list[go.Bar]:
         """
         Plot the distribution.
         """
@@ -367,23 +408,27 @@ class DiscreteDistribution(UnivariateDistribution):
 
     def log_truncated(
         self, event: Event, singleton_allowed: bool = False
-    ) -> Tuple[Optional[Self], float]:
+    ) -> LogTruncation[Self]:
         # construct event
         condition = self.composite_set_from_event(event)
-        return self.log_conditional_of_composite_set(condition)
+        return self.log_conditional_of_composite_set(event=condition)
 
-    def log_conditional(
-        self, point: Dict[Variable, Any]
-    ) -> Tuple[Optional[Self], float]:
-        return self.log_truncated(
+    def log_conditional(self, point: dict[Variable, Any]) -> LogConditioning[Self]:
+        truncation = self.log_truncated(
             SimpleEvent.from_data(
                 {self.variable: point[self.variable]}
             ).as_composite_set()
         )
+        return LogConditioning(truncation.distribution, truncation.log_probability)
 
     def log_conditional_of_composite_set(
-        self, event: AbstractCompositeSet
-    ) -> Tuple[Optional[Self], float]:
+        self, *, event: AbstractCompositeSet
+    ) -> LogTruncation[Self]:
+        """
+        :param event: The values to keep.
+        :return: The distribution restricted to the values of the event and renormalized, and
+            the log-probability of the event; impossible where the event has none.
+        """
         # calculate new probabilities
         new_probabilities = MissingDict(float)
         for x, p_x in self.probabilities.items():
@@ -394,30 +439,11 @@ class DiscreteDistribution(UnivariateDistribution):
         probability = sum(new_probabilities.values())
 
         if probability == 0:
-            return None, -np.inf
+            return LogTruncation.impossible()
 
         result = self.__class__(variable=self.variable, probabilities=new_probabilities)
         result.normalize()
-        return result, np.log(probability)
-
-    def __copy__(self) -> Self:
-        return self.__class__(variable=self.variable, probabilities=self.probabilities)
-
-    def __deepcopy__(self, memo=None) -> Self:
-        if memo is None:
-            memo = {}
-        id_self = id(self)
-        if id_self in memo:
-            return memo[id_self]
-        import copy
-
-        variable = self.variable.__class__(
-            name=self.variable.name, domain=self.variable.domain
-        )
-        probabilities = copy.deepcopy(self.probabilities, memo)
-        result = self.__class__(variable=variable, probabilities=probabilities)
-        memo[id_self] = result
-        return result
+        return LogTruncation(result, np.log(probability))
 
     def __repr__(self):
         return f"P({self.variable.name})"
@@ -440,7 +466,10 @@ class SymbolicDistribution(DiscreteDistribution):
 
     variable: Symbolic = field(kw_only=True)
 
-    def univariate_log_mode(self) -> Tuple[Set, float]:
+    def key_in_probabilities(self, *, value: Any) -> int:
+        return hash(value)
+
+    def univariate_log_mode(self) -> UnivariateLogMode:
         max_likelihood = max(self.probabilities.values())
 
         mode_hashes = {
@@ -450,11 +479,15 @@ class SymbolicDistribution(DiscreteDistribution):
 
         mode_symbols = {domain_hash_map[hash_value] for hash_value in mode_hashes}
         mode = self.variable.make_value(mode_symbols)
-        return mode, np.log(max_likelihood)
+        return UnivariateLogMode(mode, np.log(max_likelihood))
 
     def log_conditional_of_composite_set(
-        self, event: AbstractCompositeSet
-    ) -> Tuple[Optional[Self], float]:
+        self, *, event: AbstractCompositeSet
+    ) -> LogTruncation[Self]:
+        """
+        Like :meth:`DiscreteDistribution.log_conditional_of_composite_set`, reading the
+        event as a set of domain elements.
+        """
         new_probabilities = MissingDict(float)
         for x in event:
             hash_x = hash(x)
@@ -464,13 +497,13 @@ class SymbolicDistribution(DiscreteDistribution):
         probability = sum(new_probabilities.values())
 
         if probability == 0:
-            return None, -np.inf
+            return LogTruncation.impossible()
 
         result = self.__class__(variable=self.variable, probabilities=new_probabilities)
         result.normalize()
-        return result, np.log(probability)
+        return LogTruncation(result, np.log(probability))
 
-    def probabilities_for_plotting(self) -> Dict[Union[int, str], float]:
+    def probabilities_for_plotting(self) -> dict[int | str, float]:
         return {
             str(element): self.probabilities[hash(element)]
             for element in self.variable.domain.simple_sets
@@ -492,7 +525,11 @@ class SymbolicDistribution(DiscreteDistribution):
     def representation(self):
         return f"Nominal({self.variable.name})"
 
-    def fit(self, data: npt.NDArray) -> Self:
+    def fit(self, *, data: npt.NDArray) -> Self:
+        """
+        Like :meth:`DiscreteDistribution.fit`, but the data holds the domain elements
+        themselves.
+        """
         unique, counts = np.unique(data, return_counts=True)
         probabilities = MissingDict(float)
         for value, count in zip(unique, counts):
@@ -532,25 +569,28 @@ class IntegerDistribution(ContinuousDistribution, DiscreteDistribution):
 
     variable: Integer = field(kw_only=True)
 
+    def key_in_probabilities(self, *, value: Any) -> int:
+        return int(value)
+
     def log_truncated(
         self, event: Event, singleton_allowed: bool = False
-    ) -> Tuple[Optional[DiscreteDistribution], float]:
+    ) -> LogTruncation[DiscreteDistribution]:
         return DiscreteDistribution.log_truncated(self, event, singleton_allowed)
 
-    def univariate_log_mode(self) -> Tuple[AbstractCompositeSet, float]:
+    def univariate_log_mode(self) -> UnivariateLogMode:
         max_likelihood = max(self.probabilities.values())
         mode = Interval()
         for key, value in self.probabilities.items():
             if value == max_likelihood:
                 mode |= singleton(key)
-        return mode, np.log(max_likelihood)
+        return UnivariateLogMode(mode, np.log(max_likelihood))
 
-    def probabilities_for_plotting(self) -> Dict[Union[int, str], float]:
+    def probabilities_for_plotting(self) -> dict[int | str, float]:
         return {x: p_x for x, p_x in self.probabilities.items() if p_x > 0}
 
     def log_conditional_from_simple_interval_if_not_singleton(
         self, interval: SimpleInterval
-    ) -> Tuple[Optional[ContinuousDistribution], float]:
+    ) -> LogTruncation[ContinuousDistribution]:
         raise UndefinedOperationError(self)
 
     @property
@@ -594,19 +634,25 @@ class IntegerDistribution(ContinuousDistribution, DiscreteDistribution):
         )
         return VariableMap({self.variable: result})
 
-    def plot(self, **kwargs) -> List[go.Bar]:
+    def plot(self, **kwargs) -> list[go.Bar]:
         height = (
             max(self.probabilities.values()) * SCALING_FACTOR_FOR_EXPECTATION_IN_PLOT
         )
         return super().plot() + [self.univariate_expectation_trace(height)]
 
-    def apply_translation(self, translation: Dict[Variable, int]):
+    def apply_translation(self, *, translation: dict[Variable, int]) -> None:
+        """
+        Moves every value that has a probability by the translation of the variable.
+        """
         new_probabilities = MissingDict(float)
         for key, value in self.probabilities.items():
             new_probabilities[key + translation[self.variable]] = value
         self.probabilities = new_probabilities
 
-    def apply_scaling(self, scaling: Dict[Variable, int]):
+    def apply_scaling(self, *, scaling: dict[Variable, int]) -> None:
+        """
+        Multiplies every value that has a probability by the scaling of the variable.
+        """
         new_probabilities = MissingDict(float)
         for key, value in self.probabilities.items():
             new_probabilities[key * scaling[self.variable]] = value
@@ -644,7 +690,7 @@ class DiracDeltaDistribution(ContinuousDistribution):
     This is used during calculations to take precision problems into account.
     """
 
-    def log_likelihood(self, events: npt.NDArray) -> npt.NDArray:
+    def log_likelihood(self, *, events: npt.NDArray) -> npt.NDArray:
         result = np.full(len(events), -np.inf)
         # Check if the event is within the tolerance of the location
         within_tolerance = np.abs(events[:, 0] - self.location) < self.tolerance
@@ -667,11 +713,11 @@ class DiracDeltaDistribution(ContinuousDistribution):
 
     def log_conditional_from_simple_interval_if_not_singleton(
         self, interval: SimpleInterval
-    ) -> Tuple[Optional[ContinuousDistribution], float]:
+    ) -> LogTruncation[Self]:
         if self._reaches(interval.as_composite_set()):
-            return self, 0.0
+            return LogTruncation(self, 0.0)
         else:
-            return None, -np.inf
+            return LogTruncation.impossible()
 
     def probability_of_simple_event(self, event: SimpleEvent) -> float:
         return 1.0 if self._reaches(event[self.variable]) else 0.0
@@ -685,8 +731,8 @@ class DiracDeltaDistribution(ContinuousDistribution):
         window = closed(self.location - self.tolerance, self.location + self.tolerance)
         return not (window & interval).is_empty()
 
-    def univariate_log_mode(self) -> Tuple[AbstractCompositeSet, float]:
-        return self.univariate_support, np.log(self.density_cap)
+    def univariate_log_mode(self) -> UnivariateLogMode:
+        return UnivariateLogMode(self.univariate_support, np.log(self.density_cap))
 
     def sample(self, amount: int) -> npt.NDArray:
         return np.full((amount, 1), self.location)
@@ -711,26 +757,7 @@ class DiracDeltaDistribution(ContinuousDistribution):
     def __repr__(self):
         return f"δ({self.variable.name})"
 
-    def __copy__(self):
-        return self.__class__(
-            variable=self.variable, location=self.location, density_cap=self.density_cap
-        )
-
-    def __deepcopy__(self, memo=None):
-        if memo is None:
-            memo = {}
-        id_self = id(self)
-        if id_self in memo:
-            return memo[id_self]
-
-        variable = Continuous(self.variable.name)
-        result = self.__class__(
-            variable=variable, location=self.location, density_cap=self.density_cap
-        )
-        memo[id_self] = result
-        return result
-
-    def plot(self, **kwargs) -> List:
+    def plot(self, **kwargs) -> list:
         lower_border = self.location - 1
         upper_border = self.location + 1
         pdf_trace = go.Scatter(
@@ -759,8 +786,14 @@ class DiracDeltaDistribution(ContinuousDistribution):
         )
         return [pdf_trace, cdf_trace, expectation_trace, mode_trace]
 
-    def apply_translation(self, translation: VariableMap[Variable, float]):
+    def apply_translation(self, *, translation: VariableMap[Variable, float]) -> None:
+        """
+        Moves the :attr:`location` by the translation of the variable.
+        """
         self.location += translation[self.variable]
 
-    def apply_scaling(self, scaling: VariableMap[Variable, float]):
-        self.location += scaling[self.variable]
+    def apply_scaling(self, *, scaling: VariableMap[Variable, float]) -> None:
+        """
+        Multiplies the :attr:`location` by the scaling of the variable.
+        """
+        self.location *= scaling[self.variable]

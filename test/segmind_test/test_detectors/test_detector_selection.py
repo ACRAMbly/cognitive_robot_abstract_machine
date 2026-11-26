@@ -29,13 +29,13 @@ from segmind.detectors.spatial_relation_detector_nodes import (
 )
 
 
-@dataclass(eq=False, repr=False)
+@dataclass(kw_only=True, eq=False, repr=False)
 class DetectorDefinedOutsideSegMind(AbstractDetector):
     """
     A kind of detector some other package defines.
     """
 
-    def update_context_and_events(self, context, segmind_context, tracked_objects):
+    def update_context_and_events(self, segmind_context, tracked_objects):
         return []
 
 
@@ -77,14 +77,25 @@ def test_asking_for_grasps_brings_the_contacts_they_are_read_from():
     assert selection.detector_types == (ContactDetector, GraspDetector)
 
 
-def test_insertions_bring_contact_and_containment():
+def test_insertions_bring_contact_containment_and_the_supports_it_is_read_from():
     selection = DetectorSelection.of(InsertionDetector)
 
     assert set(selection.detector_types) == {
         InsertionDetector,
         ContactDetector,
         ContainmentDetector,
+        SupportDetector,
     }
+
+
+def test_containment_brings_the_supports_it_is_read_from():
+    """
+    An object is put into something by being set down in it, so containment is looked
+    for once an object comes to rest.
+    """
+    selection = DetectorSelection.of(ContainmentDetector)
+
+    assert selection.detector_types == (SupportDetector, ContainmentDetector)
 
 
 # %% one detector reports both ends of a relation
@@ -145,7 +156,7 @@ def test_everything_ticks_each_kind_after_what_it_is_read_from():
 # %% what a detector watches
 
 
-@dataclass(eq=False, repr=False)
+@dataclass(kw_only=True, eq=False, repr=False)
 class DetectorWatchingABodyBesideAnother(AbstractDetector):
     """
     Watches one body and is read from the events of another kind of detector.
@@ -155,7 +166,7 @@ class DetectorWatchingABodyBesideAnother(AbstractDetector):
     def get_required_detector_types(cls):
         return (ContactDetector,)
 
-    def update_context_and_events(self, context, segmind_context, tracked_objects):
+    def update_context_and_events(self, segmind_context, tracked_objects):
         return []
 
 

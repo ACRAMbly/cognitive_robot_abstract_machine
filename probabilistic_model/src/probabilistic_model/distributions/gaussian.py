@@ -1,25 +1,28 @@
+"""
+Gaussian and truncated Gaussian distributions over one continuous variable.
+"""
+
 from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from typing import Optional
 
 import numpy as np
 import numpy.typing as npt
 from numpy import nextafter
 from scipy.stats import norm, truncnorm
-from typing_extensions import Self, Tuple, TYPE_CHECKING
+from typing_extensions import Any, Self, TYPE_CHECKING
 
 from probabilistic_model.distributions.distributions import (
     ContinuousDistribution,
-    ContinuousDistributionWithFiniteSupport,
+    ContinuousDistributionWithConstrainedSupport,
     DiracDeltaDistribution,
 )
 from probabilistic_model.probabilistic_model import OrderType, CenterType, MomentType
+from probabilistic_model.query_results import LogTruncation, UnivariateLogMode
 from probabilistic_model.utils import simple_interval_as_array
 from random_events.interval import Interval, reals, singleton, SimpleInterval, Bound
 from random_events.product_algebra import VariableMap
-from random_events.sigma_algebra import AbstractCompositeSet
 from random_events.variable import Variable
 
 if TYPE_CHECKING:
@@ -46,16 +49,16 @@ class GaussianDistribution(ContinuousDistribution):
     def univariate_support(self) -> Interval:
         return reals()
 
-    def log_likelihood(self, x: npt.NDArray) -> npt.NDArray:
-        return norm.logpdf(x[:, 0], loc=self.location, scale=self.scale)
+    def log_likelihood(self, *, events: npt.NDArray) -> npt.NDArray:
+        return norm.logpdf(events[:, 0], loc=self.location, scale=self.scale)
 
     def cumulative_distribution_function(self, x: npt.NDArray) -> npt.NDArray:
         return norm.cdf(x[:, 0], loc=self.location, scale=self.scale)
 
-    def univariate_log_mode(self) -> Tuple[AbstractCompositeSet, float]:
-        return (
+    def univariate_log_mode(self) -> UnivariateLogMode:
+        return UnivariateLogMode(
             singleton(self.location),
-            self.log_likelihood(np.array([[self.location]]))[0],
+            self.log_likelihood(events=np.array([[self.location]]))[0],
         )
 
     def sample(self, amount: int) -> npt.NDArray:
@@ -119,25 +122,31 @@ class GaussianDistribution(ContinuousDistribution):
 
     def log_conditional_from_simple_interval_if_not_singleton(
         self, interval: SimpleInterval
-    ) -> Tuple[Optional[ContinuousDistribution], float]:
+    ) -> LogTruncation[ContinuousDistribution]:
         cdf_values = self.cumulative_distribution_function(
             simple_interval_as_array(interval).reshape(-1, 1)
         )
         probability: float = cdf_values[1] - cdf_values[0]
         if probability <= 0.0:
-            return None, -np.inf
+            return LogTruncation.impossible()
 
         if interval.as_composite_set() == reals():
-            return GaussianDistribution(
-                variable=self.variable, location=self.location, scale=self.scale
-            ), np.log(probability)
+            return LogTruncation(
+                GaussianDistribution(
+                    variable=self.variable, location=self.location, scale=self.scale
+                ),
+                np.log(probability),
+            )
 
-        return TruncatedGaussianDistribution(
-            variable=self.variable,
-            interval=interval,
-            location=self.location,
-            scale=self.scale,
-        ), np.log(probability)
+        return LogTruncation(
+            TruncatedGaussianDistribution(
+                variable=self.variable,
+                interval=interval,
+                location=self.location,
+                scale=self.scale,
+            ),
+            np.log(probability),
+        )
 
     @property
     def representation(self):
@@ -146,42 +155,28 @@ class GaussianDistribution(ContinuousDistribution):
     def __repr__(self):
         return f"N({self.variable.name})"
 
-    def __copy__(self):
-        return self.__class__(
-            variable=self.variable, location=self.location, scale=self.scale
-        )
-
-    def __deepcopy__(self, memo=None):
-        if memo is None:
-            memo = {}
-        id_self = id(self)
-        if id_self in memo:
-            return memo[id_self]
-
-        variable = self.variable.__class__(
-            name=self.variable.name, domain=self.variable.domain
-        )
-        result = self.__class__(
-            variable=variable, location=self.location, scale=self.scale
-        )
-        memo[id_self] = result
-        return result
-
     @property
     def abbreviated_symbol(self) -> str:
         return "N"
 
-    def apply_translation(self, translation: VariableMap[Variable, float]):
+    def apply_translation(self, *, translation: VariableMap[Variable, float]) -> None:
+        """
+        Moves the :attr:`location` by the translation of the variable.
+        """
         self.location += translation[self.variable]
 
-    def apply_scaling(self, scaling: VariableMap[Variable, float]):
+    def apply_scaling(self, *, scaling: VariableMap[Variable, float]) -> None:
+        """
+        Multiplies the :attr:`location` and the :attr:`scale` by the scaling of the
+        variable.
+        """
         self.location *= scaling[self.variable]
         self.scale *= scaling[self.variable]
 
 
 @dataclass
 class TruncatedGaussianDistribution(
-    ContinuousDistributionWithFiniteSupport, GaussianDistribution
+    ContinuousDistributionWithConstrainedSupport, GaussianDistribution
 ):
     """
     Class for Truncated Gaussian distributions.
@@ -190,7 +185,7 @@ class TruncatedGaussianDistribution(
     """
 
     @property
-    def standardized_bounds(self) -> Tuple[float, float]:
+    def standardized_bounds(self) -> tuple[float, float]:
         """
         :return: The bounds of the interval in standard deviations from the location,
             as :data:`scipy.stats.truncnorm` expects them.
@@ -214,7 +209,7 @@ class TruncatedGaussianDistribution(
     def cumulative_distribution_function(self, x: npt.NDArray) -> npt.NDArray:
         return self.truncated_normal.cdf(x[:, 0])
 
-    def univariate_log_mode(self) -> Tuple[Interval, float]:
+    def univariate_log_mode(self) -> UnivariateLogMode:
         if self.interval.contains(self.location):
             value = self.location
         elif self.location < self.lower:
@@ -225,7 +220,7 @@ class TruncatedGaussianDistribution(
             value = self.upper
             if self.interval.right == Bound.OPEN:
                 value = nextafter(value, -np.inf)
-        return (
+        return UnivariateLogMode(
             singleton(value),
             self.log_likelihood_without_bounds_check(np.array([[value]]))[0],
         )
@@ -255,7 +250,7 @@ class TruncatedGaussianDistribution(
 
     def log_conditional_from_simple_interval_if_not_singleton(
         self, interval: SimpleInterval
-    ) -> Tuple[Optional[ContinuousDistribution], float]:
+    ) -> LogTruncation[ContinuousDistribution]:
         """
         Truncate this distribution to the intersection of its interval and the given
         one.
@@ -265,7 +260,8 @@ class TruncatedGaussianDistribution(
         """
         intersection = self.interval.intersection_with(interval)
         if intersection.is_empty():
-            return None, -np.inf
+            return LogTruncation.impossible()
+
         return super().log_conditional_from_simple_interval_if_not_singleton(
             intersection
         )
@@ -279,36 +275,18 @@ class TruncatedGaussianDistribution(
             f"N({self.variable.name} | {self.location}, {self.scale}, {self.interval})"
         )
 
-    def __copy__(self):
-        return self.__class__(
-            variable=self.variable,
-            interval=self.interval,
-            location=self.location,
-            scale=self.scale,
-        )
+    def apply_translation(self, *, translation: VariableMap[Variable, float]) -> None:
+        """
+        Moves the :attr:`interval` and the :attr:`location` by the translation of the
+        variable.
+        """
+        super().apply_translation(translation=translation)
+        GaussianDistribution.apply_translation(self, translation=translation)
 
-    def __deepcopy__(self, memo=None):
-        if memo is None:
-            memo = {}
-        id_self = id(self)
-        if id_self in memo:
-            return memo[id_self]
-
-        variable = self.variable.__class__(self.variable.name)
-        interval = self.interval.__deepcopy__()
-        result = self.__class__(
-            variable=variable,
-            interval=interval,
-            location=self.location,
-            scale=self.scale,
-        )
-        memo[id_self] = result
-        return result
-
-    def apply_translation(self, translation: VariableMap[Variable, float]):
-        super().apply_translation(translation)
-        GaussianDistribution.apply_translation(self, translation)
-
-    def apply_scaling(self, scale: VariableMap[Variable, float]):
-        super().apply_scaling(scale)
-        GaussianDistribution.apply_scaling(self, scale)
+    def apply_scaling(self, *, scaling: VariableMap[Variable, float]) -> None:
+        """
+        Multiplies the :attr:`interval`, the :attr:`location` and the :attr:`scale` by
+        the scaling of the variable.
+        """
+        super().apply_scaling(scaling=scaling)
+        GaussianDistribution.apply_scaling(self, scaling=scaling)

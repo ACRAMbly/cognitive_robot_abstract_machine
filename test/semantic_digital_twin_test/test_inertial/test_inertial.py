@@ -1,12 +1,29 @@
+"""
+Tests of inertia tensors, their principal moments and axes, and the data they reject.
+"""
+
+from __future__ import annotations
+
+
 import numpy as np
+import pytest
 from numpy.testing import assert_allclose
 from scipy.spatial.transform import Rotation as R
 
-from semantic_digital_twin.spatial_types import RotationMatrix, Vector3
+from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
+from krrood_spatial_math.spatial_types import RotationMatrix, Vector3
+from semantic_digital_twin.world_description.world_entity import Body
 from semantic_digital_twin.world_description.inertial_properties import (
     InertiaTensor,
     PrincipalMoments,
     PrincipalAxes,
+    NPMatrix3x3,
+    NPVector3,
+)
+from semantic_digital_twin.world_description.exceptions import (
+    ArrayShapeError,
+    AsymmetricInertiaTensorError,
+    NegativeMomentOfInertiaError,
 )
 
 moments_and_axes_values = [
@@ -107,3 +124,51 @@ class TestComponentsAndAssembly:
                     axes_out.data @ np.diag(moments_out.data) @ axes_out.data.T
                 )
                 assert_allclose(sorted_tensor, expected_tensor, atol=1e-12)
+
+
+# %% a body without a description of its inertia
+
+
+def test_a_body_whose_inertia_nobody_described_has_no_inertial():
+    """
+    A placeholder mass would be taken for a real one, for instance by a physical
+    simulation that would otherwise work it out from the body's shapes.
+    """
+    assert Body(name=PrefixedName("undescribed")).inertial is None
+
+
+# %% data the inertial properties reject
+
+
+def test_a_3x3_matrix_rejects_an_array_of_another_shape():
+    """
+    A 2x2 array is no 3x3 matrix.
+    """
+    with pytest.raises(ArrayShapeError):
+        NPMatrix3x3(data=np.eye(2))
+
+
+def test_a_vector_of_three_rejects_an_array_of_another_shape():
+    """
+    An array of four elements is no vector of three.
+    """
+    with pytest.raises(ArrayShapeError):
+        NPVector3(data=np.zeros(4))
+
+
+def test_an_inertia_tensor_rejects_a_negative_moment_of_inertia():
+    """
+    A body cannot have a negative moment of inertia about an axis.
+    """
+    with pytest.raises(NegativeMomentOfInertiaError):
+        InertiaTensor.from_values(ixx=-1.0, iyy=1.0, izz=1.0, ixy=0.0, ixz=0.0, iyz=0.0)
+
+
+def test_an_inertia_tensor_rejects_an_asymmetric_matrix():
+    """
+    The products of inertia above and below the diagonal of a tensor are equal.
+    """
+    with pytest.raises(AsymmetricInertiaTensorError):
+        InertiaTensor(
+            data=np.array([[1.0, 0.5, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]])
+        )

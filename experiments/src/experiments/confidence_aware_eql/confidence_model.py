@@ -22,7 +22,7 @@ from krrood.ormatic.data_access_objects.helper import get_data_access_object_cla
 from probabilistic_model.probabilistic_circuit.relational.relational_probabilistic_circuit import (
     RelationalProbabilisticCircuit,
 )
-from typing_extensions import Any, List
+from typing_extensions import Any
 
 # %% exceptions
 
@@ -52,7 +52,7 @@ class AmbiguousThresholdError(DataclassException):
     Raised when reading the single-class threshold of a model fitted on several classes.
     """
 
-    fitted_classes: List[type]
+    fitted_classes: list[type]
     """The classes this confidence model was actually fitted on."""
 
     def error_message(self) -> str:
@@ -126,7 +126,7 @@ class PerClassConfidenceModel:
     """
 
     @classmethod
-    def fit(cls, instances: List[Any]) -> PerClassConfidenceModel:
+    def fit(cls, instances: list[Any]) -> PerClassConfidenceModel:
         """
         Fit a relational probabilistic circuit and calibrate its threshold.
 
@@ -161,14 +161,16 @@ class PerClassConfidenceModel:
         grounded = self.circuit.ground(
             _build_grounding_query(self.circuit.class_, instance)
         )
-        dataframe = self.circuit.feature_extractor.create_dataframe([instance])
-        dataframe = self.circuit.feature_extractor.preprocess_dataframe(dataframe)
+        dataframe = self.circuit.feature_extractor.create_dataframe(
+            instances=[instance]
+        )
+        dataframe = self.circuit.feature_extractor.preprocess_dataframe(df=dataframe)
         variable_names = [variable.name for variable in grounded.variables]
         event = np.full((1, len(variable_names)), np.nan)
         for index, name in enumerate(variable_names):
             if name in dataframe.columns:
                 event[0, index] = dataframe[name].iloc[0]
-        return float(grounded.log_likelihood(event)[0])
+        return float(grounded.log_likelihood(events=event)[0])
 
 
 # %% confidence model
@@ -191,7 +193,7 @@ class ConfidenceModel:
     """
 
     @classmethod
-    def fit_from_instances(cls, instances: List[Any]) -> ConfidenceModel:
+    def fit_from_instances(cls, instances: list[Any]) -> ConfidenceModel:
         """
         Fit one confidence model per distinct class found among the instances.
 
@@ -199,7 +201,7 @@ class ConfidenceModel:
             number of distinct classes.
         :return: A fitted confidence model ready to score new instances.
         """
-        instances_by_class: dict[type, List[Any]] = {}
+        instances_by_class: dict[type, list[Any]] = {}
         for instance in instances:
             instances_by_class.setdefault(type(instance), []).append(instance)
         models_by_class = {

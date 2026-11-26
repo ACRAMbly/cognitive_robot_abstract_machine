@@ -37,11 +37,12 @@ exist, but about the *model itself*. Three constructs answer that kind of questi
 |---|---|---|
 | "On average, how fast do robots move?" | {py:func}`~krrood.entity_query_language.factories.average` | a number |
 | "What fraction of robots run dangerously hot?" | {py:func}`~krrood.entity_query_language.factories.probability_of` | a number |
+| "Of the robots running hot, how many are critically hot?" | {py:func}`~krrood.entity_query_language.factories.probability_of` with `evidence` | a number |
 | "Given today's charge level, what does the rest look like?" | {py:func}`~krrood.entity_query_language.factories.distribution_of` | a distribution |
 
 Without live telemetry on hand -- only the fitted model -- all three questions below
 get answered from it, via
-{py:class}`~krrood.entity_query_language.backends.ProbabilisticBackend`, the backend
+{py:class}`~krrood.parametrization.probabilistic_backend.ProbabilisticBackend`, the backend
 that knows how to reach it:
 
 ```python
@@ -65,8 +66,14 @@ root.add_subcircuit(leaf(UniformDistribution(variable=var_temperature, interval=
 root.add_subcircuit(leaf(UniformDistribution(variable=var_speed, interval=closed(0, 2).simple_sets[0]), circuit))
 root.add_subcircuit(leaf(UniformDistribution(variable=var_charge, interval=closed(0, 3).simple_sets[0]), circuit))
 
-from krrood.entity_query_language.backends import ProbabilisticBackend
-from krrood.entity_query_language.factories import a, average, distribution_of, probability_of, variable
+from krrood.parametrization.probabilistic_backend import ProbabilisticBackend
+from krrood.entity_query_language.factories import (
+    a,
+    average,
+    distribution_of,
+    probability_of,
+    variable,
+)
 from krrood.parametrization.model_registries import DictRegistry
 
 backend = ProbabilisticBackend(model_registry=DictRegistry({Robot: circuit}))
@@ -123,6 +130,31 @@ count, only the model (as with `backend` above). The counting answer is only eve
 good as the fleet it's counting; the model-based one is exact regardless of fleet
 size, because there never was a fleet to begin with.
 
+## "Of the robots running hot, how many are critically hot?"
+
+Anything above 0.75 counts as critically hot. The question is not about the whole
+fleet but only about the robots already running hot -- the probability of one
+condition *given* another. `probability_of` takes that second condition as
+`evidence`:
+
+```python
+x = variable(Robot)
+print(probability_of(x.temperature > 0.75, evidence=x.temperature > 0.5).first(backend=backend))
+# 0.5
+```
+
+Counting works the same way, only now the robots that satisfy the evidence are the
+ones counted in the denominator:
+
+```python
+print(probability_of(y.temperature > 0.75, evidence=y.temperature > 0.5).first())
+# 0.5 -- 1 of the 2 hot robots above is critically hot
+```
+
+Evidence that nothing satisfies -- zero probability under the model, or no matching
+robot in the fleet -- leaves the answer undefined and raises
+{py:class}`~krrood.entity_query_language.exceptions.EvidenceHasZeroProbability`.
+
 ## "Given today's charge level, what does the rest look like?"
 
 Every robot left the dock at a 1.5 charge level today, and anything moving slower than
@@ -176,7 +208,8 @@ print({v.name for v in narrowed.variables})
   only a fitted model.
 - **`probability_of(condition)`** -- counts a real fleet's matching robots when one is
   on hand, or reads the exact answer straight off the model when there's only a fitted
-  model. Accepts any condition a `.where(...)` clause does.
+  model. Accepts any condition a `.where(...)` clause does, and optional `evidence`
+  to condition on.
 - **`distribution_of(match, marginalize_for=...)`** -- the same match that would
   normally *generate* robots, answered with the shape of the distribution instead of
   samples from it. Optional `marginalize_for` narrows which readings the answer
@@ -194,12 +227,13 @@ answered from a model instead of only ever a table.
 - {py:func}`~krrood.entity_query_language.factories.distribution_of`
 - {py:func}`~krrood.entity_query_language.factories.probability_of`
 - {py:func}`~krrood.entity_query_language.factories.average`
-- {py:class}`~krrood.entity_query_language.operators.probabilistic_queries.ProbabilisticQuery`
-- {py:class}`~krrood.entity_query_language.operators.probabilistic_queries.Distribution`
-- {py:class}`~krrood.entity_query_language.operators.probabilistic_queries.Probability`
+- {py:class}`~krrood.parametrization.probabilistic_queries.ProbabilisticQuery`
+- {py:class}`~krrood.parametrization.probabilistic_queries.Distribution`
+- {py:class}`~krrood.parametrization.probabilistic_queries.Probability`
 - {py:class}`~krrood.entity_query_language.operators.aggregators.Average`
-- {py:meth}`~krrood.entity_query_language.backends.ProbabilisticBackend._resolve_average`
+- {py:meth}`~krrood.parametrization.probabilistic_backend.ProbabilisticBackend._resolve_average`
 - {py:meth}`~krrood.parametrization.parameterizer.UnderspecifiedParameters.resolve_conditioned_and_truncated_model`
 - {py:class}`~krrood.parametrization.parameterizer.ModelQueryParameters`
 - {py:class}`~krrood.entity_query_language.exceptions.BackendCannotEvaluateProbabilisticQuery`
+- {py:class}`~krrood.entity_query_language.exceptions.EvidenceHasZeroProbability`
 - {py:class}`~krrood.parametrization.exceptions.JointQueryAcrossClassesNotSupported`

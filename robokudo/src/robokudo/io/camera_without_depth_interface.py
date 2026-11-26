@@ -19,15 +19,24 @@ The module is used for:
 """
 
 from __future__ import annotations
-from typing_extensions import Optional, TYPE_CHECKING, Any
+
+# %% Imports
+import time
+
+from typing_extensions import TYPE_CHECKING, Any
 
 from robokudo.io.camera_interface import CameraInterface
 from robokudo.cas import CASViews
 from robokudo.annotator_parameters import AnnotatorPredefinedParameters
+from robokudo.exceptions import CameraDataMissing, InvalidCameraObservation
+from semantic_digital_twin.datastructures.camera_model import CameraModality
+from robokudo.io.camera_model_adapters import RosCameraModelAdapter
 
 import cv2
 
 if TYPE_CHECKING:
+    from semantic_digital_twin.world import World
+
     from robokudo.cas import CAS
     import numpy.typing as npt
 
@@ -100,7 +109,7 @@ class OpenCVCameraWithoutDepthInterface(CameraInterface):
 
         Only works on video/image files.
         """
-        self._backup_color: Optional[npt.NDArray] = None
+        self._backup_color: npt.NDArray | None = None
         """
         Backup of image for single-image file mode.
         """
@@ -123,17 +132,15 @@ class OpenCVCameraWithoutDepthInterface(CameraInterface):
 
         return self._has_new_data
 
-    def set_data(self, cas: CAS) -> None:
+    def set_data(self, *, cas: CAS, world: World) -> None:
         """
-        Update the Common Analysis Structure with latest frame data.
-
-        This method:
-        * Retrieves the next frame from video/camera or backup
-        * Handles looping behavior for videos and images
-        * Applies optional contrast/brightness normalization
-        * Updates the CAS with frame and camera data
+        Put the next frame of the video, camera or images and its camera data into the
+        CAS, looping over videos and images and normalizing contrast and brightness if
+        configured.
 
         :param cas: Common Analysis Structure to update
+        :param world: The world perception perceives into; the camera is registered
+            there without a pose, since its pose is unknown
         """
         if not self.has_new_data():
             # no new frame available
@@ -147,6 +154,7 @@ class OpenCVCameraWithoutDepthInterface(CameraInterface):
             # load last/only image
             color = self._backup_color
             retval = True
+        timestamp_nanoseconds = time.time_ns()
 
         self.rk_logger.debug(
             "loaded frame {} of {}".format(
@@ -193,14 +201,39 @@ class OpenCVCameraWithoutDepthInterface(CameraInterface):
         # update additional (fake) data
         depth = self.camera_config.depth
         camera_info = self.camera_config.camera_info
-        camera_intrinsic = self.camera_config.camera_intrinsic
         color_to_depth_ratio = self.camera_config.color_to_depth_ratio
-
+        if camera_info is None:
+            raise CameraDataMissing(
+                data_name="Camera calibration",
+                context="OpenCV camera observation creation",
+            )
+        image_height, image_width = color.shape[:2]
+        if camera_info.width != image_width or camera_info.height != image_height:
+            raise InvalidCameraObservation(
+                reason=(
+                    f"the calibration resolution {camera_info.width}x"
+                    f"{camera_info.height} does not match the delivered image "
+                    f"{image_width}x{image_height}"
+                )
+            )
         if self.camera_config.update_global_with_depth_parameter:
             AnnotatorPredefinedParameters.global_with_depth = depth is not None
 
         cas.set(CASViews.COLOR_IMAGE, color)
         cas.set(CASViews.DEPTH_IMAGE, depth)
-        cas.set(CASViews.CAMERA_INFO, camera_info)
-        cas.set(CASViews.CAMERA_INTRINSIC, camera_intrinsic)
         cas.set(CASViews.COLOR_TO_DEPTH_RATIO, color_to_depth_ratio)
+        camera_frame = camera_info.header.frame_id or self.camera_config.camera_frame
+        modalities = (
+            (CameraModality.COLOR, CameraModality.DEPTH)
+            if depth is not None
+            else (CameraModality.COLOR,)
+        )
+        self.store_camera_observation(
+            cas=cas,
+            world=world,
+            camera_model=RosCameraModelAdapter.from_camera_info(camera_info),
+            camera_frame=camera_frame,
+            timestamp_nanoseconds=timestamp_nanoseconds,
+            modalities=modalities,
+            world_T_camera=None,
+        )

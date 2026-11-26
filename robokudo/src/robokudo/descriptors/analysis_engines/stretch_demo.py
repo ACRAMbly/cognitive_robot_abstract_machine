@@ -21,7 +21,11 @@ grasping it.
 from robokudo.analysis_engine import AnalysisEngineInterface
 from robokudo.annotators.cluster_pose_bb import ClusterPoseBBAnnotator
 from robokudo.annotators.collection_reader import CollectionReaderAnnotator
-from robokudo.annotators.image_cluster_extractor import ImageClusterExtractor
+from robokudo.annotators.image_cluster_extractor import (
+    ColorName,
+    ColorRangeBound,
+    ImageClusterExtractor,
+)
 from robokudo.annotators.image_preprocessor import ImagePreprocessorAnnotator
 from robokudo.annotators.pointcloud_crop import PointcloudCropAnnotator
 from robokudo.annotators.query import QueryAnnotator, GenerateQueryResult
@@ -30,6 +34,7 @@ from robokudo.descriptors.factories.cr_descriptor_factory import (
 )
 from robokudo.idioms import pipeline_init
 from robokudo.pipeline import Pipeline
+from robokudo.annotators.world_updating import WorldUpdatingAnnotator
 
 CAMERA_CONFIG_NAME = "realsense"
 """
@@ -124,11 +129,15 @@ class AnalysisEngine(AnalysisEngineInterface):
         # already-correctly-shaped region. Hardcoded to red for now, matching the one
         # object this pipeline currently targets.
         cluster_descriptor = ImageClusterExtractor.Descriptor()
-        cluster_descriptor.parameters.hsv_min = (
-            cluster_descriptor.parameters.color_name_to_hsv_range["red"]["hsv_min"]
+        cluster_descriptor.parameters.minimum_hue_saturation_value = (
+            cluster_descriptor.parameters.color_ranges[ColorName.RED][
+                ColorRangeBound.LOWER
+            ]
         )
-        cluster_descriptor.parameters.hsv_max = (
-            cluster_descriptor.parameters.color_name_to_hsv_range["red"]["hsv_max"]
+        cluster_descriptor.parameters.maximum_hue_saturation_value = (
+            cluster_descriptor.parameters.color_ranges[ColorName.RED][
+                ColorRangeBound.UPPER
+            ]
         )
         # The depth hole leaves few valid 3D points under the color mask. Lowered to
         # ClusterPoseBBAnnotator's own floor (it needs more than 10 points to compute a
@@ -154,6 +163,7 @@ class AnalysisEngine(AnalysisEngineInterface):
                 PointcloudCropAnnotator(descriptor=crop_descriptor),
                 ImageClusterExtractor(descriptor=cluster_descriptor),
                 ClusterPoseBBAnnotator(),
+                WorldUpdatingAnnotator(),
                 # Left unconfigured so that filtering by query stays off: it compares the
                 # requested type against Classification annotations, which this pipeline
                 # does not produce, so filtering a typed query would discard every object.

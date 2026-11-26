@@ -1,23 +1,41 @@
+"""
+The probabilities of the states of the nodes of a discrete layer, stored densely or
+sparsely.
+"""
+
 from __future__ import annotations
 
+import dataclasses
 import functools
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
 import numpy as np
 from scipy.sparse import csc_array, csr_array, vstack
-from typing_extensions import Generic, List, Self, Tuple, TypeVar
+from typing_extensions import Generic, Self, TypeVar
 
+import krrood.adapters.sparse_array_json_serializer  # noqa: F401 registers the serializer of the stored csr_array
+from probabilistic_model.probabilistic_circuit.tensorized.matrix_shape import (
+    MatrixShape2D,
+)
 from probabilistic_model.probabilistic_circuit.tensorized.array_types import (
+    BackendArray,
     NodeIndices,
     NodeMask,
     NodeStateValues,
     NodeValues,
+    LeafStateIndices,
     SampleNodeValues,
     StateIndices,
     StateMask,
     StateValues,
     TableEntryValues,
+)
+from probabilistic_model.probabilistic_circuit.tensorized.inner_layer.edge_matrix import (
+    RowReduction,
+)
+from probabilistic_model.probabilistic_circuit.tensorized.has_parameter_arrays import (
+    HasParameterArrays,
 )
 
 StoredLogProbabilities = TypeVar("StoredLogProbabilities")
@@ -26,19 +44,21 @@ The representation a probability table stores its log-probabilities in.
 """
 
 
-class ProbabilityTable(ABC, Generic[StoredLogProbabilities]):
+class ProbabilityTable(HasParameterArrays, Generic[StoredLogProbabilities], ABC):
     """
     The probability of every state for every node of a discrete layer, a table of shape
     (#nodes, #states).
 
-    A discrete layer answers every query through the operations of its table. A table is not changed after it was created; every operation that changes the
-    probabilities returns a new table of the same type.
+    A discrete layer answers every query through the operations of its table. A table is
+    not changed after it was created; every operation that changes the probabilities
+    returns a new table of the same type.
     """
 
     log_probabilities: StoredLogProbabilities
     """
-    The log-probabilities of the table. Every type of table declares the representation
-    it stores them in.
+    The log-probabilities of the table.
+
+    Every type of table declares the representation it stores them in.
     """
 
     # %% construction
@@ -50,7 +70,7 @@ class ProbabilityTable(ABC, Generic[StoredLogProbabilities]):
         rows: NodeIndices,
         columns: StateIndices,
         probabilities: TableEntryValues,
-        shape: Tuple[int, int],
+        shape: MatrixShape2D,
     ) -> Self:
         """
         :param rows: The node of every entry.
@@ -64,21 +84,19 @@ class ProbabilityTable(ABC, Generic[StoredLogProbabilities]):
     @abstractmethod
     def entries(
         self,
-    ) -> Tuple[NodeIndices, StateIndices, TableEntryValues]:
+    ) -> tuple[NodeIndices, StateIndices, TableEntryValues]:
         """
         :return: The node, the state and the probability of every non-zero entry.
         """
         raise NotImplementedError
 
     @classmethod
-    def of(cls, table: ProbabilityTable) -> Self:
+    def from_table(cls, *, table: ProbabilityTable) -> Self:
         """
         :param table: A table of any type.
         :return: A table of this type with the same probabilities.
         """
-        return cls.from_entries(
-            *table.entries(), (table.number_of_nodes, table.number_of_states)
-        )
+        return cls.from_entries(*table.entries(), table.shape)
 
     # %% shape
 
@@ -91,12 +109,29 @@ class ProbabilityTable(ABC, Generic[StoredLogProbabilities]):
         raise NotImplementedError
 
     @property
+    def trains_without_host_copies(self) -> bool:
+        """
+        :return: Whether looking up the log-probabilities of states during a training
+            step copies nothing from the host to the device of the table.
+        """
+        return False
+
+    @property
     @abstractmethod
     def number_of_states(self) -> int:
         """
         :return: The number of states, the columns of the table.
         """
         raise NotImplementedError
+
+    @property
+    def shape(self) -> MatrixShape2D:
+        """
+        :return: The number of nodes and of states.
+        """
+        return MatrixShape2D(
+            number_of_rows=self.number_of_nodes, number_of_columns=self.number_of_states
+        )
 
     @property
     @abstractmethod
@@ -109,10 +144,13 @@ class ProbabilityTable(ABC, Generic[StoredLogProbabilities]):
     # %% queries
 
     @abstractmethod
-    def log_probabilities_of_states(self, indices: StateIndices) -> SampleNodeValues:
+    def log_probabilities_of_states(
+        self, *, indices: LeafStateIndices
+    ) -> SampleNodeValues:
         """
-        :param indices: One state index per value, ``-1`` for a value that is not a
-            state.
+        :param indices: One state index per value for every node, shape (#values,), or
+            one per value and node, shape (#values, #nodes), ``-1`` for a value that is
+            not a state.
         :return: The log-probability of every value under every node, with shape
             (#values, #nodes).
         """
@@ -137,7 +175,7 @@ class ProbabilityTable(ABC, Generic[StoredLogProbabilities]):
         raise NotImplementedError
 
     @abstractmethod
-    def probabilities_of_node(self, node: int) -> Tuple[StateIndices, TableEntryValues]:
+    def probabilities_of_node(self, node: int) -> tuple[StateIndices, TableEntryValues]:
         """
         :param node: The index of a node.
         :return: The states with a non-zero probability under the node, ascending, and
@@ -172,7 +210,7 @@ class ProbabilityTable(ABC, Generic[StoredLogProbabilities]):
         raise NotImplementedError
 
     @abstractmethod
-    def select_nodes(self, mask: NodeMask) -> Self:
+    def select_nodes(self, *, mask: NodeMask) -> Self:
         """
         :param mask: The nodes to keep.
         :return: The table of the kept nodes.
@@ -181,7 +219,7 @@ class ProbabilityTable(ABC, Generic[StoredLogProbabilities]):
 
     @classmethod
     @abstractmethod
-    def concatenate(cls, tables: List[Self]) -> Self:
+    def concatenate(cls, tables: list[Self]) -> Self:
         """
         :param tables: Tables with the same states.
         :return: One table with the nodes of all tables, in order.
@@ -207,7 +245,7 @@ class ProbabilityTable(ABC, Generic[StoredLogProbabilities]):
 
     def cumulative_distribution_of_entries(
         self,
-    ) -> Tuple[NodeIndices, StateIndices, TableEntryValues]:
+    ) -> tuple[NodeIndices, StateIndices, TableEntryValues]:
         """
         :return: The node and the state of every non-zero entry, sorted by node and then
             by state, and the probability of the node for all states up to and including
@@ -272,20 +310,50 @@ class DenseProbabilityTable(ProbabilityTable[NodeStateValues]):
     The log-probability of every state for every node, ``-inf`` for probability zero.
     """
 
+    @property
+    def parameters(self) -> list[BackendArray]:
+        return [self.log_probabilities]
+
+    def copy_with_parameters(self, *, parameters: list[BackendArray]) -> Self:
+        (log_probabilities,) = parameters
+        return dataclasses.replace(self, log_probabilities=log_probabilities)
+
+    def projected_parameters(
+        self, *, parameters: list[BackendArray]
+    ) -> list[BackendArray]:
+        """
+        :param parameters: Log-probabilities in the shape of :attr:`log_probabilities`.
+        :return: The log-probabilities normalized per node. A node whose
+            log-probabilities are all ``-inf`` has nothing to normalize and keeps them.
+        """
+        (log_probabilities,) = parameters
+        namespace = self.namespace
+        normalization = namespace.expand_dims(
+            RowReduction.LOG_SUM_EXP.reduce_last_axis(namespace, log_probabilities),
+            axis=1,
+        )
+        return [
+            namespace.where(
+                namespace.isfinite(normalization),
+                log_probabilities - normalization,
+                log_probabilities,
+            )
+        ]
+
     @classmethod
     def from_entries(
         cls,
         rows: NodeIndices,
         columns: StateIndices,
         probabilities: TableEntryValues,
-        shape: Tuple[int, int],
+        shape: MatrixShape2D,
     ) -> Self:
-        dense = np.zeros(shape)
+        dense = np.zeros(shape.to_tuple())
         dense[rows, columns] = probabilities
         with np.errstate(divide="ignore"):
             return cls(np.log(dense))
 
-    def entries(self) -> Tuple[NodeIndices, StateIndices, TableEntryValues]:
+    def entries(self) -> tuple[NodeIndices, StateIndices, TableEntryValues]:
         rows, columns = np.nonzero(np.isfinite(self.log_probabilities))
         return rows, columns, np.exp(self.log_probabilities[rows, columns])
 
@@ -298,23 +366,67 @@ class DenseProbabilityTable(ProbabilityTable[NodeStateValues]):
         return self.log_probabilities.shape[1]
 
     @property
+    def trains_without_host_copies(self) -> bool:
+        """
+        :attr:`ProbabilityTable.trains_without_host_copies` for dense tables, which do.
+        """
+        return True
+
+    @property
     def number_of_stored_entries(self) -> int:
         return int(self.log_probabilities.size)
 
-    def log_probabilities_of_states(self, indices: StateIndices) -> SampleNodeValues:
-        result = np.full((len(indices), self.number_of_nodes), -np.inf)
-        known = indices >= 0
-        if known.any():
-            result[known] = self.log_probabilities[:, indices[known]].T
-        return result
+    def log_probabilities_of_states(
+        self, *, indices: LeafStateIndices
+    ) -> SampleNodeValues:
+        """
+        :meth:`ProbabilityTable.log_probabilities_of_states` read from the log-
+        probabilities normalized per node, so that their gradient lowers the other
+        states of a node wherever it raises one.
+        """
+        (normalized,) = self.projected_parameters(parameters=[self.log_probabilities])
+        # an unknown state reads the appended column of probability zero
+        padded = self.namespace.concat(
+            [
+                normalized,
+                self.namespace.full(
+                    (self.number_of_nodes, 1),
+                    -np.inf,
+                    dtype=self.log_probabilities.dtype,
+                    device=self.device,
+                ),
+            ],
+            axis=1,
+        )
+        columns = self.namespace.where(indices >= 0, indices, self.number_of_states)
+        if columns.ndim == 1:
+            return self.namespace.take(padded, columns, axis=1).T
+        # the entry of node n and column c sits at n * (#states + 1) + c of the flat table
+        node_offsets = self.namespace.arange(
+            self.number_of_nodes, dtype=columns.dtype, device=self.device
+        ) * (self.number_of_states + 1)
+        flat = self.namespace.take(
+            self.namespace.reshape(padded, (-1,)),
+            self.namespace.reshape(columns + node_offsets, (-1,)),
+        )
+        return self.namespace.reshape(flat, columns.shape)
 
     def probability_of_states(self, selected: StateMask) -> NodeValues:
-        return np.exp(self.log_probabilities[:, selected]).sum(axis=1)
+        columns = self.namespace.asarray(np.flatnonzero(selected), device=self.device)
+        return self.namespace.sum(
+            self.namespace.exp(
+                self.namespace.take(self.log_probabilities, columns, axis=1)
+            ),
+            axis=1,
+        )
 
     def dot(self, values: StateValues) -> NodeValues:
-        return np.exp(self.log_probabilities) @ values
+        return self.namespace.matmul(
+            self.namespace.exp(self.log_probabilities),
+            self.namespace.asarray(values, device=self.device),
+        )
 
-    def probabilities_of_node(self, node: int) -> Tuple[StateIndices, TableEntryValues]:
+    def probabilities_of_node(self, node: int) -> tuple[StateIndices, TableEntryValues]:
         [states] = np.nonzero(np.isfinite(self.log_probabilities[node]))
         return states, np.exp(self.log_probabilities[node, states])
 
@@ -338,11 +450,11 @@ class DenseProbabilityTable(ProbabilityTable[NodeStateValues]):
         with np.errstate(divide="ignore"):
             return self.__class__(np.log(normalized))
 
-    def select_nodes(self, mask: NodeMask) -> Self:
+    def select_nodes(self, *, mask: NodeMask) -> Self:
         return self.__class__(self.log_probabilities[mask])
 
     @classmethod
-    def concatenate(cls, tables: List[Self]) -> Self:
+    def concatenate(cls, tables: list[Self]) -> Self:
         return cls(np.concatenate([table.log_probabilities for table in tables]))
 
     def copy(self) -> Self:
@@ -368,9 +480,27 @@ class SparseProbabilityTable(ProbabilityTable[csr_array]):
     """
     The log-probability of every state with a non-zero probability, for every node.
 
-    A state that is not stored has probability zero. A stored zero is the log-probability
-    of a state with probability one.
+    A state that is not stored has probability zero. A stored zero is the log-
+    probability of a state with probability one.
     """
+
+    @property
+    def parameters(self) -> list[BackendArray]:
+        """
+        :return: The stored log-probabilities. They are always numpy arrays, since the
+            table is a scipy sparse array.
+        """
+        return [self.log_probabilities.data]
+
+    def copy_with_parameters(self, *, parameters: list[BackendArray]) -> Self:
+        """
+        :meth:`HasParameterArrays.copy_with_parameters` that copies the values of the
+        parameters to the host, since the table is a scipy sparse array.
+        """
+        (log_probabilities,) = parameters
+        table = self.log_probabilities.copy()
+        table.data = self.host_copy(log_probabilities)
+        return dataclasses.replace(self, log_probabilities=table)
 
     @classmethod
     def from_entries(
@@ -378,17 +508,22 @@ class SparseProbabilityTable(ProbabilityTable[csr_array]):
         rows: NodeIndices,
         columns: StateIndices,
         probabilities: TableEntryValues,
-        shape: Tuple[int, int],
+        shape: MatrixShape2D,
     ) -> Self:
         stored = probabilities > 0
         table = csr_array(
-            (probabilities[stored], (rows[stored], columns[stored])), shape=shape
+            (probabilities[stored], (rows[stored], columns[stored])),
+            shape=shape.to_tuple(),
         )
         table.sum_duplicates()
         table.sort_indices()
-        return cls(csr_array((np.log(table.data), table.indices, table.indptr), shape))
+        return cls(
+            csr_array(
+                (np.log(table.data), table.indices, table.indptr), shape.to_tuple()
+            )
+        )
 
-    def entries(self) -> Tuple[NodeIndices, StateIndices, TableEntryValues]:
+    def entries(self) -> tuple[NodeIndices, StateIndices, TableEntryValues]:
         return (
             self.rows_of_entries,
             self.probabilities.indices.astype(np.int64),
@@ -437,7 +572,18 @@ class SparseProbabilityTable(ProbabilityTable[csr_array]):
     def number_of_stored_entries(self) -> int:
         return int(self.log_probabilities.nnz)
 
-    def log_probabilities_of_states(self, indices: StateIndices) -> SampleNodeValues:
+    def log_probabilities_of_states(
+        self, *, indices: LeafStateIndices
+    ) -> SampleNodeValues:
+        if indices.ndim == 2:
+            nodes = np.broadcast_to(np.arange(self.number_of_nodes), indices.shape)
+            known = indices >= 0
+            probabilities = np.zeros(indices.shape)
+            probabilities[known] = np.asarray(
+                self.probabilities[nodes[known], indices[known]]
+            ).ravel()
+            with np.errstate(divide="ignore"):
+                return np.log(probabilities)
         result = np.full((len(indices), self.number_of_nodes), -np.inf)
         known = indices >= 0
         if known.any():
@@ -459,7 +605,7 @@ class SparseProbabilityTable(ProbabilityTable[csr_array]):
     def dot(self, values: StateValues) -> NodeValues:
         return self.probabilities @ values
 
-    def probabilities_of_node(self, node: int) -> Tuple[StateIndices, TableEntryValues]:
+    def probabilities_of_node(self, node: int) -> tuple[StateIndices, TableEntryValues]:
         start, end = self.probabilities.indptr[node : node + 2]
         return (
             self.probabilities.indices[start:end].astype(np.int64),
@@ -473,7 +619,7 @@ class SparseProbabilityTable(ProbabilityTable[csr_array]):
         rows, columns, probabilities = self.entries()
         kept = selected[columns]
         return self.from_entries(
-            rows[kept], columns[kept], probabilities[kept], self.log_probabilities.shape
+            rows[kept], columns[kept], probabilities[kept], self.shape
         )
 
     def normalized(self) -> Self:
@@ -482,14 +628,14 @@ class SparseProbabilityTable(ProbabilityTable[csr_array]):
             rows, weights=probabilities, minlength=self.number_of_nodes
         )
         return self.from_entries(
-            rows, columns, probabilities / totals[rows], self.log_probabilities.shape
+            rows, columns, probabilities / totals[rows], self.shape
         )
 
-    def select_nodes(self, mask: NodeMask) -> Self:
+    def select_nodes(self, *, mask: NodeMask) -> Self:
         return self.__class__(csr_array(self.log_probabilities[np.flatnonzero(mask)]))
 
     @classmethod
-    def concatenate(cls, tables: List[Self]) -> Self:
+    def concatenate(cls, tables: list[Self]) -> Self:
         return cls(csr_array(vstack([table.log_probabilities for table in tables])))
 
     def copy(self) -> Self:

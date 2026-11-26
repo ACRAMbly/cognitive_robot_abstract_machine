@@ -1,11 +1,18 @@
+"""
+Exceptions raised by layered circuits and their layers.
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
 
 import numpy as np
-from typing_extensions import TYPE_CHECKING, Tuple, Type
+from typing_extensions import TYPE_CHECKING
 
-from krrood.exceptions import DataclassException
+from probabilistic_model.exceptions import ProbabilisticModelException
+from probabilistic_model.probabilistic_circuit.tensorized.array_types import (
+    VariableIndices,
+)
 
 if TYPE_CHECKING:
     from probabilistic_model.probabilistic_circuit.tensorized.inner_layer.base import (
@@ -14,13 +21,13 @@ if TYPE_CHECKING:
 
 
 @dataclass
-class UndefinedCumulativeDistributionError(DataclassException, TypeError):
+class UndefinedCumulativeDistributionError(ProbabilisticModelException, TypeError):
     """
     Exception raised when the cumulative distribution function of a layer over an
     unordered variable is queried.
     """
 
-    layer_type: Type
+    layer_type: type
     """
     The type of the layer.
     """
@@ -36,7 +43,7 @@ class UndefinedCumulativeDistributionError(DataclassException, TypeError):
 
 
 @dataclass
-class NonPositiveScaleError(DataclassException, ValueError):
+class NonPositiveScaleError(ProbabilisticModelException, ValueError):
     """
     Exception raised when a layer has a scale that is not positive.
     """
@@ -54,19 +61,19 @@ class NonPositiveScaleError(DataclassException, ValueError):
 
 
 @dataclass
-class CopiesNotAlignedError(DataclassException, ValueError):
+class CopiesNotAlignedError(ProbabilisticModelException, ValueError):
     """
     Exception raised when copies of a layer graph that are to be stacked differ in their
     structure.
     """
 
-    copies: Tuple[Layer, ...]
+    copies: tuple[Layer, ...]
     """
     The layer at the same position in every copy of the layer graph, in the order of
     the copies.
     """
 
-    path: Tuple[int, ...]
+    path: tuple[int, ...]
     """
     The index of the child layer taken at every step from the roots of the copies down
     to :attr:`copies`.
@@ -75,7 +82,7 @@ class CopiesNotAlignedError(DataclassException, ValueError):
     """
 
     @property
-    def misaligned_copies(self) -> Tuple[int, ...]:
+    def misaligned_copies(self) -> tuple[int, ...]:
         """
         :return: The index of every copy whose layer differs from the one of the first
             copy in its type, its number of nodes or its number of child layers.
@@ -116,4 +123,96 @@ class CopiesNotAlignedError(DataclassException, ValueError):
         return (
             "Only stack copies that a structural pass made from the same layer graph "
             "without pruning it."
+        )
+
+
+@dataclass
+class UnsupportedArrayBackendError(ProbabilisticModelException, TypeError):
+    """
+    Exception raised when a numeric query needs the normal distribution functions of an
+    array backend for which none are available.
+    """
+
+    namespace_name: str
+    """
+    The name of the Array API namespace of the backend.
+    """
+
+    def error_message(self) -> str:
+        return (
+            f"No normal distribution functions are available for arrays of "
+            f"{self.namespace_name}."
+        )
+
+    def suggest_correction(self) -> str:
+        return "Use numpy or jax arrays."
+
+
+@dataclass
+class HostOnlyQueryError(ProbabilisticModelException, TypeError):
+    """
+    Exception raised when a structural query or sampling is asked of a circuit whose
+    parameters are not numpy arrays.
+    """
+
+    backend: str
+    """
+    The name of the Array API namespace of the parameters.
+    """
+
+    def error_message(self) -> str:
+        return (
+            f"Structural queries and sampling run on numpy only, but the parameters of "
+            f"the circuit are arrays of {self.backend}."
+        )
+
+    def suggest_correction(self) -> str:
+        return (
+            "Convert the circuit to numpy first, with "
+            "LayeredProbabilisticCircuit.to_namespace(numpy)."
+        )
+
+
+@dataclass(kw_only=True)
+class LayerOverSeveralVariablesError(ProbabilisticModelException, ValueError):
+    """
+    Exception raised when the single variable of a leaf layer is asked of a layer whose
+    nodes are over several variables.
+    """
+
+    variables: VariableIndices
+    """
+    The indices of the variables of the nodes of the layer.
+    """
+
+    def error_message(self) -> str:
+        return (
+            f"The nodes of the layer are over the variables {self.variables.tolist()}, "
+            f"not over one variable."
+        )
+
+    def suggest_correction(self) -> str:
+        return "Ask the variable of every node from node_variables instead."
+
+
+@dataclass(kw_only=True)
+class UnsortedNodeVariablesError(ProbabilisticModelException, ValueError):
+    """
+    Exception raised when the nodes of a leaf layer are not sorted by their variable.
+    """
+
+    node_variables: VariableIndices
+    """
+    The index of the variable of every node of the layer.
+    """
+
+    def error_message(self) -> str:
+        return (
+            f"The variables of the nodes {self.node_variables.tolist()} are not sorted."
+        )
+
+    def suggest_correction(self) -> str:
+        return (
+            "Order the nodes of the layer by their variable, and the edges of its "
+            "parents with them."
         )

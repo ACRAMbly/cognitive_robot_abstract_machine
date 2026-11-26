@@ -14,7 +14,9 @@ from robokudo.annotators.collection_reader import CollectionReaderAnnotator
 from robokudo.annotators.image_cluster_extractor import ImageClusterExtractor
 from robokudo.annotators.image_preprocessor import ImagePreprocessorAnnotator
 from robokudo.annotators.query import GenerateQueryResult, QueryAnnotator
-from robokudo.descriptors import CrDescriptorFactory
+from robokudo.descriptors.factories.cr_descriptor_factory import (
+    CollectionReaderDescriptorFactory,
+)
 from robokudo.utils.module_loader import ModuleLoader
 
 # %% Public launcher configuration
@@ -26,9 +28,6 @@ class ExtensionModule(StrEnum):
     PACKAGE = "robokudo_acrambly"
     """Import namespace containing the custom perception components."""
 
-    ENGINE = "scripted_tetris"
-    """Public analysis-engine descriptor."""
-
     STACKING_ENGINE = "stacking_robokudo"
     """Query-driven colored-cube analysis-engine descriptor."""
 
@@ -37,13 +36,6 @@ class ExtensionModule(StrEnum):
 
 
 # %% Engine discovery
-
-
-def test_launcher_loads_the_engine_from_the_extension_package() -> None:
-    """The existing RoboKudo loader discovers the extension's public engine."""
-    engine = ModuleLoader().load_ae(ExtensionModule.PACKAGE, ExtensionModule.ENGINE)
-
-    assert engine.name() == ExtensionModule.ENGINE
 
 
 def test_launcher_loads_the_stacking_engine_from_the_extension_package() -> None:
@@ -81,8 +73,8 @@ def test_stacking_engine_preserves_the_colored_cube_pipeline(
         camera_config=Mock(), camera_interface=Mock()
     )
     monkeypatch.setattr(
-        CrDescriptorFactory,
-        CrDescriptorFactory.create_descriptor.__name__,
+        CollectionReaderDescriptorFactory,
+        CollectionReaderDescriptorFactory.create_descriptor.__name__,
         Mock(return_value=camera_descriptor),
     )
     engine = ModuleLoader().load_ae(

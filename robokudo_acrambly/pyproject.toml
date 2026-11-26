@@ -4,32 +4,31 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "robokudo_acrambly"
-description = "ACRAMbly perception annotators and analysis engines for RoboKudo"
+description = "ACRAMbly perception components for RoboKudo"
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
-license = {text = "LGPL-3.0-only"}
+license = "LGPL-3.0-only"
 dynamic = ["version"]
 dependencies = [
-    "robokudo",
-    "semantic_digital_twin",
-    "krrood",
+    "robokudo>=26.10.0",
+    "semantic_digital_twin>=26.10.0",
+    "krrood-core>=26.10.0",
+    "krrood_spatial_math>=26.10.0",
     "numpy>=1.22.3",
-    "scipy>=1.8.0",
-    "open3d>=0.20.0",
-    "opencv-python>=4.11.0.86",
     "typing_extensions",
-    "py_trees",
 ]
 
 [tool.setuptools.packages.find]
 where = ["src"]
 include = ["robokudo_acrambly*"]
 
-[tool.setuptools.package-data]
-robokudo_acrambly = ["data/*.ply"]
-
 [tool.setuptools.dynamic]
 version = {attr = "robokudo_acrambly._version.__version__"}
 
 [dependency-groups]
-workspace = ["robokudo", "semantic_digital_twin", "krrood"]
+workspace = [
+    "robokudo",
+    "semantic_digital_twin",
+    "krrood-core",
+    "krrood_spatial_math",
+]

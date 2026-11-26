@@ -1,44 +1,73 @@
+"""
+Mass, center of mass and inertia tensor of a body, with the matrices and vectors they
+are built from.
+"""
+
 from __future__ import annotations
 from dataclasses import dataclass, field
-from typing import Tuple, Optional, Dict, Any
+from typing_extensions import Self, TypeVar, Any
 
 import numpy as np
-from numpy._typing import NDArray
-from typing_extensions import Self, TypeVar
+from numpy.typing import NDArray
 
 from krrood.adapters.json_serializer import SubclassJSONSerializer
-from semantic_digital_twin.spatial_types import Point3, RotationMatrix
+from krrood_spatial_math.spatial_types import Point3, RotationMatrix
+from semantic_digital_twin.world_description.exceptions import (
+    ArrayShapeError,
+    AsymmetricInertiaTensorError,
+    NegativeMomentOfInertiaError,
+)
 
 
-@dataclass
+@dataclass(kw_only=True)
 class NPMatrix3x3(SubclassJSONSerializer):
-    data: Optional[NDArray] = None
+    """
+    A 3x3 matrix of numbers.
+    """
 
-    def __post_init__(self):
-        if self.data is not None:
-            assert self.data.shape == (3, 3), "Matrix must be 3x3"
+    data: NDArray
+    """
+    The elements of the matrix.
+    """
+
+    def __post_init__(self) -> None:
+        """
+        :raises ArrayShapeError: If the data is not a 3x3 matrix.
+        """
+        if self.data.shape != (3, 3):
+            raise ArrayShapeError(expected_shape=(3, 3), shape=self.data.shape)
 
     def __matmul__(self, other: GenericMatrix3x3Type) -> GenericMatrix3x3Type:
         return NPMatrix3x3(data=self.data @ other.data)
 
-    def to_json(self, **kwargs) -> Dict[str, Any]:
+    def to_json(self, **kwargs) -> dict[str, Any]:
         return {**super().to_json(**kwargs), "data": self.data.tolist()}
 
     @classmethod
-    def _from_json(cls, data: Dict[str, Any], **kwargs) -> Self:
+    def _from_json(cls, *, data: dict[str, Any], **kwargs) -> Self:
         return cls(data=np.array(data["data"]))
 
 
 GenericMatrix3x3Type = TypeVar("GenericMatrix3x3Type", bound=NPMatrix3x3)
 
 
-@dataclass
+@dataclass(kw_only=True)
 class NPVector3(SubclassJSONSerializer):
-    data: Optional[NDArray] = None
+    """
+    A vector of three numbers.
+    """
 
-    def __post_init__(self):
-        if self.data is not None:
-            assert self.data.shape == (3,), "Vector must be 3-dimensional"
+    data: NDArray
+    """
+    The elements of the vector.
+    """
+
+    def __post_init__(self) -> None:
+        """
+        :raises ArrayShapeError: If the data is not a vector of three.
+        """
+        if self.data.shape != (3,):
+            raise ArrayShapeError(expected_shape=(3,), shape=self.data.shape)
 
     @classmethod
     def from_values(cls, x: float, y: float, z: float) -> Self:
@@ -47,7 +76,7 @@ class NPVector3(SubclassJSONSerializer):
         """
         return cls(data=np.array([x, y, z]))
 
-    def to_values(self) -> Tuple[float, float, float]:
+    def to_values(self) -> tuple[float, float, float]:
         """
         Return the tuple (x,y,z)
         """
@@ -59,11 +88,11 @@ class NPVector3(SubclassJSONSerializer):
         """
         return NPMatrix3x3(data=np.diag(self.data))
 
-    def to_json(self, **kwargs) -> Dict[str, Any]:
+    def to_json(self, **kwargs) -> dict[str, Any]:
         return {**super().to_json(**kwargs), "data": self.data.tolist()}
 
     @classmethod
-    def _from_json(cls, data: Dict[str, Any]) -> Self:
+    def _from_json(cls, *, data: dict[str, Any]) -> Self:
         return cls(data=np.array(data["data"]))
 
 
@@ -100,12 +129,12 @@ class PrincipalAxes(NPMatrix3x3):
 
     def __post_init__(self):
         super().__post_init__()
-        assert np.allclose(
-            self.data.T @ self.data, np.eye(3), atol=1e-10
-        ), "Principal axes must be orthonormal"
-        assert np.isclose(
-            np.linalg.det(self.data), 1.0, atol=1e-10
-        ), "Principal axes must form a right-handed coordinate system"
+        assert np.allclose(self.data.T @ self.data, np.eye(3), atol=1e-10), (
+            "Principal axes must be orthonormal"
+        )
+        assert np.isclose(np.linalg.det(self.data), 1.0, atol=1e-10), (
+            "Principal axes must form a right-handed coordinate system"
+        )
 
     def T(self) -> Self:
         return PrincipalAxes(data=self.data.T)
@@ -134,17 +163,20 @@ class InertiaTensor(NPMatrix3x3):
     https://en.wikipedia.org/wiki/Moment_of_inertia#Definition_2
     """
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
+        """
+        :meth:`NPMatrix3x3.__post_init__`, which also rejects a matrix that is no
+        inertia tensor.
+
+        :raises NegativeMomentOfInertiaError: If a moment on the diagonal is negative.
+        :raises AsymmetricInertiaTensorError: If the matrix is not symmetric.
+        """
         super().__post_init__()
-        if self.data is None:
-            return
-        diag = np.diag(self.data)
-        assert np.all(
-            diag >= 0.0
-        ), "Diagonal elements of inertia tensor must be non-negative"
-        assert np.allclose(
-            self.data, self.data.T, atol=1e-10
-        ), "Inertia tensor must be symmetric"
+        moments = np.diag(self.data)
+        if np.any(moments < 0.0):
+            raise NegativeMomentOfInertiaError(moments=moments)
+        if not np.allclose(self.data, self.data.T, atol=1e-10):
+            raise AsymmetricInertiaTensorError(matrix=self.data)
 
     @classmethod
     def from_values(
@@ -170,7 +202,7 @@ class InertiaTensor(NPMatrix3x3):
         )
         return InertiaTensor(data=data)
 
-    def to_values(self) -> Tuple[float, float, float, float, float, float]:
+    def to_values(self) -> tuple[float, float, float, float, float, float]:
         """
         Return the individual components of the inertia tensor.
 
@@ -198,8 +230,8 @@ class InertiaTensor(NPMatrix3x3):
         return InertiaTensor(data=data.data)
 
     def to_principal_moments_and_axes(
-        self, sorted_array: Optional[NDArray] = None
-    ) -> Tuple[PrincipalMoments, PrincipalAxes]:
+        self, sorted_array: NDArray | None = None
+    ) -> tuple[PrincipalMoments, PrincipalAxes]:
         """
         Decompose inertia tensor into principal moments and axes.
 

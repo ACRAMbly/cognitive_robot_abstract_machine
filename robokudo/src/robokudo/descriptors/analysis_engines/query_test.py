@@ -19,7 +19,6 @@ from py_trees.composites import Selector
 from py_trees.composites import Sequence
 from py_trees.decorators import Inverter
 from robokudo_msgs.action import Query
-from typing_extensions import List
 
 from robokudo.analysis_engine import AnalysisEngineInterface
 from robokudo.annotators.core import BaseAnnotator
@@ -29,6 +28,7 @@ from robokudo.cas import CASViews
 from robokudo.identifier import BBIdentifier
 from robokudo.idioms import pipeline_init
 from robokudo.pipeline import Pipeline
+from robokudo.annotators.world_updating import WorldUpdatingAnnotator
 
 
 class PrintNumbers(BaseAnnotator):
@@ -36,7 +36,7 @@ class PrintNumbers(BaseAnnotator):
         super().__init__(name)
         self.current_number: int = 1
         self.completed: bool = False
-        self.result: List[int] = []
+        self.result: list[int] = []
         self.result_string: str = ""
 
     def initialise(self) -> None:
@@ -95,6 +95,11 @@ class CheckQueryType(BaseAnnotator):
 
 
 class AnalysisEngine(AnalysisEngineInterface):
+    """
+    Answers a query of type ``numbers`` by counting, reporting each number as feedback,
+    unless the query is preempted.
+    """
+
     def name(self) -> str:
         return "test_pipeline"
 
@@ -126,6 +131,7 @@ class AnalysisEngine(AnalysisEngineInterface):
                 pipeline_init(),  # Initialize the pipeline
                 QueryAnnotator(),  # Handle incoming queries
                 conditional_selector,  # Preemption-aware task execution
+                WorldUpdatingAnnotator(),
             ]
         )
 
