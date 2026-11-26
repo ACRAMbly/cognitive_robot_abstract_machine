@@ -77,19 +77,20 @@ def build_plan(context, battatco, holders):
             grasp_candidate=GraspCandidate(battatco["BottomWing"], Pose.from_xyz_rpy(0.09, 0.05,0, pi/2, 0, -pi/2,reference_frame=battatco["BottomWing"].root)),
             arm=tracy.right_arm
         ),
-        # ReachAction(
-        #     grasp_candidate=GraspCandidate(battatco["BottomWing"], Pose.from_xyz_rpy(-0.089, 0.13, -0.094, pi/2, 0, pi/2, reference_frame=holders["HolderHorizontal"].root)),
-        #     arm=tracy.right_arm.end_effector,
-        # ),
+        ReachAction(
+            grasp_candidate=GraspCandidate(battatco["BottomWing"], Pose.from_xyz_rpy(0.09, -0.1, -0.015, pi/2, 0, -pi/2, reference_frame=battatco["BottomWing"].root)),
+            arm=tracy.right_arm,
+        ),
         ## Step 2: Upper body on lower body
         PickUpAction(
             grasp_candidate=GraspCandidate(battatco["UpperBody"], Pose.from_xyz_rpy(-0.1,0,0.045,0, pi/2,0,reference_frame=battatco["UpperBody"].root)),
-            arm=tracy.left_arm
+            arm=tracy.left_arm,
+
         ),
         PlaceAction(
             arm=tracy.left_arm,
             graspable=battatco["UpperBody"],
-            goal_pose=Pose.from_xyz_rpy(0, 0.037, -0.04, pi, 0, -pi/2,reference_frame=battatco["UnderBody"].root)
+            goal_pose=Pose.from_xyz_rpy(0, 0.05, -0.005, pi,  -0.175, -pi/2,reference_frame=battatco["UnderBody"].root)
         ),
         MoveBranch(branch_root=battatco["UnderBody"].root, new_parent=battatco["UpperBody"].root),
         ## Step 3: Body on lower wing
@@ -122,7 +123,7 @@ def build_plan(context, battatco, holders):
         #     allow_gripper_collision=False
         # ),
         ParkArmsAction(arms=tracy.all_arms)
-    ][2:5]
+    ][:3]
 
     statechart = Statechart(context=context)
     statechart.add_node(node=Sequence(nodes=actions))
