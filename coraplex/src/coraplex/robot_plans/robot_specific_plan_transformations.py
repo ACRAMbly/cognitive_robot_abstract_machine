@@ -6,7 +6,6 @@ their own.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
 
 from cramph.composites import ControlStructureNode, Parallel
 from cramph.node import StatechartNode
@@ -24,15 +23,10 @@ from giskardpy.motion_statechart.tasks.drive_tasks import DifferentialDriveBaseG
 from giskardpy.motion_statechart.tasks.grasped_mechanism import (
     ArticulateGraspedMechanism,
 )
-from giskardpy.motion_statechart.tasks.gripper import MoveFingers, MoveGripper
+from giskardpy.motion_statechart.tasks.gripper import MoveFingers
 from giskardpy.motion_statechart.weights import DefaultWeights
 from krrood_spatial_math.spatial_types import Pose, Vector3
-from semantic_digital_twin.datastructures.definitions import GripperState
-from semantic_digital_twin.datastructures.joint_state import JointState
 from semantic_digital_twin.robots.justin import Justin
-from semantic_digital_twin.robots.robotiq_85_gripper import (
-    Robotiq85Gripper,
-)
 from semantic_digital_twin.robots.stretch import Stretch
 from semantic_digital_twin.world_description.connections import DifferentialDrive
 from semantic_digital_twin.world_description.kinematic_chain import KinematicChain
@@ -50,11 +44,6 @@ from coraplex.robot_plans.actions.core.container import (
     MovesContainerByItsHandle,
 )
 from coraplex.robot_plans.actions.core.navigation import DrivesBase
-from coraplex.robot_plans.actions.core.pick_up import (
-    GraspingAction,
-    ReachAction,
-)
-from coraplex.robot_plans.actions.core.robot_body import MoveFingersToWidthAction
 from coraplex.robot_plans.mixins import MovesToolCenterPoint, OperatesGripper
 
 # %% keeping the torso upright while using a tool
@@ -295,82 +284,3 @@ class DriveRobotiqGrippersThroughTheirActionServers(
     def apply(self, plan_node: OperatesGripper) -> None:
         print(f"Transforming {type(plan_node).__name__}")
         plan_node.gripper_goal_type = RobotiqGripperActionServerTask
-
-
-def position_for_width(gripper, width: float) -> float:
-    opened = gripper.default_configuration(GripperState.OPEN).joint_state
-    closed = gripper.default_configuration(GripperState.CLOSE).joint_state
-
-    open_width = gripper.separation_at(opened)
-    closed_width = gripper.separation_at(closed)
-
-    if width > open_width or width < 0:
-        raise ValueError(f"Invalid gripper width: {width}")
-
-    width = max(width, closed_width)
-
-    if list(opened.connections) != list(closed.connections):
-        raise ValueError("Gripper joint configurations do not match")
-
-    low, high = 0.0, 1.0
-
-    for _ in range(30):
-        fraction = (low + high) / 2
-
-        positions = [
-            a + fraction * (b - a)
-            for a, b in zip(
-                opened.target_values,
-                closed.target_values,
-            )
-        ]
-
-        joint_state = JointState(
-            connections=list(opened.connections),
-            target_values=positions,
-        )
-
-        if gripper.separation_at(joint_state) > width:
-            low = fraction
-        else:
-            high = fraction
-
-    return float(positions[0])
-
-
-@dataclass
-class CloseRobotiqToObjectWidth(
-    PlanTransformation[GraspingAction]
-):
-    squeeze: float = 0.0
-
-    def is_applicable(self, plan_node: GraspingAction) -> bool:
-        gripper = plan_node.arm.end_effector
-
-        return (
-            isinstance(gripper, Robotiq85Gripper)
-            and gripper.fingers_are_modelled_like_the_real_ones
-            and issubclass(
-                plan_node.gripper_goal_type,
-                RobotiqGripperActionServerTask,
-            )
-            and plan_node.grasp_candidate.graspable.root.has_collision()
-        )
-
-    def apply(self, plan_node: GraspingAction) -> None:
-        gripper = plan_node.arm.end_effector
-        width = plan_node.grasp_candidate.width_along_closing_axis
-        width = max(0.0, width - 2 * self.squeeze)
-
-        for node in plan_node.descendants:
-            if isinstance(node, RobotiqGripperActionServerTask):
-                if not any(
-                    isinstance(parent, ReachAction)
-                    for parent in node.path
-                ):
-                    node.target_position = position_for_width(
-                        gripper, width
-                    )
-                    return
-
-        raise RuntimeError("Robotiq closing goal not found")
