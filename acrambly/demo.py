@@ -1,16 +1,11 @@
 
 from __future__ import annotations
 
-import mujoco
 import rclpy
-from torchvision import extension
 
 from coraplex.plans.context_extensions import RobotAccess
 from coraplex.plans.executors import KinematicallySimulatedPlanExecutor
-from coraplex.robot_plans.actions.core.pick_up import (
-    PickUpAction,
-    ReachAction
-)
+from coraplex.robot_plans.actions.core.pick_up import PickUpAction
 from coraplex.robot_plans.actions.core.placing import PlaceAction
 from coraplex.robot_plans.actions.core.robot_body import (
     ParkArmsAction,
@@ -25,11 +20,8 @@ from semantic_digital_twin.adapters.ros.tf_publisher import TFPublisher
 from semantic_digital_twin.adapters.ros.visualization.viz_marker import VizMarkerPublisher
 from semantic_digital_twin.adapters.urdf import URDFParser
 from semantic_digital_twin.grasping.grasp_candidates import GraspCandidate
-from semantic_digital_twin.robots.robot_part_mixins import HasLeftRightArm
 from semantic_digital_twin.robots.robot_parts import AbstractRobot
 from semantic_digital_twin.robots.tracy import Tracy
-from semantic_digital_twin.adapters.multi_sim import MujocoSim
-from datetime import timedelta
 
 from semantic_digital_twin.datastructures.definitions import StaticJointState
 from acrambly.sub_parts.shared.utils import spawn_body
@@ -72,6 +64,7 @@ def build_plan(context, battatco, holders):
     tracy = context.require_extension(extension_type=RobotAccess).robot
     actions = [
         ParkArmsAction(arms=tracy.all_arms),
+
         ## Step 1: bottom wing on middle holder and hold there
         PickUpAction(
             grasp_candidate=GraspCandidate(battatco["BottomWing"], Pose.from_xyz_rpy(0.09, 0.05,0, pi/2, 0, -pi/2, reference_frame=battatco["BottomWing"].root)),
@@ -82,6 +75,7 @@ def build_plan(context, battatco, holders):
             arm=tracy.right_arm,
             allow_gripper_collision=False
         ),
+
         ## Step 2: Upper body on lower body
         PickUpAction(
             grasp_candidate=GraspCandidate(battatco["UpperBody"], Pose.from_xyz_rpy(-0.1,0,0.045,0, pi/2,0, reference_frame=battatco["UpperBody"].root)),
@@ -94,6 +88,7 @@ def build_plan(context, battatco, holders):
             goal_pose=Pose.from_xyz_rpy(0, 0.05, -0.005, pi,  -0.175, -pi/2, reference_frame=battatco["UnderBody"].root)
         ),
         MoveBranch(branch_root=battatco["UnderBody"].root, new_parent=battatco["UpperBody"].root),
+
         ## Step 3: Body on lower wing
         PickUpAction(
             grasp_candidate=GraspCandidate(battatco["UpperBody"], Pose.from_xyz_rpy(-0.1,0,0.03,0, pi/2,0, reference_frame=battatco["UpperBody"].root)),
@@ -106,6 +101,7 @@ def build_plan(context, battatco, holders):
         ),
         MoveBranch(branch_root=battatco["BottomWing"].root, new_parent=battatco["UnderBody"].root),
         MoveBranch(branch_root=battatco["RearWing"].root, new_parent=battatco["UnderBody"].root),
+
         ## Step 4: Top wing on body
         PickUpAction(
             grasp_candidate=GraspCandidate(battatco["TopWing"], Pose.from_xyz_rpy(-0.05, -0.1,0, pi/2, 0, 0, reference_frame=battatco["TopWing"].root)),
@@ -116,6 +112,7 @@ def build_plan(context, battatco, holders):
             graspable=battatco["TopWing"],
             goal_pose=Pose.from_xyz_rpy(0.078, 0, 0.028, pi, 0, 0, reference_frame=battatco["UpperBody"].root)
         ),
+
         #retract right holding arm
         SetGripperAction(gripper_configuration=tracy.right_arm.end_effector.default_configuration(GripperState.OPEN)),
         MoveManipulatorAction(
@@ -130,30 +127,10 @@ def build_plan(context, battatco, holders):
     statechart.add_node(node=Sequence(nodes=actions))
     return statechart
 
-MUJOCO = False
 RVIZ = True
 REAL = True
 
-if MUJOCO:
-    pass
-    # simulation = MujocoSim(
-    #     world=world,
-    #     headless=False,
-    #     step_size=1e-3,
-    #     cone=mujoco.mjtCone.mjCONE_ELLIPTIC,
-    #     impratio=10.0,
-    #     noslip_iterations=10,
-    # )
-    #
-    # simulation.start_stepped_simulation()
-    #
-    # try:
-    #     simulation.step_simulation(timedelta(seconds=1))
-    #     with PhysicallySimulatedRobot(simulation=simulation):
-    #         plan.perform()
-    # finally:
-    #     simulation.stop_simulation()
-elif RVIZ:
+if RVIZ:
     world = URDFParser.from_file(Tracy.get_ros_file_path()).create_world()
     tracy = Tracy.from_world(world)
 
