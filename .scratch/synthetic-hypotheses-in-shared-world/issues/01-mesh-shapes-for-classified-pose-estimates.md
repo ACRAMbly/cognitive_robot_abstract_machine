@@ -1,6 +1,6 @@
 # 01: Mesh shapes for classified pose estimates
 
-Status: ready-for-agent
+Status: claimed
 Type: task
 Blocked by: None (can start immediately)
 
