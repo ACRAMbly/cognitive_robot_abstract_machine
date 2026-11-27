@@ -8,11 +8,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from krrood.patterns.specificity_ranking import concrete_subclasses
+
 from robokudo_acrambly.synthetic_observations.analysis_engine import (
     SyntheticObservationEngine,
 )
-from robokudo_acrambly.synthetic_observations.parts import TetrisBlock
 from robokudo_acrambly.synthetic_observations.scenario import PlaneLayout, Scenario
+from semantic_digital_twin_acrambly.semantic_annotations import TetrisBlock
 
 
 @dataclass(kw_only=True)
@@ -24,7 +26,11 @@ class AnalysisEngine(SyntheticObservationEngine):
 
     scenario: Scenario = field(
         default_factory=lambda: Scenario(
-            parts=PlaneLayout().arrange(labels=list(TetrisBlock))
+            parts=PlaneLayout().arrange(
+                labels=[
+                    part_type.__name__ for part_type in concrete_subclasses(TetrisBlock)
+                ]
+            )
         )
     )
 

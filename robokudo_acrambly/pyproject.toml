@@ -12,6 +12,7 @@ dynamic = ["version"]
 dependencies = [
     "robokudo>=26.10.0",
     "semantic_digital_twin>=26.10.0",
+    "semantic_digital_twin_acrambly>=26.10.0",
     "krrood-core>=26.10.0",
     "krrood_spatial_math>=26.10.0",
     "numpy>=1.22.3",
@@ -29,6 +30,7 @@ version = {attr = "robokudo_acrambly._version.__version__"}
 workspace = [
     "robokudo",
     "semantic_digital_twin",
+    "semantic_digital_twin_acrambly",
     "krrood-core",
     "krrood_spatial_math",
 ]
