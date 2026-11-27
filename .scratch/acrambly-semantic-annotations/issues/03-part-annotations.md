@@ -1,6 +1,6 @@
 # Part annotations
 
-Status: ready-for-agent
+Status: claimed
 Type: task
 Blocked by: 02
 

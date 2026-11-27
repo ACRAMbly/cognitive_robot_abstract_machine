@@ -1,6 +1,6 @@
 # Distribution and meshes
 
-Status: claimed
+Status: resolved
 Type: task
 Blocked by: 01
 
@@ -24,3 +24,18 @@ Done when the distribution installs and imports in the workspace environment,
 and neither `meshes/` nor `assembly_models/` exists.
 
 ## Comments
+
+## Answer
+
+Built in `5219a49e60`, merged in `bdff0d3f27`. The distribution
+`semantic_digital_twin_acrambly` depends on `semantic_digital_twin` and
+`krrood-core` and is registered in the root `pyproject.toml` (`dependencies`,
+workspace `members`, `[tool.uv.sources]`, `[tool.poetry.dependencies]`). It is
+installed editable in the workspace environment. The meshes were moved with
+`git mv`, and `meshes/` and `assembly_models/` are gone. `meshes.py` gives the
+mesh directories as `PathEnumeration`s (`MeshDirectory.AIRCRAFT`,
+`MeshDirectory.TETRIS_BLOCK`). `test/semantic_digital_twin_acrambly_test/test_meshes.py`
+passes.
+
+Open: `resources/` sits outside `src/`, so a wheel does not ship the meshes;
+only source and editable installs find them.
