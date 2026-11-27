@@ -81,3 +81,15 @@ second hand-written list. `robokudo_acrambly` gains a dependency on
 5. [Perception labels from annotation classes](issues/05-perception-labels.md)
 
 ## Comments
+
+Code review on 2026-11-27, against `main`, on the Standards and Spec axes.
+The developer said to stick to the spec, nothing more or less. Fixed in
+`d04e4c2636`:
+- the unrequested `meshes.py` and the poetry entry were removed;
+- the class-name labels are computed once, in `PlaneLayout.arrange`;
+- the tests derive their expected classes from `concrete_subclasses`.
+
+Left as the spec says: `Aircraft` has no `chassis` field and no root check,
+and the parts are not `IsPerceivable`. RoboKudo's `annotation_class_by_label`
+therefore does not resolve their labels yet. That matters only once a
+hypothesis becomes a world body, which is out of scope here.

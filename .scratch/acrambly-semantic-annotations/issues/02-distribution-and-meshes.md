@@ -32,10 +32,7 @@ Built in `5219a49e60`, merged in `bdff0d3f27`. The distribution
 `krrood-core` and is registered in the root `pyproject.toml` (`dependencies`,
 workspace `members`, `[tool.uv.sources]`, `[tool.poetry.dependencies]`). It is
 installed editable in the workspace environment. The meshes were moved with
-`git mv`, and `meshes/` and `assembly_models/` are gone. `meshes.py` gives the
-mesh directories as `PathEnumeration`s (`MeshDirectory.AIRCRAFT`,
-`MeshDirectory.TETRIS_BLOCK`). `test/semantic_digital_twin_acrambly_test/test_meshes.py`
-passes.
+`git mv`, and `meshes/` and `assembly_models/` are gone.
+`test/semantic_digital_twin_acrambly_test/test_meshes.py` passes.
 
-Open: `resources/` sits outside `src/`, so a wheel does not ship the meshes;
-only source and editable installs find them.
+Open: `resources/` sits outside `src/`, so a wheel does not ship the meshes.
