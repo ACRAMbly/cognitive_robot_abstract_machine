@@ -26,3 +26,17 @@ A finite, time-ordered series of scripted observations describing one scenario.
 **Shared world**:
 The one world that perception and the plan both read and change, kept the same
 in every process that joins it.
+
+**Aircraft**:
+The Battat toy aircraft that the robot assembles from its aircraft parts.
+_Avoid_: Plane, airplane
+
+**Aircraft part**:
+One of the distinct pieces the aircraft is assembled from, each with its own
+shape, such as the top wing or the left rear wheel.
+_Avoid_: Plane part, component
+
+**Tetris block**:
+One of the toy blocks built from unit cubes, in a straight or a
+three-dimensional shape.
+_Avoid_: Cube, child cube
