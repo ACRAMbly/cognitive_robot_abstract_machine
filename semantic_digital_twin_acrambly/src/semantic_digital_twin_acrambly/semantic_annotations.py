@@ -117,8 +117,7 @@ class Window(AircraftPart):
 @dataclass(eq=False, kw_only=True)
 class TetrisBlock(IsGraspable, ABC):
     """
-    One of the toy blocks built from unit cubes, in a straight or a three-dimensional
-    shape.
+    One of the toy blocks built from unit cubes, each kind of block in its own shape.
     """
 
 

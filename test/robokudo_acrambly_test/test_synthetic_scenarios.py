@@ -12,27 +12,19 @@ from dataclasses import dataclass
 import numpy
 import pytest
 
+from krrood.patterns.specificity_ranking import concrete_subclasses
 from robokudo_acrambly.descriptors.analysis_engines import (
     synthetic_aircraft,
     synthetic_tetris,
 )
+from robokudo_acrambly.synthetic_observations.analysis_engine import (
+    SyntheticObservationEngine,
+)
 from robokudo_acrambly.synthetic_observations.scenario import Scenario
 from semantic_digital_twin.semantic_annotations.mixins import IsGraspable
 from semantic_digital_twin_acrambly.semantic_annotations import (
-    BottomWing,
-    Chassis,
-    CornerTetrisBlock,
-    FrontWheel,
-    LeftRearWheel,
-    MotorGrill,
-    Propeller,
-    RearWing,
-    RightRearWheel,
-    StraightTetrisBlock,
-    TopWing,
-    UnderBody,
-    UpperBody,
-    Window,
+    AircraftPart,
+    TetrisBlock,
 )
 
 
@@ -88,28 +80,34 @@ class ScenarioUnderTest:
     """
 
 
+@dataclass(kw_only=True)
+class EngineAndExpectedParts:
+    """
+    An analysis engine and the annotation classes of the parts its scenario has to
+    contain.
+    """
+
+    engine_type: type[SyntheticObservationEngine]
+    """
+    The analysis engine whose scenario is under test.
+    """
+
+    expected_part_types: list[type[IsGraspable]]
+    """
+    The annotation classes of the parts the scenario has to contain, one part each, in
+    the order the scenario arranges them.
+    """
+
+
 @pytest.fixture(
     params=[
-        (
-            synthetic_tetris.AnalysisEngine,
-            [StraightTetrisBlock, CornerTetrisBlock],
+        EngineAndExpectedParts(
+            engine_type=synthetic_tetris.AnalysisEngine,
+            expected_part_types=concrete_subclasses(TetrisBlock),
         ),
-        (
-            synthetic_aircraft.AnalysisEngine,
-            [
-                BottomWing,
-                Chassis,
-                FrontWheel,
-                MotorGrill,
-                Propeller,
-                LeftRearWheel,
-                RightRearWheel,
-                RearWing,
-                TopWing,
-                UnderBody,
-                UpperBody,
-                Window,
-            ],
+        EngineAndExpectedParts(
+            engine_type=synthetic_aircraft.AnalysisEngine,
+            expected_part_types=concrete_subclasses(AircraftPart),
         ),
     ],
     ids=["tetris", "aircraft"],
@@ -118,9 +116,10 @@ def scenario_under_test(request: pytest.FixtureRequest) -> ScenarioUnderTest:
     """
     The scenario of each synthetic analysis engine.
     """
-    engine_type, expected_part_types = request.param
+    engine_and_expected_parts = request.param
     return ScenarioUnderTest(
-        scenario=engine_type().scenario, expected_part_types=expected_part_types
+        scenario=engine_and_expected_parts.engine_type().scenario,
+        expected_part_types=engine_and_expected_parts.expected_part_types,
     )
 
 

@@ -6,8 +6,7 @@ together with their meshes.
 
 ## Meshes
 
-The meshes are in `resources/meshes`, outside the Python source, and
-`semantic_digital_twin_acrambly.meshes.MeshDirectory` names their directories:
+The meshes are in `resources/meshes`, outside the Python source:
 
 - `aircraft`: a surface mesh (`.stl`) per aircraft part, the COLLADA meshes
   of some parts, and the CAD sources of the wings in `Imported Components`.

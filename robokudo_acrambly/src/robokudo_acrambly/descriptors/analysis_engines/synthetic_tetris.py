@@ -26,11 +26,7 @@ class AnalysisEngine(SyntheticObservationEngine):
 
     scenario: Scenario = field(
         default_factory=lambda: Scenario(
-            parts=PlaneLayout().arrange(
-                labels=[
-                    part_type.__name__ for part_type in concrete_subclasses(TetrisBlock)
-                ]
-            )
+            parts=PlaneLayout().arrange(part_types=concrete_subclasses(TetrisBlock))
         )
     )
 

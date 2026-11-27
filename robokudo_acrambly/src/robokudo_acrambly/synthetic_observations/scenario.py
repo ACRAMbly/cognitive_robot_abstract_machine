@@ -20,9 +20,14 @@ from krrood_spatial_math.spatial_types import (
 )
 from semantic_digital_twin.datastructures.camera_model import PinholeCameraModel
 from semantic_digital_twin.datastructures.camera_resolution import CameraResolution
-from typing_extensions import Sequence
+from typing_extensions import TYPE_CHECKING, Sequence
 
 from robokudo_acrambly.synthetic_observations.playback import PassSchedule
+
+if TYPE_CHECKING:
+    from semantic_digital_twin.world_description.world_entity import (
+        SemanticAnnotation,
+    )
 
 
 # %% Part paths
@@ -169,21 +174,24 @@ class PlaneLayout:
         """
         return Vector3(x=0.0, y=-1.0, z=0.0)
 
-    def arrange(self, *, labels: Sequence[str]) -> list[ScenarioPart]:
+    def arrange(
+        self, *, part_types: Sequence[type[SemanticAnnotation]]
+    ) -> list[ScenarioPart]:
         """
-        :param labels: The labels of the parts, in the order they fill the grid from the
-            nearest row, left to right.
-        :return: One part per label; neighbours sway across each other's lines and start
-            at different points of their sway and heading.
+        :param part_types: The annotation classes of the parts, in the order they fill
+            the grid from the nearest row, left to right.
+        :return: One part per annotation class, labelled with the name of that class;
+            neighbours sway across each other's lines and start at different points of
+            their sway and heading.
         """
-        used_columns = min(self.columns, len(labels))
+        used_columns = min(self.columns, len(part_types))
         parts = []
-        for index, label in enumerate(labels):
+        for index, part_type in enumerate(part_types):
             row, column = divmod(index, self.columns)
-            offset = 2.0 * math.pi * index / len(labels)
+            offset = 2.0 * math.pi * index / len(part_types)
             parts.append(
                 ScenarioPart(
-                    label=label,
+                    label=part_type.__name__,
                     path=PartPath(
                         centre=Point3(
                             x=(column - (used_columns - 1) / 2.0) * self.spacing,

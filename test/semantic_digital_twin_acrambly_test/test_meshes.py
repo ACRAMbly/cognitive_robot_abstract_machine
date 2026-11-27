@@ -9,7 +9,7 @@ from __future__ import annotations
 from enum import StrEnum
 from pathlib import Path
 
-from semantic_digital_twin_acrambly.meshes import MeshDirectory
+import pytest
 
 # %% Expected meshes
 
@@ -45,36 +45,40 @@ class TetrisBlockMeshFile(StrEnum):
 # %% Mesh locations
 
 
-def test_mesh_directories_are_in_the_resources_of_the_distribution() -> None:
+@pytest.fixture
+def meshes_directory() -> Path:
     """
-    The meshes live in ``resources/meshes`` of the distribution, outside its source.
+    :return: The directory in the resources of the distribution that holds the meshes.
     """
-    meshes = (
+    return (
         Path(__file__).resolve().parents[2]
         / "semantic_digital_twin_acrambly"
         / "resources"
         / "meshes"
     )
 
-    assert {member._name_: Path(member) for member in MeshDirectory} == {
-        "AIRCRAFT": meshes / "aircraft",
-        "TETRIS_BLOCK": meshes / "tetris_block",
-    }
 
-
-def test_aircraft_mesh_directory_holds_a_surface_mesh_per_aircraft_part() -> None:
+def test_aircraft_mesh_directory_holds_a_surface_mesh_per_aircraft_part(
+    meshes_directory: Path,
+) -> None:
     """
     Every aircraft part has its surface mesh in the aircraft mesh directory.
     """
-    surface_meshes = {path.name for path in MeshDirectory.AIRCRAFT.glob("*.stl")}
+    surface_meshes = {
+        path.name for path in (meshes_directory / "aircraft").glob("*.stl")
+    }
 
     assert surface_meshes == set(AircraftMeshFile)
 
 
-def test_tetris_block_mesh_directory_holds_a_surface_mesh_per_tetris_block() -> None:
+def test_tetris_block_mesh_directory_holds_a_surface_mesh_per_tetris_block(
+    meshes_directory: Path,
+) -> None:
     """
     Every tetris block has its surface mesh in the tetris block mesh directory.
     """
-    surface_meshes = {path.name for path in MeshDirectory.TETRIS_BLOCK.glob("*.stl")}
+    surface_meshes = {
+        path.name for path in (meshes_directory / "tetris_block").glob("*.stl")
+    }
 
     assert surface_meshes == set(TetrisBlockMeshFile)
