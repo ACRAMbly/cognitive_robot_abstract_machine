@@ -1,6 +1,6 @@
 # ACRAMbly semantic annotations
 
-Status: ready-for-agent
+Status: resolved
 
 Released for implementation by the developer on 2026-11-26.
 

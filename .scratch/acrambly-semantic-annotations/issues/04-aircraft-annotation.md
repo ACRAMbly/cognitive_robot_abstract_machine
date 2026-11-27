@@ -1,6 +1,6 @@
 # Aircraft annotation
 
-Status: claimed
+Status: resolved
 Type: task
 Blocked by: 03
 
@@ -20,3 +20,16 @@ Tests, test-first:
 Done when the tests pass and `krrood check` is clean on the new code.
 
 ## Comments
+
+## Answer
+
+Built in `d182638fcf` and merged in `fdbb264645`. `Aircraft(HasRootBody,
+PartWholeRelationship)` is rooted at the chassis body. It has eleven optional
+part fields marked with `IsPartWholeRelationship`, and `aircraft.add(part)`
+fills each one inside `modify_world()`. The tests cover three cases: an
+aircraft with only its chassis, mounting a part filling exactly its field, and
+`PartRelationshipInspector` reporting the mounted parts. All 32 tests in
+`test/semantic_digital_twin_acrambly_test` pass.
+
+Open: `Aircraft` has no `chassis` field. The `Chassis` annotation sits on
+`aircraft.root`.
