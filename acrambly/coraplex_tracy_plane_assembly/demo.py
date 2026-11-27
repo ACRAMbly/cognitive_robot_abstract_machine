@@ -282,11 +282,16 @@ class PlaneAssemblyPlan:
         """Step 1: right arm transports the wing and stays at the holder."""
         return [
             PickUpAction(
-                grasp_candidate=self._grasp("BottomWing", (0.09, 0.05, 0, pi/2, 0, -pi/2)),
+                grasp_candidate=self._grasp("BottomWing", (0.09, 0.05, 0.015, pi/2, 0, -pi/2)),
                 arm=tracy.right_arm,
             ),
             MoveManipulatorAction(
-                goal_pose=self._holder_pose("HolderHorizontal", (-0.089, 0.13, -0.094, pi/2, 0, pi/2)),
+                goal_pose=self._holder_pose("HolderHorizontal", (-0.1, 0.2, -0.094, pi/2, 0, pi/2)),
+                arm=tracy.right_arm,
+                allow_gripper_collision=False,
+            ),
+            MoveManipulatorAction(
+                goal_pose=self._holder_pose("HolderHorizontal", (-0.105, 0.14, -0.084, pi/2, 0, pi/2)),
                 arm=tracy.right_arm,
                 allow_gripper_collision=False,
             ),
@@ -296,13 +301,13 @@ class PlaneAssemblyPlan:
         """Step 2: left arm places the upper body onto the underbody."""
         return [
             PickUpAction(
-                grasp_candidate=self._grasp("UpperBody", (-0.1, 0, 0.045, 0, pi/2, 0)),
+                grasp_candidate=self._grasp("UpperBody", (0, 0, -0.005, 0, pi/2, 0)),
                 arm=tracy.left_arm,
             ),
             PlaceAction(
                 arm=tracy.left_arm,
                 graspable=self.scene.parts["UpperBody"],
-                goal_pose=self._part_pose("UnderBody", (0, 0.05, -0.005, pi, -0.175, -pi/2)),
+                goal_pose=self._part_pose("UnderBody", (0, 0.05, -0.02, pi, 0, -pi/2)),
             ),
             MoveBranch(
                 branch_root=self.scene.parts["UnderBody"].root,
@@ -314,13 +319,13 @@ class PlaneAssemblyPlan:
         """Step 3: left arm puts the assembled body on the bottom wing."""
         return [
             PickUpAction(
-                grasp_candidate=self._grasp("UpperBody", (-0.1, 0, 0.03, 0, pi/2, 0)),
+                grasp_candidate=self._grasp("UpperBody", (-0.1, 0, 0.06, 0, pi/2, 0)),
                 arm=tracy.left_arm,
             ),
             PlaceAction(
                 arm=tracy.left_arm,
                 graspable=self.scene.parts["UpperBody"],
-                goal_pose=self._holder_pose("HolderHorizontal", (0, 0.187, 0, -pi/2, pi, 0)),
+                goal_pose=self._part_pose("BottomWing", (0, -0.038, 0.025, 0, 0.1, pi/2)),
             ),
             MoveBranch(
                 branch_root=self.scene.parts["BottomWing"].root,
@@ -383,13 +388,13 @@ class PlaneAssemblyPlan:
         tracy = context.require_extension(extension_type=RobotAccess).robot
         actions = [
             ParkArmsAction(arms=tracy.all_arms),
-            *self.hold_bottom_wing(tracy),
-            *self.assemble_body(tracy),
+            *self.hold_bottom_wing(tracy),          # works
+            # *self.assemble_body(tracy),             # Precision required
             *self.mount_body_on_wing(tracy),
-            *self.mount_top_wing(tracy),
-            *self.release_and_retract(tracy),
-            *self.lift_off_partial_plane(tracy),
-            ParkArmsAction(arms=[tracy.left_arm]),
+            # *self.mount_top_wing(tracy),
+            # *self.release_and_retract(tracy),
+            # *self.lift_off_partial_plane(tracy),
+            # ParkArmsAction(arms=[tracy.left_arm]),
         ]
 
         statechart = Statechart(context=context)
