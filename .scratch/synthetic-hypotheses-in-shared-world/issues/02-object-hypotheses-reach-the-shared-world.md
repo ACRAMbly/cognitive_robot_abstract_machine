@@ -26,3 +26,22 @@ world finds the parts there. See the spec.
 - [ ] The interface tests that asserted no world pose and nothing added to the world, and the engine test that asserted a reader-only pipeline, are rewritten for the new behaviour.
 
 ## Comments
+
+2026-11-27, decided by the developer before implementation:
+
+- **Tetris meshes re-centred.** `ObjectMatcher` measures from a belief's centre, which is
+  its mesh origin, to the visual centre of the body already in the world. It matches
+  only within 0.2 m. The tetris STL origins lie 0.21 m (straight) and 0.26 m (corner)
+  from the block centres, so a new body would appear every pass. The two tetris STLs
+  are rewritten in metres and re-centred on their bounding-box centre. Nothing changes
+  in `robokudo`.
+- **Later-pass position.** After a later pass, `PerceptionBelief` moves the body so
+  that its visual centre lies at the seen position. The aircraft mesh origins lie
+  0.4–3.3 cm off their centres. So after a later pass, the main test asserts that
+  `ObjectMatcher.visual_center` of each body equals the camera pose composed with the
+  scripted position. It does not assert the body origin.
+- **Mesh class property on the bases.** With `IsPerceivable` mixed in, a tetris label
+  resolves to `TetrisBlock` itself, and the world update instantiates that class. So
+  the mesh class property must not be abstract. `AircraftPart` and `TetrisBlock` each
+  declare it without making it abstract. On a base it raises a custom
+  `DataclassException`, and every concrete class overrides it.
