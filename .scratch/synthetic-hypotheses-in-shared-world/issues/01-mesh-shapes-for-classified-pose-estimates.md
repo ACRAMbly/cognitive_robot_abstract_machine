@@ -1,6 +1,6 @@
 # 01: Mesh shapes for classified pose estimates
 
-Status: claimed
+Status: resolved
 Type: task
 Blocked by: None (can start immediately)
 
@@ -19,3 +19,15 @@ nothing about ACRAMbly. See the spec and ADR 0003.
 - [ ] No change to the FoundationPose annotator, the perception belief, the object matcher or the world-updating annotator.
 
 ## Comments
+
+## Answer
+
+Built in `6fcb6923f0`. `MeshShapeAnnotator` in
+`robokudo/src/robokudo/annotators/mesh_shape.py` is built as
+`MeshShapeAnnotator(class_meshes=[ObjectClassMesh(...)])`. It collects the meshes into
+`ObjectClassMeshes`, so two meshes for one class raise `DuplicateObjectClassMesh`.
+It uses a hypothesis's latest classification and latest pose annotation, and gives it
+a `Shape` with that mesh as geometry, with its origin at the pose. Hypotheses without
+a mesh or a pose are left unchanged. Nothing else in `robokudo` changed.
+`test/robokudo_test/test_mesh_shape.py` covers this with a small box mesh: 4 tests.
+Together with `test_world_updating.py` and `test_foundation_pose.py`, 44 tests pass.
