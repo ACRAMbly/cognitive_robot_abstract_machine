@@ -8,11 +8,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from krrood.patterns.specificity_ranking import concrete_subclasses
+
 from robokudo_acrambly.synthetic_observations.analysis_engine import (
     SyntheticObservationEngine,
 )
-from robokudo_acrambly.synthetic_observations.parts import AircraftPart
 from robokudo_acrambly.synthetic_observations.scenario import PlaneLayout, Scenario
+from semantic_digital_twin_acrambly.semantic_annotations import AircraftPart
 
 
 @dataclass(kw_only=True)
@@ -24,7 +26,7 @@ class AnalysisEngine(SyntheticObservationEngine):
 
     scenario: Scenario = field(
         default_factory=lambda: Scenario(
-            parts=PlaneLayout().arrange(labels=list(AircraftPart))
+            parts=PlaneLayout().arrange(part_types=concrete_subclasses(AircraftPart))
         )
     )
 

@@ -1,6 +1,6 @@
 # Battat plane: parts, face counts and collision geometry
 
-Inspected on 2026-10-28. Scope: this directory and its `Imported Components` subdirectory.
+Inspected on 2026-10-28. Scope: `semantic_digital_twin_acrambly/resources/meshes/aircraft` and its `Imported Components` subdirectory.
 
 ## Findings
 
@@ -45,7 +45,7 @@ Both DAE files declare millimetres (`meter="0.001"`). STL does not encode a stan
 
 ## Why more faces can cost more
 
-- **Geometry preparation:** loading detailed meshes and building acceleration structures or convex decompositions can add startup time and memory use. The repository's Bullet path caches decompositions, so preparation and repeated-query costs should be measured separately. See the local [Bullet mesh loading and cache implementation](../../../semantic_digital_twin/src/semantic_digital_twin/collision_checking/pybullet_collision_detector.py).
+- **Geometry preparation:** loading detailed meshes and building acceleration structures or convex decompositions can add startup time and memory use. The repository's Bullet path caches decompositions, so preparation and repeated-query costs should be measured separately. See the local [Bullet mesh loading and cache implementation](../../semantic_digital_twin/src/semantic_digital_twin/collision_checking/pybullet_collision_detector.py).
 - **Triangle-mesh queries:** more surface detail can increase collision work. Bounding-volume hierarchies avoid checking every triangle against every other triangle, so multiplying face counts is not a realistic runtime estimate. [MoveIt collision checking](https://moveit.picknik.ai/main/doc/examples/urdf_srdf/urdf_srdf_tutorial.html#collision-checking), [FCL interfaces](https://github.com/flexible-collision-library/fcl#interfaces).
 - **Convex collision queries:** when an engine converts a source mesh to convex geometry, the resulting hull count and hull complexity matter. Source triangle count alone does not describe that runtime geometry; generating too many convex pieces can also be expensive. [PickNik mesh optimization](https://docs.picknik.ai/8/how_to/configuration_tutorials/optimizing_robot_model_meshes/).
 
@@ -53,11 +53,11 @@ No universal triangle limit determines whether these assets are acceptable. Meas
 
 ## Relevant behavior in this repository
 
-The generic [mesh parser](../../../semantic_digital_twin/src/semantic_digital_twin/adapters/mesh.py) assigns the same mesh to a body's visual and collision collections. Loading the original STL through that parser therefore starts with its full detail in both collections.
+The generic [mesh parser](../../semantic_digital_twin/src/semantic_digital_twin/adapters/mesh.py) assigns the same mesh to a body's visual and collision collections. Loading the original STL through that parser therefore starts with its full detail in both collections.
 
-The [world configuration](../../../semantic_digital_twin/src/semantic_digital_twin/world.py) defaults to V-HACD for Bullet mesh decomposition. The [Bullet collision loader](../../../semantic_digital_twin/src/semantic_digital_twin/collision_checking/pybullet_collision_detector.py) decomposes non-convex meshes when a decomposer is configured and caches the result. Disabling decomposition causes non-convex meshes to be treated as convex hulls, as documented in the world configuration. That can change which assembly poses appear collision-free.
+The [world configuration](../../semantic_digital_twin/src/semantic_digital_twin/world.py) defaults to V-HACD for Bullet mesh decomposition. The [Bullet collision loader](../../semantic_digital_twin/src/semantic_digital_twin/collision_checking/pybullet_collision_detector.py) decomposes non-convex meshes when a decomposer is configured and caches the result. Disabling decomposition causes non-convex meshes to be treated as convex hulls, as documented in the world configuration. That can change which assembly poses appear collision-free.
 
-The [FCL collision detector](../../../semantic_digital_twin/src/semantic_digital_twin/collision_checking/trimesh_collision_detector.py) instead builds a bounding-volume hierarchy from each body's combined collision mesh. Reducing that collision mesh directly changes the triangle geometry supplied to FCL. These are available code paths; this inspection did not establish which backend currently loads the plane.
+The [FCL collision detector](../../semantic_digital_twin/src/semantic_digital_twin/collision_checking/trimesh_collision_detector.py) instead builds a bounding-volume hierarchy from each body's combined collision mesh. Reducing that collision mesh directly changes the triangle geometry supplied to FCL. These are available code paths; this inspection did not establish which backend currently loads the plane.
 
 ## Recommended solution
 

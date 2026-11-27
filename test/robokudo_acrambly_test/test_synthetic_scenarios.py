@@ -8,17 +8,24 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from enum import StrEnum
 
 import numpy
 import pytest
 
+from krrood.patterns.specificity_ranking import concrete_subclasses
 from robokudo_acrambly.descriptors.analysis_engines import (
     synthetic_aircraft,
     synthetic_tetris,
 )
-from robokudo_acrambly.synthetic_observations.parts import AircraftPart, TetrisBlock
+from robokudo_acrambly.synthetic_observations.analysis_engine import (
+    SyntheticObservationEngine,
+)
 from robokudo_acrambly.synthetic_observations.scenario import Scenario
+from semantic_digital_twin.semantic_annotations.mixins import IsGraspable
+from semantic_digital_twin_acrambly.semantic_annotations import (
+    AircraftPart,
+    TetrisBlock,
+)
 
 
 # %% Motion limits
@@ -66,16 +73,42 @@ class ScenarioUnderTest:
     The scenario the analysis engine plays back.
     """
 
-    expected_labels: type[StrEnum]
+    expected_part_types: list[type[IsGraspable]]
     """
-    The labels of the parts the scenario has to contain, one part each.
+    The annotation classes of the parts the scenario has to contain, one part each, in
+    the order the scenario arranges them.
+    """
+
+
+@dataclass(kw_only=True)
+class EngineAndExpectedParts:
+    """
+    An analysis engine and the annotation classes of the parts its scenario has to
+    contain.
+    """
+
+    engine_type: type[SyntheticObservationEngine]
+    """
+    The analysis engine whose scenario is under test.
+    """
+
+    expected_part_types: list[type[IsGraspable]]
+    """
+    The annotation classes of the parts the scenario has to contain, one part each, in
+    the order the scenario arranges them.
     """
 
 
 @pytest.fixture(
     params=[
-        (synthetic_tetris.AnalysisEngine, TetrisBlock),
-        (synthetic_aircraft.AnalysisEngine, AircraftPart),
+        EngineAndExpectedParts(
+            engine_type=synthetic_tetris.AnalysisEngine,
+            expected_part_types=concrete_subclasses(TetrisBlock),
+        ),
+        EngineAndExpectedParts(
+            engine_type=synthetic_aircraft.AnalysisEngine,
+            expected_part_types=concrete_subclasses(AircraftPart),
+        ),
     ],
     ids=["tetris", "aircraft"],
 )
@@ -83,9 +116,10 @@ def scenario_under_test(request: pytest.FixtureRequest) -> ScenarioUnderTest:
     """
     The scenario of each synthetic analysis engine.
     """
-    engine_type, expected_labels = request.param
+    engine_and_expected_parts = request.param
     return ScenarioUnderTest(
-        scenario=engine_type().scenario, expected_labels=expected_labels
+        scenario=engine_and_expected_parts.engine_type().scenario,
+        expected_part_types=engine_and_expected_parts.expected_part_types,
     )
 
 
@@ -137,11 +171,13 @@ def turned_angle(*, before: numpy.ndarray, after: numpy.ndarray) -> float:
 # %% Scenario contents
 
 
-def test_scenario_contains_one_part_per_label(
+def test_scenario_contains_one_part_per_annotation_class(
     scenario_under_test: ScenarioUnderTest,
 ) -> None:
     labels = [part.label for part in scenario_under_test.scenario.parts]
-    assert labels == list(scenario_under_test.expected_labels)
+    assert labels == [
+        part_type.__name__ for part_type in scenario_under_test.expected_part_types
+    ]
 
 
 def test_scenario_lasts_thirty_seconds_at_ten_passes_per_second(

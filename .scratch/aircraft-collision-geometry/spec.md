@@ -10,10 +10,9 @@ is subsequently authorized.
 
 Reduce the number of triangles in the plane's collision geometry while
 preserving assembly openings and clearances. The source directory is
-`assembly_models/battat/plane`.
+`semantic_digital_twin_acrambly/resources/meshes/aircraft`.
 
-The repository's [glossary](../../../GLOSSARY.md) distinguishes visual geometry
-from collision geometry. This design concerns collision geometry.
+This design concerns collision geometry.
 
 ## Verified starting point
 
@@ -21,7 +20,7 @@ The 12 STL part files contain 191,879 triangles. The body halves and three wings
 account for 177,831 triangles, or 92.7% of the total. See the existing
 [mesh report](collision_mesh_report.md) for the complete inventory.
 
-Lower-face variants already exist in [the convention directory](../convention):
+Lower-face variants already exist in [the convention directory](../../acrambly/assets/battat/convention):
 
 | Part | Source STL triangles | Existing lower-face variant triangles |
 | --- | ---: | ---: |
@@ -69,14 +68,14 @@ the largest component would discard substantial source geometry.
 
 ## Runtime constraints found in the code
 
-The [world defaults](../../../semantic_digital_twin/src/semantic_digital_twin/world.py)
+The [world defaults](../../semantic_digital_twin/src/semantic_digital_twin/world.py)
 select Bullet and V-HACD decomposition. The
-[Bullet loader](../../../semantic_digital_twin/src/semantic_digital_twin/collision_checking/pybullet_collision_detector.py)
+[Bullet loader](../../semantic_digital_twin/src/semantic_digital_twin/collision_checking/pybullet_collision_detector.py)
 can transform a nonconvex source mesh into convex collision pieces. Validation
 must therefore examine the geometry actually loaded by the chosen backend.
 The source triangle count alone does not describe those pieces.
 
-The [FCL detector](../../../semantic_digital_twin/src/semantic_digital_twin/collision_checking/trimesh_collision_detector.py)
+The [FCL detector](../../semantic_digital_twin/src/semantic_digital_twin/collision_checking/trimesh_collision_detector.py)
 builds a triangle hierarchy from the body's collision mesh. No configured
 consumer for these particular plane assets was identified.
 
