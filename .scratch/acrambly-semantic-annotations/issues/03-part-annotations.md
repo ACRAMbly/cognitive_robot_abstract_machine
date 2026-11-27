@@ -1,6 +1,6 @@
 # Part annotations
 
-Status: claimed
+Status: resolved
 Type: task
 Blocked by: 02
 
@@ -21,3 +21,16 @@ Tests under `test/semantic_digital_twin_acrambly_test/`, test-first:
 Done when the tests pass and `krrood check` is clean on the new code.
 
 ## Comments
+
+## Answer
+
+Built and merged in `cc06dd19d0`.
+`semantic_digital_twin_acrambly/semantic_annotations.py` has the abstract
+`AircraftPart` and `TetrisBlock` (`IsGraspable`, `ABC`) and the concrete parts
+the spec lists. `test_semantic_annotations.py` asserts that the concrete
+subclasses are exactly those classes. It also checks that each part, attached
+to a body, is found by a query for its class and for its abstract base. There
+are 19 tests and all pass. `krrood check` is clean.
+
+Open: the aircraft-part docstrings are plain ("The motor grill of the
+aircraft."), and the developer may add real descriptions.

@@ -1,6 +1,6 @@
 # Perception labels from annotation classes
 
-Status: ready-for-agent
+Status: claimed
 Type: task
 Blocked by: 03
 
