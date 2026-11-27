@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "semantic_digital_twin_acrambly"
+description = "Semantic annotations and meshes of the ACRAMbly assembly objects"
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+license = "LGPL-3.0-only"
+dynamic = ["version"]
+dependencies = [
+    "semantic_digital_twin>=26.10.0",
+    "krrood-core>=26.10.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["semantic_digital_twin_acrambly*"]
+
+[tool.setuptools.dynamic]
+version = {attr = "semantic_digital_twin_acrambly._version.__version__"}
+
+[dependency-groups]
+workspace = [
+    "semantic_digital_twin",
+    "krrood-core",
+]
